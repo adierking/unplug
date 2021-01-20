@@ -1,0 +1,23 @@
+[package]
+name = "unplug-cli"
+version = "0.1.0"
+authors = ["Derpky"]
+edition = "2018"
+
+[[bin]]
+name = "unplug"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+byteorder = "1"
+log = { version = "0.4", features = ["release_max_level_debug"] }
+quick-xml = "0.20"
+simplelog = "0.9"
+structopt = "0.3"
+tempfile = "3.1.0"
+unicase = "2.6"
+unplug = { path = "../unplug" }
+
+[dev-dependencies]
+unplug-test = { path = "../unplug-test" }

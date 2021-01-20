@@ -1,0 +1,20 @@
+[package]
+name = "unplug"
+version = "0.1.0"
+authors = ["Derpky"]
+edition = "2018"
+
+[dependencies]
+arrayvec = "0.5"
+bitflags = "1.2.1"
+byteorder = "1"
+encoding_rs = "0.8.26"
+log = { version = "0.4", features = ["release_max_level_debug"] }
+num_enum = "0.5.1"
+slotmap = "0.4"
+thiserror = "1.0"
+unplug-data = { path = "../unplug-data" }
+unplug-proc = { path = "../unplug-proc" }
+
+[dev-dependencies]
+lazy_static = "1.4.0"

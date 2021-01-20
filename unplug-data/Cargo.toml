@@ -1,0 +1,8 @@
+[package]
+name = "unplug-data"
+version = "0.1.0"
+authors = ["Derpky"]
+edition = "2018"
+
+[dependencies]
+num_enum = "0.5.1"
