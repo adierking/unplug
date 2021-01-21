@@ -1,6 +1,6 @@
 # :electric_plug: Unplug - Chibi-Robo! Modding Toolkit
 
-![Unplug is a Rust library and command-line interface for working with Chibi-Robo! assets.](docs/images/unplug.png)
+![Unplug is a Rust library and command-line interface for working with Chibi-Robo! assets.](docs/images/unplug.gif)
 
 :satellite: [Download](#download)<br>
 :star: [Goals](#goals)<br>
