@@ -16,16 +16,16 @@ binary for Windows or Linux.
 
 ## Goals
 
-- **Modding**: Build a low-level foundation for modifying game files
-- **Reverse Engineering**: Provide tools to help the community learn more about the game's internals
-- **Self-Contained**: Unplug should be the only tool you need to mod *Chibi-Robo!*
-- **Correctness**: What you see is what the game sees, where practical
+- **Modding**: Build a foundation for editing game assets
+- **Reverse Engineering**: Help the community learn more about how the game works
+- **Self-Contained**: Unplug should be the only tool you need to mod the game
+- **Correctness**: What you see is what the game sees
 
 ## Features
 
-- Directly access and edit the ISO
+- Built-in support for ISO reading and writing
+- Disassemble script bytecode
 - Export and import cutscene messages
-- Dump script data to a text file
 - List and extract the ISO
 - List and extract qp.bin entries
 
@@ -33,8 +33,8 @@ Stay tuned for more!
 
 ## How to Use
 
-You will need an NTSC-U (GGTE01) *Chibi-Robo!* ISO to use Unplug. Other versions of the game are
-not supported yet.
+You will need an NTSC-U (GGTE01) *Chibi-Robo! Plug Into Adventure!* ISO to use Unplug. Other
+versions of the game are not supported yet.
 
 Unplug is a command-line app, so you'll need to open PowerShell/Command Prompt/Terminal to use
 it. On Windows 10, you should try downloading Windows Terminal from the Store.
