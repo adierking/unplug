@@ -16,8 +16,19 @@ impl<S: Read + Write + Seek> ReadWriteSeek for S {}
 
 /// Trait for an object which can be read from a stream.
 pub trait ReadFrom<R: Read>: Sized {
+    /// The error type returned from `read_from()`.
     type Error;
+
+    /// Reads an instance of this object from `reader`.
     fn read_from(reader: &mut R) -> Result<Self, Self::Error>;
+
+    /// Fills a slice with instances of this object read from `reader`.
+    fn read_all_from(reader: &mut R, buf: &mut [Self]) -> Result<(), Self::Error> {
+        for elem in buf {
+            *elem = Self::read_from(reader)?;
+        }
+        Ok(())
+    }
 }
 
 /// Trait for a nullable object which can be read from a stream.
@@ -28,8 +39,19 @@ pub trait ReadOptionFrom<R: Read>: Sized {
 
 /// Trait for an object which can be written to a stream.
 pub trait WriteTo<W: Write>: Sized {
+    /// The error type returned from `write_to()`.
     type Error;
+
+    /// Writes this object to `writer`.
     fn write_to(&self, writer: &mut W) -> Result<(), Self::Error>;
+
+    /// Writes a slice of instances of this object to `writer`.
+    fn write_all_to(writer: &mut W, buf: &[Self]) -> Result<(), Self::Error> {
+        for elem in buf {
+            elem.write_to(writer)?;
+        }
+        Ok(())
+    }
 }
 
 /// Trait for a nullable object which can be written to a stream.
