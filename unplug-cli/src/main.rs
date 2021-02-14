@@ -39,6 +39,7 @@ fn run_app() -> Result<()> {
         Subcommand::DumpColliders(opt) => commands::dump_colliders(opt),
         Subcommand::ExportMessages(opt) => msg::export_messages(opt),
         Subcommand::ImportMessages(opt) => msg::import_messages(opt),
+        Subcommand::DumpMetadata(opt) => commands::dump_metadata(opt),
     }
 }
 

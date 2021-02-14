@@ -41,7 +41,7 @@ pub enum Subcommand {
     /// Dumps the data from each stage into a directory
     DumpAllStages(DumpAllStagesOpt),
 
-    /// Dumps the collision data from a globals.bin file
+    /// Dumps the collision data from globals.bin
     DumpColliders(DumpCollidersOpt),
 
     /// Exports messages to an XML file
@@ -49,6 +49,9 @@ pub enum Subcommand {
 
     /// Imports messages from an XML file
     ImportMessages(ImportMessagesOpt),
+
+    /// Dumps the metadata from globals.bin
+    DumpMetadata(DumpMetadataOpt),
 }
 
 #[derive(StructOpt)]
@@ -227,6 +230,19 @@ pub struct ExportMessagesOpt {
 
 #[derive(StructOpt)]
 pub struct DumpCollidersOpt {
+    #[structopt(flatten)]
+    pub container: OptionalContainerOpt,
+
+    #[structopt(flatten)]
+    pub globals: GlobalsOpt,
+
+    /// Redirects output to a file instead of stdout
+    #[structopt(short, long("out"), value_name("PATH"))]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(StructOpt)]
+pub struct DumpMetadataOpt {
     #[structopt(flatten)]
     pub container: OptionalContainerOpt,
 

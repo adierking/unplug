@@ -251,3 +251,21 @@ pub fn dump_colliders(opt: DumpCollidersOpt) -> Result<()> {
 
     Ok(())
 }
+
+pub fn dump_metadata(opt: DumpMetadataOpt) -> Result<()> {
+    let mut out = BufWriter::new(OutputRedirect::new(opt.output)?);
+
+    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
+    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
+
+    info!("Reading global metadata");
+    let metadata = {
+        let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path)?;
+        globals.read_metadata()?
+    };
+
+    info!("Dumping metadata");
+    writeln!(out, "{:#?}", metadata)?;
+
+    Ok(())
+}
