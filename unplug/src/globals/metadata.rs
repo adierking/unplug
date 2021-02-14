@@ -324,13 +324,13 @@ pub struct Item {
     /// The item's flags.
     pub flags: ItemFlags,
     /// The amount of time it takes to pick up the item in hundredths of seconds.
-    pub pickup_delay: u16,
+    pub pickup_delay: i16,
     /// The item's shop price.
-    pub price: u16,
+    pub price: i16,
     /// The number of happy points rewarded if the player throws the item away.
-    pub junk_exp: u16,
+    pub junk_exp: i16,
     /// The amount of money rewarded if the player throws the item away.
-    pub junk_money: u16,
+    pub junk_money: i16,
     /// The `pickup_sounds` index of the sound to play when the item is picked up. (-1 = none)
     pub pickup_sound: i8,
     /// The `collect_sounds` index of the sound to play when the item is collected. (-1 = none)
@@ -357,10 +357,10 @@ impl<R: Read> ReadFrom<StringReader<R>> for Item {
             name: reader.read_string_offset()?,
             description: reader.read_string_offset()?,
             flags: ItemFlags::from_bits_truncate(reader.read_u16::<BE>()?),
-            pickup_delay: reader.read_u16::<BE>()?,
-            price: reader.read_u16::<BE>()?,
-            junk_exp: reader.read_u16::<BE>()?,
-            junk_money: reader.read_u16::<BE>()?,
+            pickup_delay: reader.read_i16::<BE>()?,
+            price: reader.read_i16::<BE>()?,
+            junk_exp: reader.read_i16::<BE>()?,
+            junk_money: reader.read_i16::<BE>()?,
             pickup_sound: reader.read_i8()?,
             collect_sound: reader.read_i8()?,
         })
@@ -373,10 +373,10 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Item {
         writer.write_string_offset(&self.name)?;
         writer.write_string_offset(&self.description)?;
         writer.write_u16::<BE>(self.flags.bits())?;
-        writer.write_u16::<BE>(self.pickup_delay)?;
-        writer.write_u16::<BE>(self.price)?;
-        writer.write_u16::<BE>(self.junk_exp)?;
-        writer.write_u16::<BE>(self.junk_money)?;
+        writer.write_i16::<BE>(self.pickup_delay)?;
+        writer.write_i16::<BE>(self.price)?;
+        writer.write_i16::<BE>(self.junk_exp)?;
+        writer.write_i16::<BE>(self.junk_money)?;
         if self.pickup_sound >= NUM_PICKUP_SOUNDS as i8 {
             return Err(Error::InvalidPickupSound(self.pickup_sound));
         }
@@ -431,7 +431,7 @@ pub struct Atc {
     /// The attachment's description (unused?).
     pub description: CString,
     /// The attachment's shop price.
-    pub price: u16,
+    pub price: i16,
 }
 
 impl Atc {
@@ -453,7 +453,7 @@ impl<R: Read> ReadFrom<StringReader<R>> for Atc {
         let atc = Self {
             name: reader.read_string_offset()?,
             description: reader.read_string_offset()?,
-            price: reader.read_u16::<BE>()?,
+            price: reader.read_i16::<BE>()?,
         };
         reader.read_u16::<BE>()?; // Padding
         Ok(atc)
@@ -465,7 +465,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Atc {
     fn write_to(&self, writer: &mut StringWriter<W>) -> Result<()> {
         writer.write_string_offset(&self.name)?;
         writer.write_string_offset(&self.description)?;
-        writer.write_u16::<BE>(self.price)?;
+        writer.write_i16::<BE>(self.price)?;
         writer.write_u16::<BE>(0)?; // Padding
         Ok(())
     }
@@ -551,7 +551,7 @@ pub struct Leticker {
     /// The utilibot's description (shown in the shop).
     pub description: CString,
     /// The utilibot's shop price.
-    pub price: u16,
+    pub price: i16,
 }
 
 impl Leticker {
@@ -573,7 +573,7 @@ impl<R: Read> ReadFrom<StringReader<R>> for Leticker {
         let leticker = Self {
             name: reader.read_string_offset()?,
             description: reader.read_string_offset()?,
-            price: reader.read_u16::<BE>()?,
+            price: reader.read_i16::<BE>()?,
         };
         reader.read_u16::<BE>()?; // Padding
         Ok(leticker)
@@ -585,7 +585,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Leticker {
     fn write_to(&self, writer: &mut StringWriter<W>) -> Result<()> {
         writer.write_string_offset(&self.name)?;
         writer.write_string_offset(&self.description)?;
-        writer.write_u16::<BE>(self.price)?;
+        writer.write_i16::<BE>(self.price)?;
         writer.write_u16::<BE>(0)?; // Padding
         Ok(())
     }
