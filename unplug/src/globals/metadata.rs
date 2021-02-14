@@ -335,7 +335,6 @@ pub struct Atc {
     pub description: CString,
     /// The attachment's shop price.
     pub price: u16,
-    pub unk_0a: u16,
 }
 
 impl Atc {
@@ -354,12 +353,13 @@ impl Atc {
 impl<R: Read> ReadFrom<StringReader<R>> for Atc {
     type Error = Error;
     fn read_from(reader: &mut StringReader<R>) -> Result<Self> {
-        Ok(Self {
+        let atc = Self {
             name: reader.read_string_offset()?,
             description: reader.read_string_offset()?,
             price: reader.read_u16::<BE>()?,
-            unk_0a: reader.read_u16::<BE>()?,
-        })
+        };
+        reader.read_u16::<BE>()?; // Padding
+        Ok(atc)
     }
 }
 
@@ -369,7 +369,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Atc {
         writer.write_string_offset(&self.name)?;
         writer.write_string_offset(&self.description)?;
         writer.write_u16::<BE>(self.price)?;
-        writer.write_u16::<BE>(self.unk_0a)?;
+        writer.write_u16::<BE>(0)?; // Padding
         Ok(())
     }
 }
@@ -455,7 +455,6 @@ pub struct Leticker {
     pub description: CString,
     /// The utilibot's shop price.
     pub price: u16,
-    pub unk_0a: u16,
 }
 
 impl Leticker {
@@ -474,12 +473,13 @@ impl Leticker {
 impl<R: Read> ReadFrom<StringReader<R>> for Leticker {
     type Error = Error;
     fn read_from(reader: &mut StringReader<R>) -> Result<Self> {
-        Ok(Self {
+        let leticker = Self {
             name: reader.read_string_offset()?,
             description: reader.read_string_offset()?,
             price: reader.read_u16::<BE>()?,
-            unk_0a: reader.read_u16::<BE>()?,
-        })
+        };
+        reader.read_u16::<BE>()?; // Padding
+        Ok(leticker)
     }
 }
 
@@ -489,7 +489,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Leticker {
         writer.write_string_offset(&self.name)?;
         writer.write_string_offset(&self.description)?;
         writer.write_u16::<BE>(self.price)?;
-        writer.write_u16::<BE>(self.unk_0a)?;
+        writer.write_u16::<BE>(0)?; // Padding
         Ok(())
     }
 }
@@ -862,7 +862,6 @@ mod tests {
                 name: CString::new("name").unwrap(),
                 description: CString::new("description").unwrap(),
                 price: 1,
-                unk_0a: 2,
             }
         );
     }
@@ -891,7 +890,6 @@ mod tests {
                 name: CString::new("name").unwrap(),
                 description: CString::new("description").unwrap(),
                 price: 1,
-                unk_0a: 2,
             }
         );
     }
