@@ -210,7 +210,8 @@ pub struct Item {
     /// The item's description (shown in the inventory and the shop).
     pub description: CString,
     pub unk_08: u16,
-    pub unk_0a: u16,
+    /// The amount of time it takes to pick up the item in hundredths of seconds.
+    pub pickup_delay: u16,
     /// The item's shop price.
     pub price: u16,
     /// The number of happy points rewarded if the player throws the item away.
@@ -240,7 +241,7 @@ impl<R: Read> ReadFrom<StringReader<R>> for Item {
             name: reader.read_string_offset()?,
             description: reader.read_string_offset()?,
             unk_08: reader.read_u16::<BE>()?,
-            unk_0a: reader.read_u16::<BE>()?,
+            pickup_delay: reader.read_u16::<BE>()?,
             price: reader.read_u16::<BE>()?,
             junk_exp: reader.read_u16::<BE>()?,
             junk_money: reader.read_u16::<BE>()?,
@@ -255,7 +256,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Item {
         writer.write_string_offset(&self.name)?;
         writer.write_string_offset(&self.description)?;
         writer.write_u16::<BE>(self.unk_08)?;
-        writer.write_u16::<BE>(self.unk_0a)?;
+        writer.write_u16::<BE>(self.pickup_delay)?;
         writer.write_u16::<BE>(self.price)?;
         writer.write_u16::<BE>(self.junk_exp)?;
         writer.write_u16::<BE>(self.junk_money)?;
@@ -811,7 +812,7 @@ mod tests {
                 name: CString::new("name").unwrap(),
                 description: CString::new("description").unwrap(),
                 unk_08: 1,
-                unk_0a: 2,
+                pickup_delay: 2,
                 price: 3,
                 junk_exp: 4,
                 junk_money: 5,
