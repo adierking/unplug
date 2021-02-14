@@ -1,5 +1,6 @@
 use super::{Error, Result};
 use crate::common::{ReadFrom, WriteTo};
+use bitflags::bitflags;
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE, LE};
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
@@ -202,6 +203,18 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
     }
 }
 
+bitflags! {
+    #[derive(Default)]
+    pub struct ItemFlags: u16 {
+        /// The item is junk. (unused)
+        const JUNK = 1 << 0;
+        /// The item is visible in Chibi-Vision.
+        const CHIBI_VISION = 1 << 1;
+        /// The item is visible on the inventory screen.
+        const INVENTORY = 1 << 2;
+    }
+}
+
 /// Metadata which describes a collectable item.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Item {
@@ -209,7 +222,8 @@ pub struct Item {
     pub name: CString,
     /// The item's description (shown in the inventory and the shop).
     pub description: CString,
-    pub unk_08: u16,
+    /// The item's flags.
+    pub flags: ItemFlags,
     /// The amount of time it takes to pick up the item in hundredths of seconds.
     pub pickup_delay: u16,
     /// The item's shop price.
@@ -243,7 +257,7 @@ impl<R: Read> ReadFrom<StringReader<R>> for Item {
         Ok(Self {
             name: reader.read_string_offset()?,
             description: reader.read_string_offset()?,
-            unk_08: reader.read_u16::<BE>()?,
+            flags: ItemFlags::from_bits_truncate(reader.read_u16::<BE>()?),
             pickup_delay: reader.read_u16::<BE>()?,
             price: reader.read_u16::<BE>()?,
             junk_exp: reader.read_u16::<BE>()?,
@@ -259,7 +273,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Item {
     fn write_to(&self, writer: &mut StringWriter<W>) -> Result<()> {
         writer.write_string_offset(&self.name)?;
         writer.write_string_offset(&self.description)?;
-        writer.write_u16::<BE>(self.unk_08)?;
+        writer.write_u16::<BE>(self.flags.bits())?;
         writer.write_u16::<BE>(self.pickup_delay)?;
         writer.write_u16::<BE>(self.price)?;
         writer.write_u16::<BE>(self.junk_exp)?;
@@ -816,7 +830,7 @@ mod tests {
             Item {
                 name: CString::new("name").unwrap(),
                 description: CString::new("description").unwrap(),
-                unk_08: 1,
+                flags: ItemFlags::JUNK | ItemFlags::CHIBI_VISION | ItemFlags::INVENTORY,
                 pickup_delay: 2,
                 price: 3,
                 junk_exp: 4,
