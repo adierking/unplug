@@ -132,7 +132,7 @@ struct MetadataHeader {
     unk_10_offset: u32,
     unk_14_offset: u32,
     unk_18_offset: u32,
-    unk_1c_offset: u32,
+    coin_values_offset: u32,
     pickup_sounds_offset: u32,
     collect_sounds_offset: u32,
     items_offset: u32,
@@ -159,7 +159,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
             unk_10_offset: reader.read_u32::<LE>()?,
             unk_14_offset: reader.read_u32::<LE>()?,
             unk_18_offset: reader.read_u32::<LE>()?,
-            unk_1c_offset: reader.read_u32::<LE>()?,
+            coin_values_offset: reader.read_u32::<LE>()?,
             pickup_sounds_offset: reader.read_u32::<LE>()?,
             collect_sounds_offset: reader.read_u32::<LE>()?,
             items_offset: reader.read_u32::<LE>()?,
@@ -187,7 +187,7 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.unk_10_offset)?;
         writer.write_u32::<LE>(self.unk_14_offset)?;
         writer.write_u32::<LE>(self.unk_18_offset)?;
-        writer.write_u32::<LE>(self.unk_1c_offset)?;
+        writer.write_u32::<LE>(self.coin_values_offset)?;
         writer.write_u32::<LE>(self.pickup_sounds_offset)?;
         writer.write_u32::<LE>(self.collect_sounds_offset)?;
         writer.write_u32::<LE>(self.items_offset)?;
@@ -201,6 +201,63 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.letickers_offset)?;
         writer.write_u32::<LE>(self.stickers_offset)?;
         writer.write_u32::<LE>(self.stats_offset)?;
+        Ok(())
+    }
+}
+
+/// Stores the value of each type of coin object.
+///
+/// This is internally an array, but the indices are calculated based on the object data values
+/// hardcoded into the executable, so we don't lose anything by representing this as a struct.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CoinValues {
+    pub coin_g: u32,      // 0
+    pub coin_s: u32,      // 1
+    pub coin_c: u32,      // 2
+    pub junk_a: u32,      // 100
+    pub junk_b: u32,      // 101
+    pub junk_c: u32,      // 102
+    pub junk_unko: u32,   // 103
+    pub energyb: u32,     // 200
+    pub happy_heart: u32, // 300
+}
+
+impl CoinValues {
+    /// Constructs an empty `CoinValues`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<R: Read> ReadFrom<R> for CoinValues {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            coin_g: reader.read_u32::<LE>()?,
+            coin_s: reader.read_u32::<LE>()?,
+            coin_c: reader.read_u32::<LE>()?,
+            junk_a: reader.read_u32::<LE>()?,
+            junk_b: reader.read_u32::<LE>()?,
+            junk_c: reader.read_u32::<LE>()?,
+            junk_unko: reader.read_u32::<LE>()?,
+            energyb: reader.read_u32::<LE>()?,
+            happy_heart: reader.read_u32::<LE>()?,
+        })
+    }
+}
+
+impl<W: Write> WriteTo<W> for CoinValues {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u32::<LE>(self.coin_g)?;
+        writer.write_u32::<LE>(self.coin_s)?;
+        writer.write_u32::<LE>(self.coin_c)?;
+        writer.write_u32::<LE>(self.junk_a)?;
+        writer.write_u32::<LE>(self.junk_b)?;
+        writer.write_u32::<LE>(self.junk_c)?;
+        writer.write_u32::<LE>(self.junk_unko)?;
+        writer.write_u32::<LE>(self.energyb)?;
+        writer.write_u32::<LE>(self.happy_heart)?;
         Ok(())
     }
 }
@@ -588,7 +645,7 @@ pub struct Metadata {
     pub unk_10: [u32; 3],
     pub unk_14: [u32; 4],
     pub unk_18: [u32; 3],
-    pub unk_1c: [u32; 9],
+    pub coin_values: CoinValues,
     pub pickup_sounds: [u32; NUM_PICKUP_SOUNDS],
     pub collect_sounds: [u32; NUM_COLLECT_SOUNDS],
     pub items: Box<[Item]>,
@@ -611,7 +668,7 @@ impl Metadata {
             unk_10: [0; 3],
             unk_14: [0; 4],
             unk_18: [0; 3],
-            unk_1c: [0; 9],
+            coin_values: CoinValues::new(),
             pickup_sounds: [0; NUM_PICKUP_SOUNDS],
             collect_sounds: [0; NUM_COLLECT_SOUNDS],
             items: vec![Item::new(); NUM_ITEMS].into_boxed_slice(),
@@ -653,8 +710,8 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         reader.read_u32_into::<LE>(&mut metadata.unk_14)?;
         reader.seek(SeekFrom::Start(header.unk_18_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.unk_18)?;
-        reader.seek(SeekFrom::Start(header.unk_1c_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_1c)?;
+        reader.seek(SeekFrom::Start(header.coin_values_offset as u64))?;
+        metadata.coin_values = CoinValues::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.pickup_sounds_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.pickup_sounds)?;
         reader.seek(SeekFrom::Start(header.collect_sounds_offset as u64))?;
@@ -744,8 +801,8 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         write_u32_slice::<LE, W>(writer, &self.unk_14)?;
         header.unk_18_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.unk_18)?;
-        header.unk_1c_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_1c)?;
+        header.coin_values_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.coin_values.write_to(writer)?;
         header.pickup_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.pickup_sounds)?;
         header.collect_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -798,7 +855,7 @@ mod tests {
             unk_10_offset: 5,
             unk_14_offset: 6,
             unk_18_offset: 7,
-            unk_1c_offset: 8,
+            coin_values_offset: 8,
             pickup_sounds_offset: 9,
             collect_sounds_offset: 10,
             items_offset: 11,
@@ -812,6 +869,21 @@ mod tests {
             letickers_offset: 19,
             stickers_offset: 20,
             stats_offset: 21,
+        });
+    }
+
+    #[test]
+    fn test_write_and_read_coin_values() {
+        assert_write_and_read!(CoinValues {
+            coin_g: 1,
+            coin_s: 2,
+            coin_c: 3,
+            junk_a: 4,
+            junk_b: 5,
+            junk_c: 6,
+            junk_unko: 7,
+            energyb: 8,
+            happy_heart: 9,
         });
     }
 
