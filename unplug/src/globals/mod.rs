@@ -1,3 +1,5 @@
+pub mod metadata;
+
 mod builder;
 mod collision;
 mod header;
@@ -7,6 +9,7 @@ mod reader;
 pub use builder::*;
 pub use collision::*;
 pub use libs::*;
+pub use metadata::Metadata;
 pub use reader::*;
 
 use crate::event::script;

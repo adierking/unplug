@@ -1,5 +1,6 @@
 use super::collision::ObjectColliders;
 use super::header::FileHeader;
+use super::metadata::Metadata;
 use super::reader::CopyGlobals;
 use super::{Libs, Result};
 use crate::common::io::pad;
@@ -14,6 +15,7 @@ const PARTITION_ALIGN: u64 = 4;
 /// Builds globals.bin data.
 pub struct GlobalsBuilder<'a> {
     base: Option<&'a mut dyn CopyGlobals>,
+    metadata: Option<&'a Metadata>,
     colliders: Option<&'a ObjectColliders>,
     libs: Option<&'a Libs>,
 }
@@ -27,6 +29,12 @@ impl<'a> GlobalsBuilder<'a> {
     /// Sets a `GlobalsReader<R>` to copy partitions from by default.
     pub fn base<'s>(&'s mut self, globals: &'a mut dyn CopyGlobals) -> &'s mut Self {
         self.base = Some(globals);
+        self
+    }
+
+    /// Sets the metadata to write.
+    pub fn metadata<'s>(&'s mut self, metadata: &'a Metadata) -> &'s mut Self {
+        self.metadata = Some(metadata);
         self
     }
 
@@ -54,10 +62,14 @@ impl<'a> GlobalsBuilder<'a> {
 
         // Metadata
         let metadata_start = writer.seek(SeekFrom::Current(0))? as u32;
-        if let Some(base) = self.base.as_mut() {
-            base.copy_metadata(&mut writer)?;
+        if let Some(metadata) = self.metadata {
+            let region = Region::with_inf_max_len(&mut writer, metadata_start as u64, 0)?;
+            let mut buf = BufWriter::new(region);
+            metadata.write_to(&mut buf)?;
+            buf.flush()?;
         } else {
-            panic!("Missing metadata");
+            let base = self.base.as_mut().expect("Missing metadata");
+            base.copy_metadata(&mut writer)?;
         }
         header.set_metadata(metadata_start, writer.seek(SeekFrom::Current(0))? as u32);
         pad(&mut writer, PARTITION_ALIGN, 0)?;

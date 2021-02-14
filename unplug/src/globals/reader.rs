@@ -1,6 +1,6 @@
 use super::collision::ObjectColliders;
 use super::header::{FileHeader, HEADER_SIZE};
-use super::{Libs, Result};
+use super::{Libs, Metadata, Result};
 use crate::common::{ReadFrom, Region};
 use std::io::{self, BufReader, Read, Seek, SeekFrom, Write};
 
@@ -33,6 +33,11 @@ impl<R: Read + Seek> GlobalsReader<R> {
     /// Returns a region open on the libs partition.
     pub fn open_libs(&mut self) -> Result<Region<&mut R>> {
         self.open_partition(self.header.libs_offset, self.header.libs_size)
+    }
+
+    /// Reads the metadata from the file.
+    pub fn read_metadata(&mut self) -> Result<Metadata> {
+        Ok(Metadata::read_from(&mut self.open_metadata()?)?)
     }
 
     /// Reads the collision data from the file.

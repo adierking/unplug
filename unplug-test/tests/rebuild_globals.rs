@@ -1,6 +1,7 @@
 use anyhow::Result;
 use log::info;
 use serial_test::serial;
+use std::ffi::CString;
 use std::io::{Read, Seek, SeekFrom};
 use tempfile::tempfile;
 use unplug::data::object::ObjectId;
@@ -36,6 +37,40 @@ fn test_rebuild_globals_copy_all() -> Result<()> {
     let mut rebuilt_bytes = vec![];
     temp.read_to_end(&mut rebuilt_bytes)?;
     assert!(original_bytes == rebuilt_bytes);
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_rebuild_globals_metadata() -> Result<()> {
+    common::init_logging();
+
+    let mut iso = common::open_iso()?;
+    let mut qp = ArchiveReader::open(iso.open_file_at(common::QP_PATH)?)?;
+
+    info!("Reading {}", common::QP_GLOBALS_PATH);
+    let mut original = GlobalsReader::open(qp.open_file_at(common::QP_GLOBALS_PATH)?)?;
+    let mut original_metadata = original.read_metadata()?;
+
+    // Change an item name so we know it isn't just copied
+    info!("Building new globals with altered metadata");
+    original_metadata.items[0].name = CString::new("test").unwrap();
+
+    let mut temp = tempfile()?;
+    GlobalsBuilder::new().base(&mut original).metadata(&original_metadata).write_to(&mut temp)?;
+
+    info!("Reading new metadata");
+    let mut rebuilt = GlobalsReader::open(temp)?;
+    let rebuilt_metadata = rebuilt.read_metadata()?;
+    assert_eq!(original_metadata, rebuilt_metadata);
+
+    info!("Comparing other partitions");
+    assert!(common::compare_streams(
+        &mut original.open_colliders()?,
+        &mut rebuilt.open_colliders()?
+    )?);
+    assert!(common::compare_streams(&mut original.open_libs()?, &mut rebuilt.open_libs()?)?);
 
     Ok(())
 }

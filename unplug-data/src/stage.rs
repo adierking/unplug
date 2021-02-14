@@ -1,11 +1,11 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 /// The number of real (non-dev) stages.
-pub const NUM_REAL_STAGES: i32 = 30;
+pub const NUM_REAL_STAGES: usize = 30;
 /// The number of dev stages (shun, hori, ahk, etc.)
-pub const NUM_DEV_STAGES: i32 = 9;
+pub const NUM_DEV_STAGES: usize = 9;
 /// The total number of stages.
-pub const NUM_STAGES: i32 = NUM_REAL_STAGES + NUM_DEV_STAGES;
+pub const NUM_STAGES: usize = NUM_REAL_STAGES + NUM_DEV_STAGES;
 
 /// The directory where stages are stored in qp.bin.
 pub const STAGE_DIR: &str = "bin/e";
