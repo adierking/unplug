@@ -131,7 +131,7 @@ struct MetadataHeader {
     unk_0c_offset: u32,
     unk_10_offset: u32,
     unk_14_offset: u32,
-    unk_18_offset: u32,
+    default_atcs_offset: u32,
     coin_values_offset: u32,
     pickup_sounds_offset: u32,
     collect_sounds_offset: u32,
@@ -158,7 +158,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
             unk_0c_offset: reader.read_u32::<LE>()?,
             unk_10_offset: reader.read_u32::<LE>()?,
             unk_14_offset: reader.read_u32::<LE>()?,
-            unk_18_offset: reader.read_u32::<LE>()?,
+            default_atcs_offset: reader.read_u32::<LE>()?,
             coin_values_offset: reader.read_u32::<LE>()?,
             pickup_sounds_offset: reader.read_u32::<LE>()?,
             collect_sounds_offset: reader.read_u32::<LE>()?,
@@ -186,7 +186,7 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.unk_0c_offset)?;
         writer.write_u32::<LE>(self.unk_10_offset)?;
         writer.write_u32::<LE>(self.unk_14_offset)?;
-        writer.write_u32::<LE>(self.unk_18_offset)?;
+        writer.write_u32::<LE>(self.default_atcs_offset)?;
         writer.write_u32::<LE>(self.coin_values_offset)?;
         writer.write_u32::<LE>(self.pickup_sounds_offset)?;
         writer.write_u32::<LE>(self.collect_sounds_offset)?;
@@ -201,6 +201,46 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.letickers_offset)?;
         writer.write_u32::<LE>(self.stickers_offset)?;
         writer.write_u32::<LE>(self.stats_offset)?;
+        Ok(())
+    }
+}
+
+/// Determines which attachments are unlocked by default in a new game.
+/// This is internally an array, but a struct is more convenient.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct DefaultAtcs {
+    /// `true` if the copter should be unlocked by default.
+    pub copter: bool,
+    /// `true` if the popper (blaster) should be unlocked by default.
+    pub popper: bool,
+    /// `true` if the radar should be unlocked by default.
+    pub radar: bool,
+}
+
+impl DefaultAtcs {
+    /// Constructs an empty `DefaultAtcs`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<R: Read> ReadFrom<R> for DefaultAtcs {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            copter: reader.read_u32::<LE>()? != 0,
+            popper: reader.read_u32::<LE>()? != 0,
+            radar: reader.read_u32::<LE>()? != 0,
+        })
+    }
+}
+
+impl<W: Write> WriteTo<W> for DefaultAtcs {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u32::<LE>(self.copter as u32)?;
+        writer.write_u32::<LE>(self.popper as u32)?;
+        writer.write_u32::<LE>(self.radar as u32)?;
         Ok(())
     }
 }
@@ -644,7 +684,7 @@ pub struct Metadata {
     pub unk_0c: [u32; 2],
     pub unk_10: [u32; 3],
     pub unk_14: [u32; 4],
-    pub unk_18: [u32; 3],
+    pub default_atcs: DefaultAtcs,
     pub coin_values: CoinValues,
     pub pickup_sounds: [u32; NUM_PICKUP_SOUNDS],
     pub collect_sounds: [u32; NUM_COLLECT_SOUNDS],
@@ -667,7 +707,7 @@ impl Metadata {
             unk_0c: [0; 2],
             unk_10: [0; 3],
             unk_14: [0; 4],
-            unk_18: [0; 3],
+            default_atcs: DefaultAtcs::new(),
             coin_values: CoinValues::new(),
             pickup_sounds: [0; NUM_PICKUP_SOUNDS],
             collect_sounds: [0; NUM_COLLECT_SOUNDS],
@@ -708,8 +748,8 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         reader.read_u32_into::<LE>(&mut metadata.unk_10)?;
         reader.seek(SeekFrom::Start(header.unk_14_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.unk_14)?;
-        reader.seek(SeekFrom::Start(header.unk_18_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_18)?;
+        reader.seek(SeekFrom::Start(header.default_atcs_offset as u64))?;
+        metadata.default_atcs = DefaultAtcs::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.coin_values_offset as u64))?;
         metadata.coin_values = CoinValues::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.pickup_sounds_offset as u64))?;
@@ -799,8 +839,8 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         write_u32_slice::<LE, W>(writer, &self.unk_10)?;
         header.unk_14_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.unk_14)?;
-        header.unk_18_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_18)?;
+        header.default_atcs_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.default_atcs.write_to(writer)?;
         header.coin_values_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.coin_values.write_to(writer)?;
         header.pickup_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -854,7 +894,7 @@ mod tests {
             unk_0c_offset: 4,
             unk_10_offset: 5,
             unk_14_offset: 6,
-            unk_18_offset: 7,
+            default_atcs_offset: 7,
             coin_values_offset: 8,
             pickup_sounds_offset: 9,
             collect_sounds_offset: 10,
@@ -870,6 +910,11 @@ mod tests {
             stickers_offset: 20,
             stats_offset: 21,
         });
+    }
+
+    #[test]
+    fn test_write_and_read_default_atcs() {
+        assert_write_and_read!(DefaultAtcs { copter: true, popper: false, radar: true });
     }
 
     #[test]
