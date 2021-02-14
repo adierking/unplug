@@ -127,7 +127,7 @@ impl<W: Write + Seek> Seek for StringWriter<W> {
 struct MetadataHeader {
     unk_00_offset: u32,
     unk_04_offset: u32,
-    unk_08_offset: u32,
+    copter_settings_offset: u32,
     unk_0c_offset: u32,
     unk_10_offset: u32,
     unk_14_offset: u32,
@@ -154,7 +154,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
         Ok(Self {
             unk_00_offset: reader.read_u32::<LE>()?,
             unk_04_offset: reader.read_u32::<LE>()?,
-            unk_08_offset: reader.read_u32::<LE>()?,
+            copter_settings_offset: reader.read_u32::<LE>()?,
             unk_0c_offset: reader.read_u32::<LE>()?,
             unk_10_offset: reader.read_u32::<LE>()?,
             unk_14_offset: reader.read_u32::<LE>()?,
@@ -182,7 +182,7 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<LE>(self.unk_00_offset)?;
         writer.write_u32::<LE>(self.unk_04_offset)?;
-        writer.write_u32::<LE>(self.unk_08_offset)?;
+        writer.write_u32::<LE>(self.copter_settings_offset)?;
         writer.write_u32::<LE>(self.unk_0c_offset)?;
         writer.write_u32::<LE>(self.unk_10_offset)?;
         writer.write_u32::<LE>(self.unk_14_offset)?;
@@ -201,6 +201,46 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.letickers_offset)?;
         writer.write_u32::<LE>(self.stickers_offset)?;
         writer.write_u32::<LE>(self.stats_offset)?;
+        Ok(())
+    }
+}
+
+/// Settings which control the behavior of the copter attachment.
+/// This is internally an array, but a struct is more convenient.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CopterSettings {
+    /// The amount of time the player hovers when activating the copter in hundredths of seconds.
+    pub hover_duration: i32,
+    /// The player's gravity when falling with the copter in hundredths of units.
+    pub gravity: i32,
+    /// The player's terminal velocity when falling with the copter in hundredths of units.
+    pub terminal_velocity: i32,
+}
+
+impl CopterSettings {
+    /// Constructs an empty `CopterSettings`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<R: Read> ReadFrom<R> for CopterSettings {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            hover_duration: reader.read_i32::<LE>()?,
+            gravity: reader.read_i32::<LE>()?,
+            terminal_velocity: reader.read_i32::<LE>()?,
+        })
+    }
+}
+
+impl<W: Write> WriteTo<W> for CopterSettings {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_i32::<LE>(self.hover_duration)?;
+        writer.write_i32::<LE>(self.gravity)?;
+        writer.write_i32::<LE>(self.terminal_velocity)?;
         Ok(())
     }
 }
@@ -680,7 +720,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Stat {
 pub struct Metadata {
     pub unk_00: [u32; 39],
     pub unk_04: [u32; 4],
-    pub unk_08: [u32; 3],
+    pub copter_settings: CopterSettings,
     pub unk_0c: [u32; 2],
     pub unk_10: [u32; 3],
     pub unk_14: [u32; 4],
@@ -703,7 +743,7 @@ impl Metadata {
         Self {
             unk_00: [0; 39],
             unk_04: [0; 4],
-            unk_08: [0; 3],
+            copter_settings: CopterSettings::new(),
             unk_0c: [0; 2],
             unk_10: [0; 3],
             unk_14: [0; 4],
@@ -740,8 +780,8 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         reader.read_u32_into::<LE>(&mut metadata.unk_00)?;
         reader.seek(SeekFrom::Start(header.unk_04_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.unk_04)?;
-        reader.seek(SeekFrom::Start(header.unk_08_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_08)?;
+        reader.seek(SeekFrom::Start(header.copter_settings_offset as u64))?;
+        metadata.copter_settings = CopterSettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.unk_0c_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.unk_0c)?;
         reader.seek(SeekFrom::Start(header.unk_10_offset as u64))?;
@@ -831,8 +871,8 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         write_u32_slice::<LE, W>(writer, &self.unk_00)?;
         header.unk_04_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.unk_04)?;
-        header.unk_08_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_08)?;
+        header.copter_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.copter_settings.write_to(writer)?;
         header.unk_0c_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.unk_0c)?;
         header.unk_10_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -890,7 +930,7 @@ mod tests {
         assert_write_and_read!(MetadataHeader {
             unk_00_offset: 1,
             unk_04_offset: 2,
-            unk_08_offset: 3,
+            copter_settings_offset: 3,
             unk_0c_offset: 4,
             unk_10_offset: 5,
             unk_14_offset: 6,
@@ -909,6 +949,15 @@ mod tests {
             letickers_offset: 19,
             stickers_offset: 20,
             stats_offset: 21,
+        });
+    }
+
+    #[test]
+    fn test_write_and_read_copter_settings() {
+        assert_write_and_read!(CopterSettings {
+            hover_duration: 1,
+            gravity: 2,
+            terminal_velocity: 3,
         });
     }
 
