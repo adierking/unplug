@@ -32,6 +32,12 @@ pub enum Error {
     #[error("unrecognized collision material: {0}")]
     UnrecognizedMaterial(i16),
 
+    #[error("invalid pickup sound index: {0}")]
+    InvalidPickupSound(i8),
+
+    #[error("invalid collect sound index: {0}")]
+    InvalidCollectSound(i8),
+
     #[error(transparent)]
     Script(Box<script::Error>),
 

@@ -7,6 +7,8 @@ use std::ffi::{CStr, CString};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use unplug_data::stage::NUM_REAL_STAGES;
 
+const NUM_PICKUP_SOUNDS: usize = 4;
+const NUM_COLLECT_SOUNDS: usize = 3;
 const NUM_ITEMS: usize = 159;
 const NUM_ACTORS: usize = 64;
 const NUM_ATCS: usize = 9;
@@ -278,7 +280,13 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Item {
         writer.write_u16::<BE>(self.price)?;
         writer.write_u16::<BE>(self.junk_exp)?;
         writer.write_u16::<BE>(self.junk_money)?;
+        if self.pickup_sound >= NUM_PICKUP_SOUNDS as i8 {
+            return Err(Error::InvalidPickupSound(self.pickup_sound));
+        }
         writer.write_i8(self.pickup_sound)?;
+        if self.collect_sound >= NUM_COLLECT_SOUNDS as i8 {
+            return Err(Error::InvalidCollectSound(self.collect_sound));
+        }
         writer.write_i8(self.collect_sound)?;
         Ok(())
     }
@@ -581,8 +589,8 @@ pub struct Metadata {
     pub unk_14: [u32; 4],
     pub unk_18: [u32; 3],
     pub unk_1c: [u32; 9],
-    pub pickup_sounds: [u32; 4],
-    pub collect_sounds: [u32; 3],
+    pub pickup_sounds: [u32; NUM_PICKUP_SOUNDS],
+    pub collect_sounds: [u32; NUM_COLLECT_SOUNDS],
     pub items: Box<[Item]>,
     pub actors: Box<[Actor]>,
     pub atcs: Box<[Atc]>,
@@ -604,8 +612,8 @@ impl Metadata {
             unk_14: [0; 4],
             unk_18: [0; 3],
             unk_1c: [0; 9],
-            pickup_sounds: [0; 4],
-            collect_sounds: [0; 3],
+            pickup_sounds: [0; NUM_PICKUP_SOUNDS],
+            collect_sounds: [0; NUM_COLLECT_SOUNDS],
             items: vec![Item::new(); NUM_ITEMS].into_boxed_slice(),
             actors: vec![Actor::new(); NUM_ACTORS].into_boxed_slice(),
             atcs: vec![Atc::new(); NUM_ATCS].into_boxed_slice(),
@@ -835,8 +843,8 @@ mod tests {
                 price: 3,
                 junk_exp: 4,
                 junk_money: 5,
-                pickup_sound: 6,
-                collect_sound: 7,
+                pickup_sound: -6,
+                collect_sound: -7,
             }
         );
     }
