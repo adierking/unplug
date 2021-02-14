@@ -130,8 +130,8 @@ struct MetadataHeader {
     unk_14_offset: u32,
     unk_18_offset: u32,
     unk_1c_offset: u32,
-    unk_20_offset: u32,
-    unk_24_offset: u32,
+    pickup_sounds_offset: u32,
+    collect_sounds_offset: u32,
     items_offset: u32,
     actors_offset: u32,
     atcs_offset: u32,
@@ -157,8 +157,8 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
             unk_14_offset: reader.read_u32::<LE>()?,
             unk_18_offset: reader.read_u32::<LE>()?,
             unk_1c_offset: reader.read_u32::<LE>()?,
-            unk_20_offset: reader.read_u32::<LE>()?,
-            unk_24_offset: reader.read_u32::<LE>()?,
+            pickup_sounds_offset: reader.read_u32::<LE>()?,
+            collect_sounds_offset: reader.read_u32::<LE>()?,
             items_offset: reader.read_u32::<LE>()?,
             actors_offset: reader.read_u32::<LE>()?,
             atcs_offset: reader.read_u32::<LE>()?,
@@ -185,8 +185,8 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.unk_14_offset)?;
         writer.write_u32::<LE>(self.unk_18_offset)?;
         writer.write_u32::<LE>(self.unk_1c_offset)?;
-        writer.write_u32::<LE>(self.unk_20_offset)?;
-        writer.write_u32::<LE>(self.unk_24_offset)?;
+        writer.write_u32::<LE>(self.pickup_sounds_offset)?;
+        writer.write_u32::<LE>(self.collect_sounds_offset)?;
         writer.write_u32::<LE>(self.items_offset)?;
         writer.write_u32::<LE>(self.actors_offset)?;
         writer.write_u32::<LE>(self.atcs_offset)?;
@@ -218,7 +218,10 @@ pub struct Item {
     pub junk_exp: u16,
     /// The amount of money rewarded if the player throws the item away.
     pub junk_money: u16,
-    pub unk_12: u16,
+    /// The `pickup_sounds` index of the sound to play when the item is picked up. (-1 = none)
+    pub pickup_sound: i8,
+    /// The `collect_sounds` index of the sound to play when the item is collected. (-1 = none)
+    pub collect_sound: i8,
 }
 
 impl Item {
@@ -245,7 +248,8 @@ impl<R: Read> ReadFrom<StringReader<R>> for Item {
             price: reader.read_u16::<BE>()?,
             junk_exp: reader.read_u16::<BE>()?,
             junk_money: reader.read_u16::<BE>()?,
-            unk_12: reader.read_u16::<BE>()?,
+            pickup_sound: reader.read_i8()?,
+            collect_sound: reader.read_i8()?,
         })
     }
 }
@@ -260,7 +264,8 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Item {
         writer.write_u16::<BE>(self.price)?;
         writer.write_u16::<BE>(self.junk_exp)?;
         writer.write_u16::<BE>(self.junk_money)?;
-        writer.write_u16::<BE>(self.unk_12)?;
+        writer.write_i8(self.pickup_sound)?;
+        writer.write_i8(self.collect_sound)?;
         Ok(())
     }
 }
@@ -562,8 +567,8 @@ pub struct Metadata {
     pub unk_14: [u32; 4],
     pub unk_18: [u32; 3],
     pub unk_1c: [u32; 9],
-    pub unk_20: [u32; 4],
-    pub unk_24: [u32; 3],
+    pub pickup_sounds: [u32; 4],
+    pub collect_sounds: [u32; 3],
     pub items: Box<[Item]>,
     pub actors: Box<[Actor]>,
     pub atcs: Box<[Atc]>,
@@ -585,8 +590,8 @@ impl Metadata {
             unk_14: [0; 4],
             unk_18: [0; 3],
             unk_1c: [0; 9],
-            unk_20: [0; 4],
-            unk_24: [0; 3],
+            pickup_sounds: [0; 4],
+            collect_sounds: [0; 3],
             items: vec![Item::new(); NUM_ITEMS].into_boxed_slice(),
             actors: vec![Actor::new(); NUM_ACTORS].into_boxed_slice(),
             atcs: vec![Atc::new(); NUM_ATCS].into_boxed_slice(),
@@ -628,10 +633,10 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         reader.read_u32_into::<LE>(&mut metadata.unk_18)?;
         reader.seek(SeekFrom::Start(header.unk_1c_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.unk_1c)?;
-        reader.seek(SeekFrom::Start(header.unk_20_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_20)?;
-        reader.seek(SeekFrom::Start(header.unk_24_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_24)?;
+        reader.seek(SeekFrom::Start(header.pickup_sounds_offset as u64))?;
+        reader.read_u32_into::<LE>(&mut metadata.pickup_sounds)?;
+        reader.seek(SeekFrom::Start(header.collect_sounds_offset as u64))?;
+        reader.read_u32_into::<LE>(&mut metadata.collect_sounds)?;
 
         let mut reader = StringReader::new(reader);
         reader.seek(SeekFrom::Start(header.items_offset as u64))?;
@@ -719,10 +724,10 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         write_u32_slice::<LE, W>(writer, &self.unk_18)?;
         header.unk_1c_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.unk_1c)?;
-        header.unk_20_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_20)?;
-        header.unk_24_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_24)?;
+        header.pickup_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        write_u32_slice::<LE, W>(writer, &self.pickup_sounds)?;
+        header.collect_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        write_u32_slice::<LE, W>(writer, &self.collect_sounds)?;
 
         let mut writer = StringWriter::new(writer);
         header.items_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -772,8 +777,8 @@ mod tests {
             unk_14_offset: 6,
             unk_18_offset: 7,
             unk_1c_offset: 8,
-            unk_20_offset: 9,
-            unk_24_offset: 10,
+            pickup_sounds_offset: 9,
+            collect_sounds_offset: 10,
             items_offset: 11,
             actors_offset: 12,
             atcs_offset: 13,
@@ -816,7 +821,8 @@ mod tests {
                 price: 3,
                 junk_exp: 4,
                 junk_money: 5,
-                unk_12: 6,
+                pickup_sound: 6,
+                collect_sound: 7,
             }
         );
     }
