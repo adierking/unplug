@@ -126,7 +126,7 @@ impl<W: Write + Seek> Seek for StringWriter<W> {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct MetadataHeader {
     unk_00_offset: u32,
-    unk_04_offset: u32,
+    popper_settings_offset: u32,
     copter_settings_offset: u32,
     unk_0c_offset: u32,
     unk_10_offset: u32,
@@ -153,7 +153,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
             unk_00_offset: reader.read_u32::<LE>()?,
-            unk_04_offset: reader.read_u32::<LE>()?,
+            popper_settings_offset: reader.read_u32::<LE>()?,
             copter_settings_offset: reader.read_u32::<LE>()?,
             unk_0c_offset: reader.read_u32::<LE>()?,
             unk_10_offset: reader.read_u32::<LE>()?,
@@ -181,7 +181,7 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<LE>(self.unk_00_offset)?;
-        writer.write_u32::<LE>(self.unk_04_offset)?;
+        writer.write_u32::<LE>(self.popper_settings_offset)?;
         writer.write_u32::<LE>(self.copter_settings_offset)?;
         writer.write_u32::<LE>(self.unk_0c_offset)?;
         writer.write_u32::<LE>(self.unk_10_offset)?;
@@ -201,6 +201,50 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.letickers_offset)?;
         writer.write_u32::<LE>(self.stickers_offset)?;
         writer.write_u32::<LE>(self.stats_offset)?;
+        Ok(())
+    }
+}
+
+/// Settings which control the behavior of the popper (blaster) attachment.
+/// This is internally an array, but a struct is more convenient.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PopperSettings {
+    /// The projectile range without the Range Chip in tenths of units.
+    pub range_default: i32,
+    /// The projectile range with the Range Chip in tenths of units.
+    pub range_upgraded: i32,
+    /// The speed of each projectile in tenths of units.
+    pub projectile_speed: i32,
+    /// The maximum number of projectiles that can exist at a time. Hard-capped at 10.
+    pub max_projectiles: i32,
+}
+
+impl PopperSettings {
+    /// Constructs an empty `PopperSettings`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<R: Read> ReadFrom<R> for PopperSettings {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            range_default: reader.read_i32::<LE>()?,
+            range_upgraded: reader.read_i32::<LE>()?,
+            projectile_speed: reader.read_i32::<LE>()?,
+            max_projectiles: reader.read_i32::<LE>()?,
+        })
+    }
+}
+
+impl<W: Write> WriteTo<W> for PopperSettings {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_i32::<LE>(self.range_default)?;
+        writer.write_i32::<LE>(self.range_upgraded)?;
+        writer.write_i32::<LE>(self.projectile_speed)?;
+        writer.write_i32::<LE>(self.max_projectiles)?;
         Ok(())
     }
 }
@@ -719,7 +763,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Stat {
 #[non_exhaustive]
 pub struct Metadata {
     pub unk_00: [u32; 39],
-    pub unk_04: [u32; 4],
+    pub popper_settings: PopperSettings,
     pub copter_settings: CopterSettings,
     pub unk_0c: [u32; 2],
     pub unk_10: [u32; 3],
@@ -742,7 +786,7 @@ impl Metadata {
     pub fn new() -> Self {
         Self {
             unk_00: [0; 39],
-            unk_04: [0; 4],
+            popper_settings: PopperSettings::new(),
             copter_settings: CopterSettings::new(),
             unk_0c: [0; 2],
             unk_10: [0; 3],
@@ -778,8 +822,8 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
 
         reader.seek(SeekFrom::Start(header.unk_00_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.unk_00)?;
-        reader.seek(SeekFrom::Start(header.unk_04_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_04)?;
+        reader.seek(SeekFrom::Start(header.popper_settings_offset as u64))?;
+        metadata.popper_settings = PopperSettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.copter_settings_offset as u64))?;
         metadata.copter_settings = CopterSettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.unk_0c_offset as u64))?;
@@ -869,8 +913,8 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
 
         header.unk_00_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.unk_00)?;
-        header.unk_04_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_04)?;
+        header.popper_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.popper_settings.write_to(writer)?;
         header.copter_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.copter_settings.write_to(writer)?;
         header.unk_0c_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -929,7 +973,7 @@ mod tests {
     fn test_write_and_read_metadata_header() {
         assert_write_and_read!(MetadataHeader {
             unk_00_offset: 1,
-            unk_04_offset: 2,
+            popper_settings_offset: 2,
             copter_settings_offset: 3,
             unk_0c_offset: 4,
             unk_10_offset: 5,
@@ -949,6 +993,16 @@ mod tests {
             letickers_offset: 19,
             stickers_offset: 20,
             stats_offset: 21,
+        });
+    }
+
+    #[test]
+    fn test_write_and_read_popper_settings() {
+        assert_write_and_read!(PopperSettings {
+            range_default: 1,
+            range_upgraded: 2,
+            projectile_speed: 3,
+            max_projectiles: 4,
         });
     }
 
