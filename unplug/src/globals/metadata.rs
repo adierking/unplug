@@ -129,7 +129,7 @@ struct MetadataHeader {
     popper_settings_offset: u32,
     copter_settings_offset: u32,
     radar_settings_offset: u32,
-    unk_10_offset: u32,
+    time_limit_offset: u32,
     unk_14_offset: u32,
     default_atcs_offset: u32,
     coin_values_offset: u32,
@@ -156,7 +156,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
             popper_settings_offset: reader.read_u32::<LE>()?,
             copter_settings_offset: reader.read_u32::<LE>()?,
             radar_settings_offset: reader.read_u32::<LE>()?,
-            unk_10_offset: reader.read_u32::<LE>()?,
+            time_limit_offset: reader.read_u32::<LE>()?,
             unk_14_offset: reader.read_u32::<LE>()?,
             default_atcs_offset: reader.read_u32::<LE>()?,
             coin_values_offset: reader.read_u32::<LE>()?,
@@ -184,7 +184,7 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.popper_settings_offset)?;
         writer.write_u32::<LE>(self.copter_settings_offset)?;
         writer.write_u32::<LE>(self.radar_settings_offset)?;
-        writer.write_u32::<LE>(self.unk_10_offset)?;
+        writer.write_u32::<LE>(self.time_limit_offset)?;
         writer.write_u32::<LE>(self.unk_14_offset)?;
         writer.write_u32::<LE>(self.default_atcs_offset)?;
         writer.write_u32::<LE>(self.coin_values_offset)?;
@@ -318,6 +318,45 @@ impl<W: Write> WriteTo<W> for RadarSettings {
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.red_range)?;
         writer.write_i32::<LE>(self.yellow_range)?;
+        Ok(())
+    }
+}
+
+/// This gets turned into a tick count value when a level starts but never seems to be used
+/// otherwise. Possibly related to the unused "time up" feature referenced in several places?
+///
+/// This is internally an array, but a struct is more convenient.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct TimeLimit {
+    pub hours: i32,
+    pub minutes: i32,
+    pub seconds: i32,
+}
+
+impl TimeLimit {
+    /// Constructs an empty `TimeLimit`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<R: Read> ReadFrom<R> for TimeLimit {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            hours: reader.read_i32::<LE>()?,
+            minutes: reader.read_i32::<LE>()?,
+            seconds: reader.read_i32::<LE>()?,
+        })
+    }
+}
+
+impl<W: Write> WriteTo<W> for TimeLimit {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_i32::<LE>(self.hours)?;
+        writer.write_i32::<LE>(self.minutes)?;
+        writer.write_i32::<LE>(self.seconds)?;
         Ok(())
     }
 }
@@ -799,7 +838,7 @@ pub struct Metadata {
     pub popper_settings: PopperSettings,
     pub copter_settings: CopterSettings,
     pub radar_settings: RadarSettings,
-    pub unk_10: [u32; 3],
+    pub time_limit: TimeLimit,
     pub unk_14: [u32; 4],
     pub default_atcs: DefaultAtcs,
     pub coin_values: CoinValues,
@@ -822,7 +861,7 @@ impl Metadata {
             popper_settings: PopperSettings::new(),
             copter_settings: CopterSettings::new(),
             radar_settings: RadarSettings::new(),
-            unk_10: [0; 3],
+            time_limit: TimeLimit::new(),
             unk_14: [0; 4],
             default_atcs: DefaultAtcs::new(),
             coin_values: CoinValues::new(),
@@ -861,8 +900,8 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         metadata.copter_settings = CopterSettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.radar_settings_offset as u64))?;
         metadata.radar_settings = RadarSettings::read_from(reader)?;
-        reader.seek(SeekFrom::Start(header.unk_10_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_10)?;
+        reader.seek(SeekFrom::Start(header.time_limit_offset as u64))?;
+        metadata.time_limit = TimeLimit::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.unk_14_offset as u64))?;
         reader.read_u32_into::<LE>(&mut metadata.unk_14)?;
         reader.seek(SeekFrom::Start(header.default_atcs_offset as u64))?;
@@ -952,8 +991,8 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         self.copter_settings.write_to(writer)?;
         header.radar_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.radar_settings.write_to(writer)?;
-        header.unk_10_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_10)?;
+        header.time_limit_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.time_limit.write_to(writer)?;
         header.unk_14_offset = writer.seek(SeekFrom::Current(0))? as u32;
         write_u32_slice::<LE, W>(writer, &self.unk_14)?;
         header.default_atcs_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -1009,7 +1048,7 @@ mod tests {
             popper_settings_offset: 2,
             copter_settings_offset: 3,
             radar_settings_offset: 4,
-            unk_10_offset: 5,
+            time_limit_offset: 5,
             unk_14_offset: 6,
             default_atcs_offset: 7,
             coin_values_offset: 8,
@@ -1056,6 +1095,11 @@ mod tests {
     #[test]
     fn test_write_and_read_default_atcs() {
         assert_write_and_read!(DefaultAtcs { copter: true, popper: false, radar: true });
+    }
+
+    #[test]
+    fn test_write_and_read_time_limit() {
+        assert_write_and_read!(TimeLimit { hours: 1, minutes: 2, seconds: 3 });
     }
 
     #[test]
