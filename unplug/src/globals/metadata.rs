@@ -130,7 +130,7 @@ struct MetadataHeader {
     copter_settings_offset: u32,
     radar_settings_offset: u32,
     time_limit_offset: u32,
-    unk_14_offset: u32,
+    player_settings_offset: u32,
     default_atcs_offset: u32,
     coin_values_offset: u32,
     pickup_sounds_offset: u32,
@@ -157,7 +157,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
             copter_settings_offset: reader.read_u32::<LE>()?,
             radar_settings_offset: reader.read_u32::<LE>()?,
             time_limit_offset: reader.read_u32::<LE>()?,
-            unk_14_offset: reader.read_u32::<LE>()?,
+            player_settings_offset: reader.read_u32::<LE>()?,
             default_atcs_offset: reader.read_u32::<LE>()?,
             coin_values_offset: reader.read_u32::<LE>()?,
             pickup_sounds_offset: reader.read_u32::<LE>()?,
@@ -185,7 +185,7 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.copter_settings_offset)?;
         writer.write_u32::<LE>(self.radar_settings_offset)?;
         writer.write_u32::<LE>(self.time_limit_offset)?;
-        writer.write_u32::<LE>(self.unk_14_offset)?;
+        writer.write_u32::<LE>(self.player_settings_offset)?;
         writer.write_u32::<LE>(self.default_atcs_offset)?;
         writer.write_u32::<LE>(self.coin_values_offset)?;
         writer.write_u32::<LE>(self.pickup_sounds_offset)?;
@@ -357,6 +357,55 @@ impl<W: Write> WriteTo<W> for TimeLimit {
         writer.write_i32::<LE>(self.hours)?;
         writer.write_i32::<LE>(self.minutes)?;
         writer.write_i32::<LE>(self.seconds)?;
+        Ok(())
+    }
+}
+
+/// Settings which control the behavior of the player character.
+/// This is internally an array, but a struct is more convenient.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PlayerSettings {
+    /// The amount of time it takes to climb onto an object in hundredths of seconds if the analog
+    /// stick's magnitude is 1.0.
+    pub climb_duration: i32,
+    /// If this is greater than 0, it overrides the analog stick magnitude to produce a constant
+    /// climb rate. A value of 100 is equivalent to a magnitude of 1.0.
+    pub climb_rate: i32,
+    /// The percentage (1-100) that the climb meter caps out at if the player is only gently tilting
+    /// the analog stick (magnitude <= 0.7). If this is 0, the player can always climb objects
+    /// regardless of the analog stick magnitude.
+    pub gentle_climb_percent: i32,
+    /// The amount of time that the player can hold the A button in hundredths of seconds to
+    /// automatically pick up the plug.
+    pub auto_plug_pickup_time: i32,
+}
+
+impl PlayerSettings {
+    /// Constructs an empty `PlayerSettings`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<R: Read> ReadFrom<R> for PlayerSettings {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            climb_duration: reader.read_i32::<LE>()?,
+            climb_rate: reader.read_i32::<LE>()?,
+            gentle_climb_percent: reader.read_i32::<LE>()?,
+            auto_plug_pickup_time: reader.read_i32::<LE>()?,
+        })
+    }
+}
+
+impl<W: Write> WriteTo<W> for PlayerSettings {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_i32::<LE>(self.climb_duration)?;
+        writer.write_i32::<LE>(self.climb_rate)?;
+        writer.write_i32::<LE>(self.gentle_climb_percent)?;
+        writer.write_i32::<LE>(self.auto_plug_pickup_time)?;
         Ok(())
     }
 }
@@ -839,7 +888,7 @@ pub struct Metadata {
     pub copter_settings: CopterSettings,
     pub radar_settings: RadarSettings,
     pub time_limit: TimeLimit,
-    pub unk_14: [u32; 4],
+    pub player_settings: PlayerSettings,
     pub default_atcs: DefaultAtcs,
     pub coin_values: CoinValues,
     pub pickup_sounds: [u32; NUM_PICKUP_SOUNDS],
@@ -862,7 +911,7 @@ impl Metadata {
             copter_settings: CopterSettings::new(),
             radar_settings: RadarSettings::new(),
             time_limit: TimeLimit::new(),
-            unk_14: [0; 4],
+            player_settings: PlayerSettings::new(),
             default_atcs: DefaultAtcs::new(),
             coin_values: CoinValues::new(),
             pickup_sounds: [0; NUM_PICKUP_SOUNDS],
@@ -902,8 +951,8 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         metadata.radar_settings = RadarSettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.time_limit_offset as u64))?;
         metadata.time_limit = TimeLimit::read_from(reader)?;
-        reader.seek(SeekFrom::Start(header.unk_14_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_14)?;
+        reader.seek(SeekFrom::Start(header.player_settings_offset as u64))?;
+        metadata.player_settings = PlayerSettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.default_atcs_offset as u64))?;
         metadata.default_atcs = DefaultAtcs::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.coin_values_offset as u64))?;
@@ -993,8 +1042,8 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         self.radar_settings.write_to(writer)?;
         header.time_limit_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.time_limit.write_to(writer)?;
-        header.unk_14_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_14)?;
+        header.player_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.player_settings.write_to(writer)?;
         header.default_atcs_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.default_atcs.write_to(writer)?;
         header.coin_values_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -1049,7 +1098,7 @@ mod tests {
             copter_settings_offset: 3,
             radar_settings_offset: 4,
             time_limit_offset: 5,
-            unk_14_offset: 6,
+            player_settings_offset: 6,
             default_atcs_offset: 7,
             coin_values_offset: 8,
             pickup_sounds_offset: 9,
@@ -1090,6 +1139,16 @@ mod tests {
     #[test]
     fn test_write_and_read_radar_settings() {
         assert_write_and_read!(RadarSettings { red_range: 1, yellow_range: 2 });
+    }
+
+    #[test]
+    fn test_write_and_read_player_settings() {
+        assert_write_and_read!(PlayerSettings {
+            climb_duration: 1,
+            climb_rate: 2,
+            gentle_climb_percent: 3,
+            auto_plug_pickup_time: 4,
+        });
     }
 
     #[test]
