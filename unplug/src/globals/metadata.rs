@@ -125,12 +125,12 @@ impl<W: Write + Seek> Seek for StringWriter<W> {
 /// The metadata partition header.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct MetadataHeader {
-    battery_settings_offset: u32,
-    popper_settings_offset: u32,
-    copter_settings_offset: u32,
-    radar_settings_offset: u32,
+    battery_globals_offset: u32,
+    popper_globals_offset: u32,
+    copter_globals_offset: u32,
+    radar_globals_offset: u32,
     time_limit_offset: u32,
-    player_settings_offset: u32,
+    player_globals_offset: u32,
     default_atcs_offset: u32,
     coin_values_offset: u32,
     pickup_sounds_offset: u32,
@@ -152,12 +152,12 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
-            battery_settings_offset: reader.read_u32::<LE>()?,
-            popper_settings_offset: reader.read_u32::<LE>()?,
-            copter_settings_offset: reader.read_u32::<LE>()?,
-            radar_settings_offset: reader.read_u32::<LE>()?,
+            battery_globals_offset: reader.read_u32::<LE>()?,
+            popper_globals_offset: reader.read_u32::<LE>()?,
+            copter_globals_offset: reader.read_u32::<LE>()?,
+            radar_globals_offset: reader.read_u32::<LE>()?,
             time_limit_offset: reader.read_u32::<LE>()?,
-            player_settings_offset: reader.read_u32::<LE>()?,
+            player_globals_offset: reader.read_u32::<LE>()?,
             default_atcs_offset: reader.read_u32::<LE>()?,
             coin_values_offset: reader.read_u32::<LE>()?,
             pickup_sounds_offset: reader.read_u32::<LE>()?,
@@ -180,12 +180,12 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
 impl<W: Write> WriteTo<W> for MetadataHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
-        writer.write_u32::<LE>(self.battery_settings_offset)?;
-        writer.write_u32::<LE>(self.popper_settings_offset)?;
-        writer.write_u32::<LE>(self.copter_settings_offset)?;
-        writer.write_u32::<LE>(self.radar_settings_offset)?;
+        writer.write_u32::<LE>(self.battery_globals_offset)?;
+        writer.write_u32::<LE>(self.popper_globals_offset)?;
+        writer.write_u32::<LE>(self.copter_globals_offset)?;
+        writer.write_u32::<LE>(self.radar_globals_offset)?;
         writer.write_u32::<LE>(self.time_limit_offset)?;
-        writer.write_u32::<LE>(self.player_settings_offset)?;
+        writer.write_u32::<LE>(self.player_globals_offset)?;
         writer.write_u32::<LE>(self.default_atcs_offset)?;
         writer.write_u32::<LE>(self.coin_values_offset)?;
         writer.write_u32::<LE>(self.pickup_sounds_offset)?;
@@ -208,7 +208,7 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
 /// Per-action battery drain values in hundredths of watts per second.
 /// This is internally an array, but a struct is more convenient.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct BatterySettings {
+pub struct BatteryGlobals {
     pub idle: i32,
     pub idle_anim: i32,
     pub walk: i32,
@@ -250,14 +250,14 @@ pub struct BatterySettings {
     pub squirter_spray: i32,
 }
 
-impl BatterySettings {
-    /// Constructs an empty `BatterySettings`.
+impl BatteryGlobals {
+    /// Constructs an empty `BatteryGlobals`.
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<R: Read> ReadFrom<R> for BatterySettings {
+impl<R: Read> ReadFrom<R> for BatteryGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -304,7 +304,7 @@ impl<R: Read> ReadFrom<R> for BatterySettings {
     }
 }
 
-impl<W: Write> WriteTo<W> for BatterySettings {
+impl<W: Write> WriteTo<W> for BatteryGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.idle)?;
@@ -350,10 +350,10 @@ impl<W: Write> WriteTo<W> for BatterySettings {
     }
 }
 
-/// Settings which control the behavior of the popper (blaster) attachment.
+/// Values which control the behavior of the popper (blaster) attachment.
 /// This is internally an array, but a struct is more convenient.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct PopperSettings {
+pub struct PopperGlobals {
     /// The projectile range without the Range Chip in tenths of units.
     pub range_default: i32,
     /// The projectile range with the Range Chip in tenths of units.
@@ -364,14 +364,14 @@ pub struct PopperSettings {
     pub max_projectiles: i32,
 }
 
-impl PopperSettings {
-    /// Constructs an empty `PopperSettings`.
+impl PopperGlobals {
+    /// Constructs an empty `PopperGlobals`.
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<R: Read> ReadFrom<R> for PopperSettings {
+impl<R: Read> ReadFrom<R> for PopperGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -383,7 +383,7 @@ impl<R: Read> ReadFrom<R> for PopperSettings {
     }
 }
 
-impl<W: Write> WriteTo<W> for PopperSettings {
+impl<W: Write> WriteTo<W> for PopperGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.range_default)?;
@@ -394,10 +394,10 @@ impl<W: Write> WriteTo<W> for PopperSettings {
     }
 }
 
-/// Settings which control the behavior of the copter attachment.
+/// Values which control the behavior of the copter attachment.
 /// This is internally an array, but a struct is more convenient.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct CopterSettings {
+pub struct CopterGlobals {
     /// The amount of time the player hovers when activating the copter in hundredths of seconds.
     pub hover_duration: i32,
     /// The player's gravity when falling with the copter in hundredths of units.
@@ -406,14 +406,14 @@ pub struct CopterSettings {
     pub terminal_velocity: i32,
 }
 
-impl CopterSettings {
-    /// Constructs an empty `CopterSettings`.
+impl CopterGlobals {
+    /// Constructs an empty `CopterGlobals`.
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<R: Read> ReadFrom<R> for CopterSettings {
+impl<R: Read> ReadFrom<R> for CopterGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -424,7 +424,7 @@ impl<R: Read> ReadFrom<R> for CopterSettings {
     }
 }
 
-impl<W: Write> WriteTo<W> for CopterSettings {
+impl<W: Write> WriteTo<W> for CopterGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.hover_duration)?;
@@ -434,31 +434,31 @@ impl<W: Write> WriteTo<W> for CopterSettings {
     }
 }
 
-/// Settings which control the behavior of the radar attachment.
+/// Values which control the behavior of the radar attachment.
 /// This is internally an array, but a struct is more convenient.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct RadarSettings {
+pub struct RadarGlobals {
     /// The range where the radar beam is red in hundredths of units.
     pub red_range: i32,
     /// The range where the radar beam is yellow in hundredths of units.
     pub yellow_range: i32,
 }
 
-impl RadarSettings {
-    /// Constructs an empty `RadarSettings`.
+impl RadarGlobals {
+    /// Constructs an empty `RadarGlobals`.
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<R: Read> ReadFrom<R> for RadarSettings {
+impl<R: Read> ReadFrom<R> for RadarGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self { red_range: reader.read_i32::<LE>()?, yellow_range: reader.read_i32::<LE>()? })
     }
 }
 
-impl<W: Write> WriteTo<W> for RadarSettings {
+impl<W: Write> WriteTo<W> for RadarGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.red_range)?;
@@ -506,10 +506,10 @@ impl<W: Write> WriteTo<W> for TimeLimit {
     }
 }
 
-/// Settings which control the behavior of the player character.
+/// Values which control the behavior of the player character.
 /// This is internally an array, but a struct is more convenient.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct PlayerSettings {
+pub struct PlayerGlobals {
     /// The amount of time it takes to climb onto an object in hundredths of seconds if the analog
     /// stick's magnitude is 1.0.
     pub climb_duration: i32,
@@ -525,14 +525,14 @@ pub struct PlayerSettings {
     pub auto_plug_pickup_time: i32,
 }
 
-impl PlayerSettings {
-    /// Constructs an empty `PlayerSettings`.
+impl PlayerGlobals {
+    /// Constructs an empty `PlayerGlobals`.
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<R: Read> ReadFrom<R> for PlayerSettings {
+impl<R: Read> ReadFrom<R> for PlayerGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -544,7 +544,7 @@ impl<R: Read> ReadFrom<R> for PlayerSettings {
     }
 }
 
-impl<W: Write> WriteTo<W> for PlayerSettings {
+impl<W: Write> WriteTo<W> for PlayerGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.climb_duration)?;
@@ -1028,12 +1028,12 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Stat {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Metadata {
-    pub battery_settings: BatterySettings,
-    pub popper_settings: PopperSettings,
-    pub copter_settings: CopterSettings,
-    pub radar_settings: RadarSettings,
+    pub battery_globals: BatteryGlobals,
+    pub popper_globals: PopperGlobals,
+    pub copter_globals: CopterGlobals,
+    pub radar_globals: RadarGlobals,
     pub time_limit: TimeLimit,
-    pub player_settings: PlayerSettings,
+    pub player_globals: PlayerGlobals,
     pub default_atcs: DefaultAtcs,
     pub coin_values: CoinValues,
     pub pickup_sounds: [u32; NUM_PICKUP_SOUNDS],
@@ -1051,12 +1051,12 @@ pub struct Metadata {
 impl Metadata {
     pub fn new() -> Self {
         Self {
-            battery_settings: BatterySettings::new(),
-            popper_settings: PopperSettings::new(),
-            copter_settings: CopterSettings::new(),
-            radar_settings: RadarSettings::new(),
+            battery_globals: BatteryGlobals::new(),
+            popper_globals: PopperGlobals::new(),
+            copter_globals: CopterGlobals::new(),
+            radar_globals: RadarGlobals::new(),
             time_limit: TimeLimit::new(),
-            player_settings: PlayerSettings::new(),
+            player_globals: PlayerGlobals::new(),
             default_atcs: DefaultAtcs::new(),
             coin_values: CoinValues::new(),
             pickup_sounds: [0; NUM_PICKUP_SOUNDS],
@@ -1086,18 +1086,18 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         let header = MetadataHeader::read_from(reader)?;
         let mut metadata = Self::new();
 
-        reader.seek(SeekFrom::Start(header.battery_settings_offset as u64))?;
-        metadata.battery_settings = BatterySettings::read_from(reader)?;
-        reader.seek(SeekFrom::Start(header.popper_settings_offset as u64))?;
-        metadata.popper_settings = PopperSettings::read_from(reader)?;
-        reader.seek(SeekFrom::Start(header.copter_settings_offset as u64))?;
-        metadata.copter_settings = CopterSettings::read_from(reader)?;
-        reader.seek(SeekFrom::Start(header.radar_settings_offset as u64))?;
-        metadata.radar_settings = RadarSettings::read_from(reader)?;
+        reader.seek(SeekFrom::Start(header.battery_globals_offset as u64))?;
+        metadata.battery_globals = BatteryGlobals::read_from(reader)?;
+        reader.seek(SeekFrom::Start(header.popper_globals_offset as u64))?;
+        metadata.popper_globals = PopperGlobals::read_from(reader)?;
+        reader.seek(SeekFrom::Start(header.copter_globals_offset as u64))?;
+        metadata.copter_globals = CopterGlobals::read_from(reader)?;
+        reader.seek(SeekFrom::Start(header.radar_globals_offset as u64))?;
+        metadata.radar_globals = RadarGlobals::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.time_limit_offset as u64))?;
         metadata.time_limit = TimeLimit::read_from(reader)?;
-        reader.seek(SeekFrom::Start(header.player_settings_offset as u64))?;
-        metadata.player_settings = PlayerSettings::read_from(reader)?;
+        reader.seek(SeekFrom::Start(header.player_globals_offset as u64))?;
+        metadata.player_globals = PlayerGlobals::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.default_atcs_offset as u64))?;
         metadata.default_atcs = DefaultAtcs::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.coin_values_offset as u64))?;
@@ -1177,18 +1177,18 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         let mut header = MetadataHeader::default();
         header.write_to(writer)?;
 
-        header.battery_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        self.battery_settings.write_to(writer)?;
-        header.popper_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        self.popper_settings.write_to(writer)?;
-        header.copter_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        self.copter_settings.write_to(writer)?;
-        header.radar_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        self.radar_settings.write_to(writer)?;
+        header.battery_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.battery_globals.write_to(writer)?;
+        header.popper_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.popper_globals.write_to(writer)?;
+        header.copter_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.copter_globals.write_to(writer)?;
+        header.radar_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.radar_globals.write_to(writer)?;
         header.time_limit_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.time_limit.write_to(writer)?;
-        header.player_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        self.player_settings.write_to(writer)?;
+        header.player_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.player_globals.write_to(writer)?;
         header.default_atcs_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.default_atcs.write_to(writer)?;
         header.coin_values_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -1238,12 +1238,12 @@ mod tests {
     #[test]
     fn test_write_and_read_metadata_header() {
         assert_write_and_read!(MetadataHeader {
-            battery_settings_offset: 1,
-            popper_settings_offset: 2,
-            copter_settings_offset: 3,
-            radar_settings_offset: 4,
+            battery_globals_offset: 1,
+            popper_globals_offset: 2,
+            copter_globals_offset: 3,
+            radar_globals_offset: 4,
             time_limit_offset: 5,
-            player_settings_offset: 6,
+            player_globals_offset: 6,
             default_atcs_offset: 7,
             coin_values_offset: 8,
             pickup_sounds_offset: 9,
@@ -1263,8 +1263,8 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_battery_settings() {
-        assert_write_and_read!(BatterySettings {
+    fn test_write_and_read_battery_globals() {
+        assert_write_and_read!(BatteryGlobals {
             idle: 1,
             idle_anim: 2,
             walk: 3,
@@ -1308,8 +1308,8 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_popper_settings() {
-        assert_write_and_read!(PopperSettings {
+    fn test_write_and_read_popper_globals() {
+        assert_write_and_read!(PopperGlobals {
             range_default: 1,
             range_upgraded: 2,
             projectile_speed: 3,
@@ -1318,8 +1318,8 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_copter_settings() {
-        assert_write_and_read!(CopterSettings {
+    fn test_write_and_read_copter_globals() {
+        assert_write_and_read!(CopterGlobals {
             hover_duration: 1,
             gravity: 2,
             terminal_velocity: 3,
@@ -1327,13 +1327,13 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_radar_settings() {
-        assert_write_and_read!(RadarSettings { red_range: 1, yellow_range: 2 });
+    fn test_write_and_read_radar_globals() {
+        assert_write_and_read!(RadarGlobals { red_range: 1, yellow_range: 2 });
     }
 
     #[test]
-    fn test_write_and_read_player_settings() {
-        assert_write_and_read!(PlayerSettings {
+    fn test_write_and_read_player_globals() {
+        assert_write_and_read!(PlayerGlobals {
             climb_duration: 1,
             climb_rate: 2,
             gentle_climb_percent: 3,
