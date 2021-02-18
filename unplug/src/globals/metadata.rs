@@ -1,9 +1,9 @@
 use super::{Error, Result};
-use crate::common::{ReadFrom, WriteTo};
+use crate::common::{ReadFrom, Text, WriteTo};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE, LE};
 use std::convert::TryInto;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use unplug_data::stage::NUM_REAL_STAGES;
 
@@ -37,22 +37,22 @@ impl<R: Read> StringReader<R> {
     }
 
     /// Reads a 32-bit string offset and caches it.
-    /// Returns an empty `CString` for convenience purposes.
-    fn read_string_offset(&mut self) -> io::Result<CString> {
+    /// Returns an empty `Text` for convenience purposes.
+    fn read_string_offset(&mut self) -> io::Result<Text> {
         let offset = self.inner.read_u32::<LE>()?;
         self.offsets.push(offset);
-        Ok(CString::default())
+        Ok(Text::new())
     }
 }
 
 impl<R: Read + Seek> StringReader<R> {
     /// Reads the next unread string (in order the offsets were read).
-    fn read_next_string(&mut self) -> io::Result<CString> {
+    fn read_next_string(&mut self) -> io::Result<Text> {
         assert!(self.index < self.offsets.len(), "no more unread strings");
         let offset = self.offsets[self.index];
         self.index += 1;
         self.inner.seek(SeekFrom::Start(offset as u64))?;
-        Ok(CString::read_from(&mut self.inner)?)
+        Ok(CString::read_from(&mut self.inner)?.into())
     }
 }
 
@@ -74,7 +74,7 @@ struct StringWriter<W: Write + Seek> {
     inner: W,
     /// The list of strings that need to be written. The first element of the tuple is the offset of
     /// the string's placeholder offset.
-    strings: Vec<(u64, CString)>,
+    strings: Vec<(u64, Text)>,
 }
 
 impl<W: Write + Seek> StringWriter<W> {
@@ -84,9 +84,9 @@ impl<W: Write + Seek> StringWriter<W> {
     }
 
     /// Writes a placeholder string offset.
-    fn write_string_offset(&mut self, string: &CStr) -> io::Result<()> {
+    fn write_string_offset(&mut self, string: &Text) -> io::Result<()> {
         let offset = self.inner.seek(SeekFrom::Current(0))?;
-        self.strings.push((offset, string.to_owned()));
+        self.strings.push((offset, string.clone()));
         self.inner.write_u32::<LE>(0)?;
         Ok(())
     }
@@ -96,8 +96,9 @@ impl<W: Write + Seek> StringWriter<W> {
         let mut cur_offset = self.inner.seek(SeekFrom::Current(0))?;
         for (ptr_offset, string) in &self.strings {
             let str_offset = cur_offset;
-            string.write_to(&mut self.inner)?;
-            cur_offset += string.as_bytes_with_nul().len() as u64;
+            self.inner.write_all(string.as_bytes())?;
+            self.inner.write_u8(0)?;
+            cur_offset += string.as_bytes().len() as u64 + 1;
             self.inner.seek(SeekFrom::Start(*ptr_offset))?;
             self.inner.write_u32::<LE>(str_offset.try_into().expect("string offset overflow"))?;
             self.inner.seek(SeekFrom::Start(cur_offset))?;
@@ -668,9 +669,9 @@ bitflags! {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Item {
     /// The item's display name.
-    pub name: CString,
+    pub name: Text,
     /// The item's description (shown in the inventory and the shop).
-    pub description: CString,
+    pub description: Text,
     /// The item's flags.
     pub flags: ItemFlags,
     /// The amount of time it takes to pick up the item in hundredths of seconds.
@@ -743,7 +744,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Item {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Actor {
     /// The actor's display name.
-    pub name: CString,
+    pub name: Text,
 }
 
 impl Actor {
@@ -777,9 +778,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Actor {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Atc {
     /// The attachment's display name.
-    pub name: CString,
+    pub name: Text,
     /// The attachment's description (unused?).
-    pub description: CString,
+    pub description: Text,
     /// The attachment's shop price.
     pub price: i16,
 }
@@ -825,7 +826,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Atc {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Suit {
     /// The suit's display name.
-    pub name: CString,
+    pub name: Text,
 }
 
 impl Suit {
@@ -859,9 +860,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Suit {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stage {
     /// The stage's display name (shown on the loading screen).
-    pub name: CString,
+    pub name: Text,
     /// The stage's description (shown on the level select menu).
-    pub description: CString,
+    pub description: Text,
 }
 
 impl Stage {
@@ -897,9 +898,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Stage {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Leticker {
     /// The utilibot's display name.
-    pub name: CString,
+    pub name: Text,
     /// The utilibot's description (shown in the shop).
-    pub description: CString,
+    pub description: Text,
     /// The utilibot's shop price.
     pub price: i16,
 }
@@ -945,9 +946,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Leticker {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Sticker {
     /// The sticker's display name.
-    pub name: CString,
+    pub name: Text,
     /// The sticker's description (shown in the sticker menu).
-    pub description: CString,
+    pub description: Text,
     /// The index of the flag which determines whether the sticker is unlocked.
     pub flag_index: u32,
 }
@@ -990,9 +991,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Sticker {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stat {
     /// The stat's display name.
-    pub name: CString,
+    pub name: Text,
     /// The stat's description (unused?).
-    pub description: CString,
+    pub description: Text,
 }
 
 impl Stat {
@@ -1387,8 +1388,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Item,
             Item {
-                name: CString::new("name").unwrap(),
-                description: CString::new("description").unwrap(),
+                name: Text::encode("name").unwrap(),
+                description: Text::encode("description").unwrap(),
                 flags: ItemFlags::JUNK | ItemFlags::CHIBI_VISION | ItemFlags::INVENTORY,
                 pickup_delay: 2,
                 price: 3,
@@ -1402,7 +1403,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_actor() {
-        assert_write_and_read_with_strings!(Actor, Actor { name: CString::new("name").unwrap() });
+        assert_write_and_read_with_strings!(Actor, Actor { name: Text::encode("name").unwrap() });
     }
 
     #[test]
@@ -1410,8 +1411,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Atc,
             Atc {
-                name: CString::new("name").unwrap(),
-                description: CString::new("description").unwrap(),
+                name: Text::encode("name").unwrap(),
+                description: Text::encode("description").unwrap(),
                 price: 1,
             }
         );
@@ -1419,7 +1420,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_suit() {
-        assert_write_and_read_with_strings!(Suit, Suit { name: CString::new("name").unwrap() });
+        assert_write_and_read_with_strings!(Suit, Suit { name: Text::encode("name").unwrap() });
     }
 
     #[test]
@@ -1427,8 +1428,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Stage,
             Stage {
-                name: CString::new("name").unwrap(),
-                description: CString::new("description").unwrap(),
+                name: Text::encode("name").unwrap(),
+                description: Text::encode("description").unwrap(),
             }
         );
     }
@@ -1438,8 +1439,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Leticker,
             Leticker {
-                name: CString::new("name").unwrap(),
-                description: CString::new("description").unwrap(),
+                name: Text::encode("name").unwrap(),
+                description: Text::encode("description").unwrap(),
                 price: 1,
             }
         );
@@ -1450,8 +1451,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Sticker,
             Sticker {
-                name: CString::new("name").unwrap(),
-                description: CString::new("description").unwrap(),
+                name: Text::encode("name").unwrap(),
+                description: Text::encode("description").unwrap(),
                 flag_index: 1,
             }
         );
@@ -1462,8 +1463,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Stat,
             Stat {
-                name: CString::new("name").unwrap(),
-                description: CString::new("description").unwrap(),
+                name: Text::encode("name").unwrap(),
+                description: Text::encode("description").unwrap(),
             }
         );
     }

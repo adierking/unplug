@@ -1,7 +1,6 @@
 use anyhow::Result;
 use log::info;
 use serial_test::serial;
-use std::ffi::CString;
 use std::io::{Read, Seek, SeekFrom};
 use tempfile::tempfile;
 use unplug::common::Text;
@@ -56,7 +55,7 @@ fn test_rebuild_globals_metadata() -> Result<()> {
 
     // Change an item name so we know it isn't just copied
     info!("Building new globals with altered metadata");
-    original_metadata.items[0].name = CString::new("test").unwrap();
+    original_metadata.items[0].name = Text::encode("test").unwrap();
 
     let mut temp = tempfile()?;
     GlobalsBuilder::new().base(&mut original).metadata(&original_metadata).write_to(&mut temp)?;
