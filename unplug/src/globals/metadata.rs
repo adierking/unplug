@@ -125,7 +125,7 @@ impl<W: Write + Seek> Seek for StringWriter<W> {
 /// The metadata partition header.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct MetadataHeader {
-    unk_00_offset: u32,
+    battery_settings_offset: u32,
     popper_settings_offset: u32,
     copter_settings_offset: u32,
     radar_settings_offset: u32,
@@ -152,7 +152,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
-            unk_00_offset: reader.read_u32::<LE>()?,
+            battery_settings_offset: reader.read_u32::<LE>()?,
             popper_settings_offset: reader.read_u32::<LE>()?,
             copter_settings_offset: reader.read_u32::<LE>()?,
             radar_settings_offset: reader.read_u32::<LE>()?,
@@ -180,7 +180,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
 impl<W: Write> WriteTo<W> for MetadataHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
-        writer.write_u32::<LE>(self.unk_00_offset)?;
+        writer.write_u32::<LE>(self.battery_settings_offset)?;
         writer.write_u32::<LE>(self.popper_settings_offset)?;
         writer.write_u32::<LE>(self.copter_settings_offset)?;
         writer.write_u32::<LE>(self.radar_settings_offset)?;
@@ -201,6 +201,151 @@ impl<W: Write> WriteTo<W> for MetadataHeader {
         writer.write_u32::<LE>(self.letickers_offset)?;
         writer.write_u32::<LE>(self.stickers_offset)?;
         writer.write_u32::<LE>(self.stats_offset)?;
+        Ok(())
+    }
+}
+
+/// Per-action battery drain values in hundredths of watts per second.
+/// This is internally an array, but a struct is more convenient.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct BatterySettings {
+    pub idle: i32,
+    pub idle_anim: i32,
+    pub walk: i32,
+    pub jog: i32,
+    pub run: i32,
+    pub slide: i32,
+    pub equip: i32,
+    pub lift: i32,
+    pub drop: i32,
+    pub leticker: i32,
+    pub ledge_grab: i32,
+    pub ledge_slide: i32,
+    pub ledge_climb: i32,
+    pub ledge_drop: i32,
+    pub ledge_teeter: i32,
+    pub jump: i32,
+    pub fall: i32,
+    pub ladder_grab: i32,
+    pub ladder_ascend: i32,
+    pub ladder_descend: i32,
+    pub ladder_top: i32,
+    pub ladder_bottom: i32,
+    pub rope_grab: i32,
+    pub rope_ascend: i32,
+    pub rope_descend: i32,
+    pub rope_top: i32,
+    pub rope_bottom: i32,
+    pub push: i32,
+    pub copter_hover: i32,
+    pub copter_descend: i32,
+    pub popper_shoot: i32,
+    pub popper_shoot_charged: i32,
+    pub radar_scan: i32,
+    pub radar_follow: i32,
+    pub brush: i32,
+    pub spoon: i32,
+    pub mug: i32,
+    pub squirter_suck: i32,
+    pub squirter_spray: i32,
+}
+
+impl BatterySettings {
+    /// Constructs an empty `BatterySettings`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<R: Read> ReadFrom<R> for BatterySettings {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            idle: reader.read_i32::<LE>()?,
+            idle_anim: reader.read_i32::<LE>()?,
+            walk: reader.read_i32::<LE>()?,
+            jog: reader.read_i32::<LE>()?,
+            run: reader.read_i32::<LE>()?,
+            slide: reader.read_i32::<LE>()?,
+            equip: reader.read_i32::<LE>()?,
+            lift: reader.read_i32::<LE>()?,
+            drop: reader.read_i32::<LE>()?,
+            leticker: reader.read_i32::<LE>()?,
+            ledge_grab: reader.read_i32::<LE>()?,
+            ledge_slide: reader.read_i32::<LE>()?,
+            ledge_climb: reader.read_i32::<LE>()?,
+            ledge_drop: reader.read_i32::<LE>()?,
+            ledge_teeter: reader.read_i32::<LE>()?,
+            jump: reader.read_i32::<LE>()?,
+            fall: reader.read_i32::<LE>()?,
+            ladder_grab: reader.read_i32::<LE>()?,
+            ladder_ascend: reader.read_i32::<LE>()?,
+            ladder_descend: reader.read_i32::<LE>()?,
+            ladder_top: reader.read_i32::<LE>()?,
+            ladder_bottom: reader.read_i32::<LE>()?,
+            rope_grab: reader.read_i32::<LE>()?,
+            rope_ascend: reader.read_i32::<LE>()?,
+            rope_descend: reader.read_i32::<LE>()?,
+            rope_top: reader.read_i32::<LE>()?,
+            rope_bottom: reader.read_i32::<LE>()?,
+            push: reader.read_i32::<LE>()?,
+            copter_hover: reader.read_i32::<LE>()?,
+            copter_descend: reader.read_i32::<LE>()?,
+            popper_shoot: reader.read_i32::<LE>()?,
+            popper_shoot_charged: reader.read_i32::<LE>()?,
+            radar_scan: reader.read_i32::<LE>()?,
+            radar_follow: reader.read_i32::<LE>()?,
+            brush: reader.read_i32::<LE>()?,
+            spoon: reader.read_i32::<LE>()?,
+            mug: reader.read_i32::<LE>()?,
+            squirter_suck: reader.read_i32::<LE>()?,
+            squirter_spray: reader.read_i32::<LE>()?,
+        })
+    }
+}
+
+impl<W: Write> WriteTo<W> for BatterySettings {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_i32::<LE>(self.idle)?;
+        writer.write_i32::<LE>(self.idle_anim)?;
+        writer.write_i32::<LE>(self.walk)?;
+        writer.write_i32::<LE>(self.jog)?;
+        writer.write_i32::<LE>(self.run)?;
+        writer.write_i32::<LE>(self.slide)?;
+        writer.write_i32::<LE>(self.equip)?;
+        writer.write_i32::<LE>(self.lift)?;
+        writer.write_i32::<LE>(self.drop)?;
+        writer.write_i32::<LE>(self.leticker)?;
+        writer.write_i32::<LE>(self.ledge_grab)?;
+        writer.write_i32::<LE>(self.ledge_slide)?;
+        writer.write_i32::<LE>(self.ledge_climb)?;
+        writer.write_i32::<LE>(self.ledge_drop)?;
+        writer.write_i32::<LE>(self.ledge_teeter)?;
+        writer.write_i32::<LE>(self.jump)?;
+        writer.write_i32::<LE>(self.fall)?;
+        writer.write_i32::<LE>(self.ladder_grab)?;
+        writer.write_i32::<LE>(self.ladder_ascend)?;
+        writer.write_i32::<LE>(self.ladder_descend)?;
+        writer.write_i32::<LE>(self.ladder_top)?;
+        writer.write_i32::<LE>(self.ladder_bottom)?;
+        writer.write_i32::<LE>(self.rope_grab)?;
+        writer.write_i32::<LE>(self.rope_ascend)?;
+        writer.write_i32::<LE>(self.rope_descend)?;
+        writer.write_i32::<LE>(self.rope_top)?;
+        writer.write_i32::<LE>(self.rope_bottom)?;
+        writer.write_i32::<LE>(self.push)?;
+        writer.write_i32::<LE>(self.copter_hover)?;
+        writer.write_i32::<LE>(self.copter_descend)?;
+        writer.write_i32::<LE>(self.popper_shoot)?;
+        writer.write_i32::<LE>(self.popper_shoot_charged)?;
+        writer.write_i32::<LE>(self.radar_scan)?;
+        writer.write_i32::<LE>(self.radar_follow)?;
+        writer.write_i32::<LE>(self.brush)?;
+        writer.write_i32::<LE>(self.spoon)?;
+        writer.write_i32::<LE>(self.mug)?;
+        writer.write_i32::<LE>(self.squirter_suck)?;
+        writer.write_i32::<LE>(self.squirter_spray)?;
         Ok(())
     }
 }
@@ -883,7 +1028,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Stat {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Metadata {
-    pub unk_00: [u32; 39],
+    pub battery_settings: BatterySettings,
     pub popper_settings: PopperSettings,
     pub copter_settings: CopterSettings,
     pub radar_settings: RadarSettings,
@@ -906,7 +1051,7 @@ pub struct Metadata {
 impl Metadata {
     pub fn new() -> Self {
         Self {
-            unk_00: [0; 39],
+            battery_settings: BatterySettings::new(),
             popper_settings: PopperSettings::new(),
             copter_settings: CopterSettings::new(),
             radar_settings: RadarSettings::new(),
@@ -941,8 +1086,8 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
         let header = MetadataHeader::read_from(reader)?;
         let mut metadata = Self::new();
 
-        reader.seek(SeekFrom::Start(header.unk_00_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.unk_00)?;
+        reader.seek(SeekFrom::Start(header.battery_settings_offset as u64))?;
+        metadata.battery_settings = BatterySettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.popper_settings_offset as u64))?;
         metadata.popper_settings = PopperSettings::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.copter_settings_offset as u64))?;
@@ -1032,8 +1177,8 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         let mut header = MetadataHeader::default();
         header.write_to(writer)?;
 
-        header.unk_00_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.unk_00)?;
+        header.battery_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        self.battery_settings.write_to(writer)?;
         header.popper_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.popper_settings.write_to(writer)?;
         header.copter_settings_offset = writer.seek(SeekFrom::Current(0))? as u32;
@@ -1093,7 +1238,7 @@ mod tests {
     #[test]
     fn test_write_and_read_metadata_header() {
         assert_write_and_read!(MetadataHeader {
-            unk_00_offset: 1,
+            battery_settings_offset: 1,
             popper_settings_offset: 2,
             copter_settings_offset: 3,
             radar_settings_offset: 4,
@@ -1114,6 +1259,51 @@ mod tests {
             letickers_offset: 19,
             stickers_offset: 20,
             stats_offset: 21,
+        });
+    }
+
+    #[test]
+    fn test_write_and_read_battery_settings() {
+        assert_write_and_read!(BatterySettings {
+            idle: 1,
+            idle_anim: 2,
+            walk: 3,
+            jog: 4,
+            run: 5,
+            slide: 6,
+            equip: 7,
+            lift: 8,
+            drop: 9,
+            leticker: 10,
+            ledge_grab: 11,
+            ledge_slide: 12,
+            ledge_climb: 13,
+            ledge_drop: 14,
+            ledge_teeter: 15,
+            jump: 16,
+            fall: 17,
+            ladder_grab: 18,
+            ladder_ascend: 19,
+            ladder_descend: 20,
+            ladder_top: 21,
+            ladder_bottom: 22,
+            rope_grab: 23,
+            rope_ascend: 24,
+            rope_descend: 25,
+            rope_top: 26,
+            rope_bottom: 27,
+            push: 28,
+            copter_hover: 29,
+            copter_descend: 30,
+            popper_shoot: 31,
+            popper_shoot_charged: 32,
+            radar_scan: 33,
+            radar_follow: 34,
+            brush: 35,
+            spoon: 36,
+            mug: 37,
+            squirter_suck: 38,
+            squirter_spray: 39,
         });
     }
 
