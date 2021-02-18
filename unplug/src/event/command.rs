@@ -1,12 +1,13 @@
 use super::block::WriteIp;
 use super::expr::{self, Expr, SetExpr};
-use super::msg::{self, MsgArgs, PrintFArgs};
+use super::msg::{self, MsgArgs};
 use super::opcodes::*;
 use super::Ip;
 use crate::common::io::write_u8_and;
-use crate::common::{ReadFrom, WriteTo};
+use crate::common::{ReadFrom, Text, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
+use std::ffi::CString;
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
@@ -633,6 +634,31 @@ pub struct PosArgs {
     pub z: Expr,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct PrintFArgs(pub Text);
+
+impl<R: Read> ReadFrom<R> for PrintFArgs {
+    type Error = io::Error;
+    fn read_from(reader: &mut R) -> io::Result<Self> {
+        Ok(Self(CString::read_from(reader)?.into()))
+    }
+}
+
+impl<W: Write> WriteTo<W> for PrintFArgs {
+    type Error = io::Error;
+    fn write_to(&self, writer: &mut W) -> io::Result<()> {
+        writer.write_all(self.0.as_bytes())?;
+        writer.write_u8(0)?;
+        Ok(())
+    }
+}
+
+impl fmt::Debug for PrintFArgs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
 #[read_from(error = Error)]
 #[write_to(stream = Write + WriteIp, error = Error)]
@@ -815,8 +841,9 @@ pub struct MovieArgs {
 mod tests {
     use super::*;
     use crate::assert_write_and_read;
+    use crate::common::Text;
     use crate::event::expr::BinaryOp;
-    use crate::event::msg::{MsgCommand, Text};
+    use crate::event::msg::MsgCommand;
 
     fn expr() -> Expr {
         Expr::Imm32(123)
@@ -950,6 +977,7 @@ mod tests {
             z: expr(),
         })));
         assert_write_and_read!(Command::PrintF(Box::new(PrintFArgs(text("bunger")))));
+        assert_write_and_read!(Command::PrintF(Box::new(PrintFArgs(text("スプラトゥーン")))));
         assert_write_and_read!(Command::Ptcl(Box::new(PtclArgs {
             val: expr(),
             ty: PtclType::Lead(PtclLeadArgs { obj: expr(), args: vec![expr(), expr(), expr()] }),

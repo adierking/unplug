@@ -13,7 +13,7 @@ use std::mem;
 use std::path::Path;
 use std::str;
 use tempfile::NamedTempFile;
-use unplug::common::WriteTo;
+use unplug::common::{Text, WriteTo};
 use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
 use unplug::dvd::ArchiveBuilder;
 use unplug::event::msg::*;
@@ -740,7 +740,10 @@ mod tests {
 
     #[test]
     fn test_import_format() -> Result<()> {
-        assert_eq!(cmd(b"<text><f>%s</f></text>")?, MsgCommand::Format(Text::new(b"%s".to_vec())));
+        assert_eq!(
+            cmd(b"<text><f>%s</f></text>")?,
+            MsgCommand::Format(Text::with_bytes(b"%s".to_vec()))
+        );
         Ok(())
     }
 

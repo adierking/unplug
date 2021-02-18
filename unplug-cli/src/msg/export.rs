@@ -8,9 +8,10 @@ use quick_xml::Writer;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use unplug::common::Text;
 use unplug::data::stage::{StageDefinition, STAGES};
 use unplug::event::msg::{
-    DefaultFlags, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags, Text,
+    DefaultFlags, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags,
 };
 use unplug::event::Script;
 

@@ -1,13 +1,11 @@
 use super::opcodes::*;
+use crate::common::text::{self, Text};
 use crate::common::{ReadFrom, WriteTo};
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
-use encoding_rs::{SHIFT_JIS, WINDOWS_1252};
 use log::error;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::borrow::Cow;
 use std::convert::TryFrom;
-use std::ffi::CString;
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
@@ -55,9 +53,13 @@ pub enum Error {
     Invalid,
 
     #[error(transparent)]
+    Text(Box<text::Error>),
+
+    #[error(transparent)]
     Io(Box<io::Error>),
 }
 
+from_error_boxed!(Error::Text, text::Error);
 from_error_boxed!(Error::Io, io::Error);
 
 /// Commands that make up a message.
@@ -200,7 +202,7 @@ impl<R: Read + Seek> ReadFrom<R> for MsgArgs {
                         }
                         format_text.push(b);
                     }
-                    Some(MsgCommand::Format(Text { bytes: format_text }))
+                    Some(MsgCommand::Format(Text::with_bytes(format_text)))
                 }
                 MSG_SIZE => Some(MsgCommand::Size(reader.read_u8()?)),
                 MSG_COLOR => {
@@ -235,7 +237,7 @@ impl<R: Read + Seek> ReadFrom<R> for MsgArgs {
             };
             if command.is_some() || b == MSG_END {
                 if !text.is_empty() {
-                    commands.push(MsgCommand::Text(Text { bytes: text.clone() }));
+                    commands.push(MsgCommand::Text(Text::with_bytes(text.clone())));
                     text.clear();
                 }
                 if let Some(command) = command {
@@ -313,7 +315,7 @@ impl<W: Write + Seek> WriteTo<W> for MsgArgs {
                     // they can expand to any length. If you use a format string in a long message,
                     // you're on your own.
                     writer.write_u8(MSG_FORMAT)?;
-                    writer.write_all(&text.bytes)?;
+                    writer.write_all(text.as_bytes())?;
                     writer.write_u8(MSG_FORMAT)?;
                 }
                 MsgCommand::Size(size) => {
@@ -366,7 +368,11 @@ impl<W: Write + Seek> WriteTo<W> for MsgArgs {
                     writer.write_u8(MSG_STAY)?;
                 }
                 MsgCommand::Text(text) => {
-                    for &b in &text.bytes {
+                    for &b in text.as_bytes() {
+                        // Bell, backspace, and tab don't have opcodes assigned
+                        if b <= MSG_OPCODE_MAX && b != b'\x07' && b != b'\x08' && b != b'\t' {
+                            return Err(Error::InvalidChar(b as u32));
+                        }
                         writer.write_u8(match b {
                             // '$' is an escape character for '"'
                             b'"' => b'$',
@@ -377,7 +383,7 @@ impl<W: Write + Seek> WriteTo<W> for MsgArgs {
                     // character. We shouldn't call `from_str()` here because it handles SHIFT-JIS
                     // and the NTSC-U version will always interpret text as Windows-1252. Supporting
                     // other regions may require changing this calculation.
-                    num_chars += text.bytes.len();
+                    num_chars += text.as_bytes().len();
                 }
             }
         }
@@ -803,94 +809,6 @@ bitflags! {
     }
 }
 
-/// Holds raw text as part of a message.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Text {
-    pub bytes: Vec<u8>,
-}
-
-impl Text {
-    /// Constructs a `Text` from a raw byte array.
-    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
-        Self { bytes: bytes.into() }
-    }
-
-    /// Constructs a `Text` by encoding a UTF-8 string.
-    pub fn encode(string: &str) -> Result<Self> {
-        for ch in string.chars() {
-            // Bell, backspace, and tab don't have opcodes assigned
-            if ch <= MSG_OPCODE_MAX as char && ch != '\x07' && ch != '\x08' && ch != '\t' {
-                return Err(Error::InvalidChar(ch as u32));
-            }
-        }
-        let (bytes, _, unmappable) = SHIFT_JIS.encode(string);
-        if unmappable {
-            let (bytes, _, unmappable) = WINDOWS_1252.encode(string);
-            match unmappable {
-                false => Ok(Self { bytes: bytes.into() }),
-                true => Err(Error::Encode(string.to_owned())),
-            }
-        } else {
-            Ok(Self { bytes: bytes.into() })
-        }
-    }
-
-    /// Decodes the `Text` as a UTF-8 string.
-    pub fn decode(&self) -> Result<Cow<'_, str>> {
-        // If we want to be technically correct here, we should decode based on the region the game
-        // is using because that's how it will display on the console. However this is not ideal in
-        // practice because the dev stages still have a lot of debug text in Japanese, and most
-        // `PrintF` commands are also in Japanese. As a compromise, it seems to be sufficient to try
-        // and decode as SHIFT-JIS first (which works for most messages) and then fall back on
-        // Windows-1252 if that fails.
-        match SHIFT_JIS.decode_without_bom_handling_and_without_replacement(&self.bytes) {
-            Some(s) => Ok(s),
-            None => WINDOWS_1252
-                .decode_without_bom_handling_and_without_replacement(&self.bytes)
-                .ok_or(Error::Decode),
-        }
-    }
-}
-
-fn decode_message(bytes: &[u8]) -> String {
-    let (unicode, _) = SHIFT_JIS.decode_without_bom_handling(bytes);
-    // Replace ideographic spaces with regular spaces so messages look nicer in debug output
-    unicode.replace('\u{3000}', " ")
-}
-
-impl fmt::Debug for Text {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\"{}\"", decode_message(&self.bytes).escape_debug())
-    }
-}
-
-/// Arguments to the printf() command.
-#[derive(Clone, PartialEq, Eq)]
-pub struct PrintFArgs(pub Text);
-
-impl<R: Read> ReadFrom<R> for PrintFArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        let string = CString::read_from(reader)?;
-        Ok(Self(Text { bytes: string.into_bytes() }))
-    }
-}
-
-impl<W: Write> WriteTo<W> for PrintFArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_all(&self.0.bytes)?;
-        writer.write_u8(0)?;
-        Ok(())
-    }
-}
-
-impl fmt::Debug for PrintFArgs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -986,11 +904,5 @@ mod tests {
             commands: vec![MsgCommand::Size(36), MsgCommand::Text(text("bunger")),],
             extra_data: vec![0u8, 1u8, 2u8, 3u8],
         });
-    }
-
-    #[test]
-    fn test_write_and_read_printf() {
-        assert_write_and_read!(PrintFArgs(text("bunger")));
-        assert_write_and_read!(PrintFArgs(text("スプラトゥーン")));
     }
 }
