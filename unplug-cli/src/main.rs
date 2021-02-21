@@ -3,9 +3,8 @@ use log::error;
 use simplelog::{Color, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::process;
 use structopt::StructOpt;
-use unplug_cli::commands;
-use unplug_cli::msg;
 use unplug_cli::opt::{Opt, Subcommand};
+use unplug_cli::{commands, metadata, msg};
 
 fn init_logging(opt: &Opt) {
     let filter = if opt.verbose >= 2 {
@@ -40,6 +39,7 @@ fn run_app() -> Result<()> {
         Subcommand::ExportMessages(opt) => msg::export_messages(opt),
         Subcommand::ImportMessages(opt) => msg::import_messages(opt),
         Subcommand::DumpMetadata(opt) => commands::dump_metadata(opt),
+        Subcommand::ExportMetadata(opt) => metadata::export_metadata(opt),
     }
 }
 

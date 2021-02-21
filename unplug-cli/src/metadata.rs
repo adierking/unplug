@@ -1,0 +1,357 @@
+#![allow(single_use_lifetimes)]
+
+use crate::common::{open_iso_optional, open_qp_optional, read_globals_qp_or_file};
+use crate::io::OutputRedirect;
+use crate::opt::ExportMetadataOpt;
+use anyhow::Result;
+use log::info;
+use serde::{Deserialize, Serialize};
+use std::io::BufWriter;
+use unplug::common::Text;
+use unplug::globals::metadata::*;
+
+/// Generates a serializable wrapper type for list elements.
+macro_rules! wrapper {
+    ($wrapper:ident, $wrapped:ty, $def:literal) => {
+        #[derive(Serialize, Deserialize)]
+        struct $wrapper {
+            index: usize,
+            #[serde(flatten, with = $def)]
+            inner: $wrapped,
+        }
+
+        impl $wrapper {
+            fn wrap_boxed_slice(s: Box<[$wrapped]>) -> Vec<Self> {
+                Vec::from(s)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, inner)| Self { index, inner })
+                    .collect()
+            }
+        }
+    };
+}
+
+/// Serialize/Deserialize implementation for Text
+mod text {
+    use serde::de::{self, Deserialize, Deserializer};
+    use serde::ser::{self, Serializer};
+    use unplug::common::Text;
+
+    pub(super) fn serialize<S: Serializer>(text: &Text, serializer: S) -> Result<S::Ok, S::Error> {
+        let decoded = text.decode().map_err(ser::Error::custom)?;
+        serializer.serialize_str(&decoded)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Text, D::Error> {
+        let string = <&str>::deserialize(deserializer)?;
+        Ok(Text::encode(string).map_err(de::Error::custom)?)
+    }
+}
+
+/// Serialize/Deserialize implementation for ItemFlags
+mod item_flags {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use unplug::globals::metadata::ItemFlags;
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ItemFlagsDef {
+        junk: bool,
+        chibi_vision: bool,
+        inventory: bool,
+    }
+
+    pub(super) fn serialize<S: Serializer>(
+        flags: &ItemFlags,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        ItemFlagsDef {
+            junk: flags.contains(ItemFlags::JUNK),
+            chibi_vision: flags.contains(ItemFlags::CHIBI_VISION),
+            inventory: flags.contains(ItemFlags::INVENTORY),
+        }
+        .serialize(serializer)
+    }
+
+    #[allow(single_use_lifetimes)]
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<ItemFlags, D::Error> {
+        let def = ItemFlagsDef::deserialize(deserializer)?;
+        let mut flags = ItemFlags::empty();
+        flags.set(ItemFlags::JUNK, def.junk);
+        flags.set(ItemFlags::CHIBI_VISION, def.chibi_vision);
+        flags.set(ItemFlags::INVENTORY, def.inventory);
+        Ok(flags)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "BatteryGlobals", rename_all = "camelCase")]
+struct BatteryGlobalsDef {
+    idle: i32,
+    idle_anim: i32,
+    walk: i32,
+    jog: i32,
+    run: i32,
+    slide: i32,
+    equip: i32,
+    lift: i32,
+    drop: i32,
+    leticker: i32,
+    ledge_grab: i32,
+    ledge_slide: i32,
+    ledge_climb: i32,
+    ledge_drop: i32,
+    ledge_teeter: i32,
+    jump: i32,
+    fall: i32,
+    ladder_grab: i32,
+    ladder_ascend: i32,
+    ladder_descend: i32,
+    ladder_top: i32,
+    ladder_bottom: i32,
+    rope_grab: i32,
+    rope_ascend: i32,
+    rope_descend: i32,
+    rope_top: i32,
+    rope_bottom: i32,
+    push: i32,
+    copter_hover: i32,
+    copter_descend: i32,
+    popper_shoot: i32,
+    popper_shoot_charged: i32,
+    radar_scan: i32,
+    radar_follow: i32,
+    brush: i32,
+    spoon: i32,
+    mug: i32,
+    squirter_suck: i32,
+    squirter_spray: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "PopperGlobals", rename_all = "camelCase")]
+struct PopperGlobalsDef {
+    range_default: i32,
+    range_upgraded: i32,
+    projectile_speed: i32,
+    max_projectiles: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "CopterGlobals", rename_all = "camelCase")]
+struct CopterGlobalsDef {
+    hover_duration: i32,
+    gravity: i32,
+    terminal_velocity: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "RadarGlobals", rename_all = "camelCase")]
+struct RadarGlobalsDef {
+    red_range: i32,
+    yellow_range: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "PlayerGlobals", rename_all = "camelCase")]
+struct PlayerGlobalsDef {
+    climb_duration: i32,
+    climb_rate: i32,
+    gentle_climb_percent: i32,
+    auto_plug_pickup_time: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "DefaultAtcs", rename_all = "camelCase")]
+struct DefaultAtcsDef {
+    copter: bool,
+    popper: bool,
+    radar: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "CoinValues", rename_all = "camelCase")]
+struct CoinValuesDef {
+    coin_g: u32,
+    coin_s: u32,
+    coin_c: u32,
+    junk_a: u32,
+    junk_b: u32,
+    junk_c: u32,
+    junk_unko: u32,
+    energyb: u32,
+    happy_heart: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Item", rename_all = "camelCase")]
+struct ItemDef {
+    #[serde(with = "text")]
+    name: Text,
+    #[serde(with = "text")]
+    description: Text,
+    #[serde(with = "item_flags")]
+    flags: ItemFlags,
+    pickup_delay: i16,
+    price: i16,
+    junk_exp: i16,
+    junk_money: i16,
+    pickup_sound: i8,
+    collect_sound: i8,
+}
+
+wrapper!(ItemWrapper, Item, "ItemDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Actor", rename_all = "camelCase")]
+struct ActorDef {
+    #[serde(with = "text")]
+    name: Text,
+}
+
+wrapper!(ActorWrapper, Actor, "ActorDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Atc", rename_all = "camelCase")]
+struct AtcDef {
+    #[serde(with = "text")]
+    name: Text,
+    #[serde(with = "text")]
+    description: Text,
+    price: i16,
+}
+
+wrapper!(AtcWrapper, Atc, "AtcDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Suit", rename_all = "camelCase")]
+struct SuitDef {
+    #[serde(with = "text")]
+    name: Text,
+}
+
+wrapper!(SuitWrapper, Suit, "SuitDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Stage", rename_all = "camelCase")]
+struct StageDef {
+    #[serde(with = "text")]
+    name: Text,
+    #[serde(with = "text")]
+    description: Text,
+}
+
+wrapper!(StageWrapper, Stage, "StageDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Leticker", rename_all = "camelCase")]
+struct LetickerDef {
+    #[serde(with = "text")]
+    name: Text,
+    #[serde(with = "text")]
+    description: Text,
+    price: i16,
+}
+
+wrapper!(LetickerWrapper, Leticker, "LetickerDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Sticker", rename_all = "camelCase")]
+struct StickerDef {
+    #[serde(with = "text")]
+    name: Text,
+    #[serde(with = "text")]
+    description: Text,
+    flag_index: u32,
+}
+
+wrapper!(StickerWrapper, Sticker, "StickerDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Stat", rename_all = "camelCase")]
+struct StatDef {
+    #[serde(with = "text")]
+    name: Text,
+    #[serde(with = "text")]
+    description: Text,
+}
+
+wrapper!(StatWrapper, Stat, "StatDef");
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MetadataDef {
+    #[serde(with = "BatteryGlobalsDef")]
+    battery_globals: BatteryGlobals,
+    #[serde(with = "PopperGlobalsDef")]
+    popper_globals: PopperGlobals,
+    #[serde(with = "CopterGlobalsDef")]
+    copter_globals: CopterGlobals,
+    #[serde(with = "RadarGlobalsDef")]
+    radar_globals: RadarGlobals,
+    #[serde(with = "PlayerGlobalsDef")]
+    player_globals: PlayerGlobals,
+    #[serde(with = "DefaultAtcsDef")]
+    default_atcs: DefaultAtcs,
+    #[serde(with = "CoinValuesDef")]
+    coin_values: CoinValues,
+    pickup_sounds: Vec<u32>,
+    collect_sounds: Vec<u32>,
+    items: Vec<ItemWrapper>,
+    actors: Vec<ActorWrapper>,
+    atcs: Vec<AtcWrapper>,
+    suits: Vec<SuitWrapper>,
+    stages: Vec<StageWrapper>,
+    letickers: Vec<LetickerWrapper>,
+    stickers: Vec<StickerWrapper>,
+    stats: Vec<StatWrapper>,
+}
+
+impl From<Metadata> for MetadataDef {
+    fn from(metadata: Metadata) -> Self {
+        Self {
+            battery_globals: metadata.battery_globals,
+            popper_globals: metadata.popper_globals,
+            copter_globals: metadata.copter_globals,
+            radar_globals: metadata.radar_globals,
+            player_globals: metadata.player_globals,
+            default_atcs: metadata.default_atcs,
+            coin_values: metadata.coin_values,
+            pickup_sounds: metadata.pickup_sounds.to_vec(),
+            collect_sounds: metadata.collect_sounds.to_vec(),
+            items: ItemWrapper::wrap_boxed_slice(metadata.items),
+            actors: ActorWrapper::wrap_boxed_slice(metadata.actors),
+            atcs: AtcWrapper::wrap_boxed_slice(metadata.atcs),
+            suits: SuitWrapper::wrap_boxed_slice(metadata.suits),
+            stages: StageWrapper::wrap_boxed_slice(metadata.stages),
+            letickers: LetickerWrapper::wrap_boxed_slice(metadata.letickers),
+            stickers: StickerWrapper::wrap_boxed_slice(metadata.stickers),
+            stats: StatWrapper::wrap_boxed_slice(metadata.stats),
+        }
+    }
+}
+
+pub fn export_metadata(opt: ExportMetadataOpt) -> Result<()> {
+    let out = BufWriter::new(OutputRedirect::new(opt.output)?);
+
+    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
+    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
+
+    info!("Reading global metadata");
+    let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path)?;
+    let metadata = globals.read_metadata()?;
+
+    info!("Writing to JSON");
+    let root = MetadataDef::from(metadata);
+    if opt.compact {
+        serde_json::to_writer(out, &root)?;
+    } else {
+        serde_json::to_writer_pretty(out, &root)?;
+    }
+    Ok(())
+}
