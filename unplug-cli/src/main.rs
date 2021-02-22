@@ -40,6 +40,7 @@ fn run_app() -> Result<()> {
         Subcommand::ImportMessages(opt) => msg::import_messages(opt),
         Subcommand::DumpMetadata(opt) => commands::dump_metadata(opt),
         Subcommand::ExportMetadata(opt) => metadata::export_metadata(opt),
+        Subcommand::ImportMetadata(opt) => metadata::import_metadata(opt),
     }
 }
 

@@ -1,14 +1,22 @@
 #![allow(single_use_lifetimes)]
 
-use crate::common::{open_iso_optional, open_qp_optional, read_globals_qp_or_file};
+use crate::common::{
+    edit_iso_optional, open_iso_optional, open_qp_optional, read_globals_qp_or_file, QP_PATH,
+};
 use crate::io::OutputRedirect;
-use crate::opt::ExportMetadataOpt;
-use anyhow::Result;
-use log::info;
+use crate::opt::{ExportMetadataOpt, ImportMetadataOpt};
+use anyhow::{bail, Result};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
-use std::io::BufWriter;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Cursor, Seek, SeekFrom, Write};
+use std::path::Path;
+use tempfile::NamedTempFile;
 use unplug::common::Text;
+use unplug::data::stage::GLOBALS_PATH;
+use unplug::dvd::ArchiveBuilder;
 use unplug::globals::metadata::*;
+use unplug::globals::GlobalsBuilder;
 
 /// Generates a serializable wrapper type for list elements.
 macro_rules! wrapper {
@@ -28,6 +36,16 @@ macro_rules! wrapper {
                     .map(|(index, inner)| Self { index, inner })
                     .collect()
             }
+
+            fn update_metadata(wrappers: Vec<Self>, metadata: &mut [$wrapped]) -> Result<()> {
+                for wrapper in wrappers {
+                    if wrapper.index >= metadata.len() {
+                        bail!("invalid {} index: {}", stringify!($wrapped), wrapper.index);
+                    }
+                    metadata[wrapper.index] = wrapper.inner;
+                }
+                Ok(())
+            }
         }
     };
 }
@@ -46,8 +64,8 @@ mod text {
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Text, D::Error> {
-        let string = <&str>::deserialize(deserializer)?;
-        Ok(Text::encode(string).map_err(de::Error::custom)?)
+        let string = String::deserialize(deserializer)?;
+        Ok(Text::encode(&string).map_err(de::Error::custom)?)
     }
 }
 
@@ -352,6 +370,78 @@ pub fn export_metadata(opt: ExportMetadataOpt) -> Result<()> {
         serde_json::to_writer(out, &root)?;
     } else {
         serde_json::to_writer_pretty(out, &root)?;
+    }
+    Ok(())
+}
+
+pub fn import_metadata(opt: ImportMetadataOpt) -> Result<()> {
+    info!("Reading input JSON");
+    let json = BufReader::new(File::open(opt.input)?);
+    let root: MetadataDef = serde_json::from_reader(json)?;
+
+    let mut iso = edit_iso_optional(opt.container.iso.as_ref())?;
+    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
+
+    info!("Reading global metadata");
+    let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path.as_ref())?;
+    let mut metadata = globals.read_metadata()?;
+
+    info!("Rebuilding globals.bin");
+
+    metadata.battery_globals = root.battery_globals;
+    metadata.popper_globals = root.popper_globals;
+    metadata.copter_globals = root.copter_globals;
+    metadata.radar_globals = root.radar_globals;
+    metadata.player_globals = root.player_globals;
+    metadata.default_atcs = root.default_atcs;
+    metadata.coin_values = root.coin_values;
+    if root.pickup_sounds.len() != metadata.pickup_sounds.len() {
+        bail!("expected exactly {} pickupSounds", metadata.pickup_sounds.len());
+    }
+    if root.collect_sounds.len() != metadata.collect_sounds.len() {
+        bail!("expected exactly {} collectSounds", metadata.collect_sounds.len());
+    }
+    metadata.pickup_sounds.copy_from_slice(&root.pickup_sounds);
+    metadata.collect_sounds.copy_from_slice(&root.collect_sounds);
+    ItemWrapper::update_metadata(root.items, &mut metadata.items)?;
+    ActorWrapper::update_metadata(root.actors, &mut metadata.actors)?;
+    AtcWrapper::update_metadata(root.atcs, &mut metadata.atcs)?;
+    SuitWrapper::update_metadata(root.suits, &mut metadata.suits)?;
+    StageWrapper::update_metadata(root.stages, &mut metadata.stages)?;
+    LetickerWrapper::update_metadata(root.letickers, &mut metadata.letickers)?;
+    StickerWrapper::update_metadata(root.stickers, &mut metadata.stickers)?;
+    StatWrapper::update_metadata(root.stats, &mut metadata.stats)?;
+
+    let mut writer = Cursor::new(vec![]);
+    GlobalsBuilder::new().base(&mut globals).metadata(&metadata).write_to(&mut writer)?;
+    let bytes = writer.into_inner().into_boxed_slice();
+
+    let mut qp_temp = if let Some(ref mut qp) = qp {
+        info!("Rebuilding qp.bin");
+        let mut qp_temp = match opt.container.qp {
+            Some(ref path) => {
+                NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?
+            }
+            None => NamedTempFile::new()?,
+        };
+        let mut qp_builder = ArchiveBuilder::with_archive(qp);
+        qp_builder.replace_at(GLOBALS_PATH, || Cursor::new(bytes))?;
+        debug!("Writing new qp.bin to {}", qp_temp.path().to_string_lossy());
+        qp_builder.write_to(&mut qp_temp)?;
+        qp_temp
+    } else {
+        let mut globals_file = File::create(opt.globals.path.unwrap())?;
+        globals_file.write_all(&bytes)?;
+        return Ok(());
+    };
+    drop(qp);
+
+    if let Some(ref mut iso) = iso {
+        info!("Updating ISO");
+        qp_temp.seek(SeekFrom::Start(0))?;
+        iso.replace_file_at(QP_PATH, qp_temp)?;
+    } else {
+        qp_temp.persist(opt.container.qp.unwrap())?;
     }
     Ok(())
 }

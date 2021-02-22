@@ -53,8 +53,11 @@ pub enum Subcommand {
     /// Dumps the metadata from globals.bin
     DumpMetadata(DumpMetadataOpt),
 
-    /// Exports the metadata from globals.bin to a JSON file
+    /// Exports global metadata to a JSON file
     ExportMetadata(ExportMetadataOpt),
+
+    /// Imports global metadata from a JSON file
+    ImportMetadata(ImportMetadataOpt),
 }
 
 #[derive(StructOpt)]
@@ -282,4 +285,17 @@ pub struct ExportMetadataOpt {
     /// Redirects output to a file instead of stdout
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: Option<PathBuf>,
+}
+
+#[derive(StructOpt)]
+pub struct ImportMetadataOpt {
+    #[structopt(flatten)]
+    pub container: OptionalContainerOpt,
+
+    #[structopt(flatten)]
+    pub globals: GlobalsOpt,
+
+    /// Path to the input JSON file
+    #[structopt(value_name("PATH"))]
+    pub input: PathBuf,
 }
