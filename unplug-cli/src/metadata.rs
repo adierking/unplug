@@ -23,26 +23,22 @@ macro_rules! wrapper {
     ($wrapper:ident, $wrapped:ty, $def:literal) => {
         #[derive(Serialize, Deserialize)]
         struct $wrapper {
-            index: usize,
+            id: usize,
             #[serde(flatten, with = $def)]
             inner: $wrapped,
         }
 
         impl $wrapper {
             fn wrap_boxed_slice(s: Box<[$wrapped]>) -> Vec<Self> {
-                Vec::from(s)
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, inner)| Self { index, inner })
-                    .collect()
+                Vec::from(s).into_iter().enumerate().map(|(id, inner)| Self { id, inner }).collect()
             }
 
             fn update_metadata(wrappers: Vec<Self>, metadata: &mut [$wrapped]) -> Result<()> {
                 for wrapper in wrappers {
-                    if wrapper.index >= metadata.len() {
-                        bail!("invalid {} index: {}", stringify!($wrapped), wrapper.index);
+                    if wrapper.id >= metadata.len() {
+                        bail!("invalid {} ID: {}", stringify!($wrapped), wrapper.id);
                     }
-                    metadata[wrapper.index] = wrapper.inner;
+                    metadata[wrapper.id] = wrapper.inner;
                 }
                 Ok(())
             }
