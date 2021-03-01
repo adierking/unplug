@@ -23,6 +23,25 @@ unplug import-messages --iso chibi2.iso messages.xml
 You only need to copy the ISO once; any additional changes can be re-imported into the copy. The
 main reason for having a copy is so that you don't trash your retail ISO.
 
+## Editing Global Metadata
+
+The global metadata includes item attributes, room names, attachment settings, battery usage
+settings, and more.
+
+To export the globals from your ISO, use the `export-globals` command:
+
+```sh
+unplug export-globals --iso chibi.iso -o globals.json
+```
+
+This will make a file named `globals.json` which you can edit. To re-import the globals, **make a
+copy of your ISO** and then use the `import-globals` command on the copy:
+
+```sh
+cp chibi.iso chibi2.iso
+unplug import-globals --iso chibi2.iso globals.json
+```
+
 ## Dumping Scripts
 
 Most of the game's logic is powered by a custom scripting engine with bytecode stored in each
