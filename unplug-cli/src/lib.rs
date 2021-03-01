@@ -1,4 +1,4 @@
-#![deny(
+#![warn(
     absolute_paths_not_starting_with_crate,
     elided_lifetimes_in_paths,
     explicit_outlives_requirements,
