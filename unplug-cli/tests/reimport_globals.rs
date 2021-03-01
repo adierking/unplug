@@ -4,8 +4,8 @@ use std::fs::File;
 use tempfile::NamedTempFile;
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
-use unplug_cli::metadata;
-use unplug_cli::opt::{ExportMetadataOpt, GlobalsOpt, ImportMetadataOpt, OptionalContainerOpt};
+use unplug_cli::globals;
+use unplug_cli::opt::{ExportGlobalsOpt, GlobalsOpt, ImportGlobalsOpt, OptionalContainerOpt};
 use unplug_test as common;
 
 #[test]
@@ -14,13 +14,13 @@ fn test_reimport_metadata() -> Result<()> {
 
     let copy_path = common::copy_iso()?;
     let json_path = NamedTempFile::new()?.into_temp_path();
-    metadata::export_metadata(ExportMetadataOpt {
+    globals::export_globals(ExportGlobalsOpt {
         container: OptionalContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
         globals: GlobalsOpt { path: None },
         compact: false,
         output: Some(json_path.to_owned()),
     })?;
-    metadata::import_metadata(ImportMetadataOpt {
+    globals::import_globals(ImportGlobalsOpt {
         container: OptionalContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
         globals: GlobalsOpt { path: None },
         input: json_path.to_owned(),

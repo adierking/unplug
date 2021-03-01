@@ -51,10 +51,10 @@ pub enum Subcommand {
     ImportMessages(ImportMessagesOpt),
 
     /// Exports global metadata to a JSON file
-    ExportMetadata(ExportMetadataOpt),
+    ExportGlobals(ExportGlobalsOpt),
 
     /// Imports global metadata from a JSON file
-    ImportMetadata(ImportMetadataOpt),
+    ImportGlobals(ImportGlobalsOpt),
 }
 
 #[derive(StructOpt)]
@@ -255,7 +255,7 @@ pub struct ImportMessagesOpt {
 }
 
 #[derive(StructOpt)]
-pub struct ExportMetadataOpt {
+pub struct ExportGlobalsOpt {
     #[structopt(flatten)]
     pub container: OptionalContainerOpt,
 
@@ -272,7 +272,7 @@ pub struct ExportMetadataOpt {
 }
 
 #[derive(StructOpt)]
-pub struct ImportMetadataOpt {
+pub struct ImportGlobalsOpt {
     #[structopt(flatten)]
     pub container: OptionalContainerOpt,
 

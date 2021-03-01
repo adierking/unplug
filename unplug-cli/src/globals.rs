@@ -4,7 +4,7 @@ use crate::common::{
     edit_iso_optional, open_iso_optional, open_qp_optional, read_globals_qp_or_file, QP_PATH,
 };
 use crate::io::OutputRedirect;
-use crate::opt::{ExportMetadataOpt, ImportMetadataOpt};
+use crate::opt::{ExportGlobalsOpt, ImportGlobalsOpt};
 use anyhow::{bail, Result};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
@@ -350,7 +350,7 @@ impl From<Metadata> for MetadataDef {
     }
 }
 
-pub fn export_metadata(opt: ExportMetadataOpt) -> Result<()> {
+pub fn export_globals(opt: ExportGlobalsOpt) -> Result<()> {
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
 
     let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
@@ -370,7 +370,7 @@ pub fn export_metadata(opt: ExportMetadataOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn import_metadata(opt: ImportMetadataOpt) -> Result<()> {
+pub fn import_globals(opt: ImportGlobalsOpt) -> Result<()> {
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);
     let root: MetadataDef = serde_json::from_reader(json)?;
