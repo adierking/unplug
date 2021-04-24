@@ -772,7 +772,21 @@ expr_enum! {
         Unk1(ScrnUnk226Unk1Args { val }) => 1,
         Unk2(ScrnUnk226Unk2Args { val }) => 2,
         Unk3(ScrnUnk226Unk3Args { val1, val2, val3, val4 }) => 3,
-        Unk4(ScrnUnk226Unk4Args { val }) => 4,
+        Timer(ScrnTimerCommand) => 4,
+    }
+}
+
+expr_enum! {
+    type Error = Error;
+    pub enum ScrnTimerCommand {
+        Get => -4,
+        Set(Expr) => -3,
+        Pause => -2,
+        Unpause => -1,
+        Show => 0,
+        Hide => 1,
+        FadeIn => 2,
+        FadeOut => 3,
     }
 }
 
