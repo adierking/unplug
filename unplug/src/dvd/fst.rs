@@ -902,14 +902,14 @@ mod tests {
 
     #[test]
     fn test_is_name_safe() {
-        assert_eq!(is_name_safe(""), false);
-        assert_eq!(is_name_safe("."), false);
-        assert_eq!(is_name_safe(".."), false);
-        assert_eq!(is_name_safe("..."), true);
-        assert_eq!(is_name_safe("foo"), true);
-        assert_eq!(is_name_safe("foo\\"), false);
-        assert_eq!(is_name_safe("foo/"), false);
-        assert_eq!(is_name_safe("/"), false);
-        assert_eq!(is_name_safe("C:"), false);
+        assert!(!is_name_safe(""));
+        assert!(!is_name_safe("."));
+        assert!(!is_name_safe(".."));
+        assert!(is_name_safe("..."));
+        assert!(is_name_safe("foo"));
+        assert!(!is_name_safe("foo\\"));
+        assert!(!is_name_safe("foo/"));
+        assert!(!is_name_safe("/"));
+        assert!(!is_name_safe("C:"));
     }
 }

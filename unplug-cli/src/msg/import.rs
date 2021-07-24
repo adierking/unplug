@@ -273,7 +273,7 @@ impl<R: BufRead> MessageReader<R> {
                 _ => bail!("Unexpected attribute: {}", key),
             }
         }
-        Ok(cmd.ok_or_else(|| anyhow!("<{}> requires an attribute", ELEM_FONT))?)
+        cmd.ok_or_else(|| anyhow!("<{}> requires an attribute", ELEM_FONT))
     }
 
     fn read_format(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
@@ -653,10 +653,10 @@ mod tests {
 
     #[test]
     fn test_parse_bool() -> Result<()> {
-        assert_eq!(parse_bool("false")?, false);
-        assert_eq!(parse_bool("true")?, true);
-        assert_eq!(parse_bool("0")?, false);
-        assert_eq!(parse_bool("1")?, true);
+        assert!(!parse_bool("false")?);
+        assert!(parse_bool("true")?);
+        assert!(!parse_bool("0")?);
+        assert!(parse_bool("1")?);
         assert!(parse_bool("").is_err());
         assert!(parse_bool("2").is_err());
         Ok(())

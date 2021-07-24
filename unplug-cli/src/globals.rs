@@ -61,7 +61,7 @@ mod text {
         deserializer: D,
     ) -> Result<Text, D::Error> {
         let string = String::deserialize(deserializer)?;
-        Ok(Text::encode(&string).map_err(de::Error::custom)?)
+        Text::encode(&string).map_err(de::Error::custom)
     }
 }
 

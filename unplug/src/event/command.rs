@@ -152,15 +152,15 @@ impl Command {
         matches!(
             self,
             Self::Abort
-            | Self::Return
-            | Self::Goto(_)
-            | Self::If(_)
-            | Self::Elif(_)
-            | Self::EndIf(_)
-            | Self::Case(_)
-            | Self::Expr(_)
-            | Self::While(_)
-            | Self::Break(_)
+                | Self::Return
+                | Self::Goto(_)
+                | Self::If(_)
+                | Self::Elif(_)
+                | Self::EndIf(_)
+                | Self::Case(_)
+                | Self::Expr(_)
+                | Self::While(_)
+                | Self::Break(_)
         )
     }
 }
@@ -868,7 +868,7 @@ mod tests {
     }
 
     fn binary_op(lhs: Expr, rhs: Expr) -> Box<BinaryOp> {
-        Box::new(BinaryOp { lhs, rhs })
+        Box::new(BinaryOp { rhs, lhs })
     }
 
     fn if_args() -> Box<IfArgs> {

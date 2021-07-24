@@ -37,17 +37,17 @@ impl<R: Read + Seek> GlobalsReader<R> {
 
     /// Reads the metadata from the file.
     pub fn read_metadata(&mut self) -> Result<Metadata> {
-        Ok(Metadata::read_from(&mut self.open_metadata()?)?)
+        Metadata::read_from(&mut self.open_metadata()?)
     }
 
     /// Reads the collision data from the file.
     pub fn read_colliders(&mut self) -> Result<ObjectColliders> {
-        Ok(ObjectColliders::read_from(&mut self.open_colliders()?)?)
+        ObjectColliders::read_from(&mut self.open_colliders()?)
     }
 
     /// Reads the script library functions from the file.
     pub fn read_libs(&mut self) -> Result<Libs> {
-        Ok(Libs::read_from(&mut self.open_libs()?)?)
+        Libs::read_from(&mut self.open_libs()?)
     }
 
     /// Unwraps this `GlobalsReader<R>`, returning the underlying stream.

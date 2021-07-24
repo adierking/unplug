@@ -249,13 +249,13 @@ impl Expr {
         matches!(
             self,
             Self::AddAssign(_)
-            | Self::SubtractAssign(_)
-            | Self::MultiplyAssign(_)
-            | Self::DivideAssign(_)
-            | Self::ModuloAssign(_)
-            | Self::BitAndAssign(_)
-            | Self::BitOrAssign(_)
-            | Self::BitXorAssign(_)
+                | Self::SubtractAssign(_)
+                | Self::MultiplyAssign(_)
+                | Self::DivideAssign(_)
+                | Self::ModuloAssign(_)
+                | Self::BitAndAssign(_)
+                | Self::BitOrAssign(_)
+                | Self::BitXorAssign(_)
         )
     }
 }

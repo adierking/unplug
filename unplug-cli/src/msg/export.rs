@@ -119,10 +119,10 @@ impl<W: Write> MessageWriter<W> {
         let is_text = matches!(
             command,
             MsgCommand::Text(_)
-            | MsgCommand::Format(_)
-            | MsgCommand::Icon(_)
-            | MsgCommand::Newline
-            | MsgCommand::NewlineVt
+                | MsgCommand::Format(_)
+                | MsgCommand::Icon(_)
+                | MsgCommand::Newline
+                | MsgCommand::NewlineVt
         );
         if !is_text {
             self.end_text()?;
@@ -255,7 +255,7 @@ impl<W: Write> MessageWriter<W> {
 
             MsgCommand::Icon(icon) => {
                 let mut tag = BytesStart::owned_name(ELEM_ICON);
-                tag.push_attribute((ATTR_ID, icon.to_id().as_ref()));
+                tag.push_attribute((ATTR_ID, icon.to_id()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 

@@ -104,6 +104,6 @@ impl<R: Read> ReadFrom<R> for CString {
 impl<W: Write> WriteTo<W> for CString {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        Ok(writer.write_all(self.as_bytes_with_nul())?)
+        writer.write_all(self.as_bytes_with_nul())
     }
 }
