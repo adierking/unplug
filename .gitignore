@@ -16,3 +16,4 @@ heaptrack.*.gz
 # Visual Studio
 .vs/
 .vscode/
+*.code-workspace
