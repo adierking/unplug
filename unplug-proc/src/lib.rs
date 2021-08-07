@@ -42,11 +42,11 @@ enum KeyValueArg {
 
 impl Parse for KeyValueArg {
     fn parse(input: ParseStream<'_>) -> parse::Result<Self> {
-        let key = Ident::parse(&input)?;
+        let key = Ident::parse(input)?;
         input.parse::<Token![=]>()?;
         match &*key.to_string() {
-            "stream" => Ok(Self::Stream(Punctuated::parse_separated_nonempty(&input)?)),
-            "error" => Ok(Self::Error(TypePath::parse(&input)?)),
+            "stream" => Ok(Self::Stream(Punctuated::parse_separated_nonempty(input)?)),
+            "error" => Ok(Self::Error(TypePath::parse(input)?)),
             _ => Err(Error::new(key.span(), "unexpected parameter")),
         }
     }
@@ -60,7 +60,7 @@ struct AttributeArgs {
 impl Parse for AttributeArgs {
     fn parse(input: ParseStream<'_>) -> parse::Result<Self> {
         let (mut stream, mut error) = (None, None);
-        let args = Punctuated::<KeyValueArg, Token![,]>::parse_terminated(&input)?;
+        let args = Punctuated::<KeyValueArg, Token![,]>::parse_terminated(input)?;
         for arg in args {
             match arg {
                 KeyValueArg::Stream(s) => stream = Some(s),

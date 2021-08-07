@@ -229,7 +229,7 @@ impl Expr {
             | Self::ModuloAssign(op)
             | Self::BitAndAssign(op)
             | Self::BitOrAssign(op)
-            | Self::BitXorAssign(op) => Some(&op),
+            | Self::BitXorAssign(op) => Some(op),
             _ => None,
         }
     }

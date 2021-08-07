@@ -376,7 +376,7 @@ impl DirectoryEntry {
                     // Recurse into the directory and then jump past it
                     let index = i;
                     i = entry.size_or_next as usize;
-                    let node = DirectoryEntry::from_fst(*entry, index, &fst, entry_map)?;
+                    let node = DirectoryEntry::from_fst(*entry, index, fst, entry_map)?;
                     entry_map.insert(node.into())
                 }
             };
