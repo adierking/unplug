@@ -55,3 +55,24 @@ macro_rules! declare_items {
 
 // Generated using unplug-datagen
 include!("gen/items.inc.rs");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_item() {
+        let item = ItemDefinition::get(ItemId::Wastepaper);
+        assert_eq!(item.id, ItemId::Wastepaper);
+        assert_eq!(item.object, Some(ObjectId::ItemKamiKuzu));
+        assert_eq!(item.display_name, "Wastepaper");
+    }
+
+    #[test]
+    fn test_get_item_without_object() {
+        let item = ItemDefinition::get(ItemId::Unk20);
+        assert_eq!(item.id, ItemId::Unk20);
+        assert_eq!(item.object, None);
+        assert_eq!(item.display_name, "");
+    }
+}
