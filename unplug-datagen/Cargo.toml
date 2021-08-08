@@ -1,0 +1,15 @@
+[package]
+name = "unplug-datagen"
+version = "0.2.0"
+authors = ["Derpky"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+byteorder = "1"
+lazy_static = "1.4.0"
+log = { version = "0.4", features = ["release_max_level_debug"] }
+num_enum = "0.5.1"
+regex = "1"
+simplelog = "0.9"
+unplug = { path = "../unplug" }

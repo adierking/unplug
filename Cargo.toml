@@ -3,6 +3,7 @@ members = [
     "unplug",
     "unplug-cli",
     "unplug-data",
+    "unplug-datagen",
     "unplug-proc",
     "unplug-test",
 ]
