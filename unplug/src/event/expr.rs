@@ -2,9 +2,10 @@ use super::block::{Ip, WriteIp};
 use super::opcodes::*;
 use crate::common::io::write_u8_and;
 use crate::common::{ReadFrom, WriteTo};
+use crate::data::item::ItemId;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
-use std::fmt;
+use std::fmt::{self, Debug};
 use std::io::{self, Read, Write};
 use thiserror::Error;
 use unplug_proc::{ReadFrom, WriteTo};
@@ -35,7 +36,7 @@ pub enum Error {
 from_error_boxed!(Error::Io, io::Error);
 
 /// An expression which evaluates to a 32-bit signed integer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Expr {
     /// Evaluates to 1 if the two operands are equal.
     Equal(Box<BinaryOp>),
@@ -403,8 +404,88 @@ impl<W: Write + WriteIp> WriteTo<W> for Expr {
     }
 }
 
+fn debug0(f: &mut fmt::Formatter<'_>, name: &str) -> fmt::Result {
+    write!(f, "{}", name)
+}
+
+fn debug1(f: &mut fmt::Formatter<'_>, name: &str, arg: &impl Debug) -> fmt::Result {
+    f.debug_tuple(name).field(arg).finish()
+}
+
+fn debug_item(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result {
+    if let Some(id) = expr.value() {
+        if let Ok(item) = ItemId::try_from(id as i16) {
+            return f.debug_tuple(name).field(&item).finish();
+        }
+    }
+    f.debug_tuple(name).field(expr).finish()
+}
+
+impl Debug for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Equal(op) => debug1(f, "Equal", op),
+            Self::NotEqual(op) => debug1(f, "NotEqual", op),
+            Self::Less(op) => debug1(f, "Less", op),
+            Self::LessEqual(op) => debug1(f, "LessEqual", op),
+            Self::Greater(op) => debug1(f, "Greater", op),
+            Self::GreaterEqual(op) => debug1(f, "GreaterEqual", op),
+            Self::Not(e) => debug1(f, "Not", e),
+            Self::Add(op) => debug1(f, "Add", op),
+            Self::Subtract(op) => debug1(f, "Subtract", op),
+            Self::Multiply(op) => debug1(f, "Multiply", op),
+            Self::Divide(op) => debug1(f, "Divide", op),
+            Self::Modulo(op) => debug1(f, "Modulo", op),
+            Self::BitAnd(op) => debug1(f, "BitAnd", op),
+            Self::BitOr(op) => debug1(f, "BitOr", op),
+            Self::BitXor(op) => debug1(f, "BitXor", op),
+            Self::AddAssign(op) => debug1(f, "AddAssign", op),
+            Self::SubtractAssign(op) => debug1(f, "SubtractAssign", op),
+            Self::MultiplyAssign(op) => debug1(f, "MultiplyAssign", op),
+            Self::DivideAssign(op) => debug1(f, "DivideAssign", op),
+            Self::ModuloAssign(op) => debug1(f, "ModuloAssign", op),
+            Self::BitAndAssign(op) => debug1(f, "BitAndAssign", op),
+            Self::BitOrAssign(op) => debug1(f, "BitOrAssign", op),
+            Self::BitXorAssign(op) => debug1(f, "BitXorAssign", op),
+            Self::Imm16(e) => debug1(f, "Imm16", e),
+            Self::Imm32(e) => debug1(f, "Imm32", e),
+            Self::AddressOf(e) => debug1(f, "AddressOf", e),
+            Self::Stack(e) => debug1(f, "Stack", e),
+            Self::ParentStack(e) => debug1(f, "ParentStack", e),
+            Self::Flag(e) => debug1(f, "Flag", e),
+            Self::Variable(e) => debug1(f, "Variable", e),
+            Self::Result1 => debug0(f, "Result1"),
+            Self::Result2 => debug0(f, "Result2"),
+            Self::Pad(e) => debug1(f, "Pad", e),
+            Self::Battery(e) => debug1(f, "Battery", e),
+            Self::Money => debug0(f, "Money"),
+            Self::Item(e) => debug_item(f, "Item", e),
+            Self::Atc(e) => debug1(f, "Atc", e),
+            Self::Rank => debug0(f, "Rank"),
+            Self::Exp => debug0(f, "Exp"),
+            Self::Level => debug0(f, "Level"),
+            Self::Hold => debug0(f, "Hold"),
+            Self::Map(e) => debug1(f, "Map", e),
+            Self::ActorName(e) => debug1(f, "ActorName", e),
+            Self::ItemName(e) => debug_item(f, "ItemName", e),
+            Self::Time(e) => debug1(f, "Time", e),
+            Self::CurrentSuit => debug0(f, "CurrentSuit"),
+            Self::Scrap => debug0(f, "Scrap"),
+            Self::CurrentAtc => debug0(f, "CurrentAtc"),
+            Self::Use => debug0(f, "Use"),
+            Self::Hit => debug0(f, "Hit"),
+            Self::StickerName(e) => debug1(f, "StickerName", e),
+            Self::Obj(e) => debug1(f, "Obj", e),
+            Self::Random(e) => debug1(f, "Random", e),
+            Self::Sin(e) => debug1(f, "Sin", e),
+            Self::Cos(e) => debug1(f, "Cos", e),
+            Self::ArrayElement(e) => debug1(f, "ArrayElement", e),
+        }
+    }
+}
+
 /// A reference which appears on the left-hand side of an assignment.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum SetExpr {
     Stack(u8),
     Flag(Expr),
@@ -519,6 +600,30 @@ impl TryFrom<Expr> for SetExpr {
     }
 }
 
+impl Debug for SetExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Stack(e) => debug1(f, "Stack", e),
+            Self::Flag(e) => debug1(f, "Flag", e),
+            Self::Variable(e) => debug1(f, "Variable", e),
+            Self::Result1 => debug0(f, "Result1"),
+            Self::Result2 => debug0(f, "Result2"),
+            Self::Pad(e) => debug1(f, "Pad", e),
+            Self::Battery(e) => debug1(f, "Battery", e),
+            Self::Money => debug0(f, "Money"),
+            Self::Item(e) => debug_item(f, "Item", e),
+            Self::Atc(e) => debug1(f, "Atc", e),
+            Self::Rank => debug0(f, "Rank"),
+            Self::Exp => debug0(f, "Exp"),
+            Self::Level => debug0(f, "Level"),
+            Self::Time(e) => debug1(f, "Time", e),
+            Self::CurrentSuit => debug0(f, "CurrentSuit"),
+            Self::Scrap => debug0(f, "Scrap"),
+            Self::CurrentAtc => debug0(f, "CurrentAtc"),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, ReadFrom, WriteTo)]
 #[read_from(error = Error)]
 #[write_to(stream = Write + WriteIp, error = Error)]
@@ -530,7 +635,7 @@ pub struct BinaryOp {
 }
 
 // Custom Debug impl to print the left-hand side first
-impl fmt::Debug for BinaryOp {
+impl Debug for BinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BinaryOp").field("lhs", &self.lhs).field("rhs", &self.rhs).finish()
     }
