@@ -3,6 +3,7 @@ name = "unplug-cli"
 version = "0.2.0"
 authors = ["Derpky"]
 edition = "2018"
+default-run = "unplug"
 
 [[bin]]
 name = "unplug"
