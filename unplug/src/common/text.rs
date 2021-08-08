@@ -47,6 +47,11 @@ impl Text {
         &mut self.bytes
     }
 
+    /// Returns whether the text is an empty string.
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
     /// Constructs a `Text` by encoding a UTF-8 string.
     pub fn encode(string: &str) -> Result<Self> {
         let (bytes, _, unmappable) = SHIFT_JIS.encode(string);
