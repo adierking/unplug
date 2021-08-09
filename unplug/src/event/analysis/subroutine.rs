@@ -1,4 +1,5 @@
 use super::value::{DefId, Label, Value, ValueKind};
+use crate::event::script::Postorder;
 use crate::event::{Block, BlockId, Command, Ip};
 use std::collections::{HashMap, HashSet};
 
@@ -59,32 +60,23 @@ impl SubroutineInfo {
     /// Constructs a new `SubroutineInfo` by traversing the blocks reachable from an entry point.
     pub fn from_blocks(blocks: &[Block], entry_point: BlockId) -> Self {
         let mut result = Self::new(entry_point);
-        let mut visited = HashSet::new();
-        result.find_blocks(blocks, &mut visited, entry_point);
+        result.find_blocks(blocks, entry_point);
         result.find_calls(blocks);
         result
     }
 
     /// Performs a postorder traversal from the entry point and populates the `postorder` and
     /// `exit_points` lists with the results.
-    fn find_blocks(&mut self, blocks: &[Block], visited: &mut HashSet<BlockId>, id: BlockId) {
-        let block = id.get(blocks);
-        let code = block.code().expect("Expected a code block");
-        if !visited.insert(id) {
-            return;
-        }
-        if let Some(next_ip) = code.next_block {
-            let next_id = next_ip.block().expect("next_block edge is not resolved");
-            self.find_blocks(blocks, visited, next_id);
-            if let Some(else_ip) = code.else_block {
-                let else_id = else_ip.block().expect("else_block edge is not resolved");
-                self.find_blocks(blocks, visited, else_id);
-            }
-        } else {
-            // A block without a "next" edge must exit the subroutine
-            self.exit_points.push(id);
-        }
-        self.postorder.push(id);
+    fn find_blocks(&mut self, blocks: &[Block], id: BlockId) {
+        self.postorder.extend(Postorder::new(blocks, id));
+
+        // Exit points have no next_block
+        self.exit_points.extend(
+            self.postorder
+                .iter()
+                .filter(|id| id.get(blocks).code().unwrap().next_block.is_none())
+                .copied(),
+        );
     }
 
     /// Scans the subroutine's blocks for calls to other subroutines and populates the `calls` list
@@ -140,7 +132,7 @@ mod tests {
         ];
         let sub = SubroutineInfo::from_blocks(blocks, BlockId::new(0));
         assert_eq!(sub.entry_point, BlockId::new(0));
-        assert_eq!(sub.exit_points, block_ids(&[5, 7]));
-        assert_eq!(sub.postorder, block_ids(&[8, 4, 5, 2, 6, 7, 3, 1, 0]));
+        assert_eq!(sub.exit_points, block_ids(&[7, 5]));
+        assert_eq!(sub.postorder, block_ids(&[7, 8, 6, 3, 5, 4, 2, 1, 0]));
     }
 }

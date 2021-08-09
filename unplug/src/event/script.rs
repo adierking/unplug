@@ -7,6 +7,7 @@ pub use writer::ScriptWriter;
 use super::analysis::SubroutineEffectsMap;
 use super::block::{Block, BlockId, Ip};
 use super::command::{self, Command};
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::io;
 use std::iter::{DoubleEndedIterator, Enumerate, ExactSizeIterator, Extend, FusedIterator};
@@ -218,6 +219,18 @@ impl Script {
         CommandsOrderedMut { block_iter: self.blocks_ordered_mut(), command_iter: None }
     }
 
+    /// Returns a postorder iterator over a tree of blocks starting from `root`.
+    pub fn postorder(&self, root: BlockId) -> Postorder<'_> {
+        Postorder::new(&self.blocks, root)
+    }
+
+    /// Returns a reverse postorder ordering of a tree of blocks starting from `root`.
+    pub fn reverse_postorder(&self, root: BlockId) -> Vec<BlockId> {
+        let mut postorder: Vec<_> = Postorder::new(&self.blocks, root).collect();
+        postorder.reverse();
+        postorder
+    }
+
     /// Looks up the ID of the block corresponding to an `Ip`.
     pub fn resolve_ip(&self, ip: Ip) -> Result<BlockId> {
         match ip {
@@ -406,6 +419,64 @@ impl DoubleEndedIterator for CommandsOrderedMut<'_> {
 
 impl FusedIterator for CommandsOrderedMut<'_> {}
 
+/// A postorder iterator over a tree of blocks in a script.
+pub struct Postorder<'a> {
+    blocks: &'a [Block],
+    current: Option<BlockId>,
+    prev: BlockId,
+    stack: Vec<BlockId>,
+    visited: HashSet<BlockId>,
+}
+
+impl<'a> Postorder<'a> {
+    /// Constructs a new postorder iterator over `blocks` starting at `start`.
+    pub fn new(blocks: &'a [Block], start: BlockId) -> Self {
+        Self { blocks, current: Some(start), prev: start, stack: vec![], visited: HashSet::new() }
+    }
+}
+
+impl Iterator for Postorder<'_> {
+    type Item = BlockId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(current) = self.current {
+                if !self.visited.insert(current) {
+                    self.current = None;
+                    self.prev = current;
+                    continue;
+                }
+
+                // Move to else_block first. This ensures that the reverse postorder representation
+                // puts the "true" branch first.
+                self.stack.push(current);
+                let code = current.get(self.blocks).code().expect("expected code block");
+                self.current =
+                    code.else_block.map(|i| i.block().expect("else_block is not resolved"));
+            } else if let Some(&peek) = self.stack.last() {
+                // If we didn't just come from next_block, then it hasn't been visited yet.
+                let code = peek.get(self.blocks).code().expect("expected code block");
+                if let Some(Ip::Block(next_block)) = code.next_block {
+                    if self.prev != next_block {
+                        self.current = Some(next_block);
+                        continue;
+                    }
+                }
+
+                // Visit this node and go up the stack
+                self.prev = peek;
+                self.stack.pop();
+                return Some(peek);
+            } else {
+                // No more unvisited blocks in the tree
+                return None;
+            }
+        }
+    }
+}
+
+impl FusedIterator for Postorder<'_> {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,6 +489,14 @@ mod tests {
             commands: vec![Command::Lib(i)],
             next_block: None,
             else_block: None,
+        })
+    }
+
+    fn tree_block(next_block: Option<u32>, else_block: Option<u32>) -> Block {
+        Block::Code(CodeBlock {
+            commands: vec![],
+            next_block: next_block.map(|i| Ip::Block(BlockId::new(i))),
+            else_block: else_block.map(|i| Ip::Block(BlockId::new(i))),
         })
     }
 
@@ -616,6 +695,35 @@ mod tests {
         assert!(is_offset_error(TEST_SCRIPT.resolve_ip(Ip::Offset(0x654))));
         assert!(is_offset_error(TEST_SCRIPT.resolve_ip(Ip::Offset(0x122))));
         assert!(is_offset_error(TEST_SCRIPT.resolve_ip(Ip::Offset(0x78a))));
+        Ok(())
+    }
+
+    lazy_static! {
+        static ref TREE_SCRIPT: Script = {
+            let blocks = vec![
+                /* 0 */ tree_block(Some(1), Some(4)),
+                /* 1 */ tree_block(Some(2), Some(4)),
+                /* 2 */ tree_block(Some(3), None),
+                /* 3 */ tree_block(None, None),
+                /* 4 */ tree_block(Some(0), Some(5)),
+                /* 5 */ tree_block(None, None),
+            ];
+            Script::with_blocks(blocks)
+        };
+    }
+
+    #[test]
+    fn test_postorder() -> Result<()> {
+        let postorder: Vec<_> = TREE_SCRIPT.postorder(BlockId::new(0)).map(|b| b.index()).collect();
+        assert_eq!(postorder, [5, 4, 3, 2, 1, 0]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_reverse_postorder() -> Result<()> {
+        let postorder: Vec<_> =
+            TREE_SCRIPT.reverse_postorder(BlockId::new(0)).into_iter().map(|b| b.index()).collect();
+        assert_eq!(postorder, [0, 1, 2, 3, 4, 5]);
         Ok(())
     }
 }
