@@ -259,6 +259,25 @@ impl Expr {
                 | Self::BitXorAssign(_)
         )
     }
+
+    /// Returns the logical negation of the expression (e.g. `a == b` becomes `a != b`).
+    pub fn negate(&self) -> Self {
+        match self {
+            Self::Equal(op) => Self::NotEqual(op.clone()),
+            Self::NotEqual(op) => Self::Equal(op.clone()),
+            Self::Less(op) => Self::GreaterEqual(op.clone()),
+            Self::LessEqual(op) => Self::Greater(op.clone()),
+            Self::Greater(op) => Self::LessEqual(op.clone()),
+            Self::GreaterEqual(op) => Self::Less(op.clone()),
+
+            // We assume here that AND and OR are used for logical purposes
+            Self::BitAnd(op) => Self::BitOr(BinaryOp::new(op.lhs.negate(), op.rhs.negate()).into()),
+            Self::BitOr(op) => Self::BitAnd(BinaryOp::new(op.lhs.negate(), op.rhs.negate()).into()),
+
+            Self::Not(op) => *op.clone(),
+            expr => Self::Not(expr.clone().into()),
+        }
+    }
 }
 
 impl<R: Read> ReadFrom<R> for Expr {
@@ -634,6 +653,13 @@ pub struct BinaryOp {
     pub lhs: Expr,
 }
 
+impl BinaryOp {
+    /// Constructs a new `BinaryOp` using `lhs` and `rhs`.
+    pub fn new(lhs: Expr, rhs: Expr) -> Self {
+        Self { rhs, lhs }
+    }
+}
+
 // Custom Debug impl to print the left-hand side first
 impl Debug for BinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -773,7 +799,7 @@ mod tests {
     }
 
     fn binary_op() -> Box<BinaryOp> {
-        Box::new(BinaryOp { lhs: Expr::Imm32(123), rhs: Expr::Imm32(456) })
+        BinaryOp::new(Expr::Imm32(123), Expr::Imm32(456)).into()
     }
 
     fn obj_obj_expr() -> Box<ObjExpr> {
@@ -794,6 +820,39 @@ mod tests {
             index: Expr::Imm32(123),
             address: Expr::AddressOf(Ip::Offset(123)),
         })
+    }
+
+    #[test]
+    fn test_negate() {
+        let original = *expr();
+        let expected = Expr::Not(expr());
+        let actual = original.negate();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.negate(), original);
+
+        let original = Expr::Equal(binary_op());
+        let expected = Expr::NotEqual(binary_op());
+        let actual = original.negate();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.negate(), original);
+
+        let original = Expr::Less(binary_op());
+        let expected = Expr::GreaterEqual(binary_op());
+        let actual = original.negate();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.negate(), original);
+
+        let original = Expr::Greater(binary_op());
+        let expected = Expr::LessEqual(binary_op());
+        let actual = original.negate();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.negate(), original);
+
+        let original = Expr::BitAnd(BinaryOp::new(*expr(), *expr()).into());
+        let expected = Expr::BitOr(BinaryOp::new(Expr::Not(expr()), Expr::Not(expr())).into());
+        let actual = original.negate();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.negate(), original);
     }
 
     #[test]
