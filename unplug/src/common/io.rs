@@ -77,7 +77,7 @@ pub fn copy_buffered(
         let num_read = match reader.read(buf) {
             Ok(0) => return Ok(total),
             Ok(len) => len,
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         };
         writer.write_all(&buf[..num_read])?;

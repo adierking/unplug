@@ -412,12 +412,10 @@ pub fn import_globals(opt: ImportGlobalsOpt) -> Result<()> {
     GlobalsBuilder::new().base(&mut globals).metadata(&metadata).write_to(&mut writer)?;
     let bytes = writer.into_inner().into_boxed_slice();
 
-    let mut qp_temp = if let Some(ref mut qp) = qp {
+    let mut qp_temp = if let Some(qp) = &mut qp {
         info!("Rebuilding qp.bin");
-        let mut qp_temp = match opt.container.qp {
-            Some(ref path) => {
-                NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?
-            }
+        let mut qp_temp = match &opt.container.qp {
+            Some(path) => NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?,
             None => NamedTempFile::new()?,
         };
         let mut qp_builder = ArchiveBuilder::with_archive(qp);
@@ -432,7 +430,7 @@ pub fn import_globals(opt: ImportGlobalsOpt) -> Result<()> {
     };
     drop(qp);
 
-    if let Some(ref mut iso) = iso {
+    if let Some(iso) = &mut iso {
         info!("Updating ISO");
         qp_temp.seek(SeekFrom::Start(0))?;
         iso.replace_file_at(QP_PATH, qp_temp)?;

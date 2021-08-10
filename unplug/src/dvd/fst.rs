@@ -210,8 +210,8 @@ impl Entry {
     /// Returns the entry's name.
     pub fn name(&self) -> &str {
         match self {
-            Self::File(ref file) => &file.name,
-            Self::Directory(ref dir) => &dir.name,
+            Self::File(file) => &file.name,
+            Self::Directory(dir) => &dir.name,
         }
     }
 
@@ -518,9 +518,9 @@ impl FileTree {
     /// Returns the ID of the entry at `path`, interpreted relative to the `entry` directory.
     pub fn at_descendant(&self, entry: EntryId, path: &str) -> Result<EntryId> {
         let mut cur_entry = entry;
-        let mut cur_dir = match self[cur_entry] {
+        let mut cur_dir = match &self[cur_entry] {
             Entry::File(_) => return Err(Error::ExpectedDirectory(cur_entry)),
-            Entry::Directory(ref d) => d,
+            Entry::Directory(d) => d,
         };
         let mut components = path.split(|c| c == '/' || c == '\\');
         let mut stack: Vec<EntryId> = Vec::new();
@@ -548,7 +548,7 @@ impl FileTree {
                 Some(&e) => e,
                 None => break,
             };
-            match self[entry] {
+            match &self[entry] {
                 Entry::File(_) => {
                     // Only return the file if this is the last component
                     if components.next().is_none() {
@@ -556,7 +556,7 @@ impl FileTree {
                     }
                     break;
                 }
-                Entry::Directory(ref d) => {
+                Entry::Directory(d) => {
                     // Enter the directory
                     stack.push(cur_entry);
                     cur_entry = entry;

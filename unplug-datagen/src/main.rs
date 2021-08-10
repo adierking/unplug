@@ -399,7 +399,10 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
     write!(writer, "{}", GEN_HEADER)?;
     write!(writer, "{}", ITEMS_HEADER)?;
     for item in items {
-        let object = if let Some(ref label) = item.object { &label.0 } else { "None" };
+        let object = match &item.object {
+            Some(label) => &label.0,
+            _ => "None",
+        };
         writeln!(
             writer,
             "    {} => {} {{ {}, \"{}\" }},",

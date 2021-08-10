@@ -86,16 +86,16 @@ pub fn derive_read_from(input: TokenStream) -> TokenStream {
     let bounds = args.stream.unwrap_or_else(|| parse_quote!(::std::io::Read));
     let error = args.error.unwrap_or_else(|| parse_quote!(::std::io::Error));
 
-    let data = match input.data {
-        Data::Struct(ref data) => data,
+    let data = match &input.data {
+        Data::Struct(data) => data,
         _ => {
             return Error::new(input.span(), "ReadFrom can only be derived for structs")
                 .to_compile_error()
                 .into();
         }
     };
-    let fields = match data.fields {
-        Fields::Named(ref named) => named,
+    let fields = match &data.fields {
+        Fields::Named(named) => named,
         _ => {
             return Error::new(
                 input.span(),
@@ -138,16 +138,16 @@ pub fn derive_write_to(input: TokenStream) -> TokenStream {
     let bounds = args.stream.unwrap_or_else(|| parse_quote!(::std::io::Read));
     let error = args.error.unwrap_or_else(|| parse_quote!(::std::io::Error));
 
-    let data = match input.data {
-        Data::Struct(ref data) => data,
+    let data = match &input.data {
+        Data::Struct(data) => data,
         _ => {
             return Error::new(input.span(), "WriteTo can only be derived for structs")
                 .to_compile_error()
                 .into();
         }
     };
-    let fields = match data.fields {
-        Fields::Named(ref named) => named,
+    let fields = match &data.fields {
+        Fields::Named(named) => named,
         _ => {
             return Error::new(
                 input.span(),

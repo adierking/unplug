@@ -338,9 +338,9 @@ impl<'a> CommandsOrdered<'a> {
         next_command: impl Fn(&mut CommandIter<'a>) -> Option<(usize, &'a Command)>,
     ) -> Option<(CommandLocation, &'a Command)> {
         loop {
-            if let Some((loc, ref mut iter)) = self.command_iter {
+            if let Some((loc, iter)) = &mut self.command_iter {
                 match next_command(iter) {
-                    Some((i, next)) => return Some((CommandLocation::new(loc, i), next)),
+                    Some((i, next)) => return Some((CommandLocation::new(*loc, i), next)),
                     None => self.command_iter = None,
                 }
             }
@@ -386,9 +386,9 @@ impl<'a> CommandsOrderedMut<'a> {
         next_command: impl Fn(&mut CommandIterMut<'a>) -> Option<(usize, &'a mut Command)>,
     ) -> Option<(CommandLocation, &'a mut Command)> {
         loop {
-            if let Some((loc, ref mut iter)) = self.command_iter {
+            if let Some((loc, iter)) = &mut self.command_iter {
                 match next_command(iter) {
-                    Some((i, next)) => return Some((CommandLocation::new(loc, i), next)),
+                    Some((i, next)) => return Some((CommandLocation::new(*loc, i), next)),
                     None => self.command_iter = None,
                 }
             }

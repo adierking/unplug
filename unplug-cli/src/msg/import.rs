@@ -597,8 +597,8 @@ pub fn import_messages(opt: ImportMessagesOpt) -> Result<()> {
     }
 
     info!("Rebuilding qp.bin");
-    let mut qp_temp = match opt.container.qp {
-        Some(ref path) => NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?,
+    let mut qp_temp = match &opt.container.qp {
+        Some(path) => NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?,
         None => NamedTempFile::new()?,
     };
     let mut qp_builder = ArchiveBuilder::with_archive(&mut qp);
