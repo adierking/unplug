@@ -2,6 +2,7 @@ use super::block::{Ip, WriteIp};
 use super::opcodes::*;
 use crate::common::io::write_u8_and;
 use crate::common::{ReadFrom, WriteTo};
+use crate::data::atc::AtcId;
 use crate::data::item::ItemId;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
@@ -440,6 +441,15 @@ fn debug_item(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Resul
     f.debug_tuple(name).field(expr).finish()
 }
 
+fn debug_atc(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result {
+    if let Some(id) = expr.value() {
+        if let Ok(atc) = AtcId::try_from(id as i16) {
+            return f.debug_tuple(name).field(&atc).finish();
+        }
+    }
+    f.debug_tuple(name).field(expr).finish()
+}
+
 impl Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -479,7 +489,7 @@ impl Debug for Expr {
             Self::Battery(e) => debug1(f, "Battery", e),
             Self::Money => debug0(f, "Money"),
             Self::Item(e) => debug_item(f, "Item", e),
-            Self::Atc(e) => debug1(f, "Atc", e),
+            Self::Atc(e) => debug_atc(f, "Atc", e),
             Self::Rank => debug0(f, "Rank"),
             Self::Exp => debug0(f, "Exp"),
             Self::Level => debug0(f, "Level"),
@@ -631,7 +641,7 @@ impl Debug for SetExpr {
             Self::Battery(e) => debug1(f, "Battery", e),
             Self::Money => debug0(f, "Money"),
             Self::Item(e) => debug_item(f, "Item", e),
-            Self::Atc(e) => debug1(f, "Atc", e),
+            Self::Atc(e) => debug_atc(f, "Atc", e),
             Self::Rank => debug0(f, "Rank"),
             Self::Exp => debug0(f, "Exp"),
             Self::Level => debug0(f, "Level"),
