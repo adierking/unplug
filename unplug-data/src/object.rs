@@ -60,7 +60,8 @@ macro_rules! declare_objects {
         $($index:literal => $id:ident { $class:ident, $subclass:literal, $path:literal }),*
         $(,)*
     } => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i32)]
         pub enum ObjectId {
             $($id = $index),*

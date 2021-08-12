@@ -22,7 +22,8 @@ macro_rules! declare_atcs {
         $($index:literal => $id:ident { $display_name:literal }),*
         $(,)*
     } => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i16)]
         pub enum AtcId {
             $($id = $index),*
