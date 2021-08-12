@@ -36,7 +36,7 @@ use std::process;
 use unplug::common::ReadFrom;
 use unplug::data::stage::GLOBALS_PATH;
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
-use unplug::globals::metadata::Item;
+use unplug::globals::metadata::{Atc, Item};
 use unplug::globals::GlobalsReader;
 
 const MAIN_OBJECTS_ADDR: u32 = 0x8021c70c;
@@ -59,17 +59,20 @@ const SRC_DIR_NAME: &str = "src";
 const TEST_FILE_NAME: &str = "lib.rs";
 const OUTPUT_DIR_NAME: &str = "gen";
 
-const ITEMS_FILE_NAME: &str = "items.inc.rs";
-const OBJECTS_FILE_NAME: &str = "objects.inc.rs";
-
 const GEN_HEADER: &str = "// Generated with unplug-datagen. DO NOT EDIT.\n\
                           // To regenerate: cargo run -p unplug-datagen -- <iso path>\n\n";
 
+const OBJECTS_FILE_NAME: &str = "objects.inc.rs";
 const OBJECTS_HEADER: &str = "declare_objects! {\n";
 const OBJECTS_FOOTER: &str = "}\n";
 
+const ITEMS_FILE_NAME: &str = "items.inc.rs";
 const ITEMS_HEADER: &str = "declare_items! {\n";
 const ITEMS_FOOTER: &str = "}\n";
+
+const ATCS_FILE_NAME: &str = "atcs.inc.rs";
+const ATCS_HEADER: &str = "declare_atcs! {\n";
+const ATCS_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -378,10 +381,33 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
     items
 }
 
+/// Representation of an ATC which is written to the generated source.
+struct AtcDefinition {
+    id: u16,
+    label: Label,
+    display_name: String,
+}
+
+/// Builds the ATC list from globals data.
+fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
+    globals
+        .iter()
+        .enumerate()
+        .map(|(id, atc)| {
+            let display_name = atc.name.decode().unwrap();
+            let label = if !display_name.is_empty() {
+                Label::from_string_lossy(&display_name)
+            } else {
+                Label(format!("{}{}", UNKNOWN_PREFIX, id))
+            };
+            AtcDefinition { id: id as u16, label, display_name: display_name.into() }
+        })
+        .collect()
+}
+
 /// Writes the list of objects to the generated file.
 fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result<()> {
-    write!(writer, "{}", GEN_HEADER)?;
-    write!(writer, "{}", OBJECTS_HEADER)?;
+    write!(writer, "{}{}", GEN_HEADER, OBJECTS_HEADER)?;
     for object in objects {
         writeln!(
             writer,
@@ -396,8 +422,7 @@ fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result
 
 /// Writes the list of items to the generated file.
 fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
-    write!(writer, "{}", GEN_HEADER)?;
-    write!(writer, "{}", ITEMS_HEADER)?;
+    write!(writer, "{}{}", GEN_HEADER, ITEMS_HEADER)?;
     for item in items {
         let object = match &item.object {
             Some(label) => &label.0,
@@ -410,6 +435,17 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
         )?;
     }
     write!(writer, "{}", ITEMS_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
+/// Writes the list of ATCs to the generated file.
+fn write_atcs(mut writer: impl Write, atcs: &[AtcDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, ATCS_HEADER)?;
+    for atc in atcs {
+        writeln!(writer, "    {} => {} {{ \"{}\" }},", atc.id, atc.label.0, atc.display_name)?;
+    }
+    write!(writer, "{}", ATCS_FOOTER)?;
     writer.flush()?;
     Ok(())
 }
@@ -461,6 +497,9 @@ fn run_app() -> Result<()> {
     info!("Generating item data");
     let items = build_items(&objects, &metadata.items);
 
+    info!("Generating ATC data");
+    let atcs = build_atcs(&metadata.atcs);
+
     let out_dir: PathBuf = [UNPLUG_DATA_PATH, SRC_DIR_NAME, OUTPUT_DIR_NAME].iter().collect();
     fs::create_dir_all(&out_dir)?;
 
@@ -473,6 +512,11 @@ fn run_app() -> Result<()> {
     info!("Writing {}", items_path.display());
     let items_writer = BufWriter::new(File::create(items_path)?);
     write_items(items_writer, &items)?;
+
+    let atcs_path = out_dir.join(ATCS_FILE_NAME);
+    info!("Writing {}", atcs_path.display());
+    let atcs_writer = BufWriter::new(File::create(atcs_path)?);
+    write_atcs(atcs_writer, &atcs)?;
 
     Ok(())
 }

@@ -15,6 +15,7 @@
     variant_size_differences
 )]
 
+pub mod atc;
 pub mod item;
 pub mod object;
 pub mod stage;
