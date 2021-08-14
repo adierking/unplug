@@ -4,6 +4,7 @@ use crate::common::io::write_u8_and;
 use crate::common::{ReadFrom, WriteTo};
 use crate::data::atc::AtcId;
 use crate::data::item::ItemId;
+use crate::data::object::ObjectId;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Debug};
@@ -29,6 +30,15 @@ pub enum Error {
 
     #[error("expression is not a constant: {0:?}")]
     NonConstant(Box<Expr>),
+
+    #[error("expression is not a valid ATC ID: {0:?}")]
+    InvalidAtc(Box<Expr>),
+
+    #[error("expression is not a valid item ID: {0:?}")]
+    InvalidItem(Box<Expr>),
+
+    #[error("expression is not a valid object ID: {0:?}")]
+    InvalidObject(Box<Expr>),
 
     #[error(transparent)]
     Io(Box<io::Error>),
@@ -799,6 +809,39 @@ pub struct ArrayElementExpr {
     pub address: Expr,
 }
 
+/// Generates `TryFrom` implementations for converting from an `Expr` to an ID type.
+macro_rules! impl_try_from_expr {
+    ($idtype:ty, $base:ty, $err:path) => {
+        #[allow(trivial_numeric_casts)]
+        impl TryFrom<Expr> for $idtype {
+            type Error = Error;
+            fn try_from(expr: Expr) -> Result<Self> {
+                if let Some(id) = expr.value() {
+                    Ok(Self::try_from(id as $base).map_err(|_| $err(expr.into()))?)
+                } else {
+                    Err(Error::NonConstant(expr.into()))
+                }
+            }
+        }
+
+        #[allow(trivial_numeric_casts)]
+        impl TryFrom<&Expr> for $idtype {
+            type Error = Error;
+            fn try_from(expr: &Expr) -> Result<Self> {
+                if let Some(id) = expr.value() {
+                    Ok(Self::try_from(id as $base).map_err(|_| $err(expr.clone().into()))?)
+                } else {
+                    Err(Error::NonConstant(expr.clone().into()))
+                }
+            }
+        }
+    };
+}
+
+impl_try_from_expr!(AtcId, i16, Error::InvalidAtc);
+impl_try_from_expr!(ItemId, i16, Error::InvalidItem);
+impl_try_from_expr!(ObjectId, i32, Error::InvalidObject);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -863,6 +906,39 @@ mod tests {
         let actual = original.negate();
         assert_eq!(actual, expected);
         assert_eq!(actual.negate(), original);
+    }
+
+    #[test]
+    fn test_atc_from_expr() {
+        let expected = AtcId::Toothbrush;
+        let expr = Expr::Imm16(expected.into());
+        assert_eq!(AtcId::try_from(&expr).unwrap(), expected);
+        assert_eq!(AtcId::try_from(expr).unwrap(), expected);
+
+        assert!(matches!(AtcId::try_from(Expr::Imm16(-1)), Err(Error::InvalidAtc(_))));
+        assert!(matches!(AtcId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
+    }
+
+    #[test]
+    fn test_item_from_expr() {
+        let expected = ItemId::HotRod;
+        let expr = Expr::Imm16(expected.into());
+        assert_eq!(ItemId::try_from(&expr).unwrap(), expected);
+        assert_eq!(ItemId::try_from(expr).unwrap(), expected);
+
+        assert!(matches!(ItemId::try_from(Expr::Imm16(-1)), Err(Error::InvalidItem(_))));
+        assert!(matches!(ItemId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
+    }
+
+    #[test]
+    fn test_object_from_expr() {
+        let expected = ObjectId::NpcTonpy;
+        let expr = Expr::Imm32(expected.into());
+        assert_eq!(ObjectId::try_from(&expr).unwrap(), expected);
+        assert_eq!(ObjectId::try_from(expr).unwrap(), expected);
+
+        assert!(matches!(ObjectId::try_from(Expr::Imm16(-1)), Err(Error::InvalidObject(_))));
+        assert!(matches!(ObjectId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
     }
 
     #[test]
