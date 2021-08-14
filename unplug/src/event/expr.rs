@@ -442,6 +442,10 @@ fn debug1(f: &mut fmt::Formatter<'_>, name: &str, arg: &impl Debug) -> fmt::Resu
     f.debug_tuple(name).field(arg).finish()
 }
 
+fn debug2(f: &mut fmt::Formatter<'_>, name: &str, arg: &BinaryOp) -> fmt::Result {
+    f.debug_tuple(name).field(&arg.lhs).field(&arg.rhs).finish()
+}
+
 fn debug_item(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result {
     if let Some(id) = expr.value() {
         if let Ok(item) = ItemId::try_from(id as i16) {
@@ -463,29 +467,29 @@ fn debug_atc(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result
 impl Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Equal(op) => debug1(f, "Equal", op),
-            Self::NotEqual(op) => debug1(f, "NotEqual", op),
-            Self::Less(op) => debug1(f, "Less", op),
-            Self::LessEqual(op) => debug1(f, "LessEqual", op),
-            Self::Greater(op) => debug1(f, "Greater", op),
-            Self::GreaterEqual(op) => debug1(f, "GreaterEqual", op),
+            Self::Equal(op) => debug2(f, "Equal", op),
+            Self::NotEqual(op) => debug2(f, "NotEqual", op),
+            Self::Less(op) => debug2(f, "Less", op),
+            Self::LessEqual(op) => debug2(f, "LessEqual", op),
+            Self::Greater(op) => debug2(f, "Greater", op),
+            Self::GreaterEqual(op) => debug2(f, "GreaterEqual", op),
             Self::Not(e) => debug1(f, "Not", e),
-            Self::Add(op) => debug1(f, "Add", op),
-            Self::Subtract(op) => debug1(f, "Subtract", op),
-            Self::Multiply(op) => debug1(f, "Multiply", op),
-            Self::Divide(op) => debug1(f, "Divide", op),
-            Self::Modulo(op) => debug1(f, "Modulo", op),
-            Self::BitAnd(op) => debug1(f, "BitAnd", op),
-            Self::BitOr(op) => debug1(f, "BitOr", op),
-            Self::BitXor(op) => debug1(f, "BitXor", op),
-            Self::AddAssign(op) => debug1(f, "AddAssign", op),
-            Self::SubtractAssign(op) => debug1(f, "SubtractAssign", op),
-            Self::MultiplyAssign(op) => debug1(f, "MultiplyAssign", op),
-            Self::DivideAssign(op) => debug1(f, "DivideAssign", op),
-            Self::ModuloAssign(op) => debug1(f, "ModuloAssign", op),
-            Self::BitAndAssign(op) => debug1(f, "BitAndAssign", op),
-            Self::BitOrAssign(op) => debug1(f, "BitOrAssign", op),
-            Self::BitXorAssign(op) => debug1(f, "BitXorAssign", op),
+            Self::Add(op) => debug2(f, "Add", op),
+            Self::Subtract(op) => debug2(f, "Subtract", op),
+            Self::Multiply(op) => debug2(f, "Multiply", op),
+            Self::Divide(op) => debug2(f, "Divide", op),
+            Self::Modulo(op) => debug2(f, "Modulo", op),
+            Self::BitAnd(op) => debug2(f, "BitAnd", op),
+            Self::BitOr(op) => debug2(f, "BitOr", op),
+            Self::BitXor(op) => debug2(f, "BitXor", op),
+            Self::AddAssign(op) => debug2(f, "AddAssign", op),
+            Self::SubtractAssign(op) => debug2(f, "SubtractAssign", op),
+            Self::MultiplyAssign(op) => debug2(f, "MultiplyAssign", op),
+            Self::DivideAssign(op) => debug2(f, "DivideAssign", op),
+            Self::ModuloAssign(op) => debug2(f, "ModuloAssign", op),
+            Self::BitAndAssign(op) => debug2(f, "BitAndAssign", op),
+            Self::BitOrAssign(op) => debug2(f, "BitOrAssign", op),
+            Self::BitXorAssign(op) => debug2(f, "BitXorAssign", op),
             Self::Imm16(e) => debug1(f, "Imm16", e),
             Self::Imm32(e) => debug1(f, "Imm32", e),
             Self::AddressOf(e) => debug1(f, "AddressOf", e),
