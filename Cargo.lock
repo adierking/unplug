@@ -663,6 +663,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "byteorder",
+ "lazy_static",
  "log",
  "quick-xml",
  "serde",

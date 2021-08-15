@@ -23,4 +23,5 @@ unicase = "2.6"
 unplug = { path = "../unplug" }
 
 [dev-dependencies]
+lazy_static = "1.4.0"
 unplug-test = { path = "../unplug-test" }

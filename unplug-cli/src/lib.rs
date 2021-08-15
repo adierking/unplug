@@ -21,3 +21,4 @@ pub mod globals;
 pub mod io;
 pub mod msg;
 pub mod opt;
+pub mod shop;

@@ -4,7 +4,7 @@ use simplelog::{Color, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMo
 use std::process;
 use structopt::StructOpt;
 use unplug_cli::opt::{Opt, Subcommand};
-use unplug_cli::{commands, globals, msg};
+use unplug_cli::{commands, globals, msg, shop};
 
 fn init_logging(opt: &Opt) {
     let filter = if opt.verbose >= 2 {
@@ -40,6 +40,7 @@ fn run_app() -> Result<()> {
         Subcommand::ImportMessages(opt) => msg::import_messages(opt),
         Subcommand::ExportGlobals(opt) => globals::export_globals(opt),
         Subcommand::ImportGlobals(opt) => globals::import_globals(opt),
+        Subcommand::ShopTest(opt) => shop::shop_test(opt),
     }
 }
 
