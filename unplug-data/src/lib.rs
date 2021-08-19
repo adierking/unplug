@@ -19,3 +19,21 @@ pub mod atc;
 pub mod item;
 pub mod object;
 pub mod stage;
+
+use atc::AtcId;
+use item::ItemId;
+use thiserror::Error;
+
+/// The result type for data operations.
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// The error type for data operations.
+#[derive(Error, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Error {
+    #[error("{0:?} does not have a corresponding ATC")]
+    NoItemAtc(ItemId),
+
+    #[error("{0:?} does not have a corresponding item")]
+    NoAtcItem(AtcId),
+}

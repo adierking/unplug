@@ -681,6 +681,7 @@ name = "unplug-data"
 version = "0.2.0"
 dependencies = [
  "num_enum",
+ "thiserror",
 ]
 
 [[package]]

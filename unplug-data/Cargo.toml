@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 num_enum = "0.5.1"
+thiserror = "1.0"
