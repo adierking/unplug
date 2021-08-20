@@ -68,7 +68,7 @@ fn is_shop_setup(script: &Script, block: BlockId, visited: &mut HashSet<BlockId>
     false
 }
 
-/// A requirement for an item to be enabled or visible in the shop.
+/// A requirement for an item to be visible in the shop.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Requirement {
     /// The player must have an item.
@@ -108,11 +108,8 @@ pub struct Slot {
     pub item: Option<ItemId>,
     /// The maximum amount of the item that the player can have.
     pub limit: i16,
-    /// The requirements for the slot to be enabled. If empty, the slot is always enabled (unless
-    /// the inventory count exceeds the limit).
-    pub enabled: HashSet<Requirement>,
     /// The requirements for the slot to be visible. If empty, the slot is always visible.
-    pub visible: HashSet<Requirement>,
+    pub requirements: HashSet<Requirement>,
 }
 
 impl Slot {

@@ -189,7 +189,7 @@ impl<'s> ShopParser<'s> {
     /// Parses script code starting from `block` and returns the estimated slot configuration.
     pub(super) fn parse(mut self, block: BlockId) -> Vec<Slot> {
         self.parse_block(block, None);
-        self.finish()
+        self.slots
     }
 
     /// Parses `block`, building requirements from `condition`.
@@ -307,7 +307,7 @@ impl<'s> ShopParser<'s> {
             let slot = &mut self.slots[index];
             if id < 0 {
                 // Since this is hiding the slot, we have to invert the condition
-                slot.visible.extend(requirements.iter().map(|r| r.negate()));
+                slot.requirements.extend(requirements.iter().map(|r| r.negate()));
                 continue;
             }
 
@@ -326,38 +326,10 @@ impl<'s> ShopParser<'s> {
             } else {
                 warn!("Unrecognized item ID in slot {}: {}", index, id);
             }
-
-            // If the count is positive, the slot is enabled, otherwise it is disabled.
             if count > 0 {
                 slot.limit = count;
-            } else {
-                // Since this is disabling the slot, we have to invert the condition
-                slot.enabled.extend(requirements.iter().map(|r| r.negate()))
             }
         }
-    }
-
-    /// Finalizes the shop configuration.
-    fn finish(mut self) -> Vec<Slot> {
-        for slot in &mut self.slots {
-            // Timer5 is a special case. The item is disabled if you have another timer OR if you
-            // don't have any timer. This is because the game starts with a 5-minute timer but you
-            // won't have the timer in your inventory. This is too difficult for us to parse, so
-            // just override the bogus requirements we got and we'll handle this when we write the
-            // shop code back.
-            if let Some(ItemId::Timer5) = slot.item {
-                slot.enabled.clear();
-                slot.enabled.insert(Requirement::MissingItem(ItemId::Timer5));
-                continue;
-            }
-
-            // Subtract the visible requirements from the enabled requirements. Otherwise there will
-            // be redundancy here because we don't care whether something is enabled if it isn't
-            // visible anyway.
-            let visible = &slot.visible;
-            slot.enabled.retain(|r| !visible.contains(r));
-        }
-        self.slots
     }
 }
 
@@ -655,31 +627,22 @@ mod tests {
 
         let script = Script::with_blocks(blocks);
         let slots = ShopParser::new(&script).parse(BlockId::new(0));
-        assert_eq!(
-            slots[0],
-            Slot { item: Some(ItemId::HotRod), limit: 1, enabled: set![], visible: set![] }
-        );
-        assert_eq!(slots[1], Slot { item: None, limit: 0, enabled: set![], visible: set![] });
+        assert_eq!(slots[0], Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] });
+        assert_eq!(slots[1], Slot { item: None, limit: 0, requirements: set![] });
         assert_eq!(
             slots[2],
-            Slot {
-                item: Some(ItemId::BlueFlowerSeed),
-                limit: 10,
-                enabled: set![],
-                visible: set![],
-            }
+            Slot { item: Some(ItemId::BlueFlowerSeed), limit: 10, requirements: set![] }
         );
         assert_eq!(
             slots[3],
             Slot {
                 item: Some(ItemId::Toothbrush),
                 limit: 1,
-                enabled: set![Requirement::MissingAtc(AtcId::Toothbrush)],
-                visible: set![Requirement::HaveFlag(123)],
+                requirements: set![Requirement::HaveFlag(123)],
             }
         );
         for slot in slots.iter().skip(4) {
-            assert_eq!(*slot, Slot { item: None, limit: 0, enabled: set![], visible: set![] });
+            assert_eq!(*slot, Slot { item: None, limit: 0, requirements: set![] });
         }
     }
 }
