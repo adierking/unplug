@@ -5,7 +5,7 @@ pub use reader::ScriptReader;
 pub use writer::ScriptWriter;
 
 use super::analysis::SubroutineEffectsMap;
-use super::block::{Block, BlockId, Ip};
+use super::block::{Block, BlockId, CodeBlock, Ip};
 use super::command::{self, Command};
 use std::collections::HashSet;
 use std::convert::TryInto;
@@ -238,6 +238,19 @@ impl Script {
             Ip::Block(id) => Err(Error::InvalidId(id)),
             Ip::Offset(offset) => self.layout().ok_or(Error::MissingLayout)?.resolve_offset(offset),
         }
+    }
+
+    /// Empties the `from` block and chains it with `to`, effectively redirecting anything that
+    /// references it. ***Panics*** if either block is not a code block.
+    pub fn redirect_block(&mut self, from: BlockId, to: BlockId) {
+        assert!(self.block(to).is_code(), "expected a code block");
+        let from_block = self.block_mut(from);
+        assert!(from_block.is_code(), "expected a code block");
+        *from_block = Block::Code(CodeBlock {
+            commands: vec![],
+            next_block: Some(to.into()),
+            else_block: None,
+        });
     }
 }
 
@@ -714,16 +727,32 @@ mod tests {
 
     #[test]
     fn test_postorder() -> Result<()> {
-        let postorder: Vec<_> = TREE_SCRIPT.postorder(BlockId::new(0)).map(|b| b.index()).collect();
-        assert_eq!(postorder, [5, 4, 3, 2, 1, 0]);
+        let order: Vec<_> = TREE_SCRIPT.postorder(BlockId::new(0)).map(|b| b.index()).collect();
+        assert_eq!(order, [5, 4, 3, 2, 1, 0]);
         Ok(())
     }
 
     #[test]
     fn test_reverse_postorder() -> Result<()> {
-        let postorder: Vec<_> =
+        let order: Vec<_> =
             TREE_SCRIPT.reverse_postorder(BlockId::new(0)).into_iter().map(|b| b.index()).collect();
-        assert_eq!(postorder, [0, 1, 2, 3, 4, 5]);
+        assert_eq!(order, [0, 1, 2, 3, 4, 5]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_redirect_block() -> Result<()> {
+        let mut script = TREE_SCRIPT.clone();
+        script.redirect_block(BlockId::new(1), BlockId::new(4));
+
+        let old_block = script.block(BlockId::new(1)).code().unwrap();
+        assert!(old_block.commands.is_empty());
+        assert_eq!(old_block.next_block, Some(BlockId::new(4).into()));
+        assert_eq!(old_block.else_block, None);
+
+        let order: Vec<_> =
+            script.reverse_postorder(BlockId::new(0)).into_iter().map(|b| b.index()).collect();
+        assert_eq!(order, [0, 1, 4, 5]);
         Ok(())
     }
 }

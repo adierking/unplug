@@ -163,7 +163,7 @@ impl<'a> ScriptWriter<'a> {
         let code = self.script.block(block_id).code().expect("Expected a code block");
         if let Some(next_ip) = code.next_block {
             let next_block = next_ip.block().expect("next_block edge is not resolved");
-            if !code.commands.last().unwrap().is_goto() {
+            if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
                 if next_block.get(&self.predecessors).is_some() {
                     panic!("Block {:?} has more than one direct predecessor", next_block);
                 } else {
