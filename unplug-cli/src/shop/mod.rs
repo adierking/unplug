@@ -1,6 +1,8 @@
+mod compiler;
 mod parser;
-use parser::*;
-use unplug::event::Script;
+
+use compiler::ShopCompiler;
+use parser::ShopParser;
 
 use crate::common::*;
 use crate::opt::ShopTestOpt;
@@ -11,12 +13,18 @@ use unplug::data::atc::AtcId;
 use unplug::data::item::ItemId;
 use unplug::data::stage::CHIBI_HOUSE;
 use unplug::event::analysis::Label;
-use unplug::event::{BlockId, Command, Ip, SetExpr};
+use unplug::event::{BlockId, Command, Ip, Script, SetExpr};
 
-const NUM_SLOTS: usize = 20;
+/// The maximum number of slots that can fit in a shop.
+pub const NUM_SLOTS: usize = 20;
+
+/// The first global variable for shop items.
 const SHOP_ITEM_FIRST: usize = 600;
+/// The last global variable for shop items.
 const SHOP_ITEM_LAST: usize = SHOP_ITEM_FIRST + NUM_SLOTS - 1;
+/// The first global variable for shop item limits.
 const SHOP_COUNT_FIRST: usize = SHOP_ITEM_LAST + 1;
+/// The last global variable for shop item limits.
 const SHOP_COUNT_LAST: usize = SHOP_COUNT_FIRST + NUM_SLOTS - 1;
 
 fn find_shop_setup(script: &Script) -> Result<BlockId> {
@@ -25,6 +33,7 @@ fn find_shop_setup(script: &Script) -> Result<BlockId> {
     // be marked as killing the shop vars. Every routine which calls the shop routine will also
     // technically kill the shop vars, so if we sort by the number of killed labels then the first
     // one is likely to be our goal.
+    debug!("Searching for shop setup routine");
     let layout = script.layout().expect("missing script layout");
     let mut candidates: Vec<_> = layout
         .subroutine_effects()
@@ -36,10 +45,11 @@ fn find_shop_setup(script: &Script) -> Result<BlockId> {
     for (block, _) in candidates {
         debug!("Checking candidate block {:?}", block);
         if is_shop_setup(script, block, &mut HashSet::new()) {
+            debug!("Found shop setup routine starting at block {:?}", block);
             return Ok(block);
         }
     }
-    bail!("could not locate shop setup subroutine");
+    bail!("could not locate shop setup routine");
 }
 
 fn is_shop_setup(script: &Script, block: BlockId, visited: &mut HashSet<BlockId>) -> bool {
@@ -69,7 +79,7 @@ fn is_shop_setup(script: &Script, block: BlockId, visited: &mut HashSet<BlockId>
 }
 
 /// A requirement for an item to be visible in the shop.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Requirement {
     /// The player must have an item.
     HaveItem(ItemId),
@@ -121,26 +131,49 @@ impl Slot {
 
 /// An in-game shop configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct Shop {
-    pub slots: Box<[Slot]>,
+    slots: Vec<Slot>,
 }
 
 impl Shop {
-    /// Constructs an empty `Shop`.
+    /// Creates an empty `Shop`.
     pub fn new() -> Self {
-        Self { slots: vec![Slot::default(); NUM_SLOTS].into_boxed_slice() }
+        Self { slots: vec![Slot::default(); NUM_SLOTS] }
+    }
+
+    /// Creates a `Shop` initialized with `slots`. Only up to `NUM_SLOTS` slots are used.
+    pub fn with_slots(slots: impl IntoIterator<Item = Slot>) -> Self {
+        let mut slots: Vec<Slot> = slots.into_iter().take(NUM_SLOTS).collect();
+        slots.resize(NUM_SLOTS, Slot::default());
+        slots.shrink_to_fit();
+        Self { slots }
     }
 
     /// Parses a `Shop` from a script with a shop setup subroutine. Usually this should be the
     /// script for stage05 (Chibi-House).
     pub fn parse(script: &Script) -> Result<Self> {
-        debug!("Searching for shop setup routine");
         let shop_block = find_shop_setup(script)?;
-        debug!("Found shop setup routine starting at block {:?}", shop_block);
+        let mut slots = ShopParser::new(script).parse(shop_block);
+        slots.shrink_to_fit();
+        Ok(Self { slots })
+    }
 
-        let slots = ShopParser::new(script).parse(shop_block);
-        Ok(Self { slots: slots.into_boxed_slice() })
+    /// Recompiles the shop and replaces the shop setup subroutine in `script`. Usually this should
+    /// be the script for stage05 (Chibi-House).
+    pub fn compile(&self, script: &mut Script) -> Result<()> {
+        let shop_block = find_shop_setup(script)?;
+        ShopCompiler::new(script).compile(&self.slots).replace(shop_block);
+        Ok(())
+    }
+
+    /// Retrieves a slice over the slots in the shop.
+    pub fn slots(&self) -> &[Slot] {
+        &self.slots
+    }
+
+    /// Retrieves a mutable slice over the slots in the shop.
+    pub fn slots_mut(&mut self) -> &mut [Slot] {
+        &mut self.slots
     }
 }
 
@@ -151,7 +184,7 @@ impl Default for Shop {
 }
 
 pub fn shop_test(opt: ShopTestOpt) -> Result<()> {
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
+    let mut iso = edit_iso_optional(opt.container.iso.as_ref())?;
     let mut qp = open_qp_required(iso.as_mut(), &opt.container)?;
 
     info!("Reading script globals");
@@ -161,12 +194,20 @@ pub fn shop_test(opt: ShopTestOpt) -> Result<()> {
     };
 
     info!("Reading stage file");
-    let stage = read_stage_qp(&mut qp, CHIBI_HOUSE.name, &libs)?;
+    let mut stage = read_stage_qp(&mut qp, CHIBI_HOUSE.name, &libs)?;
 
     info!("Analyzing shop data");
     let shop = Shop::parse(&stage.script)?;
     for (i, slot) in shop.slots.iter().enumerate() {
         debug!("{}: {:?}", i, slot);
     }
+
+    info!("Recompiling shop data");
+    shop.compile(&mut stage.script)?;
+    let shop2 = Shop::parse(&stage.script)?;
+    for (i, slot) in shop2.slots.iter().enumerate() {
+        debug!("{}: {:?}", i, slot);
+    }
+
     Ok(())
 }

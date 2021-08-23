@@ -1,4 +1,8 @@
-use super::*;
+use super::{
+    Requirement, Slot, NUM_SLOTS, SHOP_COUNT_FIRST, SHOP_COUNT_LAST, SHOP_ITEM_FIRST,
+    SHOP_ITEM_LAST,
+};
+
 use log::warn;
 use std::collections::HashSet;
 use std::convert::TryFrom;
@@ -180,7 +184,7 @@ impl<'s> ShopParser<'s> {
     pub(super) fn new(script: &'s Script) -> Self {
         Self {
             script,
-            slots: vec![Slot::new(); NUM_SLOTS],
+            slots: vec![Slot::default(); NUM_SLOTS],
             visited: HashSet::new(),
             current_limit: 0,
         }
@@ -336,14 +340,13 @@ impl<'s> ShopParser<'s> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::iter::FromIterator;
     use unplug::event::command::IfArgs;
-    use unplug::event::{Block, CodeBlock};
+    use unplug::event::{Block, CodeBlock, Ip};
 
     /// Convenience macro for initializing HashSets
     macro_rules! set {
         [$($value:expr),* $(,)*] => {
-            HashSet::from_iter(vec![$($value),*])
+            vec![$($value),*].into_iter().collect::<::std::collections::HashSet<_>>()
         };
     }
 
@@ -392,17 +395,11 @@ mod tests {
     }
 
     fn set(var: usize, value: i16) -> Command {
-        Command::Set(
-            SetArgs {
-                target: SetExpr::Variable(Expr::Imm32(var as i32)),
-                value: Expr::Imm16(value),
-            }
-            .into(),
-        )
+        SetArgs::new(SetExpr::Variable(Expr::Imm16(var as i16)), Expr::Imm16(value)).into()
     }
 
     fn set_expr(var: usize, value: Expr) -> Command {
-        Command::Set(SetArgs { target: SetExpr::Variable(Expr::Imm32(var as i32)), value }.into())
+        SetArgs::new(SetExpr::Variable(Expr::Imm32(var as i32)), value).into()
     }
 
     fn if_(condition: Expr, else_block: u32) -> Command {

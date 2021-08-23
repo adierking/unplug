@@ -1,9 +1,7 @@
 use anyhow::Result;
 use lazy_static::lazy_static;
 use log::info;
-use std::collections::HashSet;
 use std::io::BufReader;
-use std::iter::FromIterator;
 use unplug::data::atc::AtcId;
 use unplug::data::item::ItemId;
 use unplug::data::stage::CHIBI_HOUSE;
@@ -16,7 +14,7 @@ use unplug_test as common;
 /// Convenience macro for initializing HashSets
 macro_rules! set {
     [$($value:expr),* $(,)*] => {
-        HashSet::from_iter(vec![$($value),*])
+        vec![$($value),*].into_iter().collect::<::std::collections::HashSet<_>>()
     };
 }
 
@@ -114,8 +112,8 @@ fn test_parse_shop() -> Result<()> {
     let chibi_house = Stage::read_from(&mut file, &libs)?;
     let shop = Shop::parse(&chibi_house.script)?;
 
-    assert_eq!(shop.slots.len(), EXPECTED.len());
-    for (i, (actual, expected)) in shop.slots.iter().zip(&*EXPECTED).enumerate() {
+    assert_eq!(shop.slots().len(), EXPECTED.len());
+    for (i, (actual, expected)) in shop.slots().iter().zip(&*EXPECTED).enumerate() {
         assert_eq!(actual, expected, "slot {}", i);
     }
 
