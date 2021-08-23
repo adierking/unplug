@@ -37,7 +37,6 @@ macro_rules! id_strings {
 
 id_strings! {
     AtcId {
-        Unk0 = "unk0",
         ChibiCopter = "chibi-copter",
         ChibiBlaster = "chibi-blaster",
         ChibiRadar = "chibi-radar",

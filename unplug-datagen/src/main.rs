@@ -405,6 +405,7 @@ fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
     globals
         .iter()
         .enumerate()
+        .skip(1) // ATC IDs start from 1
         .map(|(id, atc)| {
             let display_name = atc.name.decode().unwrap();
             let label = if !display_name.is_empty() {

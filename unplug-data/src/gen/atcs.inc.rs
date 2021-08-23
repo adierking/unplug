@@ -2,7 +2,6 @@
 // To regenerate: cargo run -p unplug-datagen -- <iso path>
 
 declare_atcs! {
-    0 => Unk0 { "" },
     1 => ChibiCopter { "Chibi-Copter" },
     2 => ChibiBlaster { "Chibi-Blaster" },
     3 => ChibiRadar { "Chibi-Radar" },

@@ -15,7 +15,7 @@ pub struct AtcDefinition {
 impl AtcDefinition {
     /// Retrieves the definition corresponding to an `AtcId`.
     pub fn get(id: AtcId) -> &'static AtcDefinition {
-        &ATCS[i16::from(id) as usize]
+        &ATCS[i16::from(id) as usize - 1]
     }
 }
 
