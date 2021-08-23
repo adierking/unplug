@@ -56,6 +56,9 @@ pub enum Subcommand {
     /// Imports global metadata from a JSON file
     ImportGlobals(ImportGlobalsOpt),
 
+    /// Exports shop data to a JSON file
+    ExportShop(ExportShopOpt),
+
     ShopTest(ShopTestOpt),
 }
 
@@ -290,4 +293,18 @@ pub struct ImportGlobalsOpt {
 pub struct ShopTestOpt {
     #[structopt(flatten)]
     pub container: RequiredContainerOpt,
+}
+
+#[derive(StructOpt)]
+pub struct ExportShopOpt {
+    #[structopt(flatten)]
+    pub container: RequiredContainerOpt,
+
+    /// Don't output unnecessary whitespace
+    #[structopt(short, long)]
+    pub compact: bool,
+
+    /// Redirects output to a file instead of stdout
+    #[structopt(short, long("out"), value_name("PATH"))]
+    pub output: Option<PathBuf>,
 }
