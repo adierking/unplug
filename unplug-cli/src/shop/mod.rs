@@ -2,7 +2,7 @@ mod compiler;
 mod json;
 mod parser;
 
-pub use json::export_shop;
+pub use json::{export_shop, import_shop};
 
 use compiler::ShopCompiler;
 use parser::ShopParser;

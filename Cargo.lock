@@ -666,6 +666,7 @@ dependencies = [
  "lazy_static",
  "log",
  "quick-xml",
+ "regex",
  "serde",
  "serde_json",
  "simplelog 0.9.0",

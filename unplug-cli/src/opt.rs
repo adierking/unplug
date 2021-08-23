@@ -58,6 +58,9 @@ pub enum Subcommand {
 
     /// Exports shop data to a JSON file
     ExportShop(ExportShopOpt),
+
+    /// Imports shop data from a JSON file
+    ImportShop(ImportShopOpt),
 }
 
 #[derive(StructOpt)]
@@ -299,4 +302,14 @@ pub struct ExportShopOpt {
     /// Redirects output to a file instead of stdout
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: Option<PathBuf>,
+}
+
+#[derive(StructOpt)]
+pub struct ImportShopOpt {
+    #[structopt(flatten)]
+    pub container: RequiredContainerOpt,
+
+    /// Path to the input JSON file
+    #[structopt(value_name("PATH"))]
+    pub input: PathBuf,
 }
