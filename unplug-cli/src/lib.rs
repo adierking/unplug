@@ -18,6 +18,7 @@
 pub mod commands;
 pub mod common;
 pub mod globals;
+pub mod id;
 pub mod io;
 pub mod msg;
 pub mod opt;

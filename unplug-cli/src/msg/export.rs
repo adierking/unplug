@@ -1,5 +1,6 @@
 use super::common::*;
 use crate::common::{open_iso_optional, open_qp_required, read_globals_qp, read_stage_qp};
+use crate::id::IdString;
 use crate::opt::ExportMessagesOpt;
 use anyhow::Result;
 use log::{info, trace};

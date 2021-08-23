@@ -1,5 +1,6 @@
 use super::common::*;
 use crate::common::{edit_iso_optional, open_qp_required, read_globals_qp, read_stage_qp, QP_PATH};
+use crate::id::IdString;
 use crate::opt::ImportMessagesOpt;
 use anyhow::{anyhow, bail, ensure, Result};
 use log::{debug, info, warn};
@@ -258,7 +259,7 @@ impl<R: BufRead> MessageReader<R> {
                     cmd = if let Some(hex) = value.strip_prefix('#') {
                         Some(MsgCommand::Rgba(u32::from_str_radix(hex, 16)?))
                     } else {
-                        Some(MsgCommand::Color(Color::from_id(value)?))
+                        Some(MsgCommand::Color(Color::try_from_id(value)?))
                     };
                 }
                 ATTR_MONO => cmd = Some(MsgCommand::Proportional(!parse_bool(value)?)),
@@ -298,7 +299,7 @@ impl<R: BufRead> MessageReader<R> {
         for attr in elem.attributes() {
             let (key, value) = self.decode_attribute(attr?)?;
             match key {
-                ATTR_ID => icon = Some(Icon::from_id(value)?),
+                ATTR_ID => icon = Some(Icon::try_from_id(value)?),
                 _ => bail!("Unexpected attribute: {}", key),
             }
         }
@@ -419,7 +420,7 @@ impl<R: BufRead> MessageReader<R> {
         for attr in elem.attributes() {
             let (key, value) = self.decode_attribute(attr?)?;
             match key {
-                ATTR_ID => voice = Some(Voice::from_id(value)?),
+                ATTR_ID => voice = Some(Voice::try_from_id(value)?),
                 _ => bail!("Unexpected attribute: {}", key),
             }
         }

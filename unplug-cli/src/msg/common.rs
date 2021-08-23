@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, ensure, Result};
 use byteorder::{ByteOrder, LE};
 use std::fmt;
 use unplug::data::stage::{StageDefinition, StageId, STAGES};
-use unplug::event::msg::{Color, Icon, MsgArgs, Voice};
+use unplug::event::msg::MsgArgs;
 use unplug::event::script::CommandLocation;
 use unplug::event::{Command, Script};
 
@@ -214,109 +214,6 @@ pub fn iter_messages_mut(
     script: &mut Script,
 ) -> impl Iterator<Item = (MessageId, &mut MsgArgs)> {
     script.commands_ordered_mut().filter_map(move |(l, c)| filter_message_mut(source, l, c))
-}
-
-pub trait IdString: Sized {
-    fn to_id(&self) -> &'static str;
-
-    fn from_id(id: &str) -> Result<Self>;
-}
-
-macro_rules! id_strings {
-    {
-        $($enum:path {
-            $($name:ident = $bytes:literal),*
-            $(,)*
-        })*
-    } => {
-        $(impl IdString for $enum {
-            fn to_id(&self) -> &'static str {
-                match self {
-                    $(Self::$name => $bytes,)*
-                }
-            }
-
-            fn from_id(id: &str) -> Result<Self> {
-                Ok(match id {
-                    $($bytes => Self::$name,)*
-                    _ => bail!("Unrecognized {} ID: {}", stringify!($enum), id),
-                })
-            }
-        })*
-    }
-}
-
-id_strings! {
-    Voice {
-        Telly = "telly",
-        Frog = "frog",
-        Jenny = "jenny",
-        Papa = "papa",
-        Mama = "mama",
-        Unk5 = "unk5",
-        Unk6 = "unk6",
-        Drake = "drake",
-        Captain = "captain",
-        Soldier = "soldier",
-        Peekoe = "peekoe",
-        Sophie = "sophie",
-        News1 = "news1",
-        Sarge = "sarge",
-        JennyFrog = "jenny-frog",
-        Primo = "primo",
-        Prongs = "prongs",
-        Et = "et",
-        Funky = "funky",
-        Dinah = "dinah",
-        Pitts = "pitts",
-        Mort = "mort",
-        Sunshine = "sunshine",
-        SunshineHungry = "sunshine-hungry",
-        DinahToothless = "dinah-toothless",
-        Fred = "fred",
-        Freida = "freida",
-        Tao = "tao",
-        Ufo = "ufo",
-        Underwater = "underwater",
-        Eggplant = "eggplant",
-        Phillies = "phillies",
-        Gebah = "gebah",
-        News2 = "news2",
-    }
-
-    Color {
-        White = "white",
-        Gray = "gray",
-        DarkGray = "dark-gray",
-        Cyan = "cyan",
-        Lime = "lime",
-        Blue = "blue",
-        Magenta = "magenta",
-        Red = "red",
-        Yellow = "yellow",
-        Orange = "orange",
-        Reset = "reset",
-    }
-
-    Icon {
-        Analog = "analog",
-        Up = "up",
-        Right = "right",
-        Down = "down",
-        Left = "left",
-        A = "a",
-        B = "b",
-        C = "c",
-        X = "x",
-        Y = "y",
-        Z = "z",
-        L = "l",
-        R = "r",
-        Start = "start",
-        Moolah = "moolah",
-        Yes = "yes",
-        No = "no",
-    }
 }
 
 #[cfg(test)]
