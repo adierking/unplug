@@ -19,6 +19,7 @@ pub mod atc;
 pub mod item;
 pub mod object;
 pub mod stage;
+pub mod suit;
 
 use atc::AtcId;
 use item::ItemId;
@@ -33,6 +34,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("{0:?} does not have a corresponding ATC")]
     NoItemAtc(ItemId),
+
+    #[error("{0:?} does not have a corresponding suit")]
+    NoItemSuit(ItemId),
 
     #[error("{0:?} does not have a corresponding item")]
     NoAtcItem(AtcId),

@@ -36,7 +36,7 @@ use std::process;
 use unplug::common::ReadFrom;
 use unplug::data::stage::GLOBALS_PATH;
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
-use unplug::globals::metadata::{Atc, Item};
+use unplug::globals::metadata::{Atc, Item, Suit};
 use unplug::globals::GlobalsReader;
 
 const MAIN_OBJECTS_ADDR: u32 = 0x8021c70c;
@@ -45,6 +45,12 @@ const NUM_MAIN_OBJECTS: usize = 1162;
 const INTERNAL_OBJECTS_ADDR: u32 = 0x80223690;
 const NUM_INTERNAL_OBJECTS: usize = 36;
 const INTERNAL_OBJECTS_BASE_ID: u32 = 10000;
+
+const NUM_SUITS: usize = 8;
+const SUIT_ITEMS_ADDR: u32 = 0x8020a17c;
+const SUIT_ORDER_ADDR: u32 = 0x800bc318;
+const ADDI_OPCODE: u32 = 14;
+const STRIP_SUIT_LABEL: &str = "Suit";
 
 const QP_PATH: &str = "qp.bin";
 
@@ -73,6 +79,10 @@ const ITEMS_FOOTER: &str = "}\n";
 const ATCS_FILE_NAME: &str = "atcs.inc.rs";
 const ATCS_HEADER: &str = "declare_atcs! {\n";
 const ATCS_FOOTER: &str = "}\n";
+
+const SUITS_FILE_NAME: &str = "suits.inc.rs";
+const SUITS_HEADER: &str = "declare_suits! {\n";
+const SUITS_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -407,6 +417,65 @@ fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
         .collect()
 }
 
+/// Representation of a suit which is written to the generated source.
+#[derive(Debug, Clone, Default)]
+struct SuitDefinition {
+    id: u16,
+    label: Label,
+    item: Label,
+    display_name: String,
+}
+
+/// Reads suit info from main.dol and builds the suit list.
+fn read_suits(
+    dol: &DolHeader,
+    reader: &mut (impl Read + Seek),
+    globals: &[Suit],
+    items: &[ItemDefinition],
+) -> Result<Vec<SuitDefinition>> {
+    // So this is kinda annoying, basically the suit-to-item mapping isn't in order by suit ID but
+    // rather by the order they appear in the UI. We have to scan the UI initialization code to look
+    // for `li` instructions (which are really just `addi`) that load the suit IDs.
+    let order_offset = dol.address_to_offset(SUIT_ORDER_ADDR)? as u64;
+    reader.seek(SeekFrom::Start(order_offset))?;
+    let mut order = [0; NUM_SUITS];
+    for index in order.iter_mut() {
+        let li = loop {
+            let op = reader.read_u32::<BE>()?;
+            if op >> 26 == ADDI_OPCODE {
+                break op;
+            }
+        };
+        *index = (li & 0xffff) as u16;
+    }
+
+    // Now we can actually read the item IDs. Again, these are ordered by UI position.
+    let items_offset = dol.address_to_offset(SUIT_ITEMS_ADDR)? as u64;
+    reader.seek(SeekFrom::Start(items_offset))?;
+    let mut item_ids = [0; NUM_SUITS];
+    reader.read_u16_into::<BE>(&mut item_ids)?;
+
+    let mut suits = vec![SuitDefinition::default(); NUM_SUITS];
+    for (&id, item_id) in order.iter().zip(item_ids) {
+        // Get the display name and label from globals
+        let display_name = globals[id as usize].name.decode()?;
+        let mut label = if !display_name.is_empty() {
+            Label::from_string_lossy(&display_name)
+        } else {
+            Label(format!("{}{}", UNKNOWN_PREFIX, id))
+        };
+        label = Label(label.0.replace(STRIP_SUIT_LABEL, ""));
+
+        // Look up the item ID in the suit items array
+        let item = items[item_id as usize].label.clone();
+
+        // Suit IDs start from 1
+        suits[id as usize - 1] =
+            SuitDefinition { id, label, item, display_name: display_name.into() };
+    }
+    Ok(suits)
+}
+
 /// Writes the list of objects to the generated file.
 fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, OBJECTS_HEADER)?;
@@ -452,6 +521,21 @@ fn write_atcs(mut writer: impl Write, atcs: &[AtcDefinition]) -> Result<()> {
     Ok(())
 }
 
+/// Writes the list of suits to the generated file.
+fn write_suits(mut writer: impl Write, suits: &[SuitDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, SUITS_HEADER)?;
+    for suit in suits {
+        writeln!(
+            writer,
+            "    {} => {} {{ {}, \"{}\" }},",
+            suit.id, suit.label.0, suit.item.0, suit.display_name
+        )?;
+    }
+    write!(writer, "{}", SUITS_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 fn run_app() -> Result<()> {
     init_logging();
 
@@ -469,8 +553,18 @@ fn run_app() -> Result<()> {
         );
     }
 
-    info!("Opening main.dol");
+    info!("Opening ISO");
     let mut iso = DiscStream::open(File::open(&args[1])?)?;
+
+    let metadata = {
+        info!("Opening {}", QP_PATH);
+        let mut qp = ArchiveReader::open(iso.open_file_at(QP_PATH)?)?;
+        info!("Reading globals.bin");
+        let mut globals = GlobalsReader::open(qp.open_file_at(GLOBALS_PATH)?)?;
+        globals.read_metadata()?
+    };
+
+    info!("Opening main.dol");
     let (dol, dol_reader) = iso.open_dol()?;
     let mut dol_reader = BufReader::new(dol_reader);
 
@@ -478,7 +572,6 @@ fn run_app() -> Result<()> {
     let mut objects = read_objects(&dol, &mut dol_reader, MAIN_OBJECTS_ADDR, NUM_MAIN_OBJECTS)?;
     let internal_objects =
         read_objects(&dol, &mut dol_reader, INTERNAL_OBJECTS_ADDR, NUM_INTERNAL_OBJECTS)?;
-    drop(dol_reader);
 
     info!("Generating object data");
     for mut object in internal_objects {
@@ -489,18 +582,14 @@ fn run_app() -> Result<()> {
     deduplicate_labels(&mut objects);
     fixup_labels(&mut objects);
 
-    info!("Opening {}", QP_PATH);
-    let mut qp = ArchiveReader::open(iso.open_file_at(QP_PATH)?)?;
-
-    info!("Reading globals.bin");
-    let mut globals = GlobalsReader::open(qp.open_file_at(GLOBALS_PATH)?)?;
-    let metadata = globals.read_metadata()?;
-
     info!("Generating item data");
     let items = build_items(&objects, &metadata.items);
 
     info!("Generating ATC data");
     let atcs = build_atcs(&metadata.atcs);
+
+    info!("Reading suit data");
+    let suits = read_suits(&dol, &mut dol_reader, &metadata.suits, &items)?;
 
     let out_dir: PathBuf = [UNPLUG_DATA_PATH, SRC_DIR_NAME, OUTPUT_DIR_NAME].iter().collect();
     fs::create_dir_all(&out_dir)?;
@@ -519,6 +608,11 @@ fn run_app() -> Result<()> {
     info!("Writing {}", atcs_path.display());
     let atcs_writer = BufWriter::new(File::create(atcs_path)?);
     write_atcs(atcs_writer, &atcs)?;
+
+    let suits_path = out_dir.join(SUITS_FILE_NAME);
+    info!("Writing {}", suits_path.display());
+    let suits_writer = BufWriter::new(File::create(suits_path)?);
+    write_suits(suits_writer, &suits)?;
 
     Ok(())
 }
