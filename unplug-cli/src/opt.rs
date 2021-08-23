@@ -58,8 +58,6 @@ pub enum Subcommand {
 
     /// Exports shop data to a JSON file
     ExportShop(ExportShopOpt),
-
-    ShopTest(ShopTestOpt),
 }
 
 #[derive(StructOpt)]
@@ -287,12 +285,6 @@ pub struct ImportGlobalsOpt {
     /// Path to the input JSON file
     #[structopt(value_name("PATH"))]
     pub input: PathBuf,
-}
-
-#[derive(StructOpt)]
-pub struct ShopTestOpt {
-    #[structopt(flatten)]
-    pub container: RequiredContainerOpt,
 }
 
 #[derive(StructOpt)]

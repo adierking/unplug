@@ -41,7 +41,6 @@ fn run_app() -> Result<()> {
         Subcommand::ExportGlobals(opt) => globals::export_globals(opt),
         Subcommand::ImportGlobals(opt) => globals::import_globals(opt),
         Subcommand::ExportShop(opt) => shop::export_shop(opt),
-        Subcommand::ShopTest(opt) => shop::shop_test(opt),
     }
 }
 

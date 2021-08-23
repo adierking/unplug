@@ -7,14 +7,11 @@ pub use json::export_shop;
 use compiler::ShopCompiler;
 use parser::ShopParser;
 
-use crate::common::*;
-use crate::opt::ShopTestOpt;
 use anyhow::{bail, Result};
-use log::{debug, info};
+use log::debug;
 use std::collections::HashSet;
 use unplug::data::atc::AtcId;
 use unplug::data::item::ItemId;
-use unplug::data::stage::CHIBI_HOUSE;
 use unplug::event::analysis::Label;
 use unplug::event::{BlockId, Command, Ip, Script, SetExpr};
 
@@ -184,33 +181,4 @@ impl Default for Shop {
     fn default() -> Self {
         Self::new()
     }
-}
-
-pub fn shop_test(opt: ShopTestOpt) -> Result<()> {
-    let mut iso = edit_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_required(iso.as_mut(), &opt.container)?;
-
-    info!("Reading script globals");
-    let libs = {
-        let mut globals = read_globals_qp(&mut qp)?;
-        globals.read_libs()?
-    };
-
-    info!("Reading stage file");
-    let mut stage = read_stage_qp(&mut qp, CHIBI_HOUSE.name, &libs)?;
-
-    info!("Analyzing shop data");
-    let shop = Shop::parse(&stage.script)?;
-    for (i, slot) in shop.slots.iter().enumerate() {
-        debug!("{}: {:?}", i, slot);
-    }
-
-    info!("Recompiling shop data");
-    shop.compile(&mut stage.script)?;
-    let shop2 = Shop::parse(&stage.script)?;
-    for (i, slot) in shop2.slots.iter().enumerate() {
-        debug!("{}: {:?}", i, slot);
-    }
-
-    Ok(())
 }
