@@ -104,6 +104,8 @@ lazy_static! {
 
     /// Items whose object labels match these will have their labels overridden.
     static ref ITEM_LABEL_OVERRIDES: HashMap<String, &'static str> = vec![
+        // Make capitalization nicer
+        ("ItemDenchi3".into(), "AABattery"),
         // There are two broken bottle items and they both have the display name "Broken Bottle"
         ("SoukoWineBottleA".into(), "BrokenBottleA"),
         ("SoukoWineBottleB".into(), "BrokenBottleB"),

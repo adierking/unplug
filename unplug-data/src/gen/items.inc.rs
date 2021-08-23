@@ -62,7 +62,7 @@ declare_items! {
     57 => MomsLetter { ItemLetter, "Mom's Letter" },
     58 => DBattery { ItemDenchi1, "D Battery" },
     59 => CBattery { ItemDenchi2, "C Battery" },
-    60 => AaBattery { ItemDenchi3, "AA Battery" },
+    60 => AABattery { ItemDenchi3, "AA Battery" },
     61 => RedShoe { ItemPeetsKutu, "Red Shoe" },
     62 => AlienEarChip { ItemHocyouki, "Alien Ear Chip" },
     63 => Unk63 { UnkItem63, "" },
