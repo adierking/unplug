@@ -219,7 +219,7 @@ impl<'s> ShopParser<'s> {
                 // conditional ends.
                 Command::If(arg) => {
                     next_condition = Some(join(condition.clone(), arg.condition.clone()));
-                    else_condition = Some(join(condition.clone(), arg.condition.negate()));
+                    else_condition = Some(join(condition.clone(), arg.condition.clone().negate()));
                 }
 
                 // set() commands assign to the shop variables
