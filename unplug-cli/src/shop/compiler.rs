@@ -10,6 +10,10 @@ use unplug::event::command::{IfArgs, SetArgs};
 use unplug::event::expr::BinaryOp;
 use unplug::event::{Block, BlockId, CodeBlock, Command, Expr, Ip, Script, SetExpr};
 
+const TIMER_5_RATE: i16 = 200;
+const TIMER_10_RATE: i16 = 100;
+const TIMER_15_RATE: i16 = 67;
+
 /// Compiles a collection of requirements into an expression.
 fn compile_requirements(requirements: impl IntoIterator<Item = Requirement>) -> Option<Expr> {
     let mut result = None;
@@ -54,6 +58,11 @@ fn compile_flag_requirement(flag: i32) -> Expr {
     Expr::Flag(Expr::Imm16(flag as i16).into())
 }
 
+/// Returns whether `item` is a timer.
+fn is_timer(item: Option<ItemId>) -> bool {
+    matches!(item, Some(ItemId::Timer5 | ItemId::Timer10 | ItemId::Timer15))
+}
+
 /// Compilation context for a single slot.
 struct ItemContext {
     /// The index of the slot to emit code for.
@@ -83,6 +92,11 @@ impl ItemContext {
         } else if atc.is_some() {
             if slot.limit != 1 {
                 warn!("Slot {}: Attachment items can only have a limit of 1", index);
+            }
+            1
+        } else if is_timer(item) {
+            if slot.limit != 1 {
+                warn!("Slot {}: Timers can only have a limit of 1", index);
             }
             1
         } else if slot.limit > 10 {
@@ -276,11 +290,25 @@ impl<'s> ShopCompiler<'s> {
         // As in compile(), we build up the blocks backwards to make the edges easy to connect.
 
         // If the item has a corresponding ATC, we need to check that as the source of truth
-        let acquired = ctx.atc.map(Requirement::HaveAtc).unwrap_or(Requirement::HaveItem(item));
-        let missing = acquired.negate();
+        let acquired_rec = ctx.atc.map(Requirement::HaveAtc).unwrap_or(Requirement::HaveItem(item));
+        let mut acquired = compile_requirements(iter::once(acquired_rec)).unwrap();
 
-        //   vars[SLOT_ITEM] = ITEM
-        //   vars[SLOT_COUNT] = 0
+        // Timers can also be considered acquired if the current time rate (`time[2]`) matches the
+        // timer's rate.
+        if is_timer(ctx.item) {
+            let rate = match ctx.item.unwrap() {
+                ItemId::Timer5 => TIMER_5_RATE,
+                ItemId::Timer10 => TIMER_10_RATE,
+                ItemId::Timer15 => TIMER_15_RATE,
+                other => panic!("missing rate for {:?}", other),
+            };
+            let rate_expr = Expr::Time(Expr::Imm16(2).into());
+            let rate_compare = Expr::Equal(BinaryOp::new(rate_expr, Expr::Imm16(rate)).into());
+            acquired = Expr::BitOr(BinaryOp::new(acquired, rate_compare).into())
+        }
+
+        // vars[SLOT_ITEM] = ITEM
+        // vars[SLOT_COUNT] = 0
         let disable_block = self.compile_block(|b| {
             b.emit_set_slot(ctx.index, item, Expr::Imm16(0));
             if ctx.hide_block.is_some() {
@@ -292,8 +320,7 @@ impl<'s> ShopCompiler<'s> {
         let else_block = if let Some(hide_block) = ctx.hide_block {
             // else if (<acquired>)
             self.compile_block(|b| {
-                let else_if = compile_requirements(iter::once(acquired)).unwrap();
-                b.emit_if_else(else_if, hide_block);
+                b.emit_if_else(acquired.clone(), hide_block);
             })
         } else {
             // else
@@ -302,15 +329,44 @@ impl<'s> ShopCompiler<'s> {
 
         // vars[SLOT_ITEM] = <item>
         // vars[SLOT_COUNT] = 1
-        let _enable_block = self.compile_block(|b| {
+        let enable_block = self.compile_block(|b| {
             b.emit_set_slot(ctx.index, item, Expr::Imm16(1));
             b.emit_endif(ctx.end_block);
         });
 
+        // Timer5 is a special case because 5-minute days are the default but the item will not be
+        // in the player's inventory. So even if we don't have the item, we have to disable it if
+        // the other two timers are also not acquired.
+        //
+        // Psuedocode:
+        //   if (item[TIMER_10] == 0 && item[TIMER_15] == 0) {
+        //     vars[SLOT_ITEM] = <item>
+        //     vars[SLOT_COUNT] = 0
+        //   } else {
+        //     <enable>
+        //   }
+        if ctx.item == Some(ItemId::Timer5) {
+            let _disable_block_2 = self.compile_block(|b| {
+                b.emit_set_slot(ctx.index, item, Expr::Imm16(0));
+                b.emit_endif(ctx.end_block);
+            });
+            let _if_no_timer_block = self.compile_block(|b| {
+                let condition = compile_requirements([
+                    Requirement::MissingItem(ItemId::Timer10),
+                    Requirement::MissingItem(ItemId::Timer15),
+                ]);
+                b.emit_if_else(condition.unwrap(), enable_block);
+            });
+        }
+
         // if (!<acquired> && <requirements>)
         let _if_missing_and_visible_block = self.compile_block(|b| {
-            let enabled = iter::once(missing).chain(ctx.requirements.iter().copied());
-            let condition = compile_requirements(enabled).unwrap();
+            let missing = acquired.negate();
+            let requirements = compile_requirements(ctx.requirements.iter().copied());
+            let condition = match requirements {
+                Some(r) => Expr::BitAnd(BinaryOp::new(missing, r).into()),
+                None => missing,
+            };
             b.emit_if_else(condition, else_block);
         });
     }
@@ -440,12 +496,20 @@ mod tests {
         Command::EndIf(block.into())
     }
 
+    fn eq(lhs: Expr, rhs: Expr) -> Expr {
+        Expr::Equal(BinaryOp::new(lhs, rhs).into())
+    }
+
+    fn ne(lhs: Expr, rhs: Expr) -> Expr {
+        Expr::NotEqual(BinaryOp::new(lhs, rhs).into())
+    }
+
     fn eq_0(expr: Expr) -> Expr {
-        Expr::Equal(BinaryOp::new(expr, Expr::Imm16(0)).into())
+        eq(expr, Expr::Imm16(0))
     }
 
     fn ne_0(expr: Expr) -> Expr {
-        eq_0(expr).negate()
+        ne(expr, Expr::Imm16(0))
     }
 
     fn lt_0(expr: Expr) -> Expr {
@@ -458,6 +522,10 @@ mod tests {
 
     fn and(lhs: Expr, rhs: Expr) -> Expr {
         Expr::BitAnd(BinaryOp::new(lhs, rhs).into())
+    }
+
+    fn or(lhs: Expr, rhs: Expr) -> Expr {
+        Expr::BitOr(BinaryOp::new(lhs, rhs).into())
     }
 
     fn item(id: ItemId) -> Expr {
@@ -548,11 +616,8 @@ mod tests {
         let expected = vec![
             if_else(
                 and(
-                    and(
-                        and(eq_0(item(ItemId::HotRod)), ne_0(item(ItemId::Spoon))),
-                        ne_0(atc(AtcId::Toothbrush)),
-                    ),
-                    flag(123),
+                    eq_0(item(ItemId::HotRod)),
+                    and(and(ne_0(item(ItemId::Spoon)), ne_0(atc(AtcId::Toothbrush))), flag(123)),
                 ),
                 BlockId::new(3),
             ),
@@ -561,6 +626,99 @@ mod tests {
             endif(BlockId::new(0)),
             if_else(ne_0(item(ItemId::HotRod)), BlockId::new(1)),
             set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
+            set(SHOP_COUNT_FIRST, 0),
+            endif(BlockId::new(0)),
+            set(SHOP_ITEM_FIRST, -1),
+            set(SHOP_COUNT_FIRST, 0),
+            Command::Return,
+        ];
+        let actual = compile(&slots);
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn test_compile_timer_without_requirements() {
+        let slots = vec![Slot { item: Some(ItemId::Timer15), limit: 1, requirements: set![] }];
+        let expected = vec![
+            if_else(
+                and(
+                    eq_0(item(ItemId::Timer15)),
+                    ne(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_15_RATE)),
+                ),
+                BlockId::new(1),
+            ),
+            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
+            set(SHOP_COUNT_FIRST, 1),
+            endif(BlockId::new(0)),
+            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
+            set(SHOP_COUNT_FIRST, 0),
+            Command::Return,
+        ];
+        let actual = compile(&slots);
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn test_compile_timer5() {
+        let slots = vec![Slot { item: Some(ItemId::Timer5), limit: 1, requirements: set![] }];
+        let expected = vec![
+            if_else(
+                and(
+                    eq_0(item(ItemId::Timer5)),
+                    ne(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_5_RATE)),
+                ),
+                BlockId::new(1),
+            ),
+            if_else(and(eq_0(item(ItemId::Timer10)), eq_0(item(ItemId::Timer15))), BlockId::new(2)),
+            set(SHOP_ITEM_FIRST, ItemId::Timer5.into()),
+            set(SHOP_COUNT_FIRST, 0),
+            endif(BlockId::new(0)),
+            set(SHOP_ITEM_FIRST, ItemId::Timer5.into()),
+            set(SHOP_COUNT_FIRST, 1),
+            endif(BlockId::new(0)),
+            set(SHOP_ITEM_FIRST, ItemId::Timer5.into()),
+            set(SHOP_COUNT_FIRST, 0),
+            Command::Return,
+        ];
+        let actual = compile(&slots);
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn test_compile_timer_with_requirements() {
+        let slots = vec![Slot {
+            item: Some(ItemId::Timer15),
+            limit: 1,
+            requirements: set![Requirement::HaveFlag(123)],
+        }];
+        let expected = vec![
+            if_else(
+                and(
+                    and(
+                        eq_0(item(ItemId::Timer15)),
+                        ne(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_15_RATE)),
+                    ),
+                    flag(123),
+                ),
+                BlockId::new(3),
+            ),
+            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
+            set(SHOP_COUNT_FIRST, 1),
+            endif(BlockId::new(0)),
+            if_else(
+                or(
+                    ne_0(item(ItemId::Timer15)),
+                    eq(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_15_RATE)),
+                ),
+                BlockId::new(1),
+            ),
+            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
             set(SHOP_COUNT_FIRST, 0),
             endif(BlockId::new(0)),
             set(SHOP_ITEM_FIRST, -1),
@@ -661,6 +819,8 @@ mod tests {
             Slot { item: Some(ItemId::HotRod), limit: 11, requirements: set![] },
             // ATCs must have a limit of 1
             Slot { item: Some(ItemId::Toothbrush), limit: 2, requirements: set![] },
+            // Timers must have a limit of 1
+            Slot { item: Some(ItemId::Timer15), limit: 2, requirements: set![] },
             // Empty slots must have a limit of 0
             Slot { item: None, limit: 1, requirements: set![] },
         ]);
@@ -668,6 +828,7 @@ mod tests {
             Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] },
             Slot { item: Some(ItemId::HotRod), limit: 10, requirements: set![] },
             Slot { item: Some(ItemId::Toothbrush), limit: 1, requirements: set![] },
+            Slot { item: Some(ItemId::Timer15), limit: 1, requirements: set![] },
             Slot { item: None, limit: 0, requirements: set![] },
         ]);
         let parsed = compile_and_parse(&original);
