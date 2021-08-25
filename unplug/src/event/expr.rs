@@ -271,6 +271,16 @@ impl Expr {
         )
     }
 
+    /// Creates an expression from an immediate value, selecting the smallest size that fits.
+    #[must_use]
+    #[inline]
+    pub fn imm(val: i32) -> Self {
+        match i16::try_from(val) {
+            Ok(val16) => Self::Imm16(val16),
+            Err(_) => Self::Imm32(val),
+        }
+    }
+
     /// Consumes the expression and returns its logical negation (e.g. `a == b` becomes `a != b`).
     #[must_use]
     pub fn negate(self) -> Self {
@@ -814,6 +824,36 @@ pub struct ArrayElementExpr {
     pub address: Expr,
 }
 
+impl From<i16> for Expr {
+    fn from(imm: i16) -> Self {
+        Self::Imm16(imm)
+    }
+}
+
+impl From<i32> for Expr {
+    fn from(imm: i32) -> Self {
+        Self::imm(imm)
+    }
+}
+
+impl From<AtcId> for Expr {
+    fn from(id: AtcId) -> Self {
+        Self::Imm16(id.into())
+    }
+}
+
+impl From<ItemId> for Expr {
+    fn from(id: ItemId) -> Self {
+        Self::Imm16(id.into())
+    }
+}
+
+impl From<ObjectId> for Expr {
+    fn from(id: ObjectId) -> Self {
+        Self::imm(id.into())
+    }
+}
+
 /// Generates `TryFrom` implementations for converting from an `Expr` to an ID type.
 macro_rules! impl_try_from_expr {
     ($idtype:ty, $base:ty, $err:path) => {
@@ -914,6 +954,27 @@ mod tests {
     }
 
     #[test]
+    fn test_imm() {
+        assert_eq!(Expr::imm(123), Expr::Imm16(123));
+        assert_eq!(Expr::imm(-123), Expr::Imm16(-123));
+        assert_eq!(Expr::imm(0x12345678), Expr::Imm32(0x12345678));
+        assert_eq!(Expr::imm(-0x12345678), Expr::Imm32(-0x12345678));
+        assert_eq!(Expr::imm(i16::MAX as i32), Expr::Imm16(i16::MAX));
+        assert_eq!(Expr::imm(i16::MIN as i32), Expr::Imm16(i16::MIN));
+        assert_eq!(Expr::imm(i16::MAX as i32 + 1), Expr::Imm32(i16::MAX as i32 + 1));
+        assert_eq!(Expr::imm(i16::MIN as i32 - 1), Expr::Imm32(i16::MIN as i32 - 1));
+        assert_eq!(Expr::imm(i32::MAX), Expr::Imm32(i32::MAX));
+        assert_eq!(Expr::imm(i32::MIN), Expr::Imm32(i32::MIN));
+    }
+
+    #[test]
+    fn test_expr_from_imm() {
+        assert_eq!(Expr::from(123i16), Expr::Imm16(123));
+        assert_eq!(Expr::from(123i32), Expr::Imm16(123));
+        assert_eq!(Expr::from(0x12345678), Expr::Imm32(0x12345678));
+    }
+
+    #[test]
     fn test_atc_from_expr() {
         let expected = AtcId::Toothbrush;
         let expr = Expr::Imm16(expected.into());
@@ -922,6 +983,11 @@ mod tests {
 
         assert!(matches!(AtcId::try_from(Expr::Imm16(-1)), Err(Error::InvalidAtc(_))));
         assert!(matches!(AtcId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
+    }
+
+    #[test]
+    fn test_expr_from_atc() {
+        assert_eq!(Expr::Imm16(AtcId::Toothbrush.into()), AtcId::Toothbrush.into());
     }
 
     #[test]
@@ -936,6 +1002,11 @@ mod tests {
     }
 
     #[test]
+    fn test_expr_from_item() {
+        assert_eq!(Expr::Imm16(ItemId::HotRod.into()), ItemId::HotRod.into());
+    }
+
+    #[test]
     fn test_object_from_expr() {
         let expected = ObjectId::NpcTonpy;
         let expr = Expr::Imm32(expected.into());
@@ -944,6 +1015,11 @@ mod tests {
 
         assert!(matches!(ObjectId::try_from(Expr::Imm16(-1)), Err(Error::InvalidObject(_))));
         assert!(matches!(ObjectId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
+    }
+
+    #[test]
+    fn test_expr_from_object() {
+        assert_eq!(Expr::imm(ObjectId::NpcTonpy.into()), ObjectId::NpcTonpy.into());
     }
 
     #[test]

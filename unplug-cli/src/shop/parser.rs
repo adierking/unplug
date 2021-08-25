@@ -342,56 +342,13 @@ mod tests {
     use super::*;
     use unplug::event::command::IfArgs;
     use unplug::event::{Block, CodeBlock, Ip};
+    use unplug::expr;
 
     /// Convenience macro for initializing HashSets
     macro_rules! set {
         [$($value:expr),* $(,)*] => {
             vec![$($value),*].into_iter().collect::<::std::collections::HashSet<_>>()
         };
-    }
-
-    fn eq_0(expr: Expr) -> Expr {
-        Expr::Equal(BinaryOp::new(expr, Expr::Imm32(0)).into())
-    }
-
-    fn ne_0(expr: Expr) -> Expr {
-        eq_0(expr).negate()
-    }
-
-    fn gt_0(expr: Expr) -> Expr {
-        Expr::Greater(BinaryOp::new(expr, Expr::Imm32(0)).into())
-    }
-
-    fn le_0(expr: Expr) -> Expr {
-        gt_0(expr).negate()
-    }
-
-    fn lt_0(expr: Expr) -> Expr {
-        Expr::Less(BinaryOp::new(expr, Expr::Imm32(0)).into())
-    }
-
-    fn not(expr: Expr) -> Expr {
-        Expr::Not(expr.into())
-    }
-
-    fn and(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::BitAnd(BinaryOp::new(lhs, rhs).into())
-    }
-
-    fn sub(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::Subtract(BinaryOp::new(lhs, rhs).into())
-    }
-
-    fn item(id: ItemId) -> Expr {
-        Expr::Item(Expr::Imm16(id.into()).into())
-    }
-
-    fn atc(id: AtcId) -> Expr {
-        Expr::Atc(Expr::Imm16(id.into()).into())
-    }
-
-    fn flag(index: i32) -> Expr {
-        Expr::Flag(Expr::Imm32(index).into())
     }
 
     fn set(var: usize, value: i16) -> Command {
@@ -409,19 +366,19 @@ mod tests {
     #[test]
     fn test_parse_requirements_item() {
         assert_eq!(
-            parse_requirements(&ne_0(item(ItemId::HotRod))),
+            parse_requirements(&expr![item[ItemId::HotRod] != 0]),
             set![Requirement::HaveItem(ItemId::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&gt_0(item(ItemId::HotRod))),
+            parse_requirements(&expr![item[ItemId::HotRod] > 0]),
             set![Requirement::HaveItem(ItemId::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&eq_0(item(ItemId::HotRod))),
+            parse_requirements(&expr![item[ItemId::HotRod] == 0]),
             set![Requirement::MissingItem(ItemId::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&le_0(item(ItemId::HotRod))),
+            parse_requirements(&expr![item[ItemId::HotRod] <= 0]),
             set![Requirement::MissingItem(ItemId::HotRod)]
         );
     }
@@ -429,54 +386,55 @@ mod tests {
     #[test]
     fn test_parse_requirements_atc() {
         assert_eq!(
-            parse_requirements(&ne_0(atc(AtcId::Toothbrush))),
+            parse_requirements(&expr![atc[AtcId::Toothbrush] != 0]),
             set![Requirement::HaveAtc(AtcId::Toothbrush)]
         );
         assert_eq!(
-            parse_requirements(&gt_0(atc(AtcId::Toothbrush))),
+            parse_requirements(&expr![atc[AtcId::Toothbrush] > 0]),
             set![Requirement::HaveAtc(AtcId::Toothbrush)]
         );
         assert_eq!(
-            parse_requirements(&eq_0(atc(AtcId::Toothbrush))),
+            parse_requirements(&expr![atc[AtcId::Toothbrush] == 0]),
             set![Requirement::MissingAtc(AtcId::Toothbrush)]
         );
         assert_eq!(
-            parse_requirements(&le_0(atc(AtcId::Toothbrush))),
+            parse_requirements(&expr![atc[AtcId::Toothbrush] <= 0]),
             set![Requirement::MissingAtc(AtcId::Toothbrush)]
         );
     }
 
     #[test]
     fn test_parse_requirements_flag() {
-        assert_eq!(parse_requirements(&ne_0(flag(123))), set![Requirement::HaveFlag(123)]);
-        assert_eq!(parse_requirements(&gt_0(flag(123))), set![Requirement::HaveFlag(123)]);
-        assert_eq!(parse_requirements(&eq_0(flag(123))), set![Requirement::MissingFlag(123)]);
-        assert_eq!(parse_requirements(&le_0(flag(123))), set![Requirement::MissingFlag(123)]);
+        assert_eq!(parse_requirements(&expr![flag[123]]), set![Requirement::HaveFlag(123)]);
+        assert_eq!(parse_requirements(&expr![flag[123] != 0]), set![Requirement::HaveFlag(123)]);
+        assert_eq!(parse_requirements(&expr![flag[123] > 0]), set![Requirement::HaveFlag(123)]);
+        assert_eq!(parse_requirements(&expr![!(flag[123])]), set![Requirement::MissingFlag(123)]);
+        assert_eq!(parse_requirements(&expr![flag[123] == 0]), set![Requirement::MissingFlag(123)]);
+        assert_eq!(parse_requirements(&expr![flag[123] <= 0]), set![Requirement::MissingFlag(123)]);
     }
 
     #[test]
     fn test_parse_requirements_not() {
         assert_eq!(
-            parse_requirements(&not(gt_0(item(ItemId::HotRod)))),
+            parse_requirements(&expr![!(item[ItemId::HotRod] > 0)]),
             set![Requirement::MissingItem(ItemId::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&not(not(gt_0(item(ItemId::HotRod))))),
+            parse_requirements(&expr![!(!(item[ItemId::HotRod] > 0))]),
             set![Requirement::HaveItem(ItemId::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&not(not(not(gt_0(item(ItemId::HotRod)))))),
+            parse_requirements(&expr![!(!(!(item[ItemId::HotRod] > 0)))]),
             set![Requirement::MissingItem(ItemId::HotRod)]
         );
     }
 
     #[test]
     fn test_parse_requirements_multiple() {
-        let mut cond = gt_0(item(ItemId::HotRod));
-        cond = and(cond, gt_0(atc(AtcId::Toothbrush)));
-        cond = and(cond, gt_0(flag(123)));
         assert_eq!(
-            parse_requirements(&cond),
+            parse_requirements(&expr![
+                (item[ItemId::HotRod] > 0) && (atc[AtcId::Toothbrush] > 0) && flag[123]
+            ]),
             set![
                 Requirement::HaveItem(ItemId::HotRod),
                 Requirement::HaveAtc(AtcId::Toothbrush),
@@ -532,10 +490,10 @@ mod tests {
             // 1
             Block::Code(CodeBlock {
                 commands: vec![
-                    // vars[0] = 10 - item[BlueFlowerSeed]
-                    set_expr(0, sub(Expr::Imm16(10), item(ItemId::BlueFlowerSeed))),
-                    // if (vars[0] < 0)
-                    if_(lt_0(Expr::Variable(Expr::Imm32(0).into())), 3),
+                    // var[0] = 10 - item[BlueFlowerSeed]
+                    set_expr(0, expr![10 - item[ItemId::BlueFlowerSeed]]),
+                    // if (var[0] < 0)
+                    if_(expr![var[0] < 0], 3),
                 ],
                 next_block: Some(Ip::Block(BlockId::new(2))),
                 else_block: Some(Ip::Block(BlockId::new(3))),
@@ -555,7 +513,7 @@ mod tests {
                     // item = BlueFlowerSeed
                     set(SHOP_ITEM_FIRST + 2, ItemId::BlueFlowerSeed.into()),
                     // count = vars[0]
-                    set_expr(SHOP_COUNT_FIRST + 2, Expr::Variable(Expr::Imm32(0).into())),
+                    set_expr(SHOP_COUNT_FIRST + 2, expr![var[0]]),
                 ],
                 next_block: Some(Ip::Block(BlockId::new(4))),
                 else_block: None,
@@ -564,7 +522,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // if atc[Toothbrush] == 0 && flag[123]
-                    if_(and(eq_0(atc(AtcId::Toothbrush)), flag(123)), 6),
+                    if_(expr![(atc[AtcId::Toothbrush] == 0) && flag[123]], 6),
                 ],
                 next_block: Some(Ip::Block(BlockId::new(5))),
                 else_block: Some(Ip::Block(BlockId::new(6))),
@@ -585,7 +543,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // else if atc[Toothbrush] > 0
-                    if_(gt_0(atc(AtcId::Toothbrush)), 8),
+                    if_(expr![atc[AtcId::Toothbrush] > 0], 8),
                 ],
                 next_block: Some(Ip::Block(BlockId::new(7))),
                 else_block: Some(Ip::Block(BlockId::new(8))),

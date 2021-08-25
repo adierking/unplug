@@ -18,7 +18,7 @@
 pub use unplug_data as data;
 
 #[macro_use]
-mod macros;
+pub mod macros;
 
 pub mod common;
 pub mod dvd;

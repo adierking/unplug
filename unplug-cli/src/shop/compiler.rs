@@ -7,8 +7,8 @@ use std::iter;
 use unplug::data::atc::AtcId;
 use unplug::data::item::ItemId;
 use unplug::event::command::{IfArgs, SetArgs};
-use unplug::event::expr::BinaryOp;
 use unplug::event::{Block, BlockId, CodeBlock, Command, Expr, Ip, Script, SetExpr};
+use unplug::expr;
 
 const TIMER_5_RATE: i16 = 200;
 const TIMER_10_RATE: i16 = 100;
@@ -20,7 +20,7 @@ fn compile_requirements(requirements: impl IntoIterator<Item = Requirement>) -> 
     for requirement in requirements {
         let condition = compile_requirement(&requirement);
         result = Some(match result {
-            Some(other) => Expr::BitAnd(BinaryOp::new(other, condition).into()),
+            Some(other) => expr![other && condition],
             None => condition,
         });
     }
@@ -41,21 +41,17 @@ fn compile_requirement(requirement: &Requirement) -> Expr {
 
 /// Compiles an expression for checking whether the player has `item`.
 fn compile_item_requirement(item: ItemId) -> Expr {
-    let lhs = Expr::Item(Expr::Imm16(item.into()).into());
-    let rhs = Expr::Imm16(0);
-    Expr::NotEqual(BinaryOp::new(lhs, rhs).into())
+    expr![item[item] != 0]
 }
 
 /// Compiles an expression for checking whether the player has `atc`.
 fn compile_atc_requirement(atc: AtcId) -> Expr {
-    let lhs = Expr::Atc(Expr::Imm16(atc.into()).into());
-    let rhs = Expr::Imm16(0);
-    Expr::NotEqual(BinaryOp::new(lhs, rhs).into())
+    expr![atc[atc] != 0]
 }
 
 /// Compiles an expression for checking whether `flag` is set.
 fn compile_flag_requirement(flag: i32) -> Expr {
-    Expr::Flag(Expr::Imm16(flag as i16).into())
+    expr![flag[flag]]
 }
 
 /// Returns whether `item` is a timer.
@@ -141,7 +137,7 @@ impl BlockBuilder {
 
     /// Emits `Set()` commands to fill the shop slot at `index` with `item` and `count`.
     fn emit_set_slot(&mut self, index: usize, item: ItemId, count: Expr) {
-        self.emit_set(SHOP_ITEM_FIRST + index, Expr::Imm16(item.into()));
+        self.emit_set(SHOP_ITEM_FIRST + index, item.into());
         self.emit_set(SHOP_COUNT_FIRST + index, count);
     }
 
@@ -296,15 +292,13 @@ impl<'s> ShopCompiler<'s> {
         // Timers can also be considered acquired if the current time rate (`time[2]`) matches the
         // timer's rate.
         if is_timer(ctx.item) {
-            let rate = match ctx.item.unwrap() {
-                ItemId::Timer5 => TIMER_5_RATE,
-                ItemId::Timer10 => TIMER_10_RATE,
-                ItemId::Timer15 => TIMER_15_RATE,
+            let rate = match ctx.item {
+                Some(ItemId::Timer5) => TIMER_5_RATE,
+                Some(ItemId::Timer10) => TIMER_10_RATE,
+                Some(ItemId::Timer15) => TIMER_15_RATE,
                 other => panic!("missing rate for {:?}", other),
             };
-            let rate_expr = Expr::Time(Expr::Imm16(2).into());
-            let rate_compare = Expr::Equal(BinaryOp::new(rate_expr, Expr::Imm16(rate)).into());
-            acquired = Expr::BitOr(BinaryOp::new(acquired, rate_compare).into())
+            acquired = expr![acquired || (time[2] == rate)];
         }
 
         // vars[SLOT_ITEM] = ITEM
@@ -364,7 +358,7 @@ impl<'s> ShopCompiler<'s> {
             let missing = acquired.negate();
             let requirements = compile_requirements(ctx.requirements.iter().copied());
             let condition = match requirements {
-                Some(r) => Expr::BitAnd(BinaryOp::new(missing, r).into()),
+                Some(r) => expr![missing && r],
                 None => missing,
             };
             b.emit_if_else(condition, else_block);
@@ -388,7 +382,7 @@ impl<'s> ShopCompiler<'s> {
 
         // vars[SLOT_ITEM] = <item>
         // vars[SLOT_COUNT] = vars[0]
-        let temp_var = Expr::Variable(Expr::Imm16(0).into());
+        let temp_var = expr![var[0]];
         let set_block = self.compile_block(|b| {
             b.emit_set_slot(ctx.index, item, temp_var.clone());
             if ctx.hide_block.is_some() {
@@ -402,13 +396,11 @@ impl<'s> ShopCompiler<'s> {
             b.emit_set(0, Expr::Imm16(0));
         });
 
-        // vars[0] = <limit> - item[<item>]
         let _remaining_block = self.compile_block(|b| {
-            let limit_expr = Expr::Imm16(ctx.limit);
-            let item_expr = Expr::Item(Expr::Imm16(item.into()).into());
-            b.emit_set(0, Expr::Subtract(BinaryOp::new(limit_expr, item_expr).into()));
+            // vars[0] = <limit> - item[<item>]
+            b.emit_set(0, expr![{ ctx.limit } - item[item]]);
             // if (vars[0] < 0)
-            b.emit_if_else(Expr::Less(BinaryOp::new(temp_var, Expr::Imm16(0)).into()), set_block);
+            b.emit_if_else(expr![temp_var < 0], set_block);
         });
 
         // If() statement for the visibility conditions
@@ -496,54 +488,6 @@ mod tests {
         Command::EndIf(block.into())
     }
 
-    fn eq(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::Equal(BinaryOp::new(lhs, rhs).into())
-    }
-
-    fn ne(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::NotEqual(BinaryOp::new(lhs, rhs).into())
-    }
-
-    fn eq_0(expr: Expr) -> Expr {
-        eq(expr, Expr::Imm16(0))
-    }
-
-    fn ne_0(expr: Expr) -> Expr {
-        ne(expr, Expr::Imm16(0))
-    }
-
-    fn lt_0(expr: Expr) -> Expr {
-        Expr::Less(BinaryOp::new(expr, Expr::Imm16(0)).into())
-    }
-
-    fn sub(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::Subtract(BinaryOp::new(lhs, rhs).into())
-    }
-
-    fn and(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::BitAnd(BinaryOp::new(lhs, rhs).into())
-    }
-
-    fn or(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::BitOr(BinaryOp::new(lhs, rhs).into())
-    }
-
-    fn item(id: ItemId) -> Expr {
-        Expr::Item(Expr::Imm16(id.into()).into())
-    }
-
-    fn atc(id: AtcId) -> Expr {
-        Expr::Atc(Expr::Imm16(id.into()).into())
-    }
-
-    fn flag(index: i16) -> Expr {
-        Expr::Flag(Expr::Imm16(index).into())
-    }
-
-    fn var(index: i16) -> Expr {
-        Expr::Variable(Expr::Imm16(index).into())
-    }
-
     fn compare_shops(a: &Shop, b: &Shop) {
         for (i, (slot_a, slot_b)) in a.slots().iter().zip(b.slots()).enumerate() {
             assert_eq!(slot_a, slot_b, "slot {}", i);
@@ -570,7 +514,7 @@ mod tests {
     fn test_compile_unique_item_without_requirements() {
         let slots = vec![Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] }];
         let expected = vec![
-            if_else(eq_0(item(ItemId::HotRod)), BlockId::new(1)),
+            if_else(expr![item[ItemId::HotRod] == 0], BlockId::new(1)),
             set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
@@ -588,7 +532,7 @@ mod tests {
     fn test_compile_atc_without_requirements() {
         let slots = vec![Slot { item: Some(ItemId::Toothbrush), limit: 1, requirements: set![] }];
         let expected = vec![
-            if_else(eq_0(atc(AtcId::Toothbrush)), BlockId::new(1)),
+            if_else(expr![atc[AtcId::Toothbrush] == 0], BlockId::new(1)),
             set(SHOP_ITEM_FIRST, ItemId::Toothbrush.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
@@ -615,16 +559,18 @@ mod tests {
         }];
         let expected = vec![
             if_else(
-                and(
-                    eq_0(item(ItemId::HotRod)),
-                    and(and(ne_0(item(ItemId::Spoon)), ne_0(atc(AtcId::Toothbrush))), flag(123)),
-                ),
+                expr![
+                    (item[ItemId::HotRod] == 0)
+                        && ((item[ItemId::Spoon] != 0)
+                            && (atc[AtcId::Toothbrush] != 0)
+                            && flag[123])
+                ],
                 BlockId::new(3),
             ),
             set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
-            if_else(ne_0(item(ItemId::HotRod)), BlockId::new(1)),
+            if_else(expr![item[ItemId::HotRod] != 0], BlockId::new(1)),
             set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
             set(SHOP_COUNT_FIRST, 0),
             endif(BlockId::new(0)),
@@ -643,10 +589,7 @@ mod tests {
         let slots = vec![Slot { item: Some(ItemId::Timer15), limit: 1, requirements: set![] }];
         let expected = vec![
             if_else(
-                and(
-                    eq_0(item(ItemId::Timer15)),
-                    ne(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_15_RATE)),
-                ),
+                expr![(item[ItemId::Timer15] == 0) && (time[2] != TIMER_15_RATE)],
                 BlockId::new(1),
             ),
             set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
@@ -667,13 +610,13 @@ mod tests {
         let slots = vec![Slot { item: Some(ItemId::Timer5), limit: 1, requirements: set![] }];
         let expected = vec![
             if_else(
-                and(
-                    eq_0(item(ItemId::Timer5)),
-                    ne(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_5_RATE)),
-                ),
+                expr![(item[ItemId::Timer5] == 0) && (time[2] != TIMER_5_RATE)],
                 BlockId::new(1),
             ),
-            if_else(and(eq_0(item(ItemId::Timer10)), eq_0(item(ItemId::Timer15))), BlockId::new(2)),
+            if_else(
+                expr![(item[ItemId::Timer10] == 0) && (item[ItemId::Timer15] == 0)],
+                BlockId::new(2),
+            ),
             set(SHOP_ITEM_FIRST, ItemId::Timer5.into()),
             set(SHOP_COUNT_FIRST, 0),
             endif(BlockId::new(0)),
@@ -699,23 +642,14 @@ mod tests {
         }];
         let expected = vec![
             if_else(
-                and(
-                    and(
-                        eq_0(item(ItemId::Timer15)),
-                        ne(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_15_RATE)),
-                    ),
-                    flag(123),
-                ),
+                expr![(item[ItemId::Timer15] == 0) && (time[2] != TIMER_15_RATE) && flag[123]],
                 BlockId::new(3),
             ),
             set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
             if_else(
-                or(
-                    ne_0(item(ItemId::Timer15)),
-                    eq(Expr::Time(Expr::Imm16(2).into()), Expr::Imm16(TIMER_15_RATE)),
-                ),
+                expr![(item[ItemId::Timer15] != 0) || (time[2] == TIMER_15_RATE)],
                 BlockId::new(1),
             ),
             set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
@@ -735,11 +669,11 @@ mod tests {
     fn test_compile_limit_item_without_requirements() {
         let slots = vec![Slot { item: Some(ItemId::HotRod), limit: 5, requirements: set![] }];
         let expected = vec![
-            set_expr(0, sub(Expr::Imm16(5), item(ItemId::HotRod))),
-            if_else(lt_0(var(0)), BlockId::new(1)),
+            set_expr(0, expr![5 - item[ItemId::HotRod]]),
+            if_else(expr![var[0] < 0], BlockId::new(1)),
             set(0, 0),
             set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
-            set_expr(SHOP_COUNT_FIRST, var(0)),
+            set_expr(SHOP_COUNT_FIRST, expr![var[0]]),
             Command::Return,
         ];
         let actual = compile(&slots);
@@ -761,14 +695,14 @@ mod tests {
         }];
         let expected = vec![
             if_else(
-                and(and(ne_0(item(ItemId::Spoon)), ne_0(atc(AtcId::Toothbrush))), flag(123)),
+                expr![(item[ItemId::Spoon] != 0) && (atc[AtcId::Toothbrush] != 0) && flag[123]],
                 BlockId::new(1),
             ),
-            set_expr(0, sub(Expr::Imm16(5), item(ItemId::HotRod))),
-            if_else(lt_0(var(0)), BlockId::new(2)),
+            set_expr(0, expr![5 - item[ItemId::HotRod]]),
+            if_else(expr![var[0] < 0], BlockId::new(2)),
             set(0, 0),
             set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
-            set_expr(SHOP_COUNT_FIRST, var(0)),
+            set_expr(SHOP_COUNT_FIRST, expr![var[0]]),
             endif(BlockId::new(0)),
             set(SHOP_ITEM_FIRST, -1),
             set(SHOP_COUNT_FIRST, 0),
