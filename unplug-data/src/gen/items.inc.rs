@@ -101,7 +101,7 @@ declare_items! {
     96 => Ink { ItemInk, "" },
     97 => DriedFlower { ItemKareFlowerMitu, "Dried Flower" },
     98 => Gunpowder { ItemKayaku, "Gunpowder" },
-    99 => SnorkleGoggles { ItemGoggle, "Snorkle & Goggles" },
+    99 => Snorkel { ItemGoggle, "Snorkle & Goggles" },
     100 => LoveLetter { ItemLoveLetter, "Love Letter" },
     101 => DogTags { ItemTug, "Dog Tags" },
     102 => TicketStub { ItemTicket, "Ticket Stub" },

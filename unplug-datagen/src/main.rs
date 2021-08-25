@@ -116,6 +116,8 @@ lazy_static! {
     static ref ITEM_LABEL_OVERRIDES: HashMap<String, &'static str> = vec![
         // Make capitalization nicer
         ("ItemDenchi3".into(), "AABattery"),
+        // Make this shorter and fix spelling :)
+        ("ItemGoggle".into(), "Snorkel"),
         // There are two broken bottle items and they both have the display name "Broken Bottle"
         ("SoukoWineBottleA".into(), "BrokenBottleA"),
         ("SoukoWineBottleB".into(), "BrokenBottleB"),

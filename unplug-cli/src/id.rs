@@ -181,7 +181,7 @@ id_strings! {
         Ink = "ink",
         DriedFlower = "dried-flower",
         Gunpowder = "gunpowder",
-        SnorkleGoggles = "snorkle-goggles",
+        Snorkel = "snorkel",
         LoveLetter = "love-letter",
         DogTags = "dog-tags",
         TicketStub = "ticket-stub",
