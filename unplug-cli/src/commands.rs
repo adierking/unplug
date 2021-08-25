@@ -1,4 +1,5 @@
 use crate::common::*;
+use crate::id::IdString;
 use crate::io::OutputRedirect;
 use crate::opt::*;
 use anyhow::Result;
@@ -10,12 +11,16 @@ use std::path::Path;
 use std::time::Instant;
 use unicase::UniCase;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
+use unplug::data::atc::ATCS;
+use unplug::data::item::ITEMS;
 use unplug::data::object::ObjectId;
 use unplug::data::stage::{StageDefinition, STAGES};
 use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree, OpenFile};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
+
+const UNKNOWN_ID_PREFIX: &str = "unk";
 
 fn list_files(tree: &FileTree, opt: ListOpt) -> Result<()> {
     let mut files: Vec<(String, &FileEntry)> =
@@ -51,6 +56,42 @@ pub fn list_iso(opt: ListIsoOpt) -> Result<()> {
     let iso = DiscStream::open(file)?;
     println!("Game ID: {}", iso.game_id());
     list_files(&iso.files, opt.settings)
+}
+
+fn sort_ids<I: IdString + Ord>(ids: &mut [I], settings: &ListIdsOpt) {
+    if settings.by_id {
+        ids.sort_unstable();
+    } else {
+        ids.sort_unstable_by_key(|i| i.to_id());
+    }
+    if settings.reverse {
+        ids.reverse();
+    }
+}
+
+pub fn list_items(opt: ListItemsOpt) -> Result<()> {
+    let mut items: Vec<_> = if opt.show_unknown {
+        ITEMS.iter().map(|i| i.id).collect()
+    } else {
+        ITEMS.iter().filter(|i| !i.display_name.is_empty()).map(|i| i.id).collect()
+    };
+    sort_ids(&mut items, &opt.settings);
+    for item in items {
+        println!("[{:>3}] {}", i16::from(item), item.to_id());
+    }
+    Ok(())
+}
+
+pub fn list_equipment(opt: ListEquipmentOpt) -> Result<()> {
+    let mut atcs: Vec<_> = ATCS.iter().map(|a| a.id).collect();
+    sort_ids(&mut atcs, &opt.settings);
+    for atc in atcs {
+        let name = atc.to_id();
+        if opt.show_unknown || !name.starts_with(UNKNOWN_ID_PREFIX) {
+            println!("[{:>1}] {}", i16::from(atc), atc.to_id());
+        }
+    }
+    Ok(())
 }
 
 fn extract_files(

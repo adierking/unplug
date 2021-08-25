@@ -26,6 +26,12 @@ pub enum Subcommand {
     /// Lists files in an ISO
     ListIso(ListIsoOpt),
 
+    /// Lists known item IDs
+    ListItems(ListItemsOpt),
+
+    /// Lists known equipment (ATC) IDs
+    ListEquipment(ListEquipmentOpt),
+
     /// Extracts a U8 archive (e.g. qp.bin) into a directory
     ExtractArchive(ExtractArchiveOpt),
 
@@ -112,7 +118,6 @@ pub struct ListOpt {
     pub long: bool,
 
     /// Sorts files by name (default)
-    #[allow(dead_code)]
     #[structopt(long, overrides_with_all(&["by-offset", "by-size"]))]
     pub by_name: bool,
 
@@ -147,6 +152,41 @@ pub struct ListIsoOpt {
     /// Path to the ISO to read
     #[structopt(parse(from_os_str))]
     pub path: PathBuf,
+}
+
+#[derive(StructOpt)]
+pub struct ListIdsOpt {
+    /// Sorts by name (default)
+    #[structopt(long, overrides_with_all(&["by-id"]))]
+    pub by_name: bool,
+
+    /// Sorts by ID number
+    #[structopt(long, overrides_with_all(&["by-name"]))]
+    pub by_id: bool,
+
+    /// Reverses the sorting order
+    #[structopt(long)]
+    pub reverse: bool,
+}
+
+#[derive(StructOpt)]
+pub struct ListItemsOpt {
+    #[structopt(flatten)]
+    pub settings: ListIdsOpt,
+
+    /// Includes items without names
+    #[structopt(long)]
+    pub show_unknown: bool,
+}
+
+#[derive(StructOpt)]
+pub struct ListEquipmentOpt {
+    #[structopt(flatten)]
+    pub settings: ListIdsOpt,
+
+    /// Includes equipment without names
+    #[structopt(long)]
+    pub show_unknown: bool,
 }
 
 #[derive(StructOpt)]
