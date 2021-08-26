@@ -4,12 +4,12 @@ use crate::io::OutputRedirect;
 use crate::opt::{ExportShopOpt, ImportShopOpt};
 use anyhow::{bail, Error, Result};
 use lazy_static::lazy_static;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::ser::{Formatter, Serializer};
 use std::collections::HashSet;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Cursor, Seek, SeekFrom};
 use std::path::Path;
@@ -226,11 +226,25 @@ pub fn export_shop(opt: ExportShopOpt) -> Result<()> {
 pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);
-    let json_slots: Vec<SlotModel> = serde_json::from_reader(json)?;
+    let models: Vec<SlotModel> = serde_json::from_reader(json)?;
+
     let mut slots: Vec<Slot> = vec![];
-    for slot in &json_slots {
-        slots.push(slot.try_into()?);
+    let mut items = HashSet::new();
+    let mut has_duplicate = false;
+    for model in &models {
+        let slot = Slot::try_from(model)?;
+        if let Some(item) = slot.item {
+            if !items.insert(item) {
+                error!("{} appears in the shop more than once", item.to_id());
+                has_duplicate = true;
+            }
+        }
+        slots.push(slot);
     }
+    if has_duplicate {
+        bail!("duplicate shop items are not allowed");
+    }
+
     if slots.len() > NUM_SLOTS {
         warn!(
             "The input file has too many slots ({} > {}). Excess slots will be discarded.",
@@ -254,10 +268,10 @@ pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
     let mut stage = read_stage_qp(&mut qp, CHIBI_HOUSE.name, &libs)?;
 
     info!("Compiling new shop code");
-    for (slot, json_slot) in slots.iter().zip(&json_slots) {
+    for (slot, model) in slots.iter().zip(&models) {
         if let Some(item) = slot.item {
             let index = i16::from(item) as usize;
-            metadata.items[index].price = json_slot.price;
+            metadata.items[index].price = model.price;
         }
     }
     let shop = Shop::with_slots(slots);
