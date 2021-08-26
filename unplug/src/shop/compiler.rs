@@ -8,17 +8,16 @@ use crate::expr;
 use log::Level::Trace;
 use log::{log_enabled, trace, warn};
 use std::convert::TryFrom;
-use std::iter;
 
 const TIMER_5_RATE: i16 = 200;
 const TIMER_10_RATE: i16 = 100;
 const TIMER_15_RATE: i16 = 67;
 
 /// Compiles a collection of requirements into an expression.
-fn compile_requirements(requirements: impl IntoIterator<Item = Requirement>) -> Option<Expr> {
+fn compile_requirements(requirements: &[Requirement]) -> Option<Expr> {
     let mut result = None;
     for requirement in requirements {
-        let condition = compile_requirement(&requirement);
+        let condition = compile_requirement(requirement);
         result = Some(match result {
             Some(other) => expr![other && condition],
             None => condition,
@@ -287,7 +286,7 @@ impl<'s> ShopCompiler<'s> {
 
         // If the item has a corresponding ATC, we need to check that as the source of truth
         let acquired_rec = ctx.atc.map(Requirement::HaveAtc).unwrap_or(Requirement::HaveItem(item));
-        let mut acquired = compile_requirements(iter::once(acquired_rec)).unwrap();
+        let mut acquired = compile_requirements(&[acquired_rec]).unwrap();
 
         // Timers can also be considered acquired if the current time rate (`time[2]`) matches the
         // timer's rate.
@@ -345,7 +344,7 @@ impl<'s> ShopCompiler<'s> {
                 b.emit_endif(ctx.end_block);
             });
             let _if_no_timer_block = self.compile_block(|b| {
-                let condition = compile_requirements([
+                let condition = compile_requirements(&[
                     Requirement::MissingItem(ItemId::Timer10),
                     Requirement::MissingItem(ItemId::Timer15),
                 ]);
@@ -356,7 +355,7 @@ impl<'s> ShopCompiler<'s> {
         // if (!<acquired> && <requirements>)
         let _if_missing_and_visible_block = self.compile_block(|b| {
             let missing = acquired.negate();
-            let requirements = compile_requirements(ctx.requirements.iter().copied());
+            let requirements = compile_requirements(&ctx.requirements);
             let condition = match requirements {
                 Some(r) => expr![missing && r],
                 None => missing,
@@ -404,7 +403,7 @@ impl<'s> ShopCompiler<'s> {
         });
 
         // If() statement for the visibility conditions
-        if let Some(condition) = compile_requirements(ctx.requirements.iter().copied()) {
+        if let Some(condition) = compile_requirements(&ctx.requirements) {
             let _if_visible_block = self.compile_block(|b| {
                 b.emit_if_else(condition, ctx.hide_block.unwrap());
             });
