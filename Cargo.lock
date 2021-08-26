@@ -713,6 +713,7 @@ name = "unplug-test"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "lazy_static",
  "log",
  "serial_test",
  "simplelog 0.8.0",

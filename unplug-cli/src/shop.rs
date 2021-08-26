@@ -1,4 +1,3 @@
-use super::{Requirement, Shop, Slot, NUM_SLOTS};
 use crate::common::*;
 use crate::id::IdString;
 use crate::io::OutputRedirect;
@@ -21,6 +20,7 @@ use unplug::data::item::ItemId;
 use unplug::data::stage::{CHIBI_HOUSE, GLOBALS_PATH};
 use unplug::dvd::ArchiveBuilder;
 use unplug::globals::{GlobalsBuilder, Metadata};
+use unplug::shop::{Requirement, Shop, Slot, NUM_SLOTS};
 
 const FLAG_PREFIX: &str = "flag";
 lazy_static! {

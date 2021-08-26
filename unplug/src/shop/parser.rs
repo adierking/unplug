@@ -3,15 +3,15 @@ use super::{
     SHOP_ITEM_LAST,
 };
 
+use crate::data::atc::AtcId;
+use crate::data::item::ItemId;
+use crate::event::command::SetArgs;
+use crate::event::expr::BinaryOp;
+use crate::event::{BlockId, Command, Expr, Script, SetExpr};
 use log::warn;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::iter;
-use unplug::data::atc::AtcId;
-use unplug::data::item::ItemId;
-use unplug::event::command::SetArgs;
-use unplug::event::expr::BinaryOp;
-use unplug::event::{BlockId, Command, Expr, Script, SetExpr};
 
 /// Parses `condition` into a set of `Requirement`s.
 fn parse_requirements(condition: &Expr) -> HashSet<Requirement> {
@@ -340,9 +340,9 @@ impl<'s> ShopParser<'s> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unplug::event::command::IfArgs;
-    use unplug::event::{Block, CodeBlock, Ip};
-    use unplug::expr;
+    use crate::event::command::IfArgs;
+    use crate::event::{Block, CodeBlock, Ip};
+    use crate::expr;
 
     /// Convenience macro for initializing HashSets
     macro_rules! set {

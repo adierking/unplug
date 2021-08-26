@@ -6,9 +6,10 @@ use tempfile::NamedTempFile;
 use unplug::data::stage::CHIBI_HOUSE;
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
+use unplug::shop::Shop;
 use unplug::stage::Stage;
 use unplug_cli::opt::{ExportShopOpt, ImportShopOpt, RequiredContainerOpt};
-use unplug_cli::shop::{self, Shop};
+use unplug_cli::shop;
 use unplug_test as common;
 
 #[test]

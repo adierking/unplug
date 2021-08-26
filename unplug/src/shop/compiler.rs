@@ -1,14 +1,14 @@
 use super::{Requirement, Slot, SHOP_COUNT_FIRST, SHOP_ITEM_FIRST};
 
+use crate::data::atc::AtcId;
+use crate::data::item::ItemId;
+use crate::event::command::{IfArgs, SetArgs};
+use crate::event::{Block, BlockId, CodeBlock, Command, Expr, Ip, Script, SetExpr};
+use crate::expr;
 use log::Level::Trace;
 use log::{log_enabled, trace, warn};
 use std::convert::TryFrom;
 use std::iter;
-use unplug::data::atc::AtcId;
-use unplug::data::item::ItemId;
-use unplug::event::command::{IfArgs, SetArgs};
-use unplug::event::{Block, BlockId, CodeBlock, Command, Expr, Ip, Script, SetExpr};
-use unplug::expr;
 
 const TIMER_5_RATE: i16 = 200;
 const TIMER_10_RATE: i16 = 100;
@@ -451,7 +451,6 @@ mod tests {
     use super::*;
     use crate::shop::parser::ShopParser;
     use crate::shop::Shop;
-    use anyhow::Result;
 
     /// Convenience macro for initializing HashSets
     macro_rules! set {
@@ -715,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_and_parse_shop() -> Result<()> {
+    fn test_compile_and_parse_shop() {
         let original = Shop::with_slots(vec![
             Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] },
             Slot { item: Some(ItemId::HotRod), limit: 5, requirements: set![] },
@@ -741,11 +740,10 @@ mod tests {
         ]);
         let parsed = compile_and_parse(&original);
         compare_shops(&parsed, &original);
-        Ok(())
     }
 
     #[test]
-    fn test_invalid_limits() -> Result<()> {
+    fn test_invalid_limits() {
         let original = Shop::with_slots(vec![
             // Limits cannot be below 1
             Slot { item: Some(ItemId::HotRod), limit: 0, requirements: set![] },
@@ -767,6 +765,5 @@ mod tests {
         ]);
         let parsed = compile_and_parse(&original);
         compare_shops(&parsed, &expected);
-        Ok(())
     }
 }

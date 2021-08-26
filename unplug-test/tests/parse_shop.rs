@@ -7,8 +7,8 @@ use unplug::data::item::ItemId;
 use unplug::data::stage::CHIBI_HOUSE;
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::globals::GlobalsReader;
+use unplug::shop::{Requirement, Shop, Slot};
 use unplug::stage::Stage;
-use unplug_cli::shop::{Requirement, Shop, Slot};
 use unplug_test as common;
 
 /// Convenience macro for initializing HashSets

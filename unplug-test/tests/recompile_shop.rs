@@ -5,8 +5,8 @@ use unplug::common::WriteTo;
 use unplug::data::stage::CHIBI_HOUSE;
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::globals::GlobalsReader;
+use unplug::shop::Shop;
 use unplug::stage::Stage;
-use unplug_cli::shop::Shop;
 use unplug_test as common;
 
 #[test]

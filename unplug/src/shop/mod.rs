@@ -1,19 +1,27 @@
 mod compiler;
-mod json;
 mod parser;
-
-pub use json::{export_shop, import_shop};
 
 use compiler::ShopCompiler;
 use parser::ShopParser;
 
-use anyhow::{bail, Result};
+use crate::data::atc::AtcId;
+use crate::data::item::ItemId;
+use crate::event::analysis::Label;
+use crate::event::{BlockId, Command, Ip, Script, SetExpr};
 use log::debug;
 use std::collections::HashSet;
-use unplug::data::atc::AtcId;
-use unplug::data::item::ItemId;
-use unplug::event::analysis::Label;
-use unplug::event::{BlockId, Command, Ip, Script, SetExpr};
+use thiserror::Error;
+
+/// The result type for shop operations.
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// The error type for shop operations.
+#[derive(Error, Debug)]
+#[non_exhaustive]
+pub enum Error {
+    #[error("could not locate the shop setup code")]
+    ShopCodeNotFound,
+}
 
 /// The maximum number of slots that can fit in a shop.
 pub const NUM_SLOTS: usize = 20;
@@ -49,7 +57,7 @@ fn find_shop_setup(script: &Script) -> Result<BlockId> {
             return Ok(block);
         }
     }
-    bail!("could not locate shop setup routine");
+    Err(Error::ShopCodeNotFound)
 }
 
 fn is_shop_setup(script: &Script, block: BlockId, visited: &mut HashSet<BlockId>) -> bool {
