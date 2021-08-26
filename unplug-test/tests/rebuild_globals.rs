@@ -4,7 +4,7 @@ use serial_test::serial;
 use std::io::{Read, Seek, SeekFrom};
 use tempfile::tempfile;
 use unplug::common::Text;
-use unplug::data::object::ObjectId;
+use unplug::data::Object;
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::event::command::PrintFArgs;
 use unplug::event::{Block, CodeBlock, Command};
@@ -89,7 +89,7 @@ fn test_rebuild_globals_colliders() -> Result<()> {
 
     // Add an extra collider so that we know it isn't just copied
     info!("Building new globals with altered colliders");
-    original_colliders[ObjectId::CbRobo].push(Collider {
+    original_colliders[Object::CbRobo].push(Collider {
         shape: Shape::Sphere,
         material: Material::Water,
         x: 1,

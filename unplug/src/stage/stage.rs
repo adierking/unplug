@@ -1,4 +1,4 @@
-use super::{Actor, Error, Object, Result};
+use super::{Actor, Error, ObjectPlacement, Result};
 use crate::common::{NonNoneList, ReadFrom, ReadOptionFrom, WriteOptionTo, WriteTo};
 use crate::event::block::BlockId;
 use crate::event::script::{Script, ScriptReader, ScriptWriter};
@@ -289,7 +289,7 @@ impl<W: Write> WriteOptionTo<W> for Unk2C {
 
 #[derive(Clone)]
 pub struct Stage {
-    pub objects: Vec<Object>,
+    pub objects: Vec<ObjectPlacement>,
     pub actors: Vec<Actor>,
     pub script: Script,
 
@@ -324,7 +324,7 @@ impl Stage {
         let settings = Settings::read_from(reader)?;
 
         reader.seek(SeekFrom::Start(header.objects_offset as u64))?;
-        let mut objects = NonNoneList::<Object>::read_from(reader)?.into_vec();
+        let mut objects = NonNoneList::<ObjectPlacement>::read_from(reader)?.into_vec();
 
         reader.seek(SeekFrom::Start(header.events_offset as u64))?;
         let events = EventTable::read_from(reader, objects.len())?.entry_points;

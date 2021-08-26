@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
-use unplug::data::atc::AtcId;
-use unplug::data::item::ItemId;
+use unplug::data::{Atc, Item};
 use unplug::event::msg::{Color, Icon, Voice};
 
 /// Trait for an enum which can be converted to/from ID strings.
@@ -36,7 +35,7 @@ macro_rules! id_strings {
 }
 
 id_strings! {
-    AtcId {
+    Atc {
         ChibiCopter = "chibi-copter",
         ChibiBlaster = "chibi-blaster",
         ChibiRadar = "chibi-radar",
@@ -81,7 +80,7 @@ id_strings! {
         No = "no",
     }
 
-    ItemId {
+    Item {
         FrogRing = "frog-ring",
         Pen = "pen",
         Unk2 = "unk2",

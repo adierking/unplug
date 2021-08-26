@@ -1,20 +1,19 @@
-use crate::item::ItemId;
-use crate::{Error, Result};
+use crate::{Error, Item, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 
 /// Metadata describing an attachment (ATC).
 #[derive(Debug)]
 pub struct AtcDefinition {
-    /// The attachment's corresponding `AtcId`.
-    pub id: AtcId,
+    /// The attachment's corresponding `Atc`.
+    pub id: Atc,
     /// The attachment's English display name (may be empty).
     pub display_name: &'static str,
 }
 
 impl AtcDefinition {
-    /// Retrieves the definition corresponding to an `AtcId`.
-    pub fn get(id: AtcId) -> &'static AtcDefinition {
+    /// Retrieves the definition corresponding to an `Atc`.
+    pub fn get(id: Atc) -> &'static AtcDefinition {
         &ATCS[i16::from(id) as usize - 1]
     }
 }
@@ -28,14 +27,14 @@ macro_rules! declare_atcs {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i16)]
-        pub enum AtcId {
+        pub enum Atc {
             $($id = $index),*
         }
 
         pub static ATCS: &[AtcDefinition] = &[
             $(
                 AtcDefinition {
-                    id: AtcId::$id,
+                    id: Atc::$id,
                     display_name: $display_name,
                 }
             ),*
@@ -43,33 +42,33 @@ macro_rules! declare_atcs {
     };
 }
 
-/// `TryFrom` impl for converting `ItemId`s to a corresponding `AtcId`
-impl TryFrom<ItemId> for AtcId {
+/// `TryFrom` impl for converting `Item`s to a corresponding `Atc`
+impl TryFrom<Item> for Atc {
     type Error = Error;
-    fn try_from(item: ItemId) -> Result<Self> {
+    fn try_from(item: Item) -> Result<Self> {
         Ok(match item {
-            ItemId::ChibiBlaster => Self::ChibiBlaster,
-            ItemId::ChibiRadar => Self::ChibiRadar,
-            ItemId::Toothbrush => Self::Toothbrush,
-            ItemId::Spoon => Self::Spoon,
-            ItemId::Mug => Self::Mug,
-            ItemId::Squirter => Self::Squirter,
+            Item::ChibiBlaster => Self::ChibiBlaster,
+            Item::ChibiRadar => Self::ChibiRadar,
+            Item::Toothbrush => Self::Toothbrush,
+            Item::Spoon => Self::Spoon,
+            Item::Mug => Self::Mug,
+            Item::Squirter => Self::Squirter,
             _ => return Err(Error::NoItemAtc(item)),
         })
     }
 }
 
-/// `TryFrom` impl for converting `AtcId`s to a corresponding `ItemId`
-impl TryFrom<AtcId> for ItemId {
+/// `TryFrom` impl for converting `Atc`s to a corresponding `Item`
+impl TryFrom<Atc> for Item {
     type Error = Error;
-    fn try_from(atc: AtcId) -> Result<Self> {
+    fn try_from(atc: Atc) -> Result<Self> {
         Ok(match atc {
-            AtcId::ChibiBlaster => Self::ChibiBlaster,
-            AtcId::ChibiRadar => Self::ChibiRadar,
-            AtcId::Toothbrush => Self::Toothbrush,
-            AtcId::Spoon => Self::Spoon,
-            AtcId::Mug => Self::Mug,
-            AtcId::Squirter => Self::Squirter,
+            Atc::ChibiBlaster => Self::ChibiBlaster,
+            Atc::ChibiRadar => Self::ChibiRadar,
+            Atc::Toothbrush => Self::Toothbrush,
+            Atc::Spoon => Self::Spoon,
+            Atc::Mug => Self::Mug,
+            Atc::Squirter => Self::Squirter,
             _ => return Err(Error::NoAtcItem(atc)),
         })
     }
@@ -84,20 +83,20 @@ mod tests {
 
     #[test]
     fn test_get_atc() {
-        let atc = AtcDefinition::get(AtcId::Toothbrush);
-        assert_eq!(atc.id, AtcId::Toothbrush);
+        let atc = AtcDefinition::get(Atc::Toothbrush);
+        assert_eq!(atc.id, Atc::Toothbrush);
         assert_eq!(atc.display_name, "Toothbrush");
     }
 
     #[test]
     fn test_try_atc_from_item() {
-        assert_eq!(AtcId::try_from(ItemId::Toothbrush), Ok(AtcId::Toothbrush));
-        assert_eq!(AtcId::try_from(ItemId::HotRod), Err(Error::NoItemAtc(ItemId::HotRod)));
+        assert_eq!(Atc::try_from(Item::Toothbrush), Ok(Atc::Toothbrush));
+        assert_eq!(Atc::try_from(Item::HotRod), Err(Error::NoItemAtc(Item::HotRod)));
     }
 
     #[test]
     fn test_try_item_from_atc() {
-        assert_eq!(ItemId::try_from(AtcId::Toothbrush), Ok(ItemId::Toothbrush));
-        assert_eq!(ItemId::try_from(AtcId::ChibiCopter), Err(Error::NoAtcItem(AtcId::ChibiCopter)));
+        assert_eq!(Item::try_from(Atc::Toothbrush), Ok(Item::Toothbrush));
+        assert_eq!(Item::try_from(Atc::ChibiCopter), Err(Error::NoAtcItem(Atc::ChibiCopter)));
     }
 }

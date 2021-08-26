@@ -2,9 +2,7 @@ use super::block::{Ip, WriteIp};
 use super::opcodes::*;
 use crate::common::io::write_u8_and;
 use crate::common::{ReadFrom, WriteTo};
-use crate::data::atc::AtcId;
-use crate::data::item::ItemId;
-use crate::data::object::ObjectId;
+use crate::data::{Atc, Item, Object};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Debug};
@@ -459,7 +457,7 @@ fn debug2(f: &mut fmt::Formatter<'_>, name: &str, arg: &BinaryOp) -> fmt::Result
 
 fn debug_item(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result {
     if let Some(id) = expr.value() {
-        if let Ok(item) = ItemId::try_from(id as i16) {
+        if let Ok(item) = Item::try_from(id as i16) {
             return f.debug_tuple(name).field(&item).finish();
         }
     }
@@ -468,7 +466,7 @@ fn debug_item(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Resul
 
 fn debug_atc(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result {
     if let Some(id) = expr.value() {
-        if let Ok(atc) = AtcId::try_from(id as i16) {
+        if let Ok(atc) = Atc::try_from(id as i16) {
             return f.debug_tuple(name).field(&atc).finish();
         }
     }
@@ -836,20 +834,20 @@ impl From<i32> for Expr {
     }
 }
 
-impl From<AtcId> for Expr {
-    fn from(id: AtcId) -> Self {
+impl From<Atc> for Expr {
+    fn from(id: Atc) -> Self {
         Self::Imm16(id.into())
     }
 }
 
-impl From<ItemId> for Expr {
-    fn from(id: ItemId) -> Self {
+impl From<Item> for Expr {
+    fn from(id: Item) -> Self {
         Self::Imm16(id.into())
     }
 }
 
-impl From<ObjectId> for Expr {
-    fn from(id: ObjectId) -> Self {
+impl From<Object> for Expr {
+    fn from(id: Object) -> Self {
         Self::imm(id.into())
     }
 }
@@ -883,9 +881,9 @@ macro_rules! impl_try_from_expr {
     };
 }
 
-impl_try_from_expr!(AtcId, i16, Error::InvalidAtc);
-impl_try_from_expr!(ItemId, i16, Error::InvalidItem);
-impl_try_from_expr!(ObjectId, i32, Error::InvalidObject);
+impl_try_from_expr!(Atc, i16, Error::InvalidAtc);
+impl_try_from_expr!(Item, i16, Error::InvalidItem);
+impl_try_from_expr!(Object, i32, Error::InvalidObject);
 
 #[cfg(test)]
 mod tests {
@@ -976,50 +974,50 @@ mod tests {
 
     #[test]
     fn test_atc_from_expr() {
-        let expected = AtcId::Toothbrush;
+        let expected = Atc::Toothbrush;
         let expr = Expr::Imm16(expected.into());
-        assert_eq!(AtcId::try_from(&expr).unwrap(), expected);
-        assert_eq!(AtcId::try_from(expr).unwrap(), expected);
+        assert_eq!(Atc::try_from(&expr).unwrap(), expected);
+        assert_eq!(Atc::try_from(expr).unwrap(), expected);
 
-        assert!(matches!(AtcId::try_from(Expr::Imm16(-1)), Err(Error::InvalidAtc(_))));
-        assert!(matches!(AtcId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
+        assert!(matches!(Atc::try_from(Expr::Imm16(-1)), Err(Error::InvalidAtc(_))));
+        assert!(matches!(Atc::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
     }
 
     #[test]
     fn test_expr_from_atc() {
-        assert_eq!(Expr::Imm16(AtcId::Toothbrush.into()), AtcId::Toothbrush.into());
+        assert_eq!(Expr::Imm16(Atc::Toothbrush.into()), Atc::Toothbrush.into());
     }
 
     #[test]
     fn test_item_from_expr() {
-        let expected = ItemId::HotRod;
+        let expected = Item::HotRod;
         let expr = Expr::Imm16(expected.into());
-        assert_eq!(ItemId::try_from(&expr).unwrap(), expected);
-        assert_eq!(ItemId::try_from(expr).unwrap(), expected);
+        assert_eq!(Item::try_from(&expr).unwrap(), expected);
+        assert_eq!(Item::try_from(expr).unwrap(), expected);
 
-        assert!(matches!(ItemId::try_from(Expr::Imm16(-1)), Err(Error::InvalidItem(_))));
-        assert!(matches!(ItemId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
+        assert!(matches!(Item::try_from(Expr::Imm16(-1)), Err(Error::InvalidItem(_))));
+        assert!(matches!(Item::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
     }
 
     #[test]
     fn test_expr_from_item() {
-        assert_eq!(Expr::Imm16(ItemId::HotRod.into()), ItemId::HotRod.into());
+        assert_eq!(Expr::Imm16(Item::HotRod.into()), Item::HotRod.into());
     }
 
     #[test]
     fn test_object_from_expr() {
-        let expected = ObjectId::NpcTonpy;
+        let expected = Object::NpcTonpy;
         let expr = Expr::Imm32(expected.into());
-        assert_eq!(ObjectId::try_from(&expr).unwrap(), expected);
-        assert_eq!(ObjectId::try_from(expr).unwrap(), expected);
+        assert_eq!(Object::try_from(&expr).unwrap(), expected);
+        assert_eq!(Object::try_from(expr).unwrap(), expected);
 
-        assert!(matches!(ObjectId::try_from(Expr::Imm16(-1)), Err(Error::InvalidObject(_))));
-        assert!(matches!(ObjectId::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
+        assert!(matches!(Object::try_from(Expr::Imm16(-1)), Err(Error::InvalidObject(_))));
+        assert!(matches!(Object::try_from(Expr::Stack(0)), Err(Error::NonConstant(_))));
     }
 
     #[test]
     fn test_expr_from_object() {
-        assert_eq!(Expr::imm(ObjectId::NpcTonpy.into()), ObjectId::NpcTonpy.into());
+        assert_eq!(Expr::imm(Object::NpcTonpy.into()), Object::NpcTonpy.into());
     }
 
     #[test]

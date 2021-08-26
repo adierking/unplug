@@ -8,15 +8,15 @@ const INTERNAL_OBJECT_BASE: usize = 10000;
 
 #[derive(Debug)]
 pub struct ObjectDefinition {
-    pub id: ObjectId,
+    pub id: Object,
     pub class: ObjectClass,
     pub subclass: u16,
     pub path: &'static str,
 }
 
 impl ObjectDefinition {
-    /// Retrieves the definition corresponding to an `ObjectId`.
-    pub fn get(id: ObjectId) -> &'static ObjectDefinition {
+    /// Retrieves the definition corresponding to an `Object`.
+    pub fn get(id: Object) -> &'static ObjectDefinition {
         let mut index = i32::from(id) as usize;
         if index >= INTERNAL_OBJECT_BASE {
             index = index - INTERNAL_OBJECT_BASE + NUM_OBJECTS;
@@ -63,14 +63,14 @@ macro_rules! declare_objects {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i32)]
-        pub enum ObjectId {
+        pub enum Object {
             $($id = $index),*
         }
 
         pub static OBJECTS: &[ObjectDefinition] = &[
             $(
                 ObjectDefinition {
-                    id: ObjectId::$id,
+                    id: Object::$id,
                     class: ObjectClass::$class,
                     subclass: $subclass,
                     path: $path,
@@ -89,8 +89,8 @@ mod tests {
 
     #[test]
     fn test_get_regular_object() {
-        let object = ObjectDefinition::get(ObjectId::NpcTonpy);
-        assert_eq!(object.id, ObjectId::NpcTonpy);
+        let object = ObjectDefinition::get(Object::NpcTonpy);
+        assert_eq!(object.id, Object::NpcTonpy);
         assert_eq!(object.class, ObjectClass::ActorToy); // telly is a toy CONFIRMED
         assert_eq!(object.subclass, 10);
         assert_eq!(object.path, "npc/tonpy");
@@ -98,8 +98,8 @@ mod tests {
 
     #[test]
     fn test_get_internal_object() {
-        let object = ObjectDefinition::get(ObjectId::InternalExclamation);
-        assert_eq!(object.id, ObjectId::InternalExclamation);
+        let object = ObjectDefinition::get(Object::InternalExclamation);
+        assert_eq!(object.id, Object::InternalExclamation);
         assert_eq!(object.class, ObjectClass::Free);
         assert_eq!(object.subclass, 0);
         assert_eq!(object.path, "exclamation");

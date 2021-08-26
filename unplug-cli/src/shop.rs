@@ -15,9 +15,8 @@ use std::io::{self, BufReader, BufWriter, Cursor, Seek, SeekFrom};
 use std::path::Path;
 use tempfile::NamedTempFile;
 use unplug::common::WriteTo;
-use unplug::data::atc::AtcId;
-use unplug::data::item::ItemId;
 use unplug::data::stage::{CHIBI_HOUSE, GLOBALS_PATH};
+use unplug::data::{Atc, Item};
 use unplug::dvd::ArchiveBuilder;
 use unplug::globals::{GlobalsBuilder, Metadata};
 use unplug::shop::{Requirement, Shop, Slot, NUM_SLOTS};
@@ -122,9 +121,9 @@ fn parse_requirement(s: &str) -> Result<Requirement> {
             Err(_) => bail!("Invalid flag index: {}", flag_str),
         };
         Ok(Requirement::HaveFlag(flag))
-    } else if let Ok(atc) = AtcId::try_from_id(s) {
+    } else if let Ok(atc) = Atc::try_from_id(s) {
         Ok(Requirement::HaveAtc(atc))
-    } else if let Ok(item) = ItemId::try_from_id(s) {
+    } else if let Ok(item) = Item::try_from_id(s) {
         Ok(Requirement::HaveItem(item))
     } else {
         bail!("Invalid requirement: \"{}\"", s);
@@ -176,7 +175,7 @@ impl TryFrom<&SlotModel> for Slot {
     type Error = Error;
     fn try_from(model: &SlotModel) -> Result<Self> {
         let item = if let Some(item_str) = &model.item {
-            match ItemId::try_from_id(item_str) {
+            match Item::try_from_id(item_str) {
                 Ok(item) => Some(item),
                 Err(_) => bail!("Invalid item ID: \"{}\"", item_str),
             }
@@ -322,8 +321,8 @@ mod tests {
 
     #[test]
     fn test_parse_requirement() -> Result<()> {
-        assert_eq!(parse_requirement("hot-rod")?, Requirement::HaveItem(ItemId::HotRod));
-        assert_eq!(parse_requirement("toothbrush")?, Requirement::HaveAtc(AtcId::Toothbrush));
+        assert_eq!(parse_requirement("hot-rod")?, Requirement::HaveItem(Item::HotRod));
+        assert_eq!(parse_requirement("toothbrush")?, Requirement::HaveAtc(Atc::Toothbrush));
         assert!(parse_requirement("HoT-rOd").is_err());
         assert!(parse_requirement("maid-outfit").is_err());
         assert!(parse_requirement("").is_err());
@@ -339,11 +338,11 @@ mod tests {
     #[test]
     fn test_slot_model_from_slot() {
         let slot = Slot {
-            item: Some(ItemId::HotRod),
+            item: Some(Item::HotRod),
             limit: 5,
             requirements: set![
-                Requirement::HaveItem(ItemId::SpaceScrambler),
-                Requirement::HaveAtc(AtcId::Toothbrush),
+                Requirement::HaveItem(Item::SpaceScrambler),
+                Requirement::HaveAtc(Atc::Toothbrush),
                 Requirement::HaveFlag(123),
             ],
         };
@@ -373,13 +372,13 @@ mod tests {
             requires: vec!["flag(123)".into(), "space-scrambler".into(), "toothbrush".into()],
         };
         let slot = Slot::try_from(&model).unwrap();
-        assert_eq!(slot.item, Some(ItemId::HotRod));
+        assert_eq!(slot.item, Some(Item::HotRod));
         assert_eq!(slot.limit, 5);
         assert_eq!(
             slot.requirements,
             set![
-                Requirement::HaveItem(ItemId::SpaceScrambler),
-                Requirement::HaveAtc(AtcId::Toothbrush),
+                Requirement::HaveItem(Item::SpaceScrambler),
+                Requirement::HaveAtc(Atc::Toothbrush),
                 Requirement::HaveFlag(123),
             ]
         );

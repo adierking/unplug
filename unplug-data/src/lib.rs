@@ -21,8 +21,11 @@ pub mod object;
 pub mod stage;
 pub mod suit;
 
-use atc::AtcId;
-use item::ItemId;
+pub use atc::Atc;
+pub use item::Item;
+pub use object::Object;
+pub use suit::Suit;
+
 use thiserror::Error;
 
 /// The result type for data operations.
@@ -33,11 +36,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[non_exhaustive]
 pub enum Error {
     #[error("{0:?} does not have a corresponding ATC")]
-    NoItemAtc(ItemId),
+    NoItemAtc(Item),
 
     #[error("{0:?} does not have a corresponding suit")]
-    NoItemSuit(ItemId),
+    NoItemSuit(Item),
 
     #[error("{0:?} does not have a corresponding item")]
-    NoAtcItem(AtcId),
+    NoAtcItem(Atc),
 }

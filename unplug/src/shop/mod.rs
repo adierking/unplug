@@ -4,8 +4,7 @@ mod parser;
 use compiler::ShopCompiler;
 use parser::ShopParser;
 
-use crate::data::atc::AtcId;
-use crate::data::item::ItemId;
+use crate::data::{Atc, Item};
 use crate::event::analysis::Label;
 use crate::event::{BlockId, Command, Ip, Script, SetExpr};
 use log::debug;
@@ -90,13 +89,13 @@ fn is_shop_setup(script: &Script, block: BlockId, visited: &mut HashSet<BlockId>
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Requirement {
     /// The player must have an item.
-    HaveItem(ItemId),
+    HaveItem(Item),
     /// The player must not have an item.
-    MissingItem(ItemId),
+    MissingItem(Item),
     /// The player must have an ATC.
-    HaveAtc(AtcId),
+    HaveAtc(Atc),
     /// The player must not have an ATC.
-    MissingAtc(AtcId),
+    MissingAtc(Atc),
     /// A flag must be set.
     HaveFlag(i32),
     /// A flag must not be set.
@@ -123,7 +122,7 @@ impl Requirement {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Slot {
     /// The item in the slot. If `None`, the slot is unused.
-    pub item: Option<ItemId>,
+    pub item: Option<Item>,
     /// The maximum amount of the item that the player can have.
     pub limit: i16,
     /// The requirements for the slot to be visible. If empty, the slot is always visible.

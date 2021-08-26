@@ -13,7 +13,7 @@ use unicase::UniCase;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::data::atc::ATCS;
 use unplug::data::item::ITEMS;
-use unplug::data::object::ObjectId;
+use unplug::data::object::Object;
 use unplug::data::stage::{StageDefinition, STAGES};
 use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree, OpenFile};
 use unplug::event::{Block, Script};
@@ -283,7 +283,7 @@ pub fn dump_colliders(opt: DumpCollidersOpt) -> Result<()> {
 
     info!("Dumping colliders");
     for (obj, list) in colliders.objects.iter().enumerate() {
-        writeln!(out, "Object {:?} ({}):", ObjectId::try_from(obj as i32)?, obj)?;
+        writeln!(out, "Object {:?} ({}):", Object::try_from(obj as i32)?, obj)?;
         for (i, collider) in list.iter().enumerate() {
             writeln!(out, "{:>2} {:?}", i, collider)?;
         }

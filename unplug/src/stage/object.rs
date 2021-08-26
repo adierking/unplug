@@ -1,6 +1,6 @@
 use super::{Error, Result};
 use crate::common::{ReadOptionFrom, WriteOptionTo, WriteTo};
-use crate::data::object::ObjectId;
+use crate::data::Object;
 use crate::event::BlockId;
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
@@ -9,8 +9,8 @@ use std::io::{Read, Write};
 use std::num::NonZeroI32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Object {
-    pub id: ObjectId,
+pub struct ObjectPlacement {
+    pub id: Object,
     pub x: i32,
     pub y: i32,
     pub z: i32,
@@ -27,7 +27,7 @@ pub struct Object {
     pub script: Option<BlockId>,
 }
 
-impl<R: Read> ReadOptionFrom<R> for Object {
+impl<R: Read> ReadOptionFrom<R> for ObjectPlacement {
     type Error = Error;
     fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
         let id = reader.read_i32::<BE>()?;
@@ -54,7 +54,7 @@ impl<R: Read> ReadOptionFrom<R> for Object {
     }
 }
 
-impl<W: Write> WriteTo<W> for Object {
+impl<W: Write> WriteTo<W> for ObjectPlacement {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.id.into())?;
@@ -75,7 +75,7 @@ impl<W: Write> WriteTo<W> for Object {
     }
 }
 
-impl<W: Write> WriteOptionTo<W> for Object {
+impl<W: Write> WriteOptionTo<W> for ObjectPlacement {
     type Error = Error;
     fn write_option_to(opt: Option<&Self>, writer: &mut W) -> Result<()> {
         match opt {

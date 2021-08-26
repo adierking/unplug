@@ -1,7 +1,6 @@
 use super::{Requirement, Slot, SHOP_COUNT_FIRST, SHOP_ITEM_FIRST};
 
-use crate::data::atc::AtcId;
-use crate::data::item::ItemId;
+use crate::data::{Atc, Item};
 use crate::event::command::{IfArgs, SetArgs};
 use crate::event::{Block, BlockId, CodeBlock, Command, Expr, Ip, Script, SetExpr};
 use crate::expr;
@@ -39,12 +38,12 @@ fn compile_requirement(requirement: &Requirement) -> Expr {
 }
 
 /// Compiles an expression for checking whether the player has `item`.
-fn compile_item_requirement(item: ItemId) -> Expr {
+fn compile_item_requirement(item: Item) -> Expr {
     expr![item[item] != 0]
 }
 
 /// Compiles an expression for checking whether the player has `atc`.
-fn compile_atc_requirement(atc: AtcId) -> Expr {
+fn compile_atc_requirement(atc: Atc) -> Expr {
     expr![atc[atc] != 0]
 }
 
@@ -54,8 +53,8 @@ fn compile_flag_requirement(flag: i32) -> Expr {
 }
 
 /// Returns whether `item` is a timer.
-fn is_timer(item: Option<ItemId>) -> bool {
-    matches!(item, Some(ItemId::Timer5 | ItemId::Timer10 | ItemId::Timer15))
+fn is_timer(item: Option<Item>) -> bool {
+    matches!(item, Some(Item::Timer5 | Item::Timer10 | Item::Timer15))
 }
 
 /// Compilation context for a single slot.
@@ -63,9 +62,9 @@ struct ItemContext {
     /// The index of the slot to emit code for.
     index: usize,
     /// The item in the slot, if any.
-    item: Option<ItemId>,
+    item: Option<Item>,
     /// The slot's corresponding ATC, if any.
-    atc: Option<AtcId>,
+    atc: Option<Atc>,
     /// The effective limit for the slot.
     limit: i16,
     /// The block to jump to after the slot has been initialized.
@@ -79,7 +78,7 @@ struct ItemContext {
 impl ItemContext {
     fn new(slot: &Slot, index: usize, end_block: BlockId) -> Self {
         let item = slot.item;
-        let atc = item.and_then(|i| AtcId::try_from(i).ok());
+        let atc = item.and_then(|i| Atc::try_from(i).ok());
 
         // Coerce the limit to comply with the game restrictions if necessary
         let limit = if item.is_none() {
@@ -135,7 +134,7 @@ impl BlockBuilder {
     }
 
     /// Emits `Set()` commands to fill the shop slot at `index` with `item` and `count`.
-    fn emit_set_slot(&mut self, index: usize, item: ItemId, count: Expr) {
+    fn emit_set_slot(&mut self, index: usize, item: Item, count: Expr) {
         self.emit_set(SHOP_ITEM_FIRST + index, item.into());
         self.emit_set(SHOP_COUNT_FIRST + index, count);
     }
@@ -267,7 +266,7 @@ impl<'s> ShopCompiler<'s> {
     }
 
     /// Compiles a slot which holds a "unique" item that can only be in the inventory once.
-    fn compile_slot_unique(&mut self, ctx: &ItemContext, item: ItemId) {
+    fn compile_slot_unique(&mut self, ctx: &ItemContext, item: Item) {
         assert_eq!(ctx.limit, 1);
 
         // Psuedocode:
@@ -292,9 +291,9 @@ impl<'s> ShopCompiler<'s> {
         // timer's rate.
         if is_timer(ctx.item) {
             let rate = match ctx.item {
-                Some(ItemId::Timer5) => TIMER_5_RATE,
-                Some(ItemId::Timer10) => TIMER_10_RATE,
-                Some(ItemId::Timer15) => TIMER_15_RATE,
+                Some(Item::Timer5) => TIMER_5_RATE,
+                Some(Item::Timer10) => TIMER_10_RATE,
+                Some(Item::Timer15) => TIMER_15_RATE,
                 other => panic!("missing rate for {:?}", other),
             };
             acquired = expr![acquired || (time[2] == rate)];
@@ -338,15 +337,15 @@ impl<'s> ShopCompiler<'s> {
         //   } else {
         //     <enable>
         //   }
-        if ctx.item == Some(ItemId::Timer5) {
+        if ctx.item == Some(Item::Timer5) {
             let _disable_block_2 = self.compile_block(|b| {
                 b.emit_set_slot(ctx.index, item, Expr::Imm16(0));
                 b.emit_endif(ctx.end_block);
             });
             let _if_no_timer_block = self.compile_block(|b| {
                 let condition = compile_requirements(&[
-                    Requirement::MissingItem(ItemId::Timer10),
-                    Requirement::MissingItem(ItemId::Timer15),
+                    Requirement::MissingItem(Item::Timer10),
+                    Requirement::MissingItem(Item::Timer15),
                 ]);
                 b.emit_if_else(condition.unwrap(), enable_block);
             });
@@ -365,7 +364,7 @@ impl<'s> ShopCompiler<'s> {
     }
 
     /// Compiles a slot which may hold more than one item.
-    fn compile_slot_limit(&mut self, ctx: &ItemContext, item: ItemId) {
+    fn compile_slot_limit(&mut self, ctx: &ItemContext, item: Item) {
         // Psuedocode:
         //   if (<requirements>) {
         //     vars[0] = <limit> - item[<item>]
@@ -510,13 +509,13 @@ mod tests {
 
     #[test]
     fn test_compile_unique_item_without_requirements() {
-        let slots = vec![Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] }];
+        let slots = vec![Slot { item: Some(Item::HotRod), limit: 1, requirements: set![] }];
         let expected = vec![
-            if_else(expr![item[ItemId::HotRod] == 0], BlockId::new(1)),
-            set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
+            if_else(expr![item[Item::HotRod] == 0], BlockId::new(1)),
+            set(SHOP_ITEM_FIRST, Item::HotRod.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
-            set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
+            set(SHOP_ITEM_FIRST, Item::HotRod.into()),
             set(SHOP_COUNT_FIRST, 0),
             Command::Return,
         ];
@@ -528,13 +527,13 @@ mod tests {
 
     #[test]
     fn test_compile_atc_without_requirements() {
-        let slots = vec![Slot { item: Some(ItemId::Toothbrush), limit: 1, requirements: set![] }];
+        let slots = vec![Slot { item: Some(Item::Toothbrush), limit: 1, requirements: set![] }];
         let expected = vec![
-            if_else(expr![atc[AtcId::Toothbrush] == 0], BlockId::new(1)),
-            set(SHOP_ITEM_FIRST, ItemId::Toothbrush.into()),
+            if_else(expr![atc[Atc::Toothbrush] == 0], BlockId::new(1)),
+            set(SHOP_ITEM_FIRST, Item::Toothbrush.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
-            set(SHOP_ITEM_FIRST, ItemId::Toothbrush.into()),
+            set(SHOP_ITEM_FIRST, Item::Toothbrush.into()),
             set(SHOP_COUNT_FIRST, 0),
             Command::Return,
         ];
@@ -547,29 +546,27 @@ mod tests {
     #[test]
     fn test_compile_unique_item_with_requirements() {
         let slots = vec![Slot {
-            item: Some(ItemId::HotRod),
+            item: Some(Item::HotRod),
             limit: 1,
             requirements: set![
-                Requirement::HaveItem(ItemId::Spoon),
-                Requirement::HaveAtc(AtcId::Toothbrush),
+                Requirement::HaveItem(Item::Spoon),
+                Requirement::HaveAtc(Atc::Toothbrush),
                 Requirement::HaveFlag(123),
             ],
         }];
         let expected = vec![
             if_else(
                 expr![
-                    (item[ItemId::HotRod] == 0)
-                        && ((item[ItemId::Spoon] != 0)
-                            && (atc[AtcId::Toothbrush] != 0)
-                            && flag[123])
+                    (item[Item::HotRod] == 0)
+                        && ((item[Item::Spoon] != 0) && (atc[Atc::Toothbrush] != 0) && flag[123])
                 ],
                 BlockId::new(3),
             ),
-            set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
+            set(SHOP_ITEM_FIRST, Item::HotRod.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
-            if_else(expr![item[ItemId::HotRod] != 0], BlockId::new(1)),
-            set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
+            if_else(expr![item[Item::HotRod] != 0], BlockId::new(1)),
+            set(SHOP_ITEM_FIRST, Item::HotRod.into()),
             set(SHOP_COUNT_FIRST, 0),
             endif(BlockId::new(0)),
             set(SHOP_ITEM_FIRST, -1),
@@ -584,16 +581,16 @@ mod tests {
 
     #[test]
     fn test_compile_timer_without_requirements() {
-        let slots = vec![Slot { item: Some(ItemId::Timer15), limit: 1, requirements: set![] }];
+        let slots = vec![Slot { item: Some(Item::Timer15), limit: 1, requirements: set![] }];
         let expected = vec![
             if_else(
-                expr![(item[ItemId::Timer15] == 0) && (time[2] != TIMER_15_RATE)],
+                expr![(item[Item::Timer15] == 0) && (time[2] != TIMER_15_RATE)],
                 BlockId::new(1),
             ),
-            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
+            set(SHOP_ITEM_FIRST, Item::Timer15.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
-            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
+            set(SHOP_ITEM_FIRST, Item::Timer15.into()),
             set(SHOP_COUNT_FIRST, 0),
             Command::Return,
         ];
@@ -605,23 +602,20 @@ mod tests {
 
     #[test]
     fn test_compile_timer5() {
-        let slots = vec![Slot { item: Some(ItemId::Timer5), limit: 1, requirements: set![] }];
+        let slots = vec![Slot { item: Some(Item::Timer5), limit: 1, requirements: set![] }];
         let expected = vec![
+            if_else(expr![(item[Item::Timer5] == 0) && (time[2] != TIMER_5_RATE)], BlockId::new(1)),
             if_else(
-                expr![(item[ItemId::Timer5] == 0) && (time[2] != TIMER_5_RATE)],
-                BlockId::new(1),
-            ),
-            if_else(
-                expr![(item[ItemId::Timer10] == 0) && (item[ItemId::Timer15] == 0)],
+                expr![(item[Item::Timer10] == 0) && (item[Item::Timer15] == 0)],
                 BlockId::new(2),
             ),
-            set(SHOP_ITEM_FIRST, ItemId::Timer5.into()),
+            set(SHOP_ITEM_FIRST, Item::Timer5.into()),
             set(SHOP_COUNT_FIRST, 0),
             endif(BlockId::new(0)),
-            set(SHOP_ITEM_FIRST, ItemId::Timer5.into()),
+            set(SHOP_ITEM_FIRST, Item::Timer5.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
-            set(SHOP_ITEM_FIRST, ItemId::Timer5.into()),
+            set(SHOP_ITEM_FIRST, Item::Timer5.into()),
             set(SHOP_COUNT_FIRST, 0),
             Command::Return,
         ];
@@ -634,23 +628,23 @@ mod tests {
     #[test]
     fn test_compile_timer_with_requirements() {
         let slots = vec![Slot {
-            item: Some(ItemId::Timer15),
+            item: Some(Item::Timer15),
             limit: 1,
             requirements: set![Requirement::HaveFlag(123)],
         }];
         let expected = vec![
             if_else(
-                expr![(item[ItemId::Timer15] == 0) && (time[2] != TIMER_15_RATE) && flag[123]],
+                expr![(item[Item::Timer15] == 0) && (time[2] != TIMER_15_RATE) && flag[123]],
                 BlockId::new(3),
             ),
-            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
+            set(SHOP_ITEM_FIRST, Item::Timer15.into()),
             set(SHOP_COUNT_FIRST, 1),
             endif(BlockId::new(0)),
             if_else(
-                expr![(item[ItemId::Timer15] != 0) || (time[2] == TIMER_15_RATE)],
+                expr![(item[Item::Timer15] != 0) || (time[2] == TIMER_15_RATE)],
                 BlockId::new(1),
             ),
-            set(SHOP_ITEM_FIRST, ItemId::Timer15.into()),
+            set(SHOP_ITEM_FIRST, Item::Timer15.into()),
             set(SHOP_COUNT_FIRST, 0),
             endif(BlockId::new(0)),
             set(SHOP_ITEM_FIRST, -1),
@@ -665,12 +659,12 @@ mod tests {
 
     #[test]
     fn test_compile_limit_item_without_requirements() {
-        let slots = vec![Slot { item: Some(ItemId::HotRod), limit: 5, requirements: set![] }];
+        let slots = vec![Slot { item: Some(Item::HotRod), limit: 5, requirements: set![] }];
         let expected = vec![
-            set_expr(0, expr![5 - item[ItemId::HotRod]]),
+            set_expr(0, expr![5 - item[Item::HotRod]]),
             if_else(expr![var[0] < 0], BlockId::new(1)),
             set(0, 0),
-            set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
+            set(SHOP_ITEM_FIRST, Item::HotRod.into()),
             set_expr(SHOP_COUNT_FIRST, expr![var[0]]),
             Command::Return,
         ];
@@ -683,23 +677,23 @@ mod tests {
     #[test]
     fn test_compile_limit_item_with_requirements() {
         let slots = vec![Slot {
-            item: Some(ItemId::HotRod),
+            item: Some(Item::HotRod),
             limit: 5,
             requirements: set![
-                Requirement::HaveItem(ItemId::Spoon),
-                Requirement::HaveAtc(AtcId::Toothbrush),
+                Requirement::HaveItem(Item::Spoon),
+                Requirement::HaveAtc(Atc::Toothbrush),
                 Requirement::HaveFlag(123),
             ],
         }];
         let expected = vec![
             if_else(
-                expr![(item[ItemId::Spoon] != 0) && (atc[AtcId::Toothbrush] != 0) && flag[123]],
+                expr![(item[Item::Spoon] != 0) && (atc[Atc::Toothbrush] != 0) && flag[123]],
                 BlockId::new(1),
             ),
-            set_expr(0, expr![5 - item[ItemId::HotRod]]),
+            set_expr(0, expr![5 - item[Item::HotRod]]),
             if_else(expr![var[0] < 0], BlockId::new(2)),
             set(0, 0),
-            set(SHOP_ITEM_FIRST, ItemId::HotRod.into()),
+            set(SHOP_ITEM_FIRST, Item::HotRod.into()),
             set_expr(SHOP_COUNT_FIRST, expr![var[0]]),
             endif(BlockId::new(0)),
             set(SHOP_ITEM_FIRST, -1),
@@ -715,24 +709,24 @@ mod tests {
     #[test]
     fn test_compile_and_parse_shop() {
         let original = Shop::with_slots(vec![
-            Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] },
-            Slot { item: Some(ItemId::HotRod), limit: 5, requirements: set![] },
+            Slot { item: Some(Item::HotRod), limit: 1, requirements: set![] },
+            Slot { item: Some(Item::HotRod), limit: 5, requirements: set![] },
             Slot::default(),
             Slot {
-                item: Some(ItemId::HotRod),
+                item: Some(Item::HotRod),
                 limit: 1,
                 requirements: set![
-                    Requirement::HaveItem(ItemId::Spoon),
-                    Requirement::HaveAtc(AtcId::Toothbrush),
+                    Requirement::HaveItem(Item::Spoon),
+                    Requirement::HaveAtc(Atc::Toothbrush),
                     Requirement::HaveFlag(123),
                 ],
             },
             Slot {
-                item: Some(ItemId::HotRod),
+                item: Some(Item::HotRod),
                 limit: 5,
                 requirements: set![
-                    Requirement::HaveItem(ItemId::Spoon),
-                    Requirement::HaveAtc(AtcId::Toothbrush),
+                    Requirement::HaveItem(Item::Spoon),
+                    Requirement::HaveAtc(Atc::Toothbrush),
                     Requirement::HaveFlag(123),
                 ],
             },
@@ -745,21 +739,21 @@ mod tests {
     fn test_invalid_limits() {
         let original = Shop::with_slots(vec![
             // Limits cannot be below 1
-            Slot { item: Some(ItemId::HotRod), limit: 0, requirements: set![] },
+            Slot { item: Some(Item::HotRod), limit: 0, requirements: set![] },
             // Limits cannot be above 10
-            Slot { item: Some(ItemId::HotRod), limit: 11, requirements: set![] },
+            Slot { item: Some(Item::HotRod), limit: 11, requirements: set![] },
             // ATCs must have a limit of 1
-            Slot { item: Some(ItemId::Toothbrush), limit: 2, requirements: set![] },
+            Slot { item: Some(Item::Toothbrush), limit: 2, requirements: set![] },
             // Timers must have a limit of 1
-            Slot { item: Some(ItemId::Timer15), limit: 2, requirements: set![] },
+            Slot { item: Some(Item::Timer15), limit: 2, requirements: set![] },
             // Empty slots must have a limit of 0
             Slot { item: None, limit: 1, requirements: set![] },
         ]);
         let expected = Shop::with_slots(vec![
-            Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] },
-            Slot { item: Some(ItemId::HotRod), limit: 10, requirements: set![] },
-            Slot { item: Some(ItemId::Toothbrush), limit: 1, requirements: set![] },
-            Slot { item: Some(ItemId::Timer15), limit: 1, requirements: set![] },
+            Slot { item: Some(Item::HotRod), limit: 1, requirements: set![] },
+            Slot { item: Some(Item::HotRod), limit: 10, requirements: set![] },
+            Slot { item: Some(Item::Toothbrush), limit: 1, requirements: set![] },
+            Slot { item: Some(Item::Timer15), limit: 1, requirements: set![] },
             Slot { item: None, limit: 0, requirements: set![] },
         ]);
         let parsed = compile_and_parse(&original);

@@ -1,22 +1,21 @@
-use crate::item::ItemId;
-use crate::{Error, Result};
+use crate::{Error, Item, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 
 /// Metadata describing a suit.
 #[derive(Debug)]
 pub struct SuitDefinition {
-    /// The suit's corresponding `SuitId`.
-    pub id: SuitId,
+    /// The suit's corresponding `Suit`.
+    pub id: Suit,
     /// The item corresponding to the suit.
-    pub item: ItemId,
+    pub item: Item,
     /// The suit's English display name (may be empty).
     pub display_name: &'static str,
 }
 
 impl SuitDefinition {
-    /// Retrieves the definition corresponding to a `SuitId`.
-    pub fn get(id: SuitId) -> &'static SuitDefinition {
+    /// Retrieves the definition corresponding to a `Suit`.
+    pub fn get(id: Suit) -> &'static SuitDefinition {
         &SUITS[i16::from(id) as usize - 1]
     }
 }
@@ -30,15 +29,15 @@ macro_rules! declare_suits {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i16)]
-        pub enum SuitId {
+        pub enum Suit {
             $($id = $index),*
         }
 
         pub static SUITS: &[SuitDefinition] = &[
             $(
                 SuitDefinition {
-                    id: SuitId::$id,
-                    item: ItemId::$item,
+                    id: Suit::$id,
+                    item: Item::$item,
                     display_name: $display_name,
                 }
             ),*
@@ -46,17 +45,17 @@ macro_rules! declare_suits {
     };
 }
 
-/// `From` impl for converting `SuitId`s to a corresponding `ItemId`
-impl From<SuitId> for ItemId {
-    fn from(suit: SuitId) -> Self {
+/// `From` impl for converting `Suit`s to a corresponding `Item`
+impl From<Suit> for Item {
+    fn from(suit: Suit) -> Self {
         SuitDefinition::get(suit).item
     }
 }
 
-/// `TryFrom` impl for converting `ItemId`s to a corresponding `SuitId`
-impl TryFrom<ItemId> for SuitId {
+/// `TryFrom` impl for converting `Item`s to a corresponding `Suit`
+impl TryFrom<Item> for Suit {
     type Error = Error;
-    fn try_from(item: ItemId) -> Result<Self> {
+    fn try_from(item: Item) -> Result<Self> {
         if let Some(suit) = SUITS.iter().find(|s| s.item == item) {
             Ok(suit.id)
         } else {
@@ -74,20 +73,20 @@ mod tests {
 
     #[test]
     fn test_get_suit() {
-        let suit = SuitDefinition::get(SuitId::Pajamas);
-        assert_eq!(suit.id, SuitId::Pajamas);
-        assert_eq!(suit.item, ItemId::Pajamas);
+        let suit = SuitDefinition::get(Suit::Pajamas);
+        assert_eq!(suit.id, Suit::Pajamas);
+        assert_eq!(suit.item, Item::Pajamas);
         assert_eq!(suit.display_name, "Pajamas");
     }
 
     #[test]
     fn test_item_from_suit() {
-        assert_eq!(ItemId::from(SuitId::Pajamas), ItemId::Pajamas);
+        assert_eq!(Item::from(Suit::Pajamas), Item::Pajamas);
     }
 
     #[test]
     fn test_try_suit_from_item() {
-        assert_eq!(SuitId::try_from(ItemId::Pajamas), Ok(SuitId::Pajamas));
-        assert_eq!(SuitId::try_from(ItemId::HotRod), Err(Error::NoItemSuit(ItemId::HotRod)));
+        assert_eq!(Suit::try_from(Item::Pajamas), Ok(Suit::Pajamas));
+        assert_eq!(Suit::try_from(Item::HotRod), Err(Error::NoItemSuit(Item::HotRod)));
     }
 }

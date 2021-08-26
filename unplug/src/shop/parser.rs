@@ -3,8 +3,7 @@ use super::{
     SHOP_ITEM_LAST,
 };
 
-use crate::data::atc::AtcId;
-use crate::data::item::ItemId;
+use crate::data::{Atc, Item};
 use crate::event::command::SetArgs;
 use crate::event::expr::BinaryOp;
 use crate::event::{BlockId, Command, Expr, Script, SetExpr};
@@ -62,12 +61,12 @@ fn parse_requirement(condition: &Expr) -> Option<Requirement> {
 
         // Assume that item/atc/flag references are checking for the corresponding thing
         Expr::Item(e) => {
-            if let Ok(item) = ItemId::try_from(&**e) {
+            if let Ok(item) = Item::try_from(&**e) {
                 return Some(Requirement::HaveItem(item));
             }
         }
         Expr::Atc(e) => {
-            if let Ok(atc) = AtcId::try_from(&**e) {
+            if let Ok(atc) = Atc::try_from(&**e) {
                 return Some(Requirement::HaveAtc(atc));
             }
         }
@@ -316,7 +315,7 @@ impl<'s> ShopParser<'s> {
             }
 
             // Update the slot item
-            if let Ok(item) = ItemId::try_from(id) {
+            if let Ok(item) = Item::try_from(id) {
                 if let Some(existing) = slot.item {
                     if existing != item {
                         warn!(
@@ -366,40 +365,40 @@ mod tests {
     #[test]
     fn test_parse_requirements_item() {
         assert_eq!(
-            parse_requirements(&expr![item[ItemId::HotRod] != 0]),
-            set![Requirement::HaveItem(ItemId::HotRod)]
+            parse_requirements(&expr![item[Item::HotRod] != 0]),
+            set![Requirement::HaveItem(Item::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&expr![item[ItemId::HotRod] > 0]),
-            set![Requirement::HaveItem(ItemId::HotRod)]
+            parse_requirements(&expr![item[Item::HotRod] > 0]),
+            set![Requirement::HaveItem(Item::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&expr![item[ItemId::HotRod] == 0]),
-            set![Requirement::MissingItem(ItemId::HotRod)]
+            parse_requirements(&expr![item[Item::HotRod] == 0]),
+            set![Requirement::MissingItem(Item::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&expr![item[ItemId::HotRod] <= 0]),
-            set![Requirement::MissingItem(ItemId::HotRod)]
+            parse_requirements(&expr![item[Item::HotRod] <= 0]),
+            set![Requirement::MissingItem(Item::HotRod)]
         );
     }
 
     #[test]
     fn test_parse_requirements_atc() {
         assert_eq!(
-            parse_requirements(&expr![atc[AtcId::Toothbrush] != 0]),
-            set![Requirement::HaveAtc(AtcId::Toothbrush)]
+            parse_requirements(&expr![atc[Atc::Toothbrush] != 0]),
+            set![Requirement::HaveAtc(Atc::Toothbrush)]
         );
         assert_eq!(
-            parse_requirements(&expr![atc[AtcId::Toothbrush] > 0]),
-            set![Requirement::HaveAtc(AtcId::Toothbrush)]
+            parse_requirements(&expr![atc[Atc::Toothbrush] > 0]),
+            set![Requirement::HaveAtc(Atc::Toothbrush)]
         );
         assert_eq!(
-            parse_requirements(&expr![atc[AtcId::Toothbrush] == 0]),
-            set![Requirement::MissingAtc(AtcId::Toothbrush)]
+            parse_requirements(&expr![atc[Atc::Toothbrush] == 0]),
+            set![Requirement::MissingAtc(Atc::Toothbrush)]
         );
         assert_eq!(
-            parse_requirements(&expr![atc[AtcId::Toothbrush] <= 0]),
-            set![Requirement::MissingAtc(AtcId::Toothbrush)]
+            parse_requirements(&expr![atc[Atc::Toothbrush] <= 0]),
+            set![Requirement::MissingAtc(Atc::Toothbrush)]
         );
     }
 
@@ -416,16 +415,16 @@ mod tests {
     #[test]
     fn test_parse_requirements_not() {
         assert_eq!(
-            parse_requirements(&expr![!(item[ItemId::HotRod] > 0)]),
-            set![Requirement::MissingItem(ItemId::HotRod)]
+            parse_requirements(&expr![!(item[Item::HotRod] > 0)]),
+            set![Requirement::MissingItem(Item::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&expr![!(!(item[ItemId::HotRod] > 0))]),
-            set![Requirement::HaveItem(ItemId::HotRod)]
+            parse_requirements(&expr![!(!(item[Item::HotRod] > 0))]),
+            set![Requirement::HaveItem(Item::HotRod)]
         );
         assert_eq!(
-            parse_requirements(&expr![!(!(!(item[ItemId::HotRod] > 0)))]),
-            set![Requirement::MissingItem(ItemId::HotRod)]
+            parse_requirements(&expr![!(!(!(item[Item::HotRod] > 0)))]),
+            set![Requirement::MissingItem(Item::HotRod)]
         );
     }
 
@@ -433,11 +432,11 @@ mod tests {
     fn test_parse_requirements_multiple() {
         assert_eq!(
             parse_requirements(&expr![
-                (item[ItemId::HotRod] > 0) && (atc[AtcId::Toothbrush] > 0) && flag[123]
+                (item[Item::HotRod] > 0) && (atc[Atc::Toothbrush] > 0) && flag[123]
             ]),
             set![
-                Requirement::HaveItem(ItemId::HotRod),
-                Requirement::HaveAtc(AtcId::Toothbrush),
+                Requirement::HaveItem(Item::HotRod),
+                Requirement::HaveAtc(Atc::Toothbrush),
                 Requirement::HaveFlag(123)
             ]
         );
@@ -476,7 +475,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // item = HotRot
-                    set(SHOP_ITEM_FIRST + 0, ItemId::HotRod.into()),
+                    set(SHOP_ITEM_FIRST + 0, Item::HotRod.into()),
                     // count = 1
                     set(SHOP_COUNT_FIRST + 0, 1),
                     // item = -1
@@ -491,7 +490,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // var[0] = 10 - item[BlueFlowerSeed]
-                    set_expr(0, expr![10 - item[ItemId::BlueFlowerSeed]]),
+                    set_expr(0, expr![10 - item[Item::BlueFlowerSeed]]),
                     // if (var[0] < 0)
                     if_(expr![var[0] < 0], 3),
                 ],
@@ -511,7 +510,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // item = BlueFlowerSeed
-                    set(SHOP_ITEM_FIRST + 2, ItemId::BlueFlowerSeed.into()),
+                    set(SHOP_ITEM_FIRST + 2, Item::BlueFlowerSeed.into()),
                     // count = vars[0]
                     set_expr(SHOP_COUNT_FIRST + 2, expr![var[0]]),
                 ],
@@ -522,7 +521,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // if atc[Toothbrush] == 0 && flag[123]
-                    if_(expr![(atc[AtcId::Toothbrush] == 0) && flag[123]], 6),
+                    if_(expr![(atc[Atc::Toothbrush] == 0) && flag[123]], 6),
                 ],
                 next_block: Some(Ip::Block(BlockId::new(5))),
                 else_block: Some(Ip::Block(BlockId::new(6))),
@@ -531,7 +530,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // item = Toothbrush
-                    set(SHOP_ITEM_FIRST + 3, ItemId::Toothbrush.into()),
+                    set(SHOP_ITEM_FIRST + 3, Item::Toothbrush.into()),
                     // count = 1
                     set(SHOP_COUNT_FIRST + 3, 1),
                     Command::EndIf(Ip::Block(BlockId::new(9))),
@@ -543,7 +542,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // else if atc[Toothbrush] > 0
-                    if_(expr![atc[AtcId::Toothbrush] > 0], 8),
+                    if_(expr![atc[Atc::Toothbrush] > 0], 8),
                 ],
                 next_block: Some(Ip::Block(BlockId::new(7))),
                 else_block: Some(Ip::Block(BlockId::new(8))),
@@ -552,7 +551,7 @@ mod tests {
             Block::Code(CodeBlock {
                 commands: vec![
                     // item = Toothbrush
-                    set(SHOP_ITEM_FIRST + 3, ItemId::Toothbrush.into()),
+                    set(SHOP_ITEM_FIRST + 3, Item::Toothbrush.into()),
                     // count = 0
                     set(SHOP_COUNT_FIRST + 3, 0),
                     Command::EndIf(Ip::Block(BlockId::new(9))),
@@ -582,16 +581,16 @@ mod tests {
 
         let script = Script::with_blocks(blocks);
         let slots = ShopParser::new(&script).parse(BlockId::new(0));
-        assert_eq!(slots[0], Slot { item: Some(ItemId::HotRod), limit: 1, requirements: set![] });
+        assert_eq!(slots[0], Slot { item: Some(Item::HotRod), limit: 1, requirements: set![] });
         assert_eq!(slots[1], Slot { item: None, limit: 0, requirements: set![] });
         assert_eq!(
             slots[2],
-            Slot { item: Some(ItemId::BlueFlowerSeed), limit: 10, requirements: set![] }
+            Slot { item: Some(Item::BlueFlowerSeed), limit: 10, requirements: set![] }
         );
         assert_eq!(
             slots[3],
             Slot {
-                item: Some(ItemId::Toothbrush),
+                item: Some(Item::Toothbrush),
                 limit: 1,
                 requirements: set![Requirement::HaveFlag(123)],
             }

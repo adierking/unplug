@@ -2,9 +2,8 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use log::info;
 use std::io::BufReader;
-use unplug::data::atc::AtcId;
-use unplug::data::item::ItemId;
 use unplug::data::stage::CHIBI_HOUSE;
+use unplug::data::{Atc, Item};
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::shop::{Requirement, Shop, Slot};
@@ -22,66 +21,66 @@ lazy_static! {
     /// Expected shop contents
     static ref EXPECTED: Vec<Slot> = vec![
         Slot {
-            item: Some(ItemId::Timer5),
+            item: Some(Item::Timer5),
             limit: 1,
             requirements: set![],
         },
         Slot {
-            item: Some(ItemId::Timer10),
+            item: Some(Item::Timer10),
             limit: 1,
             requirements: set![],
         },
         Slot {
-            item: Some(ItemId::Timer15),
+            item: Some(Item::Timer15),
             limit: 1,
             requirements: set![],
         },
-        Slot { item: Some(ItemId::PinkFlowerSeed), limit: 10, requirements: set![] },
-        Slot { item: Some(ItemId::BlueFlowerSeed), limit: 10, requirements: set![] },
-        Slot { item: Some(ItemId::WhiteFlowerSeed), limit: 10, requirements: set![] },
-        Slot { item: Some(ItemId::NectarFlowerSeed), limit: 1, requirements: set![] },
+        Slot { item: Some(Item::PinkFlowerSeed), limit: 10, requirements: set![] },
+        Slot { item: Some(Item::BlueFlowerSeed), limit: 10, requirements: set![] },
+        Slot { item: Some(Item::WhiteFlowerSeed), limit: 10, requirements: set![] },
+        Slot { item: Some(Item::NectarFlowerSeed), limit: 1, requirements: set![] },
         Slot {
-            item: Some(ItemId::ChargeChip),
+            item: Some(Item::ChargeChip),
             limit: 1,
-            requirements: set![Requirement::HaveAtc(AtcId::ChibiBlaster)],
+            requirements: set![Requirement::HaveAtc(Atc::ChibiBlaster)],
         },
         Slot {
-            item: Some(ItemId::TraumaSuit),
+            item: Some(Item::TraumaSuit),
             limit: 1,
             requirements: set![Requirement::HaveFlag(19)],
         },
         Slot {
-            item: Some(ItemId::ChibiBattery),
+            item: Some(Item::ChibiBattery),
             limit: 1,
-            requirements: set![Requirement::HaveItem(ItemId::TraumaSuit)],
+            requirements: set![Requirement::HaveItem(Item::TraumaSuit)],
         },
         Slot {
-            item: Some(ItemId::ChibiBlaster),
+            item: Some(Item::ChibiBlaster),
             limit: 1,
             requirements: set![],
         },
         Slot {
-            item: Some(ItemId::RangeChip),
+            item: Some(Item::RangeChip),
             limit: 1,
-            requirements: set![Requirement::HaveAtc(AtcId::ChibiBlaster)],
+            requirements: set![Requirement::HaveAtc(Atc::ChibiBlaster)],
         },
         Slot {
-            item: Some(ItemId::ChibiRadar),
+            item: Some(Item::ChibiRadar),
             limit: 1,
             requirements: set![Requirement::HaveFlag(601)],
         },
         Slot {
-            item: Some(ItemId::AlienEarChip),
+            item: Some(Item::AlienEarChip),
             limit: 1,
             requirements: set![Requirement::HaveFlag(474)],
         },
         Slot {
-            item: Some(ItemId::HotRod),
+            item: Some(Item::HotRod),
             limit: 1,
             requirements: set![],
         },
         Slot {
-            item: Some(ItemId::SpaceScrambler),
+            item: Some(Item::SpaceScrambler),
             limit: 1,
             requirements: set![],
         },

@@ -43,12 +43,11 @@ macro_rules! from_error_boxed {
 /// Built-in arrays:
 /// ```
 /// # use unplug::expr;
-/// # use unplug::data::atc::AtcId;
-/// # use unplug::data::item::ItemId;
+/// # use unplug::data::{Atc, Item};
 /// let a = expr![atc[1] != 0];
-/// let b = expr![atc[AtcId::Toothbrush] != 0];
+/// let b = expr![atc[Atc::Toothbrush] != 0];
 /// let c = expr![item[42] != 0];
-/// let d = expr![item[ItemId::HotRod] != 0];
+/// let d = expr![item[Item::HotRod] != 0];
 /// let e = expr![atc[1] != 0 && flag[123]];
 /// ```
 ///
@@ -298,8 +297,7 @@ macro_rules! expr_enum {
 
 #[cfg(test)]
 mod tests {
-    use crate::data::atc::AtcId;
-    use crate::data::item::ItemId;
+    use crate::data::{Atc, Item};
     use crate::event::expr::{BinaryOp, Expr};
 
     #[test]
@@ -363,8 +361,8 @@ mod tests {
         assert_eq!(expr![time[1]], Expr::Time(Expr::Imm16(1).into()));
         assert_eq!(expr![var[1]], Expr::Variable(Expr::Imm16(1).into()));
 
-        assert_eq!(expr![atc[AtcId::Toothbrush]], Expr::Atc(Box::new(AtcId::Toothbrush.into())));
-        assert_eq!(expr![item[ItemId::HotRod]], Expr::Item(Box::new(ItemId::HotRod.into())));
+        assert_eq!(expr![atc[Atc::Toothbrush]], Expr::Atc(Box::new(Atc::Toothbrush.into())));
+        assert_eq!(expr![item[Item::HotRod]], Expr::Item(Box::new(Item::HotRod.into())));
 
         assert_eq!(
             expr![1 + item[1]],

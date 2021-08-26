@@ -1,6 +1,6 @@
 use super::{Error, Result};
 use crate::common::{NonNoneList, ReadFrom, ReadOptionFrom, WriteOptionTo, WriteTo};
-use crate::data::object::{ObjectId, NUM_OBJECTS};
+use crate::data::object::{Object, NUM_OBJECTS};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryInto;
@@ -107,16 +107,16 @@ pub struct ObjectColliders {
     pub objects: Box<[Vec<Collider>]>,
 }
 
-impl Index<ObjectId> for ObjectColliders {
+impl Index<Object> for ObjectColliders {
     type Output = Vec<Collider>;
 
-    fn index(&self, id: ObjectId) -> &Self::Output {
+    fn index(&self, id: Object) -> &Self::Output {
         &self.objects[i32::from(id) as usize]
     }
 }
 
-impl IndexMut<ObjectId> for ObjectColliders {
-    fn index_mut(&mut self, id: ObjectId) -> &mut Self::Output {
+impl IndexMut<Object> for ObjectColliders {
+    fn index_mut(&mut self, id: Object) -> &mut Self::Output {
         &mut self.objects[i32::from(id) as usize]
     }
 }

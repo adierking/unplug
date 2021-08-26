@@ -1,31 +1,31 @@
-use super::object::ObjectId;
+use super::Object;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 /// Metadata describing an item.
 #[derive(Debug)]
 pub struct ItemDefinition {
-    /// The item's corresponding `ItemId`.
-    pub id: ItemId,
+    /// The item's corresponding `Item`.
+    pub id: Item,
     /// The object corresponding to this item, if there is one.
-    pub object: Option<ObjectId>,
+    pub object: Option<Object>,
     /// The item's English display name (may be empty).
     pub display_name: &'static str,
 }
 
 impl ItemDefinition {
-    /// Retrieves the definition corresponding to an `ItemId`.
-    pub fn get(id: ItemId) -> &'static ItemDefinition {
+    /// Retrieves the definition corresponding to an `Item`.
+    pub fn get(id: Item) -> &'static ItemDefinition {
         &ITEMS[i16::from(id) as usize]
     }
 }
 
-/// Expands an object ID name into an `Option<ObjectId>`.
+/// Expands an object ID name into an `Option<Object>`.
 macro_rules! __impl_object_id {
     (None) => {
         None
     };
     ($object:ident) => {
-        Some(ObjectId::$object)
+        Some(Object::$object)
     };
 }
 
@@ -38,14 +38,14 @@ macro_rules! declare_items {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i16)]
-        pub enum ItemId {
+        pub enum Item {
             $($id = $index),*
         }
 
         pub static ITEMS: &[ItemDefinition] = &[
             $(
                 ItemDefinition {
-                    id: ItemId::$id,
+                    id: Item::$id,
                     object: __impl_object_id!($object),
                     display_name: $display_name,
                 }
@@ -63,16 +63,16 @@ mod tests {
 
     #[test]
     fn test_get_item() {
-        let item = ItemDefinition::get(ItemId::Wastepaper);
-        assert_eq!(item.id, ItemId::Wastepaper);
-        assert_eq!(item.object, Some(ObjectId::ItemKamiKuzu));
+        let item = ItemDefinition::get(Item::Wastepaper);
+        assert_eq!(item.id, Item::Wastepaper);
+        assert_eq!(item.object, Some(Object::ItemKamiKuzu));
         assert_eq!(item.display_name, "Wastepaper");
     }
 
     #[test]
     fn test_get_item_without_object() {
-        let item = ItemDefinition::get(ItemId::Unk20);
-        assert_eq!(item.id, ItemId::Unk20);
+        let item = ItemDefinition::get(Item::Unk20);
+        assert_eq!(item.id, Item::Unk20);
         assert_eq!(item.object, None);
         assert_eq!(item.display_name, "");
     }
