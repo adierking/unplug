@@ -7,8 +7,6 @@ use std::convert::TryFrom;
 pub struct AtcDefinition {
     /// The attachment's corresponding `Atc`.
     pub id: Atc,
-    /// The attachment's English display name (may be empty).
-    pub display_name: &'static str,
 }
 
 impl AtcDefinition {
@@ -21,7 +19,7 @@ impl AtcDefinition {
 // Macro used in the generated ATC list
 macro_rules! declare_atcs {
     {
-        $($index:literal => $id:ident { $display_name:literal }),*
+        $($index:literal => $id:ident),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,12 +30,7 @@ macro_rules! declare_atcs {
         }
 
         pub static ATCS: &[AtcDefinition] = &[
-            $(
-                AtcDefinition {
-                    id: Atc::$id,
-                    display_name: $display_name,
-                }
-            ),*
+            $(AtcDefinition { id: Atc::$id }),*
         ];
     };
 }
@@ -85,7 +78,6 @@ mod tests {
     fn test_get_atc() {
         let atc = AtcDefinition::get(Atc::Toothbrush);
         assert_eq!(atc.id, Atc::Toothbrush);
-        assert_eq!(atc.display_name, "Toothbrush");
     }
 
     #[test]

@@ -681,6 +681,7 @@ dependencies = [
 name = "unplug-data"
 version = "0.2.0"
 dependencies = [
+ "bitflags",
  "num_enum",
  "thiserror",
 ]

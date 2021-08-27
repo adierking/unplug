@@ -9,8 +9,6 @@ pub struct SuitDefinition {
     pub id: Suit,
     /// The item corresponding to the suit.
     pub item: Item,
-    /// The suit's English display name (may be empty).
-    pub display_name: &'static str,
 }
 
 impl SuitDefinition {
@@ -23,7 +21,7 @@ impl SuitDefinition {
 // Macro used in the generated suit list
 macro_rules! declare_suits {
     {
-        $($index:literal => $id:ident { $item:ident, $display_name:literal }),*
+        $($index:literal => $id:ident { $item:ident }),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -38,7 +36,6 @@ macro_rules! declare_suits {
                 SuitDefinition {
                     id: Suit::$id,
                     item: Item::$item,
-                    display_name: $display_name,
                 }
             ),*
         ];
@@ -76,7 +73,6 @@ mod tests {
         let suit = SuitDefinition::get(Suit::Pajamas);
         assert_eq!(suit.id, Suit::Pajamas);
         assert_eq!(suit.item, Item::Pajamas);
-        assert_eq!(suit.display_name, "Pajamas");
     }
 
     #[test]

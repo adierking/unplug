@@ -80,6 +80,8 @@ const OBJECTS_FOOTER: &str = "}\n";
 const ITEMS_FILE_NAME: &str = "items.inc.rs";
 const ITEMS_HEADER: &str = "declare_items! {\n";
 const ITEMS_FOOTER: &str = "}\n";
+const ITEM_FLAGS_EMPTY: &str = "ItemFlags::empty()";
+const ITEM_FLAGS_UNKNOWN: &str = "ItemFlags::UNKNOWN";
 
 const ATCS_FILE_NAME: &str = "atcs.inc.rs";
 const ATCS_HEADER: &str = "declare_atcs! {\n";
@@ -355,7 +357,7 @@ struct ItemDefinition {
     id: u16,
     label: Label,
     object: Option<Label>,
-    display_name: String,
+    is_unknown: bool,
 }
 
 /// Builds the item list from object definition and globals data.
@@ -382,7 +384,7 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
                     id: object.subclass,
                     label,
                     object: Some(object.label.clone()),
-                    display_name: display_name.into(),
+                    is_unknown: display_name.is_empty(),
                 })
             } else {
                 None
@@ -396,8 +398,7 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
         let id = i as u16;
         if items[i].id != id {
             let label = Label(format!("{}{}", UNKNOWN_PREFIX, id));
-            items
-                .insert(i, ItemDefinition { id, label, object: None, display_name: String::new() });
+            items.insert(i, ItemDefinition { id, label, object: None, is_unknown: true });
         }
     }
     assert_eq!(items.len(), NUM_ITEMS);
@@ -408,7 +409,6 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
 struct AtcDefinition {
     id: u16,
     label: Label,
-    display_name: String,
 }
 
 /// Builds the ATC list from globals data.
@@ -424,7 +424,7 @@ fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
             } else {
                 Label(format!("{}{}", UNKNOWN_PREFIX, id))
             };
-            AtcDefinition { id: id as u16, label, display_name: display_name.into() }
+            AtcDefinition { id: id as u16, label }
         })
         .collect()
 }
@@ -435,7 +435,6 @@ struct SuitDefinition {
     id: u16,
     label: Label,
     item: Label,
-    display_name: String,
 }
 
 /// Reads suit info from main.dol and builds the suit list.
@@ -482,8 +481,7 @@ fn read_suits(
         let item = items[item_id as usize].label.clone();
 
         // Suit IDs start from 1
-        suits[id as usize - 1] =
-            SuitDefinition { id, label, item, display_name: display_name.into() };
+        suits[id as usize - 1] = SuitDefinition { id, label, item };
     }
     Ok(suits)
 }
@@ -595,11 +593,8 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
             Some(label) => &label.0,
             _ => "None",
         };
-        writeln!(
-            writer,
-            "    {} => {} {{ {}, \"{}\" }},",
-            item.id, item.label.0, object, item.display_name
-        )?;
+        let flags = if item.is_unknown { ITEM_FLAGS_UNKNOWN } else { ITEM_FLAGS_EMPTY };
+        writeln!(writer, "    {} => {} {{ {}, {} }},", item.id, item.label.0, object, flags)?;
     }
     write!(writer, "{}", ITEMS_FOOTER)?;
     writer.flush()?;
@@ -610,7 +605,7 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
 fn write_atcs(mut writer: impl Write, atcs: &[AtcDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, ATCS_HEADER)?;
     for atc in atcs {
-        writeln!(writer, "    {} => {} {{ \"{}\" }},", atc.id, atc.label.0, atc.display_name)?;
+        writeln!(writer, "    {} => {},", atc.id, atc.label.0)?;
     }
     write!(writer, "{}", ATCS_FOOTER)?;
     writer.flush()?;
@@ -621,11 +616,7 @@ fn write_atcs(mut writer: impl Write, atcs: &[AtcDefinition]) -> Result<()> {
 fn write_suits(mut writer: impl Write, suits: &[SuitDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, SUITS_HEADER)?;
     for suit in suits {
-        writeln!(
-            writer,
-            "    {} => {} {{ {}, \"{}\" }},",
-            suit.id, suit.label.0, suit.item.0, suit.display_name
-        )?;
+        writeln!(writer, "    {} => {} {{ {} }},", suit.id, suit.label.0, suit.item.0)?;
     }
     write!(writer, "{}", SUITS_FOOTER)?;
     writer.flush()?;

@@ -12,7 +12,7 @@ use std::time::Instant;
 use unicase::UniCase;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::data::atc::ATCS;
-use unplug::data::item::ITEMS;
+use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
 use unplug::data::stage::STAGES;
 use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree, OpenFile};
@@ -73,7 +73,7 @@ pub fn list_items(opt: ListItemsOpt) -> Result<()> {
     let mut items: Vec<_> = if opt.show_unknown {
         ITEMS.iter().map(|i| i.id).collect()
     } else {
-        ITEMS.iter().filter(|i| !i.display_name.is_empty()).map(|i| i.id).collect()
+        ITEMS.iter().filter(|i| !i.flags.contains(ItemFlags::UNKNOWN)).map(|i| i.id).collect()
     };
     sort_ids(&mut items, &opt.settings);
     for item in items {

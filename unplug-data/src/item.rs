@@ -1,4 +1,5 @@
 use super::Object;
+use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 /// Metadata describing an item.
@@ -8,14 +9,22 @@ pub struct ItemDefinition {
     pub id: Item,
     /// The object corresponding to this item, if there is one.
     pub object: Option<Object>,
-    /// The item's English display name (may be empty).
-    pub display_name: &'static str,
+    /// Flags describing the item.
+    pub flags: ItemFlags,
 }
 
 impl ItemDefinition {
     /// Retrieves the definition corresponding to an `Item`.
     pub fn get(id: Item) -> &'static ItemDefinition {
         &ITEMS[i16::from(id) as usize]
+    }
+}
+
+bitflags! {
+    /// Flags describing an item.
+    pub struct ItemFlags: u32 {
+        /// The item does not have a known purpose.
+        const UNKNOWN = 0x1;
     }
 }
 
@@ -32,7 +41,7 @@ macro_rules! __impl_object_id {
 // Macro used in the generated item list
 macro_rules! declare_items {
     {
-        $($index:literal => $id:ident { $object:ident, $display_name:literal }),*
+        $($index:literal => $id:ident { $object:ident, $flags:expr }),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -47,7 +56,7 @@ macro_rules! declare_items {
                 ItemDefinition {
                     id: Item::$id,
                     object: __impl_object_id!($object),
-                    display_name: $display_name,
+                    flags: $flags,
                 }
             ),*
         ];
@@ -66,7 +75,6 @@ mod tests {
         let item = ItemDefinition::get(Item::Wastepaper);
         assert_eq!(item.id, Item::Wastepaper);
         assert_eq!(item.object, Some(Object::ItemKamiKuzu));
-        assert_eq!(item.display_name, "Wastepaper");
     }
 
     #[test]
@@ -74,6 +82,5 @@ mod tests {
         let item = ItemDefinition::get(Item::Unk20);
         assert_eq!(item.id, Item::Unk20);
         assert_eq!(item.object, None);
-        assert_eq!(item.display_name, "");
     }
 }
