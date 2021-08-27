@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::info;
 use std::io::BufReader;
-use unplug::data::stage::{StageDefinition, StageId};
+use unplug::data::stage::{Stage as StageId, StageDefinition};
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
@@ -35,18 +35,18 @@ static STAGE_INFO: &[StageInfo] = &[
     StageInfo { id: StageId::Drain, objects: 63, blocks: 180 },
     StageInfo { id: StageId::Foyer, objects: 513, blocks: 4188 },
     StageInfo { id: StageId::Hori, objects: 27, blocks: 20 },
-    StageInfo { id: StageId::Jenny, objects: 379, blocks: 2196 },
+    StageInfo { id: StageId::JennysRoom, objects: 379, blocks: 2196 },
     StageInfo { id: StageId::Junko, objects: 17, blocks: 9 },
     StageInfo { id: StageId::Kitchen, objects: 375, blocks: 3106 },
     StageInfo { id: StageId::LivingRoom, objects: 498, blocks: 3512 },
-    StageInfo { id: StageId::Birthday, objects: 186, blocks: 96 },
+    StageInfo { id: StageId::LivingRoomBirthday, objects: 186, blocks: 96 },
     StageInfo { id: StageId::Mariko, objects: 6, blocks: 7 },
     StageInfo { id: StageId::Mory, objects: 82, blocks: 196 },
-    StageInfo { id: StageId::MotherSpider, objects: 55, blocks: 75 },
+    StageInfo { id: StageId::MotherSpidersRoom, objects: 55, blocks: 75 },
     StageInfo { id: StageId::Ryosuke, objects: 2, blocks: 5 },
     StageInfo { id: StageId::Sayoko, objects: 26, blocks: 41 },
     StageInfo { id: StageId::Shun, objects: 144, blocks: 553 },
-    StageInfo { id: StageId::Credits, objects: 1, blocks: 4 },
+    StageInfo { id: StageId::StaffCredit, objects: 1, blocks: 4 },
     StageInfo { id: StageId::Stage08, objects: 5, blocks: 16 },
     StageInfo { id: StageId::Stage12, objects: 1, blocks: 0 },
     StageInfo { id: StageId::Stage15, objects: 1, blocks: 0 },
@@ -81,9 +81,9 @@ fn test_read_all_stages() -> Result<()> {
     assert_eq!(libs.script.blocks().len(), GLOBALS_BLOCKS);
 
     for info in STAGE_INFO {
-        let stage_path = StageDefinition::get(info.id).path();
+        let stage_path = StageDefinition::get(info.id).path;
         info!("Reading {}", stage_path);
-        let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
+        let mut file = BufReader::new(qp.open_file_at(stage_path)?);
         let stage = Stage::read_from(&mut file, &libs)?;
         assert_eq!(stage.objects.len(), info.objects);
         assert_eq!(stage.script.len(), info.blocks);

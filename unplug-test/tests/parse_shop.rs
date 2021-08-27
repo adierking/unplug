@@ -2,7 +2,7 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use log::info;
 use std::io::BufReader;
-use unplug::data::stage::CHIBI_HOUSE;
+use unplug::data::stage::{Stage as StageId, StageDefinition};
 use unplug::data::{Atc, Item};
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::globals::GlobalsReader;
@@ -105,9 +105,9 @@ fn test_parse_shop() -> Result<()> {
         globals.read_libs()?
     };
 
-    let stage_path = CHIBI_HOUSE.path();
+    let stage_path = StageDefinition::get(StageId::ChibiHouse).path;
     info!("Reading {}", stage_path);
-    let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
+    let mut file = BufReader::new(qp.open_file_at(stage_path)?);
     let chibi_house = Stage::read_from(&mut file, &libs)?;
     let shop = Shop::parse(&chibi_house.script)?;
 

@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::io::{BufReader, Cursor, Seek, SeekFrom};
 use unplug::common::WriteTo;
-use unplug::data::stage::{StageDefinition, STAGES};
+use unplug::data::stage::STAGES;
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
@@ -22,10 +22,10 @@ fn test_rebuild_all_stages() -> Result<()> {
         globals.read_libs()?
     };
 
-    for &id in STAGES {
-        let stage_path = StageDefinition::get(id).path();
+    for stage_def in STAGES {
+        let stage_path = stage_def.path;
         info!("Reading {}", stage_path);
-        let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
+        let mut file = BufReader::new(qp.open_file_at(stage_path)?);
         let original = Stage::read_from(&mut file, &libs)?;
 
         info!("Rebuilding the stage");

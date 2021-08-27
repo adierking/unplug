@@ -24,6 +24,7 @@ pub mod suit;
 pub use atc::Atc;
 pub use item::Item;
 pub use object::Object;
+pub use stage::Stage;
 pub use suit::Suit;
 
 use thiserror::Error;

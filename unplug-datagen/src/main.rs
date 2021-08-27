@@ -15,7 +15,7 @@
     variant_size_differences
 )]
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Error, Result};
 use byteorder::{ReadBytesExt, BE};
 use lazy_static::lazy_static;
 use log::{error, info, trace};
@@ -33,10 +33,10 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::process;
-use unplug::common::ReadFrom;
+use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom};
 use unplug::data::stage::GLOBALS_PATH;
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
-use unplug::globals::metadata::{Atc, Item, Suit};
+use unplug::globals::metadata::{Atc, Item, Stage, Suit};
 use unplug::globals::GlobalsReader;
 
 const MAIN_OBJECTS_ADDR: u32 = 0x8021c70c;
@@ -51,6 +51,11 @@ const SUIT_ITEMS_ADDR: u32 = 0x8020a17c;
 const SUIT_ORDER_ADDR: u32 = 0x800bc318;
 const ADDI_OPCODE: u32 = 14;
 const STRIP_SUIT_LABEL: &str = "Suit";
+
+const STAGE_LIST_ADDR: u32 = 0x802244e4;
+const FIRST_DEV_STAGE: i32 = 100;
+const STAGE_DIR: &str = "bin/e";
+const STAGE_EXT: &str = ".bin";
 
 const QP_PATH: &str = "qp.bin";
 
@@ -83,6 +88,10 @@ const ATCS_FOOTER: &str = "}\n";
 const SUITS_FILE_NAME: &str = "suits.inc.rs";
 const SUITS_HEADER: &str = "declare_suits! {\n";
 const SUITS_FOOTER: &str = "}\n";
+
+const STAGES_FILE_NAME: &str = "stages.inc.rs";
+const STAGES_HEADER: &str = "declare_stages! {\n";
+const STAGES_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -151,7 +160,7 @@ struct RawObjectDefinition {
 }
 
 impl<R: Read> ReadFrom<R> for RawObjectDefinition {
-    type Error = anyhow::Error;
+    type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
             model_addr: reader.read_u32::<BE>()?,
@@ -479,6 +488,90 @@ fn read_suits(
     Ok(suits)
 }
 
+// The raw representation of a stage in the executable.
+#[derive(Debug, Copy, Clone)]
+struct RawStageDefinition {
+    name_addr: u32,
+    index: i32,
+    flags: u32,
+}
+
+impl<R: Read> ReadFrom<R> for RawStageDefinition {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            name_addr: reader.read_u32::<BE>()?,
+            index: reader.read_i32::<BE>()?,
+            flags: reader.read_u32::<BE>()?,
+        })
+    }
+}
+
+impl<R: Read> ReadOptionFrom<R> for RawStageDefinition {
+    type Error = Error;
+    fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
+        // The last stage in each list has a null address
+        let stage = RawStageDefinition::read_from(reader)?;
+        Ok(if stage.name_addr != 0 { Some(stage) } else { None })
+    }
+}
+
+/// Representation of a stage which is written to the generated source.
+struct StageDefinition {
+    id: i32,
+    label: Label,
+    path: String,
+}
+
+/// Reads the stage list from the executable.
+fn read_stages(
+    dol: &DolHeader,
+    reader: &mut (impl Read + Seek),
+    globals: &[Stage],
+) -> Result<Vec<StageDefinition>> {
+    // The stage list has a null-terminated list of main stages followed by a null-terminated list
+    // of developer stages.
+    let stages_offset = dol.address_to_offset(STAGE_LIST_ADDR)? as u64;
+    reader.seek(SeekFrom::Start(stages_offset))?;
+    let mut stages = NonNoneList::<RawStageDefinition>::read_from(reader)?.into_vec();
+    let dev_stages = NonNoneList::<RawStageDefinition>::read_from(reader)?.into_vec();
+    // Correct the dev stage indexes because they're -1 in the executable
+    stages.extend(
+        dev_stages
+            .into_iter()
+            .enumerate()
+            .map(|(i, stage)| RawStageDefinition { index: FIRST_DEV_STAGE + (i as i32), ..stage }),
+    );
+
+    let mut definitions: Vec<StageDefinition> = vec![];
+    for stage in stages {
+        let name_offset = dol.address_to_offset(stage.name_addr)? as u64;
+        reader.seek(SeekFrom::Start(name_offset))?;
+        let name = CString::read_from(reader)?.into_string()?;
+
+        let label = if stage.index < FIRST_DEV_STAGE {
+            // Try to build the stage name based on the name and description in globals
+            let metadata = &globals[stage.index as usize];
+            let display_name = metadata.name.decode()?;
+            let display_desc = metadata.description.decode()?;
+            if !display_name.is_empty() || !display_desc.is_empty() {
+                Label::from_string_lossy(&format!("{} {}", display_name, display_desc))
+            } else {
+                Label::from_string_lossy(&name)
+            }
+        } else {
+            Label::from_string_lossy(&name)
+        };
+
+        definitions.push(StageDefinition {
+            id: stage.index,
+            label,
+            path: format!("{}/{}{}", STAGE_DIR, name, STAGE_EXT),
+        });
+    }
+    Ok(definitions)
+}
+
 /// Writes the list of objects to the generated file.
 fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, OBJECTS_HEADER)?;
@@ -539,6 +632,17 @@ fn write_suits(mut writer: impl Write, suits: &[SuitDefinition]) -> Result<()> {
     Ok(())
 }
 
+/// Writes the list of stages to the generated file.
+fn write_stages(mut writer: impl Write, stages: &[StageDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, STAGES_HEADER)?;
+    for stage in stages {
+        writeln!(writer, "    {} => {} {{ \"{}\" }},", stage.id, stage.label.0, stage.path)?;
+    }
+    write!(writer, "{}", STAGES_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 fn run_app() -> Result<()> {
     init_logging();
 
@@ -594,6 +698,9 @@ fn run_app() -> Result<()> {
     info!("Reading suit data");
     let suits = read_suits(&dol, &mut dol_reader, &metadata.suits, &items)?;
 
+    info!("Reading stage data");
+    let stages = read_stages(&dol, &mut dol_reader, &metadata.stages)?;
+
     let out_dir: PathBuf = [UNPLUG_DATA_PATH, SRC_DIR_NAME, OUTPUT_DIR_NAME].iter().collect();
     fs::create_dir_all(&out_dir)?;
 
@@ -616,6 +723,11 @@ fn run_app() -> Result<()> {
     info!("Writing {}", suits_path.display());
     let suits_writer = BufWriter::new(File::create(suits_path)?);
     write_suits(suits_writer, &suits)?;
+
+    let stages_path = out_dir.join(STAGES_FILE_NAME);
+    info!("Writing {}", stages_path.display());
+    let stages_writer = BufWriter::new(File::create(stages_path)?);
+    write_stages(stages_writer, &stages)?;
 
     Ok(())
 }

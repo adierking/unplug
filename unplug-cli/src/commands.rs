@@ -14,7 +14,7 @@ use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::data::atc::ATCS;
 use unplug::data::item::ITEMS;
 use unplug::data::object::Object;
-use unplug::data::stage::{StageDefinition, STAGES};
+use unplug::data::stage::STAGES;
 use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree, OpenFile};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
@@ -257,11 +257,10 @@ pub fn dump_all_stages(opt: DumpAllStagesOpt) -> Result<()> {
     let libs_out = File::create(Path::join(&opt.output, "globals.txt"))?;
     do_dump_libs(&libs, BufWriter::new(libs_out))?;
 
-    for &stage_id in STAGES {
-        let stage_def = StageDefinition::get(stage_id);
-        info!("Reading {}.bin", stage_def.name);
-        let stage = read_stage_qp(&mut qp, stage_def.name, &libs)?;
-        let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", stage_def.name)))?;
+    for stage_def in STAGES {
+        info!("Reading {}.bin", stage_def.name());
+        let stage = read_stage_qp(&mut qp, stage_def.name(), &libs)?;
+        let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", stage_def.name())))?;
         do_dump_stage(&stage, &opt.flags, BufWriter::new(stage_out))?;
     }
 

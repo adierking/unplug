@@ -10,7 +10,7 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use unplug::common::Text;
-use unplug::data::stage::{StageDefinition, STAGES};
+use unplug::data::stage::STAGES;
 use unplug::event::msg::{
     DefaultFlags, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags,
 };
@@ -385,11 +385,10 @@ pub fn export_messages(opt: ExportMessagesOpt) -> Result<()> {
     writer.start()?;
     writer.write_script(MessageSource::Globals, &libs.script)?;
 
-    for &id in STAGES {
-        let def = StageDefinition::get(id);
-        info!("Reading {}.bin", def.name);
-        let stage = read_stage_qp(&mut qp, def.name, &libs)?;
-        writer.write_script(MessageSource::Stage(id), &stage.script)?;
+    for def in STAGES {
+        info!("Reading {}.bin", def.name());
+        let stage = read_stage_qp(&mut qp, def.name(), &libs)?;
+        writer.write_script(MessageSource::Stage(def.id), &stage.script)?;
     }
 
     writer.finish()?;

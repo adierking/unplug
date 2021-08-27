@@ -580,13 +580,13 @@ pub fn import_messages(opt: ImportMessagesOpt) -> Result<()> {
             MessageSource::Stage(id) => id,
         };
         let stage_def = StageDefinition::get(stage_id);
-        info!("Rebuilding {}.bin", stage_def.name);
-        let mut stage = read_stage_qp(&mut qp, stage_def.name, &libs)?;
+        info!("Rebuilding {}.bin", stage_def.name());
+        let mut stage = read_stage_qp(&mut qp, stage_def.name(), &libs)?;
         apply_messages(source, &mut stage.script, &mut messages);
         let mut writer = Cursor::new(vec![]);
         stage.write_to(&mut writer)?;
         let bytes = writer.into_inner().into_boxed_slice();
-        rebuilt_files.push((stage_def.path(), bytes));
+        rebuilt_files.push((stage_def.path.to_owned(), bytes));
     }
 
     if !messages.is_empty() {

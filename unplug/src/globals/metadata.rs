@@ -5,7 +5,7 @@ use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE, LE};
 use std::convert::TryInto;
 use std::ffi::CString;
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use unplug_data::stage::NUM_REAL_STAGES;
+use unplug_data::stage::NUM_MAIN_STAGES;
 
 const NUM_PICKUP_SOUNDS: usize = 4;
 const NUM_COLLECT_SOUNDS: usize = 3;
@@ -1066,7 +1066,7 @@ impl Metadata {
             actors: vec![Actor::new(); NUM_ACTORS].into_boxed_slice(),
             atcs: vec![Atc::new(); NUM_ATCS].into_boxed_slice(),
             suits: vec![Suit::new(); NUM_SUITS].into_boxed_slice(),
-            stages: vec![Stage::new(); NUM_REAL_STAGES].into_boxed_slice(),
+            stages: vec![Stage::new(); NUM_MAIN_STAGES].into_boxed_slice(),
             letickers: vec![Leticker::new(); NUM_LETICKERS].into_boxed_slice(),
             stickers: vec![Sticker::new(); NUM_STICKERS].into_boxed_slice(),
             stats: vec![Stat::new(); NUM_STATS].into_boxed_slice(),
@@ -1169,7 +1169,7 @@ impl<W: Write + Seek> WriteTo<W> for Metadata {
         assert_eq!(self.actors.len(), NUM_ACTORS);
         assert_eq!(self.atcs.len(), NUM_ATCS);
         assert_eq!(self.suits.len(), NUM_SUITS);
-        assert_eq!(self.stages.len(), NUM_REAL_STAGES);
+        assert_eq!(self.stages.len(), NUM_MAIN_STAGES);
         assert_eq!(self.letickers.len(), NUM_LETICKERS);
         assert_eq!(self.stickers.len(), NUM_STICKERS);
         assert_eq!(self.stats.len(), NUM_STATS);

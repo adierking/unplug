@@ -1,12 +1,12 @@
 use crate::io::copy_into_memory;
 use crate::opt::{OptionalContainerOpt, RequiredContainerOpt};
-use anyhow::Result;
+use anyhow::{bail, Result};
 use log::{debug, info};
 use std::fs::{File, OpenOptions};
 use std::io::Cursor;
 use std::path::Path;
 use unplug::common::ReadSeek;
-use unplug::data::stage::{GLOBALS_PATH, STAGE_DIR};
+use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::{GlobalsReader, Libs};
 use unplug::stage::Stage;
@@ -114,8 +114,11 @@ pub fn read_stage_qp(
     name: &str,
     libs: &Libs,
 ) -> Result<Stage> {
-    let path = format!("{}/{}.bin", STAGE_DIR, name);
-    Ok(Stage::read_from(&mut read_entry(qp, &path)?, libs)?)
+    let def = match StageDefinition::find(name) {
+        Some(def) => def,
+        None => bail!("Unknown stage \"{}\"", name),
+    };
+    Ok(Stage::read_from(&mut read_entry(qp, def.path)?, libs)?)
 }
 
 /// Reads a stage by name from either an archive or the local filesystem.

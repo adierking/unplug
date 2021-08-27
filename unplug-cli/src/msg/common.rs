@@ -1,7 +1,7 @@
 use anyhow::{anyhow, ensure, Result};
 use byteorder::{ByteOrder, LE};
 use std::fmt;
-use unplug::data::stage::{StageDefinition, StageId, STAGES};
+use unplug::data::stage::{Stage, StageDefinition, STAGES};
 use unplug::event::msg::MsgArgs;
 use unplug::event::script::CommandLocation;
 use unplug::event::{Command, Script};
@@ -85,7 +85,7 @@ pub enum MessageSource {
     /// The message is in globals.bin.
     Globals,
     /// The message is in a stage file.
-    Stage(StageId),
+    Stage(Stage),
 }
 
 impl MessageSource {
@@ -93,7 +93,7 @@ impl MessageSource {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Globals => "globals",
-            Self::Stage(stage) => StageDefinition::get(*stage).name,
+            Self::Stage(stage) => StageDefinition::get(*stage).name(),
         }
     }
 
@@ -102,11 +102,11 @@ impl MessageSource {
         if s == "globals" {
             Ok(Self::Globals)
         } else {
-            let stage = *STAGES
+            let stage = STAGES
                 .iter()
-                .find(|&&id| StageDefinition::get(id).name == s)
+                .find(|stage| stage.name() == s)
                 .ok_or_else(|| anyhow!("Invalid message source: {}", s))?;
-            Ok(Self::Stage(stage))
+            Ok(Self::Stage(stage.id))
         }
     }
 }
@@ -228,8 +228,8 @@ mod tests {
     fn test_parse_message_id() -> Result<()> {
         let parse = MessageId::parse;
         assert_eq!(parse("globals:ab:cd")?, id(MessageSource::Globals, 0xab, 0xcd));
-        assert_eq!(parse("stage02:ab:cd")?, id(MessageSource::Stage(StageId::Foyer), 0xab, 0xcd));
-        assert_eq!(parse("ahk:ab:cd")?, id(MessageSource::Stage(StageId::Ahk), 0xab, 0xcd));
+        assert_eq!(parse("stage02:ab:cd")?, id(MessageSource::Stage(Stage::Foyer), 0xab, 0xcd));
+        assert_eq!(parse("ahk:ab:cd")?, id(MessageSource::Stage(Stage::Ahk), 0xab, 0xcd));
         assert!(parse("foo:ab:cd").is_err());
         assert!(parse("stage07:ab:cd:").is_err());
         assert!(parse("foo").is_err());
