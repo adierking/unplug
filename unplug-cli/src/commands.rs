@@ -94,6 +94,16 @@ pub fn list_equipment(opt: ListEquipmentOpt) -> Result<()> {
     Ok(())
 }
 
+pub fn list_stages(opt: ListStagesOpt) -> Result<()> {
+    let mut stages: Vec<_> = STAGES.iter().map(|s| s.id).collect();
+    sort_ids(&mut stages, &opt.settings);
+    for stage in stages {
+        let name = stage.to_id();
+        println!("[{:>3}] {}", i32::from(stage), name);
+    }
+    Ok(())
+}
+
 fn extract_files(
     mut reader: (impl Read + Seek),
     tree: &FileTree,

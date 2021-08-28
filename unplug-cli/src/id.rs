@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use unplug::data::{Atc, Item};
+use unplug::data::{Atc, Item, Stage};
 use unplug::event::msg::{Color, Icon, Voice};
 
 /// Trait for an enum which can be converted to/from ID strings.
@@ -240,6 +240,48 @@ id_strings! {
         BlueFlowers = "blue-flowers",
         WhiteFlowers = "white-flowers",
         ChibiBattery = "chibi-battery",
+    }
+
+    Stage {
+        Debug = "debug",
+        Kitchen = "kitchen",
+        Foyer = "foyer",
+        Basement = "basement",
+        JennysRoom = "jennys-room",
+        ChibiHouse = "chibi-house",
+        Bedroom = "bedroom",
+        LivingRoom = "living-room",
+        Stage08 = "stage08",
+        Backyard = "backyard",
+        StaffCredit = "credits",
+        Drain = "drain",
+        Stage12 = "stage12",
+        ChibiManual = "chibi-manual",
+        LivingRoomBirthday = "living-room-birthday",
+        Stage15 = "stage15",
+        Ufo = "ufo",
+        Stage17 = "stage17",
+        BedroomPast = "bedroom-past",
+        Stage19 = "stage19",
+        Stage20 = "stage20",
+        Stage21 = "stage21",
+        MotherSpidersRoom = "mother-spider",
+        Stage23 = "stage23",
+        Stage24 = "stage24",
+        Stage25 = "stage25",
+        Stage26 = "stage26",
+        Stage27 = "stage27",
+        Stage28 = "stage28",
+        Stage29 = "stage29",
+        Shun = "shun",
+        Hori = "hori",
+        Ahk = "ahk",
+        Junko = "junko",
+        Sayoko = "sayoko",
+        Mory = "mory",
+        Ryosuke = "ryosuke",
+        Takanabe = "takanabe",
+        Mariko = "mariko",
     }
 
     Voice {

@@ -32,6 +32,7 @@ fn run_app() -> Result<()> {
         Subcommand::ListIso(opt) => commands::list_iso(opt),
         Subcommand::ListItems(opt) => commands::list_items(opt),
         Subcommand::ListEquipment(opt) => commands::list_equipment(opt),
+        Subcommand::ListStages(opt) => commands::list_stages(opt),
         Subcommand::ExtractArchive(opt) => commands::extract_archive(opt),
         Subcommand::ExtractIso(opt) => commands::extract_iso(opt),
         Subcommand::DumpStage(opt) => commands::dump_stage(opt),

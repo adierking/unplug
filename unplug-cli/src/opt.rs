@@ -32,6 +32,9 @@ pub enum Subcommand {
     /// Lists known equipment (ATC) IDs
     ListEquipment(ListEquipmentOpt),
 
+    /// Lists known stages
+    ListStages(ListStagesOpt),
+
     /// Extracts a U8 archive (e.g. qp.bin) into a directory
     ExtractArchive(ExtractArchiveOpt),
 
@@ -187,6 +190,12 @@ pub struct ListEquipmentOpt {
     /// Includes equipment without names
     #[structopt(long)]
     pub show_unknown: bool,
+}
+
+#[derive(StructOpt)]
+pub struct ListStagesOpt {
+    #[structopt(flatten)]
+    pub settings: ListIdsOpt,
 }
 
 #[derive(StructOpt)]
