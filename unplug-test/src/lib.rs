@@ -1,6 +1,6 @@
 use anyhow::{bail, ensure, Result};
 use log::info;
-use simplelog::{ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::env;
 use std::fs::{self, File};
 use std::io::{Read, Seek};
@@ -20,8 +20,12 @@ static INIT_LOGGING: Once = Once::new();
 /// Configures logging at the beginning of a test.
 pub fn init_logging() {
     INIT_LOGGING.call_once(|| {
-        let config = ConfigBuilder::new().set_time_format_str("%T%.3f").build();
-        TermLogger::init(LevelFilter::Debug, config, TerminalMode::Stderr).unwrap();
+        let config = ConfigBuilder::new()
+            .set_time_format_str("%T%.3f")
+            .set_level_color(Level::Info, Some(Color::Green))
+            .build();
+        TermLogger::init(LevelFilter::Debug, config, TerminalMode::Stderr, ColorChoice::Auto)
+            .unwrap();
     });
 }
 

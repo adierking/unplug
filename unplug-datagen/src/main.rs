@@ -22,7 +22,7 @@ use lazy_static::lazy_static;
 use log::{error, info, trace};
 use num_enum::TryFromPrimitive;
 use regex::Regex;
-use simplelog::{Color, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -140,9 +140,9 @@ fn init_logging() {
         .set_thread_level(LevelFilter::Off)
         .set_target_level(LevelFilter::Trace)
         .set_time_format_str("%T%.3f")
-        .set_level_color(Level::Info, Color::Green)
+        .set_level_color(Level::Info, Some(Color::Green))
         .build();
-    TermLogger::init(LevelFilter::Debug, config, TerminalMode::Stderr).unwrap();
+    TermLogger::init(LevelFilter::Debug, config, TerminalMode::Stderr, ColorChoice::Auto).unwrap();
 }
 
 fn usage() {

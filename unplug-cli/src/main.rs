@@ -1,6 +1,6 @@
 use anyhow::Result;
 use log::error;
-use simplelog::{Color, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::process;
 use structopt::StructOpt;
 use unplug_cli::opt::{Opt, Subcommand};
@@ -19,9 +19,9 @@ fn init_logging(opt: &Opt) {
         .set_thread_level(LevelFilter::Off)
         .set_target_level(LevelFilter::Trace)
         .set_time_format_str("%T%.3f")
-        .set_level_color(Level::Info, Color::Green)
+        .set_level_color(Level::Info, Some(Color::Green))
         .build();
-    TermLogger::init(filter, config, TerminalMode::Stderr).unwrap();
+    TermLogger::init(filter, config, TerminalMode::Stderr, ColorChoice::Auto).unwrap();
 }
 
 fn run_app() -> Result<()> {
