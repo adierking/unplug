@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "unplug-data"
-version = "0.2.0"
+version = "0.0.0"
 dependencies = [
  "bitflags",
  "num_enum",
@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "unplug-datagen"
-version = "0.2.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "unplug-proc"
-version = "0.2.0"
+version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -700,7 +700,7 @@ dependencies = [
 
 [[package]]
 name = "unplug-test"
-version = "0.2.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "lazy_static",
