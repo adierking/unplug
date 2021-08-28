@@ -23,6 +23,33 @@ unplug import-messages --iso chibi2.iso messages.xml
 You only need to copy the ISO once; any additional changes can be re-imported into the copy. The
 main reason for having a copy is so that you don't trash your retail ISO.
 
+## Editing the In-Game Shop
+
+New in v0.3, you can use Unplug to edit the in-game shop and change what items are available.
+
+To export the shop from your ISO, use the `export-shop` command:
+
+```sh
+unplug export-shop --iso chibi.iso -o shop.json
+```
+
+This will make a file named `shop.json` which you can edit. You can edit each slot's
+item, price, limit, and requirements. (Note that there is a hard limit of 20 items.) Item IDs are
+mostly just lowercased and hypenated (i.e. kebab-case) versions of the in-game names, but if you
+need to check which names are available then you can use the new `list-items` command:
+
+```sh
+unplug list-items
+```
+
+After you're done editing the shop, **make a copy of your ISO** and then use the `import-shop`
+command on the copy:
+
+```sh
+cp chibi.iso chibi2.iso
+unplug import-shop --iso chibi2.iso shop.json
+```
+
 ## Editing Global Metadata
 
 The global metadata includes item attributes, room names, attachment settings, battery usage

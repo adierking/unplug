@@ -24,9 +24,10 @@ binary for Windows or Linux.
 ## Features
 
 - Built-in support for ISO reading and writing
-- Disassemble script bytecode
-- Edit the global metadata
 - Export and import cutscene messages
+- Change items in the shop
+- Edit the global metadata
+- Disassemble script bytecode
 - List and extract the ISO
 - List and extract qp.bin entries
 
