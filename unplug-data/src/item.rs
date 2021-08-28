@@ -23,8 +23,8 @@ impl ItemDefinition {
 bitflags! {
     /// Flags describing an item.
     pub struct ItemFlags: u32 {
-        /// The item does not have a known purpose.
-        const UNKNOWN = 0x1;
+        /// The item is not actually used by the game.
+        const UNUSED = 0x1;
     }
 }
 
@@ -41,7 +41,7 @@ macro_rules! __impl_object_id {
 // Macro used in the generated item list
 macro_rules! declare_items {
     {
-        $($index:literal => $id:ident { $object:ident, $flags:expr }),*
+        $($index:literal => $id:ident { $object:ident $(, $flag:ident)* }),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -56,7 +56,7 @@ macro_rules! declare_items {
                 ItemDefinition {
                     id: Item::$id,
                     object: __impl_object_id!($object),
-                    flags: $flags,
+                    flags: ItemFlags::from_bits_truncate(0 $(| ItemFlags::$flag.bits())*),
                 }
             ),*
         ];
@@ -75,6 +75,7 @@ mod tests {
         let item = ItemDefinition::get(Item::Wastepaper);
         assert_eq!(item.id, Item::Wastepaper);
         assert_eq!(item.object, Some(Object::ItemKamiKuzu));
+        assert!(item.flags.is_empty());
     }
 
     #[test]
@@ -82,5 +83,6 @@ mod tests {
         let item = ItemDefinition::get(Item::Unk20);
         assert_eq!(item.id, Item::Unk20);
         assert_eq!(item.object, None);
+        assert_eq!(item.flags, ItemFlags::UNUSED);
     }
 }

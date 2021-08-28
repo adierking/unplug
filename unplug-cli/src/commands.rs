@@ -73,7 +73,7 @@ pub fn list_items(opt: ListItemsOpt) -> Result<()> {
     let mut items: Vec<_> = if opt.show_unknown {
         ITEMS.iter().map(|i| i.id).collect()
     } else {
-        ITEMS.iter().filter(|i| !i.flags.contains(ItemFlags::UNKNOWN)).map(|i| i.id).collect()
+        ITEMS.iter().filter(|i| !i.flags.contains(ItemFlags::UNUSED)).map(|i| i.id).collect()
     };
     sort_ids(&mut items, &opt.settings);
     for item in items {

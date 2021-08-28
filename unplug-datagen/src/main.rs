@@ -81,8 +81,7 @@ const OBJECTS_FOOTER: &str = "}\n";
 const ITEMS_FILE_NAME: &str = "items.inc.rs";
 const ITEMS_HEADER: &str = "declare_items! {\n";
 const ITEMS_FOOTER: &str = "}\n";
-const ITEM_FLAGS_EMPTY: &str = "ItemFlags::empty()";
-const ITEM_FLAGS_UNKNOWN: &str = "ItemFlags::UNKNOWN";
+const ITEM_FLAG_UNUSED: &str = "UNUSED";
 
 const ATCS_FILE_NAME: &str = "atcs.inc.rs";
 const ATCS_HEADER: &str = "declare_atcs! {\n";
@@ -358,7 +357,7 @@ struct ItemDefinition {
     id: u16,
     label: Label,
     object: Option<Label>,
-    is_unknown: bool,
+    flags: Vec<String>,
 }
 
 /// Builds the item list from object definition and globals data.
@@ -381,11 +380,15 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
                 } else {
                     Label(object.label.0.replace(STRIP_ITEM_LABEL, ""))
                 };
+                let mut flags = vec![];
+                if display_name.is_empty() {
+                    flags.push(ITEM_FLAG_UNUSED.into());
+                }
                 Some(ItemDefinition {
                     id: object.subclass,
                     label,
                     object: Some(object.label.clone()),
-                    is_unknown: display_name.is_empty(),
+                    flags,
                 })
             } else {
                 None
@@ -399,7 +402,8 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
         let id = i as u16;
         if items[i].id != id {
             let label = Label(format!("{}{}", UNKNOWN_PREFIX, id));
-            items.insert(i, ItemDefinition { id, label, object: None, is_unknown: true });
+            let flags = vec![ITEM_FLAG_UNUSED.into()];
+            items.insert(i, ItemDefinition { id, label, object: None, flags });
         }
     }
     assert_eq!(items.len(), NUM_ITEMS);
@@ -594,8 +598,8 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
             Some(label) => &label.0,
             _ => "None",
         };
-        let flags = if item.is_unknown { ITEM_FLAGS_UNKNOWN } else { ITEM_FLAGS_EMPTY };
-        writeln!(writer, "    {} => {} {{ {}, {} }},", item.id, item.label.0, object, flags)?;
+        let flags: String = item.flags.iter().map(|f| format!(", {}", f)).collect();
+        writeln!(writer, "    {} => {} {{ {}{} }},", item.id, item.label.0, object, flags)?;
     }
     write!(writer, "{}", ITEMS_FOOTER)?;
     writer.flush()?;
