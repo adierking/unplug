@@ -54,7 +54,10 @@ fn compile_flag_requirement(flag: i32) -> Expr {
 
 /// Returns whether `item` is a timer.
 fn is_timer(item: Option<Item>) -> bool {
-    matches!(item, Some(Item::Timer5 | Item::Timer10 | Item::Timer15))
+    match item {
+        Some(item) => [Item::Timer5, Item::Timer10, Item::Timer15].contains(&item),
+        None => false,
+    }
 }
 
 /// Compilation context for a single slot.

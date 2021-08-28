@@ -1,3 +1,4 @@
+#![allow(clippy::trivial_regex)]
 #![warn(
     absolute_paths_not_starting_with_crate,
     elided_lifetimes_in_paths,
@@ -467,7 +468,7 @@ fn read_suits(
     reader.read_u16_into::<BE>(&mut item_ids)?;
 
     let mut suits = vec![SuitDefinition::default(); NUM_SUITS];
-    for (&id, item_id) in order.iter().zip(item_ids) {
+    for (&id, &item_id) in order.iter().zip(&item_ids) {
         // Get the display name and label from globals
         let display_name = globals[id as usize].name.decode()?;
         let mut label = if !display_name.is_empty() {
