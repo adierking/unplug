@@ -58,6 +58,11 @@ const FIRST_DEV_STAGE: i32 = 100;
 const STAGE_DIR: &str = "bin/e";
 const STAGE_EXT: &str = ".bin";
 
+const MUSIC_LIST_ADDR: u32 = 0x802108a8;
+const NUM_MUSIC: usize = 109;
+const MUSIC_PATH_PREFIX: &str = "qp/";
+const MUSIC_EXT: &str = ".hps";
+
 const QP_PATH: &str = "qp.bin";
 
 const INTERNAL_PREFIX: &str = "Internal";
@@ -94,6 +99,10 @@ const SUITS_FOOTER: &str = "}\n";
 const STAGES_FILE_NAME: &str = "stages.inc.rs";
 const STAGES_HEADER: &str = "declare_stages! {\n";
 const STAGES_FOOTER: &str = "}\n";
+
+const MUSIC_FILE_NAME: &str = "music.inc.rs";
+const MUSIC_HEADER: &str = "declare_music! {\n";
+const MUSIC_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -575,6 +584,56 @@ fn read_stages(
     Ok(definitions)
 }
 
+// The raw representation of a music file in the executable.
+#[derive(Default, Copy, Clone)]
+struct RawMusicDefinition {
+    path_addr: u32,
+    volume: u8,
+}
+
+impl<R: Read> ReadFrom<R> for RawMusicDefinition {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        let result = Self { path_addr: reader.read_u32::<BE>()?, volume: reader.read_u8()? };
+        let _padding = reader.read_u24::<BE>()?;
+        Ok(result)
+    }
+}
+
+/// Representation of a music file which is written to the generated source.
+struct MusicDefinition {
+    id: u8,
+    label: Label,
+    path: String,
+    volume: u8,
+}
+
+/// Reads the music list from the executable.
+fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<MusicDefinition>> {
+    let music_offset = dol.address_to_offset(MUSIC_LIST_ADDR)? as u64;
+    reader.seek(SeekFrom::Start(music_offset))?;
+    let mut raw_music = [RawMusicDefinition::default(); NUM_MUSIC];
+    RawMusicDefinition::read_all_from(reader, &mut raw_music)?;
+
+    let mut definitions: Vec<MusicDefinition> = vec![];
+    // Music IDs start at 1
+    for (id, music) in raw_music.iter().enumerate().skip(1) {
+        // The file path doesn't include the "qp/" directory, so we have to add it
+        let path_offset = dol.address_to_offset(music.path_addr)? as u64;
+        reader.seek(SeekFrom::Start(path_offset))?;
+        let mut path = CString::read_from(reader)?.into_string()?;
+        path.insert_str(0, MUSIC_PATH_PREFIX);
+
+        // Make the label based on the filename
+        let (_, filename) = path.rsplit_once('/').unwrap();
+        let name = filename.strip_suffix(MUSIC_EXT).unwrap();
+        let label = Label::from_string_lossy(name);
+
+        definitions.push(MusicDefinition { id: id as u8, label, path, volume: music.volume });
+    }
+    Ok(definitions)
+}
+
 /// Writes the list of objects to the generated file.
 fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, OBJECTS_HEADER)?;
@@ -639,6 +698,17 @@ fn write_stages(mut writer: impl Write, stages: &[StageDefinition]) -> Result<()
     Ok(())
 }
 
+/// Writes the music list to the generated file.
+fn write_music(mut writer: impl Write, music: &[MusicDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, MUSIC_HEADER)?;
+    for m in music {
+        writeln!(writer, "    {} => {} {{ {}, \"{}\" }},", m.id, m.label.0, m.volume, m.path)?;
+    }
+    write!(writer, "{}", MUSIC_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 fn run_app() -> Result<()> {
     init_logging();
 
@@ -697,6 +767,9 @@ fn run_app() -> Result<()> {
     info!("Reading stage data");
     let stages = read_stages(&dol, &mut dol_reader, &metadata.stages)?;
 
+    info!("Reading music data");
+    let music = read_music(&dol, &mut dol_reader)?;
+
     let out_dir: PathBuf = [UNPLUG_DATA_PATH, SRC_DIR_NAME, OUTPUT_DIR_NAME].iter().collect();
     fs::create_dir_all(&out_dir)?;
 
@@ -724,6 +797,11 @@ fn run_app() -> Result<()> {
     info!("Writing {}", stages_path.display());
     let stages_writer = BufWriter::new(File::create(stages_path)?);
     write_stages(stages_writer, &stages)?;
+
+    let music_path = out_dir.join(MUSIC_FILE_NAME);
+    info!("Writing {}", music_path.display());
+    let music_writer = BufWriter::new(File::create(music_path)?);
+    write_music(music_writer, &music)?;
 
     Ok(())
 }
