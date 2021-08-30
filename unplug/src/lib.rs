@@ -20,6 +20,7 @@ pub use unplug_data as data;
 #[macro_use]
 pub mod macros;
 
+pub mod audio;
 pub mod common;
 pub mod dvd;
 pub mod event;
