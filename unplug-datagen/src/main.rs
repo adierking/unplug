@@ -142,6 +142,12 @@ lazy_static! {
         ("SoukoWineBottleA".into(), "BrokenBottleA"),
         ("SoukoWineBottleB".into(), "BrokenBottleB"),
     ].into_iter().collect();
+
+    /// Find-and-replace pairs for music paths
+    static ref MUSIC_PATH_FIXUPS: Vec<(Regex, &'static str)> = vec![
+        // Fix capitalization
+        (Regex::new("/nwing.hps$").unwrap(), "/Nwing.hps"),
+    ];
 }
 
 fn init_logging() {
@@ -623,6 +629,14 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
         reader.seek(SeekFrom::Start(path_offset))?;
         let mut path = CString::read_from(reader)?.into_string()?;
         path.insert_str(0, MUSIC_PATH_PREFIX);
+
+        // Fix up the path if necessary
+        for (find, replace) in MUSIC_PATH_FIXUPS.iter() {
+            if let Cow::Owned(new) = find.replace(&path, *replace) {
+                path = new;
+                break;
+            }
+        }
 
         // Make the label based on the filename
         let (_, filename) = path.rsplit_once('/').unwrap();

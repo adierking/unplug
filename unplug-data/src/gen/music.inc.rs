@@ -103,7 +103,7 @@ declare_music! {
     99 => Chicken { 255, "qp/streaming/chicken.hps" },
     100 => American { 255, "qp/streaming/american.hps" },
     101 => Pipe { 255, "qp/streaming/pipe.hps" },
-    102 => Nwing { 255, "qp/streaming/nwing.hps" },
+    102 => Nwing { 255, "qp/streaming/Nwing.hps" },
     103 => Victory { 180, "qp/streaming/victory.hps" },
     104 => Mugen { 255, "qp/streaming/mugen.hps" },
     105 => Yusho { 255, "qp/streaming/yusho.hps" },
