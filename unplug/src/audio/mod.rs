@@ -24,9 +24,6 @@ pub enum Error {
     #[error("invalid channel count: {0}")]
     InvalidChannelCount(u32),
 
-    #[error("DSP address {0:#x} is out of bounds ({1:#x})")]
-    AddressOutOfBounds(u32, u32),
-
     #[error(transparent)]
     Io(Box<io::Error>),
 }

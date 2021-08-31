@@ -62,11 +62,11 @@ pub struct Channel {
     pub looping: bool,
     /// Format of each sample in the channel.
     pub format: SampleFormat,
-    /// Address of the sample that looping starts at.
+    /// Address of the sample that looping starts at. Unused and always points to the first sample.
     pub start_address: u32,
-    /// Address of the last sample.
+    /// Address of the last sample. Unused.
     pub end_address: u32,
-    /// Address that decoding should begin at.
+    /// Address that the DSP should begin at. Unused and always points to the first sample.
     pub current_address: u32,
     /// ADPCM coefficients.
     pub coefficients: [i16; 16],
@@ -87,12 +87,6 @@ impl<R: Read> ReadFrom<R> for Channel {
             current_address: reader.read_u32::<BE>()?,
             ..Default::default()
         };
-        if channel.start_address > channel.end_address {
-            return Err(Error::AddressOutOfBounds(channel.start_address, channel.end_address));
-        }
-        if channel.current_address > channel.end_address {
-            return Err(Error::AddressOutOfBounds(channel.current_address, channel.end_address));
-        }
         reader.read_i16_into::<BE>(&mut channel.coefficients)?;
         channel.gain = reader.read_u16::<BE>()?;
         channel.initial_context = DecoderContext::read_from(reader)?;
