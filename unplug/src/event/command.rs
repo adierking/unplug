@@ -506,7 +506,7 @@ expr_enum! {
         Unk241 => TYPE_UNK_241,
         Unk242 => TYPE_UNK_242,
         Scale(CheckScaleArgs { obj }) => TYPE_SCALE,
-        Unk245 => TYPE_UNK_245,
+        Marker => TYPE_MARKER,
         Unk246(CheckUnk246Args { val }) => TYPE_UNK_246,
     }
 }
