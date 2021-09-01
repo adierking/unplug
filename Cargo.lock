@@ -96,6 +96,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc32fast"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81156fece84ab6a9f2afdb109ce3ae577e42b1228441eded99bd77f627953b1a"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -703,6 +712,7 @@ name = "unplug-test"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "crc32fast",
  "lazy_static",
  "log",
  "serial_test",

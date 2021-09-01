@@ -1,8 +1,11 @@
-use super::{Error, Result, SampleFormat};
+use super::adpcm::{Context, Decoder, GcAdpcm};
+use super::format::{AnyFormat, Format, GcFormat, PcmS16Le};
+use super::sample::{CastSamples, JoinChannels};
+use super::{Error, ReadSamples, Result, Samples};
 use crate::common::ReadFrom;
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
-use log::{debug, trace};
+use log::{debug, error, trace};
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::io::{Read, Seek, SeekFrom};
@@ -16,10 +19,13 @@ const FIRST_BLOCK_OFFSET: u32 = 0x80;
 const END_BLOCK_OFFSET: u32 = u32::MAX;
 
 /// The alignment of data in an HPS file.
-const DATA_ALIGN: u32 = 0x20;
+const DATA_ALIGN: usize = 0x20;
+
+/// Convenience type for an opaque decoder.
+type HpsDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
 
 /// Aligns `offset` to the next multiple of the data alignment.
-fn align(offset: u32) -> u32 {
+fn align(offset: usize) -> usize {
     (offset + DATA_ALIGN - 1) & !(DATA_ALIGN - 1)
 }
 
@@ -61,7 +67,7 @@ pub struct Channel {
     /// even if the HPS as a whole does not loop.
     pub looping: bool,
     /// Format of each sample in the channel.
-    pub format: SampleFormat,
+    pub format: GcFormat,
     /// Address of the sample that looping starts at. Unused and always points to the first sample.
     pub start_address: u32,
     /// Address of the last sample. Unused.
@@ -73,7 +79,7 @@ pub struct Channel {
     /// Audio gain level.
     pub gain: u16,
     /// Initial decoder parameters.
-    pub initial_context: DecoderContext,
+    pub initial_context: Context,
 }
 
 impl<R: Read> ReadFrom<R> for Channel {
@@ -81,7 +87,7 @@ impl<R: Read> ReadFrom<R> for Channel {
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut channel = Self {
             looping: reader.read_u16::<BE>()? != 0,
-            format: SampleFormat::read_from(reader)?,
+            format: GcFormat::read_from(reader)?,
             start_address: reader.read_u32::<BE>()?,
             end_address: reader.read_u32::<BE>()?,
             current_address: reader.read_u32::<BE>()?,
@@ -89,52 +95,8 @@ impl<R: Read> ReadFrom<R> for Channel {
         };
         reader.read_i16_into::<BE>(&mut channel.coefficients)?;
         channel.gain = reader.read_u16::<BE>()?;
-        channel.initial_context = DecoderContext::read_from(reader)?;
+        channel.initial_context = Context::read_from(reader)?;
         Ok(channel)
-    }
-}
-
-/// Audio decoder context.
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
-pub struct DecoderContext {
-    /// ADPCM uses this as a byte where the high nibble is the predictor (coefficient index) and the
-    /// low nibble is the scale. Use `predictor()` and `scale()` to unpack this.
-    pub predictor_and_scale: u16,
-    /// Previously-decoded samples, where `last_samples[1]` is the oldest. Use `push_sample()` to
-    /// insert new samples into this.
-    pub last_samples: [i16; 2],
-}
-
-impl DecoderContext {
-    /// Creates an empty `DecoderContext`.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Unpacks the current ADPCM predictor (coefficient index) value.
-    pub fn predictor(&self) -> usize {
-        ((self.predictor_and_scale >> 4) & 0x7) as usize
-    }
-
-    /// Unpacks the current ADPCM scale value.
-    pub fn scale(&self) -> i32 {
-        1 << (self.predictor_and_scale & 0xf)
-    }
-
-    /// Pushes a new sample into the sample history, pushing out the oldest sample.
-    pub fn push_sample(&mut self, sample: i16) {
-        self.last_samples[1] = self.last_samples[0];
-        self.last_samples[0] = sample;
-    }
-}
-
-impl<R: Read> ReadFrom<R> for DecoderContext {
-    type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let predictor_and_scale = reader.read_u16::<BE>()?;
-        let mut last_samples = [0i16; 2];
-        reader.read_i16_into::<BE>(&mut last_samples)?;
-        Ok(Self { predictor_and_scale, last_samples })
     }
 }
 
@@ -170,7 +132,7 @@ struct BlockHeader {
     /// The offset of the next block to play.
     next_offset: u32,
     /// Initial decoder parameters for each channel.
-    channel_contexts: [DecoderContext; 2],
+    channel_contexts: [Context; 2],
     /// Markers in this block.
     markers: Vec<Marker>,
 }
@@ -186,7 +148,7 @@ impl<R: Read> ReadFrom<R> for BlockHeader {
         };
 
         for context in &mut header.channel_contexts {
-            *context = DecoderContext::read_from(reader)?;
+            *context = Context::read_from(reader)?;
             let _padding = reader.read_u16::<BE>()?;
         }
 
@@ -220,6 +182,34 @@ pub struct HpsStream {
     pub loop_start: Option<usize>,
     /// The blocks making up the stream data.
     pub blocks: Vec<Block>,
+}
+
+impl HpsStream {
+    /// Creates a `ChannelReader` over a channel in the stream.
+    /// ***Panics*** if the channel index is out-of-bounds.
+    pub fn reader(&self, channel: usize) -> ChannelReader<'_> {
+        assert!(channel < self.channels.len(), "invalid channel index");
+        ChannelReader { blocks: &self.blocks, channel, format: self.channels[channel].format }
+    }
+
+    /// Creates a decoder which decodes all channels into PCM16 format and joins them.
+    pub fn decoder(&self) -> HpsDecoder<'_> {
+        if self.channels.len() == 1 {
+            self.channel_decoder(0)
+        } else {
+            let left = self.channel_decoder(0);
+            let right = self.channel_decoder(1);
+            Box::new(JoinChannels::new(left, right))
+        }
+    }
+
+    /// Creates a decoder which decodes the samples in `channel` into PCM16 format.
+    /// ***Panics*** if the channel index is out-of-bounds.
+    pub fn channel_decoder(&self, channel: usize) -> HpsDecoder<'_> {
+        let reader = self.reader(channel);
+        let casted = CastSamples::new(reader);
+        Box::new(Decoder::new(Box::new(casted), &self.channels[channel].coefficients))
+    }
 }
 
 impl<R: Read + Seek> ReadFrom<R> for HpsStream {
@@ -315,12 +305,13 @@ impl Block {
         // Calculate the size of each channel and use this to determine their offsets. Channel
         // data is aligned to a multiple of the alignment size.
         let mut block_channels = ArrayVec::new();
-        let mut data_offset = 0u32;
+        let mut data_offset = 0;
         for (i, channel) in channels.iter().enumerate() {
-            let data_size = channel.format.calculate_size(header.end_address);
+            let format = Format::from(channel.format);
+            let data_size = format.size_of(header.end_address as usize + 1);
             block_channels.push(BlockChannel {
-                data_offset: data_offset as usize,
-                data_size: data_size as usize,
+                data_offset,
+                data_size,
                 initial_context: header.channel_contexts[i],
             });
             data_offset = align(data_offset + data_size);
@@ -354,13 +345,48 @@ pub struct BlockChannel {
     /// The size (in bytes) of the channel data.
     pub data_size: usize,
     /// Initial decoder parameters.
-    pub initial_context: DecoderContext,
+    pub initial_context: Context,
 }
 
 impl BlockChannel {
     /// Creates an empty `BlockChannel`.
     pub fn new() -> Self {
         Self::default()
+    }
+}
+
+/// Reads sample data from a single HPS channel.
+pub struct ChannelReader<'a> {
+    blocks: &'a [Block],
+    channel: usize,
+    format: GcFormat,
+}
+
+impl<'a> ReadSamples<'a> for ChannelReader<'a> {
+    type Format = AnyFormat;
+    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
+        if self.blocks.is_empty() {
+            return Ok(None);
+        }
+        let block = &self.blocks[0];
+        self.blocks = &self.blocks[1..];
+        match self.format {
+            GcFormat::Adpcm => Ok(Some(
+                Samples::<GcAdpcm> {
+                    context: block.channels[self.channel].initial_context,
+                    start_address: 0,
+                    end_address: block.end_address as usize,
+                    channels: 1,
+                    bytes: block.channel_data(self.channel).into(),
+                }
+                .into_any(),
+            )),
+            other => {
+                // TODO
+                error!("Sample format not supported yet: {:?}", other);
+                Err(Error::UnsupportedFormat(self.format.into()))
+            }
+        }
     }
 }
 
@@ -409,12 +435,12 @@ mod tests {
 
         let ch = &header.channels[0];
         assert!(!ch.looping);
-        assert_eq!(ch.format, SampleFormat::Adpcm);
+        assert_eq!(ch.format, GcFormat::Adpcm);
         assert_eq!(ch.start_address, 1);
         assert_eq!(ch.end_address, 3);
         assert_eq!(ch.current_address, 2);
         for i in 0..16 {
-            assert_eq!(ch.coefficients[i as usize], (i + 1) as i16);
+            assert_eq!(ch.coefficients[i], (i + 1) as i16);
         }
         assert_eq!(ch.gain, 4);
         assert_eq!(ch.initial_context.predictor_and_scale, 5);
@@ -469,12 +495,12 @@ mod tests {
 
         let ch0 = &header.channels[0];
         assert!(!ch0.looping);
-        assert_eq!(ch0.format, SampleFormat::Adpcm);
+        assert_eq!(ch0.format, GcFormat::Adpcm);
         assert_eq!(ch0.start_address, 1);
         assert_eq!(ch0.end_address, 3);
         assert_eq!(ch0.current_address, 2);
         for i in 0..16 {
-            assert_eq!(ch0.coefficients[i as usize], (i + 1) as i16);
+            assert_eq!(ch0.coefficients[i], (i + 1) as i16);
         }
         assert_eq!(ch0.gain, 4);
         assert_eq!(ch0.initial_context.predictor_and_scale, 5);
@@ -482,12 +508,12 @@ mod tests {
 
         let ch1 = &header.channels[1];
         assert!(ch1.looping);
-        assert_eq!(ch1.format, SampleFormat::Pcm16);
+        assert_eq!(ch1.format, GcFormat::Pcm16);
         assert_eq!(ch1.start_address, 8);
         assert_eq!(ch1.end_address, 10);
         assert_eq!(ch1.current_address, 9);
         for i in 0..16 {
-            assert_eq!(ch1.coefficients[i as usize], (i + 1) as i16);
+            assert_eq!(ch1.coefficients[i], (i + 1) as i16);
         }
         assert_eq!(ch1.gain, 11);
         assert_eq!(ch1.initial_context.predictor_and_scale, 12);
@@ -592,7 +618,7 @@ mod tests {
         };
         let channel = Channel {
             looping: true,
-            format: SampleFormat::Adpcm,
+            format: GcFormat::Adpcm,
             start_address: 0x02,
             end_address: 0x1f,
             current_address: 0x02,
