@@ -164,7 +164,7 @@ impl<'a> SampleIterator<'a> {
         let step = F::sample_to_byte(1, samples.channels);
         assert!(step > 0);
         let start = F::address_to_byte(samples.start_address);
-        let end = F::address_to_byte(samples.end_address) + step;
+        let end = F::address_to_byte(samples.end_address + 1);
         Self { bytes: &samples.bytes[start..end], step }
     }
 }

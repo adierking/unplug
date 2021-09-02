@@ -3,8 +3,11 @@ pub mod format;
 pub mod hps;
 pub mod sample;
 
+mod wav;
+
 pub use format::{Format, FormatTag, GcFormat};
 pub use sample::{ReadSamples, Samples};
+pub use wav::WavBuilder;
 
 use std::io;
 use thiserror::Error;
