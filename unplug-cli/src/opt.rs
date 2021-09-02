@@ -70,6 +70,9 @@ pub enum Subcommand {
 
     /// Imports shop data from a JSON file
     ImportShop(ImportShopOpt),
+
+    /// Exports a HPS music file to a WAV file
+    ExportMusic(ExportMusicOpt),
 }
 
 #[derive(StructOpt)]
@@ -361,4 +364,19 @@ pub struct ImportShopOpt {
     /// Path to the input JSON file
     #[structopt(value_name("PATH"))]
     pub input: PathBuf,
+}
+
+#[derive(StructOpt)]
+pub struct ExportMusicOpt {
+    /// Run within a Chibi-Robo! ISO
+    #[structopt(long, value_name("PATH"), parse(from_os_str))]
+    pub iso: Option<PathBuf>,
+
+    /// Path to the HPS file to export
+    #[structopt(parse(from_os_str))]
+    pub path: PathBuf,
+
+    /// Path to the output WAV file
+    #[structopt(short, value_name("PATH"))]
+    pub output: PathBuf,
 }

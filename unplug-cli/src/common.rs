@@ -38,6 +38,20 @@ pub fn edit_iso_optional(path: Option<impl AsRef<Path>>) -> Result<Option<DiscSt
     }
 }
 
+/// Opens a file from either an ISO or the local filesystem.
+pub fn open_iso_entry_or_file<'a>(
+    iso: Option<&'a mut DiscStream<File>>,
+    path: impl AsRef<Path>,
+) -> Result<Box<dyn ReadSeek + 'a>> {
+    if let Some(iso) = iso {
+        info!("Opening {} from ISO", path.as_ref().display());
+        Ok(iso.open_file_at(path.as_ref().to_str().unwrap())?)
+    } else {
+        info!("Opening file: {}", path.as_ref().display());
+        Ok(Box::new(File::open(path)?))
+    }
+}
+
 fn open_qp<'a>(
     iso: Option<&'a mut DiscStream<File>>,
     path: Option<impl AsRef<Path>>,
@@ -47,7 +61,7 @@ fn open_qp<'a>(
         let file = iso.open_file_at(QP_PATH)?;
         Ok(Some(ArchiveReader::open(file)?))
     } else if let Some(path) = path {
-        info!("Opening archive: {}", path.as_ref().to_str().unwrap());
+        info!("Opening archive: {}", path.as_ref().display());
         let file: Box<dyn ReadSeek> = Box::new(File::open(path)?);
         Ok(Some(ArchiveReader::open(file)?))
     } else {
@@ -82,7 +96,7 @@ fn read_entry(
 
 /// Copies a file into memory.
 fn read_file(path: impl AsRef<Path>) -> Result<MemoryCursor> {
-    debug!("Opening file: {}", path.as_ref().to_str().unwrap());
+    debug!("Opening file: {}", path.as_ref().display());
     Ok(copy_into_memory(File::open(path)?)?)
 }
 

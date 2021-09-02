@@ -6,6 +6,7 @@ pub mod sample;
 mod wav;
 
 pub use format::{Format, FormatTag, GcFormat};
+pub use hps::HpsStream;
 pub use sample::{ReadSamples, Samples};
 pub use wav::WavBuilder;
 

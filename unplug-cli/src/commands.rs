@@ -6,11 +6,13 @@ use anyhow::Result;
 use log::{debug, info};
 use std::convert::TryFrom;
 use std::fs::{self, File};
-use std::io::{BufWriter, Read, Seek, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::Path;
 use std::time::Instant;
 use unicase::UniCase;
+use unplug::audio::{HpsStream, WavBuilder};
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
+use unplug::common::ReadFrom;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
@@ -299,5 +301,24 @@ pub fn dump_colliders(opt: DumpCollidersOpt) -> Result<()> {
         writeln!(out)?;
     }
 
+    Ok(())
+}
+
+pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
+    let start_time = Instant::now();
+
+    let mut iso = open_iso_optional(opt.iso.as_ref())?;
+    let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), opt.path)?);
+    let hps = HpsStream::read_from(&mut reader)?;
+
+    info!("Decoding to {}", opt.output.display());
+    let out = BufWriter::new(File::create(&opt.output)?);
+    WavBuilder::new()
+        .channels(hps.channels.len())
+        .sample_rate(hps.sample_rate)
+        .samples(hps.decoder())
+        .write_to(out)?;
+
+    info!("Export finished in {:?}", start_time.elapsed());
     Ok(())
 }
