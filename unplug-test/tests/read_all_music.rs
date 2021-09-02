@@ -2,8 +2,8 @@ use anyhow::Result;
 use crc32fast::Hasher;
 use log::info;
 use std::io::BufReader;
+use unplug::audio::dsp::DspFormat;
 use unplug::audio::hps::{Block, HpsStream};
-use unplug::audio::GcFormat;
 use unplug::common::ReadFrom;
 use unplug::data::music::{Music, MusicDefinition};
 use unplug::dvd::OpenFile;
@@ -13,7 +13,7 @@ fn validate_channel(hps: &HpsStream, block: &Block, channel: usize) {
     if channel >= hps.channels.len() {
         return;
     }
-    if hps.channels[channel].format != GcFormat::Adpcm {
+    if hps.channels[channel].address.format != DspFormat::Adpcm {
         return;
     }
     // Basic validity check: the first byte should match the context's predictor_and_scale

@@ -1,5 +1,6 @@
-use super::adpcm::{Context, Decoder, GcAdpcm};
-use super::format::{AnyFormat, Format, GcFormat, PcmS16Le};
+use super::adpcm::{Context, Decoder, GcAdpcm, Info};
+use super::dsp::{AudioAddress, DspFormat};
+use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
 use crate::common::ReadFrom;
@@ -9,6 +10,7 @@ use log::{debug, error, trace};
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::io::{Read, Seek, SeekFrom};
+use unplug_proc::ReadFrom;
 
 /// The magic string at the beginning of an HPS file.
 const HPS_MAGIC: &[u8; 8] = b" HALPST\0";
@@ -61,43 +63,11 @@ impl<R: Read> ReadFrom<R> for FileHeader {
 }
 
 /// Audio channel header.
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ReadFrom)]
+#[read_from(error = Error)]
 pub struct Channel {
-    /// True if the channel is looping. Note that this is a DSP parameter and should always be true,
-    /// even if the HPS as a whole does not loop.
-    pub looping: bool,
-    /// Format of each sample in the channel.
-    pub format: GcFormat,
-    /// Address of the sample that looping starts at. Unused and always points to the first sample.
-    pub start_address: u32,
-    /// Address of the last sample. Unused.
-    pub end_address: u32,
-    /// Address that the DSP should begin at. Unused and always points to the first sample.
-    pub current_address: u32,
-    /// ADPCM coefficients.
-    pub coefficients: [i16; 16],
-    /// Audio gain level.
-    pub gain: u16,
-    /// Initial decoder parameters.
-    pub initial_context: Context,
-}
-
-impl<R: Read> ReadFrom<R> for Channel {
-    type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let mut channel = Self {
-            looping: reader.read_u16::<BE>()? != 0,
-            format: GcFormat::read_from(reader)?,
-            start_address: reader.read_u32::<BE>()?,
-            end_address: reader.read_u32::<BE>()?,
-            current_address: reader.read_u32::<BE>()?,
-            ..Default::default()
-        };
-        reader.read_i16_into::<BE>(&mut channel.coefficients)?;
-        channel.gain = reader.read_u16::<BE>()?;
-        channel.initial_context = Context::read_from(reader)?;
-        Ok(channel)
-    }
+    pub address: AudioAddress,
+    pub adpcm: Info,
 }
 
 /// A marker in an audio stream which allows the game to trigger events when it is reached.
@@ -189,7 +159,8 @@ impl HpsStream {
     /// ***Panics*** if the channel index is out-of-bounds.
     pub fn reader(&self, channel: usize) -> ChannelReader<'_> {
         assert!(channel < self.channels.len(), "invalid channel index");
-        ChannelReader { blocks: &self.blocks, channel, format: self.channels[channel].format }
+        let format = self.channels[channel].address.format;
+        ChannelReader { blocks: &self.blocks, channel, format }
     }
 
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
@@ -208,7 +179,8 @@ impl HpsStream {
     pub fn channel_decoder(&self, channel: usize) -> HpsDecoder<'_> {
         let reader = self.reader(channel);
         let casted = CastSamples::new(reader);
-        Box::new(Decoder::new(Box::new(casted), &self.channels[channel].coefficients))
+        let coefficients = &self.channels[channel].adpcm.coefficients;
+        Box::new(Decoder::new(Box::new(casted), coefficients))
     }
 }
 
@@ -307,7 +279,7 @@ impl Block {
         let mut block_channels = ArrayVec::new();
         let mut data_offset = 0;
         for (i, channel) in channels.iter().enumerate() {
-            let format = Format::from(channel.format);
+            let format = Format::from(channel.address.format);
             let data_size = format.size_of(header.end_address as usize + 1);
             block_channels.push(BlockChannel {
                 data_offset,
@@ -359,7 +331,7 @@ impl BlockChannel {
 pub struct ChannelReader<'a> {
     blocks: &'a [Block],
     channel: usize,
-    format: GcFormat,
+    format: DspFormat,
 }
 
 impl<'a> ReadSamples<'a> for ChannelReader<'a> {
@@ -371,7 +343,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         let block = &self.blocks[0];
         self.blocks = &self.blocks[1..];
         match self.format {
-            GcFormat::Adpcm => Ok(Some(
+            DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
                     context: block.channels[self.channel].initial_context,
                     start_address: 0,
@@ -434,17 +406,17 @@ mod tests {
         assert_eq!(header.num_channels, 1);
 
         let ch = &header.channels[0];
-        assert!(!ch.looping);
-        assert_eq!(ch.format, GcFormat::Adpcm);
-        assert_eq!(ch.start_address, 1);
-        assert_eq!(ch.end_address, 3);
-        assert_eq!(ch.current_address, 2);
+        assert!(!ch.address.looping);
+        assert_eq!(ch.address.format, DspFormat::Adpcm);
+        assert_eq!(ch.address.loop_address, 1);
+        assert_eq!(ch.address.end_address, 3);
+        assert_eq!(ch.address.current_address, 2);
         for i in 0..16 {
-            assert_eq!(ch.coefficients[i], (i + 1) as i16);
+            assert_eq!(ch.adpcm.coefficients[i], (i + 1) as i16);
         }
-        assert_eq!(ch.gain, 4);
-        assert_eq!(ch.initial_context.predictor_and_scale, 5);
-        assert_eq!(ch.initial_context.last_samples, [6, 7]);
+        assert_eq!(ch.adpcm.gain, 4);
+        assert_eq!(ch.adpcm.context.predictor_and_scale, 5);
+        assert_eq!(ch.adpcm.context.last_samples, [6, 7]);
 
         Ok(())
     }
@@ -494,30 +466,30 @@ mod tests {
         assert_eq!(header.num_channels, 2);
 
         let ch0 = &header.channels[0];
-        assert!(!ch0.looping);
-        assert_eq!(ch0.format, GcFormat::Adpcm);
-        assert_eq!(ch0.start_address, 1);
-        assert_eq!(ch0.end_address, 3);
-        assert_eq!(ch0.current_address, 2);
+        assert!(!ch0.address.looping);
+        assert_eq!(ch0.address.format, DspFormat::Adpcm);
+        assert_eq!(ch0.address.loop_address, 1);
+        assert_eq!(ch0.address.end_address, 3);
+        assert_eq!(ch0.address.current_address, 2);
         for i in 0..16 {
-            assert_eq!(ch0.coefficients[i], (i + 1) as i16);
+            assert_eq!(ch0.adpcm.coefficients[i], (i + 1) as i16);
         }
-        assert_eq!(ch0.gain, 4);
-        assert_eq!(ch0.initial_context.predictor_and_scale, 5);
-        assert_eq!(ch0.initial_context.last_samples, [6, 7]);
+        assert_eq!(ch0.adpcm.gain, 4);
+        assert_eq!(ch0.adpcm.context.predictor_and_scale, 5);
+        assert_eq!(ch0.adpcm.context.last_samples, [6, 7]);
 
         let ch1 = &header.channels[1];
-        assert!(ch1.looping);
-        assert_eq!(ch1.format, GcFormat::Pcm16);
-        assert_eq!(ch1.start_address, 8);
-        assert_eq!(ch1.end_address, 10);
-        assert_eq!(ch1.current_address, 9);
+        assert!(ch1.address.looping);
+        assert_eq!(ch1.address.format, DspFormat::Pcm16);
+        assert_eq!(ch1.address.loop_address, 8);
+        assert_eq!(ch1.address.end_address, 10);
+        assert_eq!(ch1.address.current_address, 9);
         for i in 0..16 {
-            assert_eq!(ch1.coefficients[i], (i + 1) as i16);
+            assert_eq!(ch1.adpcm.coefficients[i], (i + 1) as i16);
         }
-        assert_eq!(ch1.gain, 11);
-        assert_eq!(ch1.initial_context.predictor_and_scale, 12);
-        assert_eq!(ch1.initial_context.last_samples, [13, 14]);
+        assert_eq!(ch1.adpcm.gain, 11);
+        assert_eq!(ch1.adpcm.context.predictor_and_scale, 12);
+        assert_eq!(ch1.adpcm.context.last_samples, [13, 14]);
 
         Ok(())
     }
@@ -617,14 +589,14 @@ mod tests {
             markers: vec![],
         };
         let channel = Channel {
-            looping: true,
-            format: GcFormat::Adpcm,
-            start_address: 0x02,
-            end_address: 0x1f,
-            current_address: 0x02,
-            coefficients: [0; 16],
-            gain: 0,
-            initial_context: Default::default(),
+            address: AudioAddress {
+                looping: true,
+                format: DspFormat::Adpcm,
+                loop_address: 0x02,
+                end_address: 0x1f,
+                current_address: 0x02,
+            },
+            adpcm: Info { coefficients: [0; 16], gain: 0, context: Default::default() },
         };
         let channels = [channel, channel];
         let mut reader = Cursor::new(bytes);

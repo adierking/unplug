@@ -1,11 +1,5 @@
-use super::{Error, Result};
-use crate::common::ReadFrom;
-use byteorder::{ReadBytesExt, BE};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::any::Any;
-use std::convert::TryFrom;
 use std::fmt::Debug;
-use std::io::Read;
 
 /// Supported audio sample formats.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -45,45 +39,6 @@ impl Format {
 impl Default for Format {
     fn default() -> Self {
         Self::PcmS16Le
-    }
-}
-
-impl From<GcFormat> for Format {
-    fn from(gc: GcFormat) -> Self {
-        match gc {
-            GcFormat::Adpcm => Self::GcAdpcm,
-            GcFormat::Pcm16 => Self::PcmS16Be,
-            GcFormat::Pcm8 => Self::PcmS8,
-        }
-    }
-}
-
-/// GameCube audio sample formats.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
-#[repr(u16)]
-pub enum GcFormat {
-    /// GameCube ADPCM
-    Adpcm = 0,
-    /// 16-bit big endian PCM
-    Pcm16 = 10,
-    /// 8-bit PCM
-    Pcm8 = 25,
-}
-
-impl Default for GcFormat {
-    fn default() -> Self {
-        Self::Adpcm
-    }
-}
-
-impl<R: Read> ReadFrom<R> for GcFormat {
-    type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let id = reader.read_u16::<BE>()?;
-        match Self::try_from(id) {
-            Ok(format) => Ok(format),
-            Err(_) => Err(Error::UnrecognizedSampleFormat(id)),
-        }
     }
 }
 

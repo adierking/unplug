@@ -15,6 +15,28 @@ impl StaticFormat for GcAdpcm {
     }
 }
 
+/// GameCube ADPCM decoder info.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub struct Info {
+    /// ADPCM coefficients.
+    pub coefficients: [i16; 16],
+    /// Audio gain level.
+    pub gain: u16,
+    /// Initial decoder parameters.
+    pub context: Context,
+}
+
+impl<R: Read> ReadFrom<R> for Info {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        let mut info = Info::default();
+        reader.read_i16_into::<BE>(&mut info.coefficients)?;
+        info.gain = reader.read_u16::<BE>()?;
+        info.context = Context::read_from(reader)?;
+        Ok(info)
+    }
+}
+
 /// GameCube ADPCM decoder context.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct Context {

@@ -1,11 +1,12 @@
 pub mod adpcm;
+pub mod dsp;
 pub mod format;
 pub mod hps;
 pub mod sample;
 
 mod wav;
 
-pub use format::{Format, FormatTag, GcFormat};
+pub use format::{Format, FormatTag};
 pub use hps::HpsStream;
 pub use sample::{ReadSamples, Samples};
 pub use wav::WavBuilder;
