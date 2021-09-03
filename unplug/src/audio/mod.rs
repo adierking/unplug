@@ -3,12 +3,14 @@ pub mod dsp;
 pub mod format;
 pub mod hps;
 pub mod sample;
+pub mod ssm;
 
 mod wav;
 
 pub use format::{Format, FormatTag};
 pub use hps::HpsStream;
 pub use sample::{ReadSamples, Samples};
+pub use ssm::SoundBank;
 pub use wav::WavBuilder;
 
 use std::io;
