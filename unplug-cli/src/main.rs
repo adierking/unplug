@@ -46,6 +46,7 @@ fn run_app() -> Result<()> {
         Subcommand::ExportShop(opt) => shop::export_shop(opt),
         Subcommand::ImportShop(opt) => shop::import_shop(opt),
         Subcommand::ExportMusic(opt) => commands::export_music(opt),
+        Subcommand::ExportSounds(opt) => commands::export_sounds(opt),
     }
 }
 
