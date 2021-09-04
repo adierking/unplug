@@ -2,6 +2,7 @@ pub mod adpcm;
 pub mod dsp;
 pub mod format;
 pub mod hps;
+pub mod rwav;
 pub mod sample;
 pub mod ssm;
 
@@ -28,6 +29,9 @@ pub enum Error {
 
     #[error("invalid HPS magic")]
     InvalidHpsMagic,
+
+    #[error("invalid RWAV data")]
+    InvalidRwav,
 
     #[error("audio stream is not mono")]
     StreamNotMono,
