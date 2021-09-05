@@ -1,0 +1,30 @@
+// Generated with unplug-datagen. DO NOT EDIT.
+// To regenerate: cargo run -p unplug-datagen -- <iso path>
+
+declare_soundbanks! {
+    0 => Sample { 0x0, "qp/sfx_sample.ssm" },
+    1 => Stage07 { 0x1b5, "qp/sfx_stage07.ssm" },
+    2 => Stage02 { 0x1e3, "qp/sfx_stage02.ssm" },
+    3 => Stage05 { 0x206, "qp/sfx_stage05.ssm" },
+    4 => Kitchen { 0x22c, "qp/sfx_kitchen.ssm" },
+    5 => Souko { 0x254, "qp/sfx_souko.ssm" },
+    6 => Uraniwa { 0x27e, "qp/sfx_uraniwa.ssm" },
+    7 => Papamama { 0x2a2, "qp/sfx_papamama.ssm" },
+    8 => Jennyroom { 0x2cd, "qp/sfx_jennyroom.ssm" },
+    9 => Ufo { 0x2f9, "qp/sfx_ufo.ssm" },
+    10 => Manual { 0x31a, "qp/sfx_manual.ssm" },
+    11 => Pipe { 0x31b, "qp/sfx_pipe.ssm" },
+    12 => Hock { 0x321, "qp/sfx_hock.ssm" },
+    13 => Gicco { 0x333, "qp/sfx_gicco.ssm" },
+    14 => Bb { 0x34d, "qp/sfx_bb.ssm" },
+    15 => Sanpoo { 0x35e, "qp/sfx_sanpoo.ssm" },
+    16 => Trex { 0x386, "qp/sfx_trex.ssm" },
+    17 => Army { 0x3a6, "qp/sfx_army.ssm" },
+    18 => Kaeru { 0x3d9, "qp/sfx_kaeru.ssm" },
+    19 => UraniwaAmbient1 { 0x406, "qp/sfx_uraniwa_ambient1.ssm" },
+    20 => UraniwaAmbient2 { 0x40e, "qp/sfx_uraniwa_ambient2.ssm" },
+    21 => UraniwaAmbient3 { 0x416, "qp/sfx_uraniwa_ambient3.ssm" },
+    22 => Martial { 0x418, "qp/sfx_martial.ssm" },
+    23 => Concert { 0x43e, "qp/sfx_concert.ssm" },
+    24 => Ending { 0x448, "qp/sfx_ending.ssm" },
+}

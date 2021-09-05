@@ -71,6 +71,38 @@ const UNKNOWN_PREFIX: &str = "Unk";
 const NUM_ITEMS: usize = 159;
 const STRIP_ITEM_LABEL: &str = "Item";
 
+/// Paths to sound banks within the ISO. This does not include `sfx_hori.ssm` because it has a bad
+/// base index and cannot be loaded.
+const SOUND_BANKS: &[&str] = &[
+    "qp/sfx_army.ssm",
+    "qp/sfx_bb.ssm",
+    "qp/sfx_concert.ssm",
+    "qp/sfx_ending.ssm",
+    "qp/sfx_gicco.ssm",
+    "qp/sfx_hock.ssm",
+    "qp/sfx_jennyroom.ssm",
+    "qp/sfx_kaeru.ssm",
+    "qp/sfx_kitchen.ssm",
+    "qp/sfx_manual.ssm",
+    "qp/sfx_martial.ssm",
+    "qp/sfx_papamama.ssm",
+    "qp/sfx_pipe.ssm",
+    "qp/sfx_sample.ssm",
+    "qp/sfx_sanpoo.ssm",
+    "qp/sfx_souko.ssm",
+    "qp/sfx_stage02.ssm",
+    "qp/sfx_stage05.ssm",
+    "qp/sfx_stage07.ssm",
+    "qp/sfx_trex.ssm",
+    "qp/sfx_ufo.ssm",
+    "qp/sfx_uraniwa.ssm",
+    "qp/sfx_uraniwa_ambient1.ssm",
+    "qp/sfx_uraniwa_ambient2.ssm",
+    "qp/sfx_uraniwa_ambient3.ssm",
+];
+const SOUND_BANK_PREFIX: &str = "sfx_";
+const SOUND_BANK_EXT: &str = ".ssm";
+
 const UNPLUG_DATA_PATH: &str = "unplug-data";
 const SRC_DIR_NAME: &str = "src";
 const TEST_FILE_NAME: &str = "lib.rs";
@@ -103,6 +135,10 @@ const STAGES_FOOTER: &str = "}\n";
 const MUSIC_FILE_NAME: &str = "music.inc.rs";
 const MUSIC_HEADER: &str = "declare_music! {\n";
 const MUSIC_FOOTER: &str = "}\n";
+
+const SOUND_BANKS_FILE_NAME: &str = "soundbanks.inc.rs";
+const SOUND_BANKS_HEADER: &str = "declare_soundbanks! {\n";
+const SOUND_BANKS_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -648,6 +684,36 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
     Ok(definitions)
 }
 
+/// Representation of a sound bank which is written to the generated source.
+struct SoundBankDefinition {
+    id: i16,
+    label: Label,
+    base_index: u32,
+    path: String,
+}
+
+/// Reads sound bank information from the ISO.
+fn read_sound_banks(disc: &mut DiscStream<impl Read + Seek>) -> Result<Vec<SoundBankDefinition>> {
+    let mut bank_bases: Vec<(&'static str, u32)> = vec![];
+    for &path in SOUND_BANKS {
+        let mut reader = disc.open_file_at(path)?;
+        reader.seek(SeekFrom::Start(0xc))?;
+        let base_index = reader.read_u32::<BE>()?;
+        bank_bases.push((path, base_index));
+    }
+    bank_bases.sort_unstable_by_key(|(_, b)| *b);
+
+    let mut banks = vec![];
+    for (id, (path, base_index)) in bank_bases.into_iter().enumerate() {
+        let mut name = path.rsplit('/').next().unwrap();
+        name = name.strip_prefix(SOUND_BANK_PREFIX).unwrap();
+        name = name.strip_suffix(SOUND_BANK_EXT).unwrap();
+        let label = Label::from_string_lossy(name);
+        banks.push(SoundBankDefinition { id: id as i16, label, base_index, path: path.to_owned() })
+    }
+    Ok(banks)
+}
+
 /// Writes the list of objects to the generated file.
 fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, OBJECTS_HEADER)?;
@@ -723,6 +789,21 @@ fn write_music(mut writer: impl Write, music: &[MusicDefinition]) -> Result<()> 
     Ok(())
 }
 
+/// Writes the list of sound banks to the generated file.
+fn write_sound_banks(mut writer: impl Write, banks: &[SoundBankDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, SOUND_BANKS_HEADER)?;
+    for bank in banks {
+        writeln!(
+            writer,
+            "    {} => {} {{ {:#x}, \"{}\" }},",
+            bank.id, bank.label.0, bank.base_index, bank.path
+        )?;
+    }
+    write!(writer, "{}", SOUND_BANKS_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 fn run_app() -> Result<()> {
     init_logging();
 
@@ -742,6 +823,9 @@ fn run_app() -> Result<()> {
 
     info!("Opening ISO");
     let mut iso = DiscStream::open(File::open(&args[1])?)?;
+
+    info!("Reading sound banks");
+    let banks = read_sound_banks(&mut iso)?;
 
     let metadata = {
         info!("Opening {}", QP_PATH);
@@ -816,6 +900,11 @@ fn run_app() -> Result<()> {
     info!("Writing {}", music_path.display());
     let music_writer = BufWriter::new(File::create(music_path)?);
     write_music(music_writer, &music)?;
+
+    let sound_banks_path = out_dir.join(SOUND_BANKS_FILE_NAME);
+    info!("Writing {}", sound_banks_path.display());
+    let sound_banks_writer = BufWriter::new(File::create(sound_banks_path)?);
+    write_sound_banks(sound_banks_writer, &banks)?;
 
     Ok(())
 }
