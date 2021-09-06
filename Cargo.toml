@@ -7,6 +7,12 @@ members = [
     "unplug-proc",
     "unplug-test",
 ]
+default-members = [
+    "unplug",
+    "unplug-cli",
+    "unplug-data",
+    "unplug-test",
+]
 
 [profile.release]
 codegen-units = 1
