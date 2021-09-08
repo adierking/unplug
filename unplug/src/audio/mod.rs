@@ -4,6 +4,7 @@ pub mod format;
 pub mod hps;
 pub mod rwav;
 pub mod sample;
+pub mod sem;
 pub mod ssm;
 
 mod wav;
@@ -11,6 +12,7 @@ mod wav;
 pub use format::{Format, FormatTag};
 pub use hps::HpsStream;
 pub use sample::{ReadSamples, Samples};
+pub use sem::EventBank;
 pub use ssm::SoundBank;
 pub use wav::WavBuilder;
 
@@ -35,6 +37,9 @@ pub enum Error {
 
     #[error("audio stream is not mono")]
     StreamNotMono,
+
+    #[error("unrecognized event command: {0}")]
+    UnrecognizedEventCommand(u8),
 
     #[error("unrecognized sample format: {0}")]
     UnrecognizedSampleFormat(u16),
