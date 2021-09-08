@@ -34,6 +34,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::process;
+use unplug::audio::EventBank;
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom};
 use unplug::data::stage::GLOBALS_PATH;
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
@@ -102,6 +103,7 @@ const SOUND_BANKS: &[&str] = &[
 ];
 const SOUND_BANK_PREFIX: &str = "sfx_";
 const SOUND_BANK_EXT: &str = ".ssm";
+const SOUND_EVENTS_PATH: &str = "qp/sfx_sample.sem";
 
 const UNPLUG_DATA_PATH: &str = "unplug-data";
 const SRC_DIR_NAME: &str = "src";
@@ -688,12 +690,16 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
 struct SoundBankDefinition {
     id: i16,
     label: Label,
-    base_index: u32,
+    sound_base: u32,
+    event_base: u32,
     path: String,
 }
 
 /// Reads sound bank information from the ISO.
-fn read_sound_banks(disc: &mut DiscStream<impl Read + Seek>) -> Result<Vec<SoundBankDefinition>> {
+fn read_sound_banks(
+    disc: &mut DiscStream<impl Read + Seek>,
+    events: &EventBank,
+) -> Result<Vec<SoundBankDefinition>> {
     let mut bank_bases: Vec<(&'static str, u32)> = vec![];
     for &path in SOUND_BANKS {
         let mut reader = disc.open_file_at(path)?;
@@ -704,12 +710,20 @@ fn read_sound_banks(disc: &mut DiscStream<impl Read + Seek>) -> Result<Vec<Sound
     bank_bases.sort_unstable_by_key(|(_, b)| *b);
 
     let mut banks = vec![];
-    for (id, (path, base_index)) in bank_bases.into_iter().enumerate() {
+    for (id, ((path, sound_base), &event_base)) in
+        bank_bases.into_iter().zip(&events.group_bases).enumerate()
+    {
         let mut name = path.rsplit('/').next().unwrap();
         name = name.strip_prefix(SOUND_BANK_PREFIX).unwrap();
         name = name.strip_suffix(SOUND_BANK_EXT).unwrap();
         let label = Label::from_string_lossy(name);
-        banks.push(SoundBankDefinition { id: id as i16, label, base_index, path: path.to_owned() })
+        banks.push(SoundBankDefinition {
+            id: id as i16,
+            label,
+            sound_base,
+            event_base,
+            path: path.to_owned(),
+        })
     }
     Ok(banks)
 }
@@ -795,8 +809,8 @@ fn write_sound_banks(mut writer: impl Write, banks: &[SoundBankDefinition]) -> R
     for bank in banks {
         writeln!(
             writer,
-            "    {} => {} {{ {:#x}, \"{}\" }},",
-            bank.id, bank.label.0, bank.base_index, bank.path
+            "    {} => {} {{ 0x{:>04x}, 0x{:>04x}, \"{}\" }},",
+            bank.id, bank.label.0, bank.sound_base, bank.event_base, bank.path
         )?;
     }
     write!(writer, "{}", SOUND_BANKS_FOOTER)?;
@@ -824,8 +838,14 @@ fn run_app() -> Result<()> {
     info!("Opening ISO");
     let mut iso = DiscStream::open(File::open(&args[1])?)?;
 
+    info!("Reading sound events");
+    let events = {
+        let mut reader = BufReader::new(iso.open_file_at(SOUND_EVENTS_PATH)?);
+        EventBank::read_from(&mut reader)?
+    };
+
     info!("Reading sound banks");
-    let banks = read_sound_banks(&mut iso)?;
+    let banks = read_sound_banks(&mut iso, &events)?;
 
     let metadata = {
         info!("Opening {}", QP_PATH);
