@@ -1,4 +1,5 @@
 pub mod adpcm;
+pub mod brsar;
 pub mod dsp;
 pub mod format;
 pub mod hps;
@@ -9,6 +10,7 @@ pub mod ssm;
 
 mod wav;
 
+pub use brsar::Brsar;
 pub use format::{Format, FormatTag};
 pub use hps::HpsStream;
 pub use sample::{ReadSamples, Samples};
@@ -26,6 +28,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("invalid BRSAR data")]
+    InvalidBrsar,
+
     #[error("invalid channel count: {0}")]
     InvalidChannelCount(u32),
 

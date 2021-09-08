@@ -1,5 +1,5 @@
 use anyhow::{bail, ensure, Result};
-use log::info;
+use log::{info, warn};
 use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::env;
 use std::fs::{self, File};
@@ -35,6 +35,18 @@ pub fn iso_path() -> Result<String> {
         Ok(path) => Ok(path),
         Err(_) => {
             bail!("The CHIBI_ISO environment variable must point to a {} ISO", GAME_ID);
+        }
+    }
+}
+
+/// Reads the `CHIBI_BRSAR` environment variable. If this returns `None`, the test should exit.
+pub fn brsar_path() -> Option<String> {
+    match env::var("CHIBI_BRSAR") {
+        Ok(path) => Some(path),
+        Err(_) => {
+            warn!("Skipping: the CHIBI_BRSAR environment variable is not set.");
+            warn!("To run BRSAR tests, point it to the cb_robo.brsar file from New Play Control.");
+            None
         }
     }
 }
