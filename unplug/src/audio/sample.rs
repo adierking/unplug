@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_any_without_context() {
-        let bytes: Vec<u8> = (0..16).into_iter().collect();
+        let bytes: Vec<u8> = (0..16).collect();
         let original = Samples::<PcmS16Le> {
             context: (),
             start_address: 2,
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_any_with_context() {
-        let bytes: Vec<u8> = (0..16).into_iter().collect();
+        let bytes: Vec<u8> = (0..16).collect();
         let original = Samples::<PcmS16LeContext> {
             context: 123,
             start_address: 2,
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_cast_samples() -> Result<()> {
-        let bytes: Vec<u8> = (0..16).into_iter().collect();
+        let bytes: Vec<u8> = (0..16).collect();
         let original = Samples::<PcmS16Le> {
             context: (),
             start_address: 2,
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_sample_iterator_mono() {
-        let bytes: Vec<u8> = (0..16).into_iter().collect();
+        let bytes: Vec<u8> = (0..16).collect();
         let samples = Samples::<PcmS16Le> {
             context: (),
             start_address: 1,
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_sample_iterator_stereo() {
-        let bytes: Vec<u8> = (0..16).into_iter().collect();
+        let bytes: Vec<u8> = (0..16).collect();
         let samples = Samples::<PcmS16Le> {
             context: (),
             start_address: 1,
@@ -383,8 +383,8 @@ mod tests {
 
     #[test]
     fn test_join_channels() -> Result<()> {
-        let lbytes: Vec<u8> = (0..32).into_iter().step_by(2).collect();
-        let rbytes: Vec<u8> = (0..32).into_iter().skip(1).step_by(2).collect();
+        let lbytes: Vec<u8> = (0..32).step_by(2).collect();
+        let rbytes: Vec<u8> = (0..32).skip(1).step_by(2).collect();
         let left = Samples::<PcmS16Le> {
             context: (),
             start_address: 1,

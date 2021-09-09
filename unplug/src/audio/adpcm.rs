@@ -101,6 +101,8 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
 
 impl ReadSamples<'static> for Decoder<'_, '_> {
     type Format = PcmS16Le;
+
+    #[allow(clippy::verbose_bit_mask)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         let encoded = match self.source.read_samples() {
             Ok(Some(s)) => s,

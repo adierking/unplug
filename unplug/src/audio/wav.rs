@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_write_wav() -> Result<()> {
-        let bytes: Vec<u8> = (0..16).into_iter().collect();
+        let bytes: Vec<u8> = (0..16).collect();
         let samples = Samples::<'_, PcmS16Le> {
             context: (),
             start_address: 0,

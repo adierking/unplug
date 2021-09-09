@@ -465,7 +465,6 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::convert::TryInto;
     use std::io::Cursor;
 
     #[rustfmt::skip]
@@ -568,12 +567,12 @@ mod tests {
         assert_eq!(rwav.channels.len(), 2);
 
         let channel0 = &rwav.channels[0];
-        let expected_coefficients: [i16; 16] = (0..16).collect::<Vec<_>>().try_into().unwrap();
-        assert_eq!(channel0.adpcm.coefficients, expected_coefficients);
+        let expected_coefficients = (0..16).collect::<Vec<i16>>();
+        assert_eq!(channel0.adpcm.coefficients, expected_coefficients.as_slice());
         assert_eq!(channel0.data, &RWAV_BYTES[0x108..0x118]);
 
         let channel1 = &rwav.channels[1];
-        assert_eq!(channel1.adpcm.coefficients, expected_coefficients);
+        assert_eq!(channel1.adpcm.coefficients, expected_coefficients.as_slice());
         assert_eq!(channel1.data, &RWAV_BYTES[0x118..0x128]);
 
         let samples0 = rwav.reader(0).read_samples()?.unwrap();

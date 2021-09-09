@@ -677,7 +677,7 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
         }
 
         // Make the label based on the filename
-        let (_, filename) = path.rsplit_once('/').unwrap();
+        let filename = path.rsplit('/').next().unwrap();
         let name = filename.strip_suffix(MUSIC_EXT).unwrap();
         let label = Label::from_string_lossy(name);
 
