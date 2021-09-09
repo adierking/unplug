@@ -20,6 +20,7 @@ pub mod item;
 pub mod music;
 pub mod object;
 pub mod sound_bank;
+pub mod sound_event;
 pub mod stage;
 pub mod suit;
 
@@ -28,6 +29,7 @@ pub use item::Item;
 pub use music::Music;
 pub use object::Object;
 pub use sound_bank::SoundBank;
+pub use sound_event::SoundEvent;
 pub use stage::Stage;
 pub use suit::Suit;
 

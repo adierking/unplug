@@ -16,10 +16,10 @@
     variant_size_differences
 )]
 
-use anyhow::{bail, Error, Result};
+use anyhow::{anyhow, bail, Error, Result};
 use byteorder::{ReadBytesExt, BE};
 use lazy_static::lazy_static;
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use num_enum::TryFromPrimitive;
 use regex::Regex;
 use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
@@ -34,7 +34,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::process;
-use unplug::audio::EventBank;
+use unplug::audio::{Brsar, EventBank};
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom};
 use unplug::data::stage::GLOBALS_PATH;
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
@@ -74,32 +74,32 @@ const STRIP_ITEM_LABEL: &str = "Item";
 
 /// Paths to sound banks within the ISO. This does not include `sfx_hori.ssm` because it has a bad
 /// base index and cannot be loaded.
-const SOUND_BANKS: &[&str] = &[
-    "qp/sfx_army.ssm",
-    "qp/sfx_bb.ssm",
-    "qp/sfx_concert.ssm",
-    "qp/sfx_ending.ssm",
-    "qp/sfx_gicco.ssm",
-    "qp/sfx_hock.ssm",
-    "qp/sfx_jennyroom.ssm",
-    "qp/sfx_kaeru.ssm",
-    "qp/sfx_kitchen.ssm",
-    "qp/sfx_manual.ssm",
-    "qp/sfx_martial.ssm",
-    "qp/sfx_papamama.ssm",
-    "qp/sfx_pipe.ssm",
-    "qp/sfx_sample.ssm",
-    "qp/sfx_sanpoo.ssm",
-    "qp/sfx_souko.ssm",
-    "qp/sfx_stage02.ssm",
-    "qp/sfx_stage05.ssm",
-    "qp/sfx_stage07.ssm",
-    "qp/sfx_trex.ssm",
-    "qp/sfx_ufo.ssm",
-    "qp/sfx_uraniwa.ssm",
-    "qp/sfx_uraniwa_ambient1.ssm",
-    "qp/sfx_uraniwa_ambient2.ssm",
-    "qp/sfx_uraniwa_ambient3.ssm",
+const SOUND_BANKS: &[(&str, &str)] = &[
+    ("qp/sfx_army.ssm", "GROUP_ARMY"),
+    ("qp/sfx_bb.ssm", "GROUP_BB"),
+    ("qp/sfx_concert.ssm", "GROUP_CONCERT"),
+    ("qp/sfx_ending.ssm", "GROUP_ENDING"),
+    ("qp/sfx_gicco.ssm", "GROUP_GICCO"),
+    ("qp/sfx_hock.ssm", "GROUP_HOCK"),
+    ("qp/sfx_jennyroom.ssm", "GROUP_JENNYROOM"),
+    ("qp/sfx_kaeru.ssm", "GROUP_KAERU"),
+    ("qp/sfx_kitchen.ssm", "GROUP_KITCHEN"),
+    ("qp/sfx_manual.ssm", "GROUP_MANUAL"),
+    ("qp/sfx_martial.ssm", "GROUP_MARTIAL"),
+    ("qp/sfx_papamama.ssm", "GROUP_PAPAMAMA"),
+    ("qp/sfx_pipe.ssm", "GROUP_PIPE"),
+    ("qp/sfx_sample.ssm", "GROUP_DEF"),
+    ("qp/sfx_sanpoo.ssm", "GROUP_SANPOO"),
+    ("qp/sfx_souko.ssm", "GROUP_SOUKO"),
+    ("qp/sfx_stage02.ssm", "GROUP_STAGE02"),
+    ("qp/sfx_stage05.ssm", "GROUP_STAGE05"),
+    ("qp/sfx_stage07.ssm", "GROUP_STAGE07"),
+    ("qp/sfx_trex.ssm", "GROUP_TREX"),
+    ("qp/sfx_ufo.ssm", "GROUP_UFO"),
+    ("qp/sfx_uraniwa.ssm", "GROUP_URANIWA"),
+    ("qp/sfx_uraniwa_ambient1.ssm", "GROUP_URANIWA_AMIBENT_1"),
+    ("qp/sfx_uraniwa_ambient2.ssm", "GROUP_URANIWA_AMBIENT_2"),
+    ("qp/sfx_uraniwa_ambient3.ssm", "GROUP_URANIWA_AMBIENT_3"),
 ];
 const SOUND_BANK_PREFIX: &str = "sfx_";
 const SOUND_BANK_EXT: &str = ".ssm";
@@ -112,6 +112,9 @@ const OUTPUT_DIR_NAME: &str = "gen";
 
 const GEN_HEADER: &str = "// Generated with unplug-datagen. DO NOT EDIT.\n\
                           // To regenerate: cargo run -p unplug-datagen -- <iso path>\n\n";
+const GEN_HEADER_BRSAR: &str = "// Generated with unplug-datagen. DO NOT EDIT.\n\
+                                // To regenerate: cargo run -p unplug-datagen -- <iso path> \
+                                --brsar <cb_robo.brsar path>\n\n";
 
 const OBJECTS_FILE_NAME: &str = "objects.inc.rs";
 const OBJECTS_HEADER: &str = "declare_objects! {\n";
@@ -141,6 +144,10 @@ const MUSIC_FOOTER: &str = "}\n";
 const SOUND_BANKS_FILE_NAME: &str = "sound_banks.inc.rs";
 const SOUND_BANKS_HEADER: &str = "declare_sound_banks! {\n";
 const SOUND_BANKS_FOOTER: &str = "}\n";
+
+const SOUND_EVENTS_FILE_NAME: &str = "sound_events.inc.rs";
+const SOUND_EVENTS_HEADER: &str = "declare_sound_events! {\n";
+const SOUND_EVENTS_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -198,8 +205,39 @@ fn init_logging() {
     TermLogger::init(LevelFilter::Debug, config, TerminalMode::Stderr, ColorChoice::Auto).unwrap();
 }
 
+/// Command-line options.
+struct Options {
+    /// Path to the ISO to load.
+    iso: PathBuf,
+    /// Path to cb_robo.brsar.
+    brsar: Option<PathBuf>,
+}
+
+fn parse_options() -> Result<Options> {
+    let mut iso: Option<PathBuf> = None;
+    let mut brsar: Option<PathBuf> = None;
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_ref() {
+            "-h" | "--help" => {
+                usage();
+                process::exit(0);
+            }
+            "--brsar" => {
+                let path = args.next().ok_or_else(|| anyhow!("--brsar: path expected"))?;
+                brsar = Some(PathBuf::from(path));
+            }
+            arg if iso.is_none() => iso = Some(PathBuf::from(arg)),
+            arg => bail!("unrecognized argument: {}", arg),
+        }
+    }
+    Ok(Options { iso: iso.ok_or_else(|| anyhow!("ISO path expected"))?, brsar })
+}
+
 fn usage() {
-    eprintln!("Usage: cargo run -p unplug-datagen -- <iso>");
+    eprintln!("Usage: cargo run -p unplug-datagen -- <iso> [--brsar <path>]\n");
+    eprintln!("To generate sound names, --brsar must be provided with a path to cb_robo.brsar");
+    eprintln!("from the Wii release of the game (R24J01).\n");
 }
 
 /// The raw representation of an object in the executable.
@@ -701,7 +739,7 @@ fn read_sound_banks(
     events: &EventBank,
 ) -> Result<Vec<SoundBankDefinition>> {
     let mut bank_bases: Vec<(&'static str, u32)> = vec![];
-    for &path in SOUND_BANKS {
+    for &(path, _) in SOUND_BANKS {
         let mut reader = disc.open_file_at(path)?;
         reader.seek(SeekFrom::Start(0xc))?;
         let base_index = reader.read_u32::<BE>()?;
@@ -726,6 +764,80 @@ fn read_sound_banks(
         })
     }
     Ok(banks)
+}
+
+/// Representation of a sound event which is written to the generated source.
+struct SoundEventDefinition {
+    id: u32,
+    label: Label,
+    name: String,
+}
+
+/// Builds the sound event list by matching sounds in a BRSAR with an event bank.
+fn build_sound_events(
+    events: &EventBank,
+    brsar: &Brsar,
+    banks: &[SoundBankDefinition],
+) -> Vec<SoundEventDefinition> {
+    #[derive(Default, Copy, Clone)]
+    struct BankState {
+        next_id: u32,
+        end_id: u32,
+    }
+
+    // Compute each bank's starting ID and ending ID. NPC has sounds that the GCN version doesn't,
+    // so we have to make sure not to emit definitions for extra sounds.
+    let mut states = vec![BankState::default(); banks.len()];
+    let mut end_event = events.events.len() as u32;
+    for (id, &base) in events.group_bases.iter().enumerate().rev() {
+        states[id].next_id = (id as u32) << 16;
+        states[id].end_id = states[id].next_id + end_event - base;
+        end_event = base;
+    }
+
+    // Build a map of collection indexes to bank indexes
+    let mut collection_to_bank: HashMap<u32, usize> = HashMap::new();
+    for (i, collection) in brsar.collections.iter().enumerate() {
+        if !collection.groups.is_empty() {
+            let group_index = collection.groups[0].index;
+            let group = &brsar.groups[group_index as usize];
+            let group_name = brsar.symbol(group.name_index);
+            let bank_path = SOUND_BANKS.iter().find(|&&(_, g)| g == group_name);
+            if let Some(&(path, _)) = bank_path {
+                let bank_def = banks.iter().find(|b| b.path == path).unwrap();
+                let bank_index = bank_def.id as usize;
+                collection_to_bank.insert(i as u32, bank_index);
+            }
+        }
+    }
+
+    // Look up each sound's corresponding bank and give it the next ID for the bank. It turns out
+    // that the order sounds are stored in the BRSAR matches the order of the events in the .sem.
+    let mut defs = Vec::with_capacity(events.events.len());
+    for sound in &brsar.sounds {
+        if let Some(&bank_id) = collection_to_bank.get(&sound.collection_index) {
+            let bank = &mut states[bank_id];
+            if bank.next_id < bank.end_id {
+                let name = brsar.symbol(sound.name_index);
+                let label = Label::from_string_lossy(name);
+                defs.push(SoundEventDefinition { id: bank.next_id, label, name: name.to_owned() });
+                bank.next_id += 1;
+            }
+        }
+    }
+    debug!("Found names for {}/{} sound events", defs.len(), events.events.len());
+
+    // Fill in any IDs we somehow missed (seems to only be the uraniwa_ambient banks)
+    for bank in &mut states {
+        while bank.next_id < bank.end_id {
+            let name = format!("UNK_{:>06x}", bank.next_id);
+            let label = Label::from_string_lossy(&name);
+            defs.push(SoundEventDefinition { id: bank.next_id, label, name });
+            bank.next_id += 1;
+        }
+    }
+    defs.sort_unstable_by_key(|d| d.id);
+    defs
 }
 
 /// Writes the list of objects to the generated file.
@@ -818,14 +930,28 @@ fn write_sound_banks(mut writer: impl Write, banks: &[SoundBankDefinition]) -> R
     Ok(())
 }
 
+/// Writes the list of sound events to the generated file.
+fn write_sound_events(mut writer: impl Write, events: &[SoundEventDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER_BRSAR, SOUND_EVENTS_HEADER)?;
+    for event in events {
+        writeln!(writer, "    0x{:>06x} => {} {{ \"{}\" }},", event.id, event.label.0, event.name)?;
+    }
+    write!(writer, "{}", SOUND_EVENTS_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 fn run_app() -> Result<()> {
     init_logging();
 
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        usage();
-        return Ok(());
-    }
+    let options = match parse_options() {
+        Ok(o) => o,
+        Err(err) => {
+            usage();
+            error!("Fatal: {:#}", err);
+            process::exit(1);
+        }
+    };
 
     let test_path: PathBuf = [UNPLUG_DATA_PATH, SRC_DIR_NAME, TEST_FILE_NAME].iter().collect();
     if !test_path.exists() {
@@ -836,7 +962,7 @@ fn run_app() -> Result<()> {
     }
 
     info!("Opening ISO");
-    let mut iso = DiscStream::open(File::open(&args[1])?)?;
+    let mut iso = DiscStream::open(File::open(&options.iso)?)?;
 
     info!("Reading sound events");
     let events = {
@@ -846,6 +972,15 @@ fn run_app() -> Result<()> {
 
     info!("Reading sound banks");
     let banks = read_sound_banks(&mut iso, &events)?;
+
+    let mut sound_events = vec![];
+    if let Some(brsar_path) = options.brsar {
+        info!("Reading BRSAR");
+        let mut brsar_reader = BufReader::new(File::open(&brsar_path)?);
+        let brsar = Brsar::read_from(&mut brsar_reader)?;
+        info!("Matching sound event names");
+        sound_events = build_sound_events(&events, &brsar, &banks);
+    }
 
     let metadata = {
         info!("Opening {}", QP_PATH);
@@ -925,6 +1060,13 @@ fn run_app() -> Result<()> {
     info!("Writing {}", sound_banks_path.display());
     let sound_banks_writer = BufWriter::new(File::create(sound_banks_path)?);
     write_sound_banks(sound_banks_writer, &banks)?;
+
+    if !sound_events.is_empty() {
+        let sound_events_path = out_dir.join(SOUND_EVENTS_FILE_NAME);
+        info!("Writing {}", sound_events_path.display());
+        let sound_events_writer = BufWriter::new(File::create(sound_events_path)?);
+        write_sound_events(sound_events_writer, &sound_events)?;
+    }
 
     Ok(())
 }
