@@ -19,7 +19,7 @@ pub mod atc;
 pub mod item;
 pub mod music;
 pub mod object;
-pub mod soundbank;
+pub mod sound_bank;
 pub mod stage;
 pub mod suit;
 
@@ -27,7 +27,7 @@ pub use atc::Atc;
 pub use item::Item;
 pub use music::Music;
 pub use object::Object;
-pub use soundbank::SoundBank;
+pub use sound_bank::SoundBank;
 pub use stage::Stage;
 pub use suit::Suit;
 

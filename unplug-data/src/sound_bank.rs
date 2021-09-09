@@ -23,7 +23,7 @@ impl SoundBankDefinition {
 }
 
 /// Macro used in the generated sound bank list.
-macro_rules! declare_soundbanks {
+macro_rules! declare_sound_banks {
     {
         $($index:literal => $id:ident { $sbase:literal, $ebase:literal, $path:literal }),*
         $(,)*
@@ -49,14 +49,14 @@ macro_rules! declare_soundbanks {
 }
 
 // Generated using unplug-datagen
-include!("gen/soundbanks.inc.rs");
+include!("gen/sound_banks.inc.rs");
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_get_soundbank() {
+    fn test_get_sound_bank() {
         let bank = SoundBankDefinition::get(SoundBank::Ufo);
         assert_eq!(bank.id, SoundBank::Ufo);
         assert_eq!(bank.sound_base, 0x2f9);

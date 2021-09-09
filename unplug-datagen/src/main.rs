@@ -138,8 +138,8 @@ const MUSIC_FILE_NAME: &str = "music.inc.rs";
 const MUSIC_HEADER: &str = "declare_music! {\n";
 const MUSIC_FOOTER: &str = "}\n";
 
-const SOUND_BANKS_FILE_NAME: &str = "soundbanks.inc.rs";
-const SOUND_BANKS_HEADER: &str = "declare_soundbanks! {\n";
+const SOUND_BANKS_FILE_NAME: &str = "sound_banks.inc.rs";
+const SOUND_BANKS_HEADER: &str = "declare_sound_banks! {\n";
 const SOUND_BANKS_FOOTER: &str = "}\n";
 
 lazy_static! {
