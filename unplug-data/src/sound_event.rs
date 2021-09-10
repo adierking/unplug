@@ -61,10 +61,10 @@ mod tests {
     fn test_get_sound_event() {
         let event = SoundEventDefinition::get(SoundEvent::VoiceHelpMe);
         assert_eq!(event.id, SoundEvent::VoiceHelpMe);
-        assert_eq!(event.name, "VOICE_HELP_ME");
+        assert_eq!(event.name, "voice_help_me");
 
         let event = SoundEventDefinition::get(SoundEvent::NpcSanpooLaugh);
         assert_eq!(event.id, SoundEvent::NpcSanpooLaugh);
-        assert_eq!(event.name, "NPC_SANPOO_LAUGH");
+        assert_eq!(event.name, "npc_sanpoo_laugh");
     }
 }

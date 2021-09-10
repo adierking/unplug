@@ -51,6 +51,6 @@ mod tests {
     fn test_get_sound() {
         let sound = SoundDefinition::get(Sound::VoiceHelpMe);
         assert_eq!(sound.id, Sound::VoiceHelpMe);
-        assert_eq!(sound.name, "VOICE_HELP_ME");
+        assert_eq!(sound.name, "voice_help_me");
     }
 }
