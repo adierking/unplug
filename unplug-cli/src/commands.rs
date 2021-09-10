@@ -325,18 +325,12 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
-    let start_time = Instant::now();
-
-    let mut iso = open_iso_optional(opt.iso.as_ref())?;
-    let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), opt.path)?);
-    let ssm = SoundBank::read_from(&mut reader)?;
+fn export_bank_sounds(bank: &SoundBank, dir: &Path, subdir: Option<&str>) -> Result<()> {
     // Omit names for unusable banks (sfx_hori.ssm)
-    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == ssm.base_index);
-
-    fs::create_dir_all(&opt.output)?;
-    for (i, sound) in ssm.sounds.iter().enumerate() {
-        let id = ssm.base_index + i as u32;
+    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index);
+    fs::create_dir_all(dir)?;
+    for (i, sound) in bank.sounds.iter().enumerate() {
+        let id = bank.base_index + i as u32;
         let filename = if have_names {
             match Sound::try_from(id) {
                 Ok(s) => format!("{}.wav", SoundDefinition::get(s).name),
@@ -345,14 +339,42 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
         } else {
             format!("{:>04}.wav", id)
         };
-        info!("Writing {}", filename);
-        let out_path = opt.output.join(filename);
+        if let Some(subdir) = subdir {
+            info!("Writing {}/{}", subdir, filename);
+        } else {
+            info!("Writing {}", filename);
+        }
+        let out_path = dir.join(filename);
         let out = BufWriter::new(File::create(&out_path)?);
         WavBuilder::new()
             .channels(sound.channels.len())
             .sample_rate(sound.sample_rate)
             .samples(sound.decoder())
             .write_to(out)?;
+    }
+    Ok(())
+}
+
+pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
+    let start_time = Instant::now();
+
+    let mut iso = open_iso_optional(opt.iso.as_ref())?;
+    if let Some(bank_path) = opt.path {
+        // Export single bank
+        let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), &bank_path)?);
+        let bank = SoundBank::read_from(&mut reader)?;
+        export_bank_sounds(&bank, &opt.output, None)?;
+    } else {
+        // Export everything
+        let mut iso = iso.expect("no iso path or bank path");
+        for bank_def in SOUND_BANKS {
+            let bank_name = bank_def.path.rsplit(|c| c == '.' || c == '/').nth(1).unwrap();
+            info!("Reading {}.ssm", bank_name);
+            let mut reader = BufReader::new(iso.open_file_at(bank_def.path)?);
+            let bank = SoundBank::read_from(&mut reader)?;
+            let dir = opt.output.join(bank_name);
+            export_bank_sounds(&bank, &dir, Some(bank_name))?;
+        }
     }
 
     info!("Export finished in {:?}", start_time.elapsed());

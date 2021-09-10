@@ -74,7 +74,7 @@ pub enum Subcommand {
     /// Exports a HPS music file to a WAV file
     ExportMusic(ExportMusicOpt),
 
-    /// Exports a SSM sound bank to WAV files
+    /// Exports sound effects to WAV files
     ExportSounds(ExportSoundsOpt),
 }
 
@@ -380,7 +380,7 @@ pub struct ExportMusicOpt {
     pub path: PathBuf,
 
     /// Path to the output WAV file
-    #[structopt(short, value_name("PATH"))]
+    #[structopt(short, long("out"), value_name("PATH"))]
     pub output: PathBuf,
 }
 
@@ -390,11 +390,11 @@ pub struct ExportSoundsOpt {
     #[structopt(long, value_name("PATH"), parse(from_os_str))]
     pub iso: Option<PathBuf>,
 
-    /// Path to the SSM file to export
-    #[structopt(parse(from_os_str))]
-    pub path: PathBuf,
+    /// Path to the SSM file to export. If --iso is provided, this can be omitted to export all sounds.
+    #[structopt(value_name("SSM"), parse(from_os_str), required_unless("iso"))]
+    pub path: Option<PathBuf>,
 
     /// Path to the output directory
-    #[structopt(short, value_name("PATH"))]
+    #[structopt(short, long("out"), value_name("PATH"))]
     pub output: PathBuf,
 }
