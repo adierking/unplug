@@ -19,7 +19,7 @@
 use anyhow::{anyhow, bail, Error, Result};
 use byteorder::{ReadBytesExt, BE};
 use lazy_static::lazy_static;
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use num_enum::TryFromPrimitive;
 use regex::{Regex, RegexSet};
 use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
@@ -98,9 +98,9 @@ const SOUND_BANKS: &[(&str, &str)] = &[
     ("qp/sfx_trex.ssm", "GROUP_TREX"),
     ("qp/sfx_ufo.ssm", "GROUP_UFO"),
     ("qp/sfx_uraniwa.ssm", "GROUP_URANIWA"),
-    ("qp/sfx_uraniwa_ambient1.ssm", "GROUP_URANIWA_AMIBENT_1"),
-    ("qp/sfx_uraniwa_ambient2.ssm", "GROUP_URANIWA_AMBIENT_2"),
-    ("qp/sfx_uraniwa_ambient3.ssm", "GROUP_URANIWA_AMBIENT_3"),
+    ("qp/sfx_uraniwa_ambient1.ssm", "GROUP_URANIWA_AMBIENT1"),
+    ("qp/sfx_uraniwa_ambient2.ssm", "GROUP_URANIWA_AMBIENT2"),
+    ("qp/sfx_uraniwa_ambient3.ssm", "GROUP_URANIWA_AMBIENT3"),
 ];
 const SOUND_BANK_PREFIX: &str = "sfx_";
 const SOUND_BANK_EXT: &str = ".ssm";
@@ -822,6 +822,8 @@ fn build_sound_events(
                 let bank_def = banks.iter().find(|b| b.path == path).unwrap();
                 let bank_index = bank_def.id as usize;
                 collection_to_bank.insert(i as u32, bank_index);
+            } else {
+                warn!("No bank found for group \"{}\"", group_name);
             }
         }
     }
@@ -845,7 +847,7 @@ fn build_sound_events(
     }
     debug!("Found names for {}/{} sound events", defs.len(), events.events.len());
 
-    // Fill in any IDs we somehow missed (seems to only be the uraniwa_ambient banks)
+    // Fill in any IDs we somehow missed
     for bank in &mut states {
         while bank.next_id < bank.end_id {
             let name = format!("unk_{:>06x}", bank.next_id);
