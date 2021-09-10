@@ -17,6 +17,7 @@ use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
 use unplug::data::sound::{Sound, SoundDefinition};
+use unplug::data::sound_bank::SOUND_BANKS;
 use unplug::data::stage::STAGES;
 use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree, OpenFile};
 use unplug::event::{Block, Script};
@@ -330,13 +331,19 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
     let mut iso = open_iso_optional(opt.iso.as_ref())?;
     let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), opt.path)?);
     let ssm = SoundBank::read_from(&mut reader)?;
+    // Omit names for unusable banks (sfx_hori.ssm)
+    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == ssm.base_index);
 
     fs::create_dir_all(&opt.output)?;
     for (i, sound) in ssm.sounds.iter().enumerate() {
         let id = ssm.base_index + i as u32;
-        let filename = match Sound::try_from(id) {
-            Ok(s) => format!("{}.wav", SoundDefinition::get(s).name),
-            Err(_) => format!("{:>04}.wav", i),
+        let filename = if have_names {
+            match Sound::try_from(id) {
+                Ok(s) => format!("{}.wav", SoundDefinition::get(s).name),
+                Err(_) => format!("{:>04}.wav", id),
+            }
+        } else {
+            format!("{:>04}.wav", id)
         };
         info!("Writing {}", filename);
         let out_path = opt.output.join(filename);
