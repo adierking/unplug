@@ -16,6 +16,7 @@ use unplug::common::ReadFrom;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
+use unplug::data::sound::{Sound, SoundDefinition};
 use unplug::data::stage::STAGES;
 use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree, OpenFile};
 use unplug::event::{Block, Script};
@@ -332,7 +333,11 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
 
     fs::create_dir_all(&opt.output)?;
     for (i, sound) in ssm.sounds.iter().enumerate() {
-        let filename = format!("{:>04}.wav", i);
+        let id = ssm.base_index + i as u32;
+        let filename = match Sound::try_from(id) {
+            Ok(s) => format!("{}.wav", SoundDefinition::get(s).name),
+            Err(_) => format!("{:>04}.wav", i),
+        };
         info!("Writing {}", filename);
         let out_path = opt.output.join(filename);
         let out = BufWriter::new(File::create(&out_path)?);
