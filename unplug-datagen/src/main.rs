@@ -21,7 +21,7 @@ use byteorder::{ReadBytesExt, BE};
 use lazy_static::lazy_static;
 use log::{debug, error, info, trace};
 use num_enum::TryFromPrimitive;
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -34,6 +34,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::process;
+use unplug::audio::sem::Command;
 use unplug::audio::{Brsar, EventBank};
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom};
 use unplug::data::stage::GLOBALS_PATH;
@@ -149,6 +150,10 @@ const SOUND_EVENTS_FILE_NAME: &str = "sound_events.inc.rs";
 const SOUND_EVENTS_HEADER: &str = "declare_sound_events! {\n";
 const SOUND_EVENTS_FOOTER: &str = "}\n";
 
+const SOUNDS_FILE_NAME: &str = "sounds.inc.rs";
+const SOUNDS_HEADER: &str = "declare_sounds! {\n";
+const SOUNDS_FOOTER: &str = "}\n";
+
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
     /// will be replaced by the associated string.
@@ -193,6 +198,16 @@ lazy_static! {
         // Fix capitalization
         (Regex::new("/nwing.hps$").unwrap(), "/Nwing.hps"),
     ];
+
+    /// Regexes matching sound names to discard because they are duplicates.
+    static ref DUPLICATE_SOUND_DISCARDS: RegexSet = RegexSet::new(&[
+        r"^NONE$",
+        r"^ROBO_WAIK$",
+        r"^ROBO_CHARGE2$",
+        r"^SYSTEM_NG$",
+        r"^ROBO_SYRINGE_IN$",
+        r"^NPC_ARMY_FOOT\d$",
+    ]).unwrap();
 }
 
 fn init_logging() {
@@ -840,6 +855,33 @@ fn build_sound_events(
     defs
 }
 
+/// Representation of a sound which is written to the generated source.
+struct SoundDefinition {
+    id: u32,
+    label: Label,
+    name: String,
+}
+
+/// Builds the sound list by matching event names.
+fn build_sounds(events: &EventBank, event_defs: &[SoundEventDefinition]) -> Vec<SoundDefinition> {
+    let mut defs: Vec<SoundDefinition> = Vec::with_capacity(event_defs.len());
+    for (event, def) in events.events.iter().zip(event_defs) {
+        if DUPLICATE_SOUND_DISCARDS.is_match(&def.name) {
+            continue;
+        }
+        if let Some(action) = event.actions.iter().find(|a| a.command == Command::Sound) {
+            defs.push(SoundDefinition {
+                id: action.data as u32,
+                label: def.label.clone(),
+                name: def.name.clone(),
+            });
+        }
+    }
+    debug!("Found {} sound names", defs.len());
+    defs.sort_unstable_by_key(|d| d.id);
+    defs
+}
+
 /// Writes the list of objects to the generated file.
 fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, OBJECTS_HEADER)?;
@@ -941,6 +983,17 @@ fn write_sound_events(mut writer: impl Write, events: &[SoundEventDefinition]) -
     Ok(())
 }
 
+/// Writes the list of sounds to the generated file.
+fn write_sounds(mut writer: impl Write, sounds: &[SoundDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER_BRSAR, SOUNDS_HEADER)?;
+    for sound in sounds {
+        writeln!(writer, "    {} => {} {{ \"{}\" }},", sound.id, sound.label.0, sound.name)?;
+    }
+    write!(writer, "{}", SOUNDS_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 fn run_app() -> Result<()> {
     init_logging();
 
@@ -974,12 +1027,14 @@ fn run_app() -> Result<()> {
     let banks = read_sound_banks(&mut iso, &events)?;
 
     let mut sound_events = vec![];
+    let mut sounds = vec![];
     if let Some(brsar_path) = options.brsar {
         info!("Reading BRSAR");
         let mut brsar_reader = BufReader::new(File::open(&brsar_path)?);
         let brsar = Brsar::read_from(&mut brsar_reader)?;
         info!("Matching sound event names");
         sound_events = build_sound_events(&events, &brsar, &banks);
+        sounds = build_sounds(&events, &sound_events);
     }
 
     let metadata = {
@@ -1066,6 +1121,13 @@ fn run_app() -> Result<()> {
         info!("Writing {}", sound_events_path.display());
         let sound_events_writer = BufWriter::new(File::create(sound_events_path)?);
         write_sound_events(sound_events_writer, &sound_events)?;
+    }
+
+    if !sounds.is_empty() {
+        let sounds_path = out_dir.join(SOUNDS_FILE_NAME);
+        info!("Writing {}", sounds_path.display());
+        let sounds_writer = BufWriter::new(File::create(sounds_path)?);
+        write_sounds(sounds_writer, &sounds)?;
     }
 
     Ok(())
