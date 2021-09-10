@@ -201,12 +201,12 @@ lazy_static! {
 
     /// Regexes matching sound names to discard because they are duplicates.
     static ref DUPLICATE_SOUND_DISCARDS: RegexSet = RegexSet::new(&[
-        r"^NONE$",
-        r"^ROBO_WAIK$",
-        r"^ROBO_CHARGE2$",
-        r"^SYSTEM_NG$",
-        r"^ROBO_SYRINGE_IN$",
-        r"^NPC_ARMY_FOOT\d$",
+        r"^none$",
+        r"^robo_waik$",
+        r"^robo_charge2$",
+        r"^system_ng$",
+        r"^robo_syringe_in$",
+        r"^npc_army_foot\d$",
     ]).unwrap();
 }
 
@@ -833,9 +833,12 @@ fn build_sound_events(
         if let Some(&bank_id) = collection_to_bank.get(&sound.collection_index) {
             let bank = &mut states[bank_id];
             if bank.next_id < bank.end_id {
-                let name = brsar.symbol(sound.name_index);
-                let label = Label::from_string_lossy(name);
-                defs.push(SoundEventDefinition { id: bank.next_id, label, name: name.to_owned() });
+                // Convert sound names to lowercase. While the names in the BRSAR are in uppercase,
+                // every file in the GameCube build uses lowercase, so this makes the sound file
+                // names more consistent with everything else.
+                let name = brsar.symbol(sound.name_index).to_lowercase();
+                let label = Label::from_string_lossy(&name);
+                defs.push(SoundEventDefinition { id: bank.next_id, label, name });
                 bank.next_id += 1;
             }
         }
@@ -845,7 +848,7 @@ fn build_sound_events(
     // Fill in any IDs we somehow missed (seems to only be the uraniwa_ambient banks)
     for bank in &mut states {
         while bank.next_id < bank.end_id {
-            let name = format!("UNK_{:>06x}", bank.next_id);
+            let name = format!("unk_{:>06x}", bank.next_id);
             let label = Label::from_string_lossy(&name);
             defs.push(SoundEventDefinition { id: bank.next_id, label, name });
             bank.next_id += 1;
