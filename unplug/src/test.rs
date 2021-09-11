@@ -1,8 +1,13 @@
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::block::{Ip, WriteIp};
-use byteorder::{WriteBytesExt, LE};
+use byteorder::{ByteOrder, WriteBytesExt, LE};
 use std::fmt::Debug;
 use std::io::{self, Cursor, Seek, SeekFrom};
+
+/// Test sound provided by whirligig231
+const TEST_WAV: &[u8] = include_bytes!("test/ionpack.wav");
+/// Offset of the data section in `TEST_WAV`
+const TEST_WAV_DATA_OFFSET: usize = 0x24;
 
 /// Asserts that writing a value to a byte array and reading it back produces the same value.
 #[macro_export]
@@ -57,4 +62,16 @@ impl WriteIp for Cursor<Vec<u8>> {
             panic!("IP is not an offset: {:?}", ip);
         }
     }
+}
+
+/// Returns a cursor over the sample data in the test WAV. The data is stereo PCMS16LE.
+pub(crate) fn open_test_wav() -> Cursor<&'static [u8]> {
+    let data_header = &TEST_WAV[TEST_WAV_DATA_OFFSET..(TEST_WAV_DATA_OFFSET + 8)];
+    let data_id = LE::read_u32(&data_header[0..4]);
+    let data_size = LE::read_u32(&data_header[4..8]) as usize;
+    assert_eq!(data_id, 0x61746164); // 'data'
+
+    let samples_start = TEST_WAV_DATA_OFFSET + 8;
+    let samples_end = samples_start + data_size;
+    Cursor::new(&TEST_WAV[samples_start..samples_end])
 }

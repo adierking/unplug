@@ -1,4 +1,7 @@
+mod coefficients;
 mod decode;
+
+pub use coefficients::*;
 pub use decode::*;
 
 use super::format::StaticFormat;
@@ -20,7 +23,7 @@ impl StaticFormat for GcAdpcm {
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct Info {
     /// ADPCM coefficients.
-    pub coefficients: [i16; 16],
+    pub coefficients: Coefficients,
     /// Audio gain level.
     pub gain: u16,
     /// Initial decoder parameters.

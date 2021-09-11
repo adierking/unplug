@@ -1,4 +1,4 @@
-use super::GcAdpcm;
+use super::{Coefficients, GcAdpcm};
 use crate::audio::format::PcmS16Le;
 use crate::audio::{ReadSamples, Result, Samples};
 use byteorder::{WriteBytesExt, LE};
@@ -9,7 +9,7 @@ use std::convert::TryInto;
 #[allow(single_use_lifetimes)]
 pub struct Decoder<'a, 'b: 'a> {
     source: Box<dyn ReadSamples<'b, Format = GcAdpcm> + 'a>,
-    coefficients: [i16; 16],
+    coefficients: Coefficients,
 }
 
 impl<'a, 'b: 'a> Decoder<'a, 'b> {
