@@ -43,6 +43,9 @@ pub enum Error {
     #[error("audio stream is not mono")]
     StreamNotMono,
 
+    #[error("audio stream is not stereo")]
+    StreamNotStereo,
+
     #[error("unrecognized event command: {0}")]
     UnrecognizedEventCommand(u8),
 

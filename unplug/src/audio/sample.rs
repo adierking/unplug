@@ -240,6 +240,75 @@ where
     }
 }
 
+/// Splits a stereo stream into two mono streams.
+pub struct SplitChannels<'a, F, R>
+where
+    F: RawFormat + 'static,
+    R: ReadSamples<'a, Format = F>,
+{
+    reader: R,
+    _marker: PhantomData<&'a F>,
+}
+
+impl<'a, F, R> SplitChannels<'a, F, R>
+where
+    F: RawFormat + 'static,
+    R: ReadSamples<'a, Format = F>,
+{
+    /// Creates a new `SplitChannels` which reads samples from `reader`.
+    pub fn new(reader: R) -> Self {
+        Self { reader, _marker: PhantomData }
+    }
+
+    /// Reads the next pair of streams from the inner stream. If there are no more samples, returns
+    /// `Ok(None)`.
+    pub fn read_next(&mut self) -> Result<Option<SplitChannelsResult<F>>> {
+        let stereo = match self.reader.read_samples()? {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        if stereo.channels != 2 {
+            return Err(Error::StreamNotStereo);
+        }
+
+        let mut left_bytes = Vec::with_capacity(stereo.bytes.len() / 2);
+        let mut right_bytes = Vec::with_capacity(stereo.bytes.len() / 2);
+        for sample in stereo.iter() {
+            let (left_sample, right_sample) = sample.split_at(sample.len() / 2);
+            left_bytes.extend(left_sample);
+            right_bytes.extend(right_sample);
+        }
+
+        let left = Samples::<'static, F> {
+            context: (),
+            start_address: 0,
+            end_address: F::byte_to_address(left_bytes.len() - 1),
+            channels: 1,
+            bytes: left_bytes.into(),
+        };
+        let right = Samples::<'static, F> {
+            context: (),
+            start_address: 0,
+            end_address: F::byte_to_address(right_bytes.len() - 1),
+            channels: 1,
+            bytes: right_bytes.into(),
+        };
+        Ok(Some(SplitChannelsResult {
+            left: Box::new(left.into_reader()),
+            right: Box::new(right.into_reader()),
+        }))
+    }
+}
+
+/// A pair of streams returned by a `SplitChannels`.
+#[non_exhaustive]
+pub struct SplitChannelsResult<F> {
+    /// The left audio stream.
+    pub left: Box<dyn ReadSamples<'static, Format = F>>,
+    /// The right audio stream.
+    pub right: Box<dyn ReadSamples<'static, Format = F>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,6 +481,35 @@ mod tests {
                 0x14, 0x16, 0x15, 0x17, 0x18, 0x1a, 0x19, 0x1b,
             ]
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_split_channels() -> Result<()> {
+        let bytes: Vec<u8> = (0..16).collect();
+        let stereo = Samples::<PcmS16Le> {
+            context: (),
+            start_address: 2,
+            end_address: 5,
+            channels: 2,
+            bytes: Cow::Borrowed(&bytes),
+        };
+
+        let mut splitter = SplitChannels::new(stereo.into_reader());
+        let mut split = splitter.read_next()?.unwrap();
+        let left = split.left.read_samples()?.unwrap();
+        let right = split.right.read_samples()?.unwrap();
+
+        assert_eq!(left.start_address, 0);
+        assert_eq!(left.end_address, 1);
+        assert_eq!(left.channels, 1);
+        assert_eq!(left.bytes.as_ref(), &[0x4, 0x5, 0x8, 0x9,]);
+
+        assert_eq!(right.start_address, 0);
+        assert_eq!(right.end_address, 1);
+        assert_eq!(right.channels, 1);
+        assert_eq!(right.bytes.as_ref(), &[0x6, 0x7, 0xa, 0xb,]);
 
         Ok(())
     }
