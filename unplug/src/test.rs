@@ -5,9 +5,21 @@ use std::fmt::Debug;
 use std::io::{self, Cursor, Seek, SeekFrom};
 
 /// Test sound provided by whirligig231
-const TEST_WAV: &[u8] = include_bytes!("test/ionpack.wav");
+pub(crate) const TEST_WAV: &[u8] = include_bytes!("test/ionpack.wav");
 /// Offset of the data section in `TEST_WAV`
-const TEST_WAV_DATA_OFFSET: usize = 0x24;
+pub(crate) const TEST_WAV_DATA_OFFSET: usize = 0x24;
+
+/// Test sound left channel encoded to GC ADPCM format
+pub(crate) const TEST_WAV_LEFT_DSP: &[u8] = include_bytes!("test/ionpack-dsp-left.bin");
+/// Test sound left channel coefficients
+pub(crate) const TEST_WAV_LEFT_COEFFICIENTS: [i16; 16] =
+    [73, 1854, 3534, -1788, 923, 977, 3818, -1807, 437, 1541, 3534, -1587, 1768, 228, 3822, -1781];
+
+/// Test sound right channel encoded to GC ADPCM format
+pub(crate) const TEST_WAV_RIGHT_DSP: &[u8] = include_bytes!("test/ionpack-dsp-right.bin");
+/// Test sound right channel coefficients
+pub(crate) const TEST_WAV_RIGHT_COEFFICIENTS: [i16; 16] =
+    [49, 1829, 3542, -1781, 784, 1112, 3720, -1707, 374, 1605, 3677, -1738, 1630, 371, 3840, -1800];
 
 /// Asserts that writing a value to a byte array and reading it back produces the same value.
 #[macro_export]

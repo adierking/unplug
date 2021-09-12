@@ -357,15 +357,6 @@ mod test {
     use crate::test;
     use byteorder::{ReadBytesExt, LE};
 
-    const EXPECTED_LEFT_COEFFICIENTS: Coefficients = [
-        73, 1854, 3534, -1788, 923, 977, 3818, -1807, 437, 1541, 3534, -1587, 1768, 228, 3822,
-        -1781,
-    ];
-    const EXPECTED_RIGHT_COEFFICIENTS: Coefficients = [
-        49, 1829, 3542, -1781, 784, 1112, 3720, -1707, 374, 1605, 3677, -1738, 1630, 371, 3840,
-        -1800,
-    ];
-
     #[test]
     fn test_calculate_coefficients() -> Result<()> {
         let mut reader = test::open_test_wav();
@@ -378,8 +369,8 @@ mod test {
         }
         let left_coefficients = calculate_coefficients(&left_samples);
         let right_coefficients = calculate_coefficients(&right_samples);
-        assert_eq!(left_coefficients, EXPECTED_LEFT_COEFFICIENTS);
-        assert_eq!(right_coefficients, EXPECTED_RIGHT_COEFFICIENTS);
+        assert_eq!(left_coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
+        assert_eq!(right_coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
         Ok(())
     }
 }

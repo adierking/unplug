@@ -1,8 +1,10 @@
 mod coefficients;
 mod decode;
+mod encode;
 
 pub use coefficients::*;
 pub use decode::*;
+pub use encode::*;
 
 use super::format::StaticFormat;
 use super::{Error, Format, Result};
