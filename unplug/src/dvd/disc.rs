@@ -1,7 +1,7 @@
 use super::dol::{self, DolHeader};
 use super::fst::{self, EditFile, EntryId, FileStringTable, FileTree, FstEntryKind, OpenFile};
 use crate::common::io::{copy_within, fill, read_fixed_string, write_fixed_string};
-use crate::common::{ReadFrom, ReadSeek, ReadWriteSeek, Region, WriteTo};
+use crate::common::{self, ReadFrom, ReadSeek, ReadWriteSeek, Region, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use encoding_rs::mem;
 use log::{debug, trace};
@@ -227,7 +227,7 @@ impl<S: Read + Seek> DiscStream<S> {
         self.free_regions
             .iter()
             .filter_map(|r| {
-                let aligned_offset = (r.offset + align - 1) & !(align - 1);
+                let aligned_offset = common::align(r.offset, align);
                 let padding = aligned_offset - r.offset;
                 if padding >= r.size {
                     return None;

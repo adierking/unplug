@@ -3,7 +3,7 @@ use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
-use crate::common::ReadFrom;
+use crate::common::{align, ReadFrom};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
 use log::{debug, error, trace};
@@ -25,11 +25,6 @@ const DATA_ALIGN: usize = 0x20;
 
 /// Convenience type for an opaque decoder.
 type HpsDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
-
-/// Aligns `offset` to the next multiple of the data alignment.
-fn align(offset: usize) -> usize {
-    (offset + DATA_ALIGN - 1) & !(DATA_ALIGN - 1)
-}
 
 /// HPS file header.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -131,7 +126,7 @@ impl<R: Read> ReadFrom<R> for BlockHeader {
         }
 
         // In order to preserve alignment, data is always reserved for a multiple of 4 markers
-        let aligned = (num_markers + 3) & !3;
+        let aligned = align(num_markers, 4);
         for _ in num_markers..aligned {
             Marker::read_from(reader)?;
         }
@@ -286,7 +281,7 @@ impl Block {
                 data_size,
                 initial_context: header.channel_contexts[i],
             });
-            data_offset = align(data_offset + data_size);
+            data_offset = align(data_offset + data_size, DATA_ALIGN);
         }
 
         Ok(Block {

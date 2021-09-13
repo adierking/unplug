@@ -3,7 +3,7 @@ use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
-use crate::common::ReadFrom;
+use crate::common::{align, ReadFrom};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
 use log::{debug, error};
@@ -18,11 +18,6 @@ const DATA_ALIGN: u64 = 0x20;
 
 /// Convenience type for an opaque decoder.
 type SsmDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
-
-/// Aligns `offset` to the next multiple of the data alignment.
-fn align(offset: u64) -> u64 {
-    (offset + DATA_ALIGN - 1) & !(DATA_ALIGN - 1)
-}
 
 /// SSM file header.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -204,7 +199,7 @@ impl<R: Read + Seek> ReadFrom<R> for SoundBank {
         }
 
         // The sample data follows the sound headers, aligned to the next 64-byte boundary
-        let data_offset = align(HEADER_SIZE + header.index_size as u64);
+        let data_offset = align(HEADER_SIZE + header.index_size as u64, DATA_ALIGN);
         reader.seek(SeekFrom::Start(data_offset))?;
         let mut data = vec![];
         reader.take(header.data_size as u64).read_to_end(&mut data)?;

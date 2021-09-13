@@ -31,6 +31,7 @@ use super::GcAdpcm;
 use crate::audio::adpcm::calculate_coefficients;
 use crate::audio::format::PcmS16Le;
 use crate::audio::{Error, ReadSamples, Result, Samples};
+use crate::common::clamp_i16;
 use byteorder::{ByteOrder, LE};
 use log::debug;
 use std::mem;
@@ -118,10 +119,9 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
     let mut max_distance: i16 = 0;
     for s in pcm.windows(3) {
         let predicted = (c0 * (s[1] as i32) + c1 * (s[0] as i32)) / 2048;
-        let dist32 = s[2] as i32 - predicted;
-        let dist16 = dist32.max(i16::MIN as i32).min(i16::MAX as i32) as i16;
-        if dist16.abs() > max_distance.abs() {
-            max_distance = dist16;
+        let distance = clamp_i16(s[2] as i32 - predicted);
+        if distance.abs() > max_distance.abs() {
+            max_distance = distance;
         }
     }
 
@@ -156,9 +156,7 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
                 max_overflow = max_overflow.max(overflow);
             }
             *adpcm = clamped;
-
-            let out32 = (predicted + clamped * scale + 0x400) >> 11;
-            frame.pcm[s + 2] = out32.max(i16::MIN as i32).min(i16::MAX as i32) as i16;
+            frame.pcm[s + 2] = clamp_i16((predicted + clamped * scale + 0x400) >> 11);
 
             let actual_distance = (pcm[s + 2] - frame.pcm[s + 2]) as f64;
             frame.distance += actual_distance * actual_distance;

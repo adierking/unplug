@@ -1,6 +1,7 @@
 use super::{Coefficients, GcAdpcm};
 use crate::audio::format::PcmS16Le;
 use crate::audio::{ReadSamples, Result, Samples};
+use crate::common::clamp_i16;
 use byteorder::{WriteBytesExt, LE};
 use log::trace;
 use std::convert::TryInto;
@@ -74,12 +75,10 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
             let s0 = context.last_samples[0] as i32;
             let s1 = context.last_samples[1] as i32;
             let predicted = (c0 * s0 + c1 * s1 + 0x400) >> 11;
+            let pcm = clamp_i16(predicted + val * context.scale());
 
-            let pcm32 = predicted + val * context.scale();
-            let pcm16 = pcm32.max(i16::MIN as i32).min(i16::MAX as i32) as i16;
-
-            decoded.write_i16::<LE>(pcm16)?;
-            context.push_sample(pcm16);
+            decoded.write_i16::<LE>(pcm)?;
+            context.push_sample(pcm);
         }
 
         Ok(Some(Samples {

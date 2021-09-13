@@ -1,4 +1,5 @@
 mod list;
+mod math;
 mod read_write;
 mod region;
 
@@ -7,6 +8,7 @@ pub mod string_table;
 pub mod text;
 
 pub use list::*;
+pub use math::*;
 pub use read_write::*;
 pub use region::*;
 pub use string_table::StringTable;

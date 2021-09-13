@@ -59,7 +59,7 @@ pub fn fill(mut writer: impl Write, byte: u8, len: u64) -> io::Result<()> {
 /// Writes padding bytes so that a writer's offset is aligned to a power of two.
 pub fn pad(mut writer: (impl Write + Seek), align: u64, fill: u8) -> io::Result<()> {
     let offset = writer.seek(SeekFrom::Current(0))?;
-    let aligned = (offset + align - 1) & !(align - 1);
+    let aligned = super::align(offset, align);
     let padding = aligned - offset;
     self::fill(writer, fill, padding)?;
     Ok(())
