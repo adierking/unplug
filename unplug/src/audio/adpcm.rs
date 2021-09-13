@@ -8,9 +8,9 @@ pub use encode::*;
 
 use super::format::StaticFormat;
 use super::{Error, Format, Result};
-use crate::common::ReadFrom;
-use byteorder::{ReadBytesExt, BE};
-use std::io::Read;
+use crate::common::{ReadFrom, WriteTo};
+use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
+use std::io::{Read, Write};
 
 #[derive(Copy, Clone)]
 pub struct GcAdpcm;
@@ -40,6 +40,18 @@ impl<R: Read> ReadFrom<R> for Info {
         info.gain = reader.read_u16::<BE>()?;
         info.context = Context::read_from(reader)?;
         Ok(info)
+    }
+}
+
+impl<W: Write> WriteTo<W> for Info {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        let mut coefficient_bytes = [0u8; 32];
+        BE::write_i16_into(&self.coefficients, &mut coefficient_bytes);
+        writer.write_all(&coefficient_bytes)?;
+        writer.write_u16::<BE>(self.gain)?;
+        self.context.write_to(writer)?;
+        Ok(())
     }
 }
 
@@ -84,5 +96,31 @@ impl<R: Read> ReadFrom<R> for Context {
         let mut last_samples = [0i16; 2];
         reader.read_i16_into::<BE>(&mut last_samples)?;
         Ok(Self { predictor_and_scale, last_samples })
+    }
+}
+
+impl<W: Write> WriteTo<W> for Context {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u16::<BE>(self.predictor_and_scale)?;
+        writer.write_i16::<BE>(self.last_samples[0])?;
+        writer.write_i16::<BE>(self.last_samples[1])?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assert_write_and_read;
+    use std::convert::TryInto;
+
+    #[test]
+    fn test_write_and_read_info() {
+        assert_write_and_read!(Info {
+            coefficients: (1..=16).collect::<Vec<i16>>().try_into().unwrap(),
+            gain: 1,
+            context: Context { predictor_and_scale: 2, last_samples: [3, 4] },
+        });
     }
 }

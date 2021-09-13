@@ -3,18 +3,21 @@ use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
-use crate::common::{align, ReadFrom};
+use crate::common::io::pad;
+use crate::common::{align, ReadFrom, WriteTo};
 use arrayvec::ArrayVec;
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use log::{debug, error};
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 
 /// The size of the file header.
 const HEADER_SIZE: u64 = 0x10;
 /// The alignment of data in an SSM file.
 const DATA_ALIGN: u64 = 0x20;
+/// The alignment of each audio frame in bytes.
+const FRAME_ALIGN: u64 = 8;
 
 /// Convenience type for an opaque decoder.
 type SsmDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
@@ -44,6 +47,17 @@ impl<R: Read> ReadFrom<R> for FileHeader {
     }
 }
 
+impl<W: Write> WriteTo<W> for FileHeader {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u32::<BE>(self.index_size)?;
+        writer.write_u32::<BE>(self.data_size)?;
+        writer.write_u32::<BE>(self.num_sounds)?;
+        writer.write_u32::<BE>(self.base_index)?;
+        Ok(())
+    }
+}
+
 /// Header for sound channel data.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 struct ChannelHeader {
@@ -65,6 +79,17 @@ impl<R: Read> ReadFrom<R> for ChannelHeader {
         };
         let _padding = reader.read_u16::<BE>()?;
         Ok(header)
+    }
+}
+
+impl<W: Write> WriteTo<W> for ChannelHeader {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        self.address.write_to(writer)?;
+        self.adpcm.write_to(writer)?;
+        self.loop_context.write_to(writer)?;
+        writer.write_u16::<BE>(0)?;
+        Ok(())
     }
 }
 
@@ -90,9 +115,20 @@ impl<R: Read> ReadFrom<R> for SoundHeader {
     }
 }
 
+impl<W: Write> WriteTo<W> for SoundHeader {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u32::<BE>(self.channels.len() as u32)?;
+        writer.write_u32::<BE>(self.sample_rate)?;
+        for channel in &self.channels {
+            channel.write_to(writer)?;
+        }
+        Ok(())
+    }
+}
+
 /// Contains complete data for a channel in a sound.
 #[derive(Clone, Default, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct Channel {
     pub address: AudioAddress,
     pub adpcm: Info,
@@ -125,7 +161,7 @@ impl Channel {
         let end_address = header.address.end_address;
         let nibbles = (end_address - start_address + 1) as usize;
         let start_offset = format.address_to_byte(start_address as usize);
-        let end_offset = start_offset + format.size_of(nibbles);
+        let end_offset = align(start_offset + format.size_of(nibbles), FRAME_ALIGN as usize);
         let data = Vec::from(&bank_data[start_offset..end_offset]);
 
         // Since we have a separate data buffer now, we have to update the addresses
@@ -135,6 +171,16 @@ impl Channel {
         address.current_address -= start_address;
 
         Channel { address, adpcm: header.adpcm, loop_context: header.loop_context, data }
+    }
+
+    fn make_header(&self, data_offset: u64) -> ChannelHeader {
+        let mut address = self.address;
+        let format = Format::from(address.format);
+        let start_address = format.byte_to_address(data_offset as usize) as u32;
+        address.loop_address += start_address;
+        address.end_address += start_address;
+        address.current_address += start_address;
+        ChannelHeader { address, adpcm: self.adpcm, loop_context: self.loop_context }
     }
 }
 
@@ -217,6 +263,54 @@ impl<R: Read + Seek> ReadFrom<R> for SoundBank {
     }
 }
 
+impl<W: Write + Seek> WriteTo<W> for SoundBank {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        assert_eq!(writer.seek(SeekFrom::Current(0))?, 0);
+
+        // Write a placeholder header which we can fill in with the sizes later
+        let mut header = FileHeader {
+            index_size: 0,
+            data_size: 0,
+            num_sounds: self.sounds.len() as u32,
+            base_index: self.base_index,
+        };
+        header.write_to(writer)?;
+
+        // Write all the sound headers and keep track of what the current channel's data offset
+        // should be so that we can write everything in one pass
+        let mut data_offset = 0;
+        for sound in &self.sounds {
+            let mut channels = ArrayVec::new();
+            for channel in &sound.channels {
+                channels.push(channel.make_header(data_offset));
+                // Audio data must be aligned on a frame boundary
+                data_offset = align(data_offset + channel.data.len() as u64, FRAME_ALIGN);
+            }
+            let sound_header = SoundHeader { sample_rate: sound.sample_rate, channels };
+            sound_header.write_to(writer)?;
+        }
+        header.index_size = (writer.seek(SeekFrom::Current(0))? - HEADER_SIZE) as u32;
+        header.data_size = align(data_offset, DATA_ALIGN) as u32;
+        pad(&mut *writer, DATA_ALIGN, 0)?;
+
+        for sound in &self.sounds {
+            for channel in &sound.channels {
+                writer.write_all(&channel.data)?;
+                pad(&mut *writer, FRAME_ALIGN, 0)?;
+            }
+        }
+        // The data section size is aligned in the official SSM files
+        pad(&mut *writer, DATA_ALIGN, 0)?;
+
+        let end_offset = writer.seek(SeekFrom::Current(0))?;
+        writer.seek(SeekFrom::Start(0))?;
+        header.write_to(writer)?;
+        writer.seek(SeekFrom::Start(end_offset))?;
+        Ok(())
+    }
+}
+
 impl Debug for SoundBank {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SoundBank")
@@ -265,12 +359,13 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assert_write_and_read;
     use std::io::Cursor;
 
     #[rustfmt::skip]
     const SSM_BYTES: &[u8] = &[
         0x00, 0x00, 0x00, 0xd0, // index_size
-        0x00, 0x00, 0x00, 0x30, // data_size
+        0x00, 0x00, 0x00, 0x40, // data_size
         0x00, 0x00, 0x00, 0x02, // num_sounds
         0x00, 0x00, 0x01, 0x23, // base_index
 
@@ -344,6 +439,10 @@ mod tests {
         // sound 1 channel 1
         0x17, 0x42, 0x44, 0x46, 0x48, 0x4a, 0x4c, 0x4e,
         0x17, 0x52, 0x54, 0x56, 0x58, 0x5a, 0x5c, 0x5e,
+
+        // padding
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
 
     #[test]
@@ -373,5 +472,41 @@ mod tests {
         assert_eq!(samples1_1.channels, 1);
         assert_eq!(samples1_1.bytes, &SSM_BYTES[0x100..0x110]);
         Ok(())
+    }
+
+    #[test]
+    fn test_read_and_write_sound_bank() -> Result<()> {
+        let ssm = SoundBank::read_from(&mut Cursor::new(SSM_BYTES))?;
+        let mut writer = Cursor::new(vec![]);
+        ssm.write_to(&mut writer)?;
+        assert_eq!(writer.into_inner(), SSM_BYTES);
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_and_read_file_header() {
+        assert_write_and_read!(FileHeader {
+            index_size: 1,
+            data_size: 2,
+            num_sounds: 3,
+            base_index: 4,
+        });
+    }
+
+    #[test]
+    fn test_write_and_read_channel_header() {
+        assert_write_and_read!(ChannelHeader {
+            address: AudioAddress::default(),
+            adpcm: Info::default(),
+            loop_context: Context::default(),
+        });
+    }
+
+    #[test]
+    fn test_write_and_read_sound_header() {
+        assert_write_and_read!(SoundHeader {
+            sample_rate: 44100,
+            channels: ArrayVec::from([ChannelHeader::default(); 2]),
+        });
     }
 }

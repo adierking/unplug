@@ -1,9 +1,9 @@
 use super::{Error, Format, Result};
-use crate::common::ReadFrom;
-use byteorder::{ReadBytesExt, BE};
+use crate::common::{ReadFrom, WriteTo};
+use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
-use std::io::Read;
+use std::io::{Read, Write};
 
 /// GameCube DSP audio sample formats.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
@@ -31,6 +31,14 @@ impl<R: Read> ReadFrom<R> for DspFormat {
             Ok(format) => Ok(format),
             Err(_) => Err(Error::UnrecognizedSampleFormat(id)),
         }
+    }
+}
+
+impl<W: Write> WriteTo<W> for DspFormat {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u16::<BE>((*self).into())?;
+        Ok(())
     }
 }
 
@@ -70,5 +78,34 @@ impl<R: Read> ReadFrom<R> for AudioAddress {
             end_address: reader.read_u32::<BE>()?,
             current_address: reader.read_u32::<BE>()?,
         })
+    }
+}
+
+impl<W: Write> WriteTo<W> for AudioAddress {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u16::<BE>(self.looping.into())?;
+        self.format.write_to(writer)?;
+        writer.write_u32::<BE>(self.loop_address)?;
+        writer.write_u32::<BE>(self.end_address)?;
+        writer.write_u32::<BE>(self.current_address)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assert_write_and_read;
+
+    #[test]
+    fn test_write_and_read_audio_address() {
+        assert_write_and_read!(AudioAddress {
+            looping: true,
+            format: DspFormat::Pcm16,
+            loop_address: 1,
+            end_address: 2,
+            current_address: 3,
+        });
     }
 }
