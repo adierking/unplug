@@ -174,42 +174,46 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
 }
 
 /// Encodes raw PCM data into GameCube ADPCM format.
-#[derive(Default, Clone)]
-pub struct Encoder {
-    samples: Vec<i16>,
+#[allow(single_use_lifetimes)]
+pub struct Encoder<'r, 's> {
+    reader: Option<Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>>,
 }
 
-impl Encoder {
-    /// Creates an empty `Encoder`.
-    pub fn new() -> Self {
-        Self::default()
+impl<'r, 's> Encoder<'r, 's> {
+    /// Creates an `Encoder` which reads samples from `reader`.
+    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Self {
+        Self { reader: Some(Box::from(reader)) }
     }
+}
 
-    /// Reads all of the samples from `reader` and queues them up to be encoded. The samples must be
-    /// mono or else this will fail.
-    pub fn enqueue(&mut self, reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<()> {
+impl ReadSamples<'static> for Encoder<'_, '_> {
+    type Format = GcAdpcm;
+    fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
+        let mut reader = match self.reader.take() {
+            Some(reader) => reader,
+            None => return Ok(None),
+        };
+
+        let mut pcm = vec![];
         while let Some(samples) = reader.read_samples()? {
             if samples.channels != 1 {
                 return Err(Error::StreamNotMono);
             }
+            pcm.reserve(samples.bytes.len() / 2);
             for sample in samples.iter() {
-                self.samples.push(LE::read_i16(sample));
+                pcm.push(LE::read_i16(sample));
             }
         }
-        Ok(())
-    }
 
-    /// Encodes all of the enqueued samples into a single ADPCM buffer.
-    pub fn encode(self) -> Samples<'static, GcAdpcm> {
         debug!("Calculating coefficients");
-        let coefficients = calculate_coefficients(&self.samples);
+        let coefficients = calculate_coefficients(&pcm);
 
-        debug!("Encoding {} samples using {:?}", self.samples.len(), coefficients);
+        debug!("Encoding {} samples using {:?}", pcm.len(), coefficients);
         let mut info = Info { coefficients, ..Default::default() };
-        let bytes = encode(&self.samples, &mut info);
+        let bytes = encode(&pcm, &mut info);
 
         debug!("Encoded to {} bytes", bytes.len());
-        Samples {
+        Ok(Some(Samples {
             params: Info {
                 coefficients: info.coefficients,
                 gain: 0,
@@ -219,10 +223,10 @@ impl Encoder {
                 },
             },
             start_address: 2,
-            end_address: bytes.len() * 2 - self.samples.len() % 2 - 1,
+            end_address: bytes.len() * 2 - pcm.len() % 2 - 1,
             channels: 1,
             bytes: bytes.into(),
-        }
+        }))
     }
 }
 
@@ -244,15 +248,13 @@ mod tests {
             bytes: bytes.into(),
         };
 
-        let mut left_encoder = Encoder::new();
-        let mut right_encoder = Encoder::new();
         let splitter = SplitChannels::new(samples.into_reader());
-        left_encoder.enqueue(&mut splitter.left())?;
-        right_encoder.enqueue(&mut splitter.right())?;
+        let mut left_encoder = Encoder::new(splitter.left());
+        let mut right_encoder = Encoder::new(splitter.right());
 
-        let left = left_encoder.encode();
+        let left = left_encoder.read_samples()?.unwrap();
         assert_eq!(left.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
-        let right = right_encoder.encode();
+        let right = right_encoder.read_samples()?.unwrap();
         assert_eq!(right.params.coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
 
         assert_eq!(
