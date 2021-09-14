@@ -1,8 +1,11 @@
 use super::format::{AnyFormat, AnyParams, Format, FormatTag, RawFormat, StaticFormat};
 use super::{Error, Result};
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 /// A block of audio sample data read from an audio source.
 #[derive(Clone)]
@@ -241,72 +244,116 @@ where
 }
 
 /// Splits a stereo stream into two mono streams.
-pub struct SplitChannels<'a, F, R>
+pub struct SplitChannels<'a, F>
 where
     F: RawFormat + 'static,
-    R: ReadSamples<'a, Format = F>,
 {
-    reader: R,
-    _marker: PhantomData<&'a F>,
+    state: Arc<Mutex<SplitChannelsState<'a, F>>>,
 }
 
-impl<'a, F, R> SplitChannels<'a, F, R>
+impl<'a, F> SplitChannels<'a, F>
 where
     F: RawFormat + 'static,
-    R: ReadSamples<'a, Format = F>,
 {
     /// Creates a new `SplitChannels` which reads samples from `reader`.
-    pub fn new(reader: R) -> Self {
-        Self { reader, _marker: PhantomData }
+    pub fn new(reader: impl ReadSamples<'a, Format = F> + 'a) -> Self {
+        Self { state: SplitChannelsState::new(Box::from(reader)) }
     }
 
-    /// Reads the next pair of streams from the inner stream. If there are no more samples, returns
-    /// `Ok(None)`.
-    pub fn read_next(&mut self) -> Result<Option<SplitChannelsResult<F>>> {
-        let stereo = match self.reader.read_samples()? {
-            Some(s) => s,
-            None => return Ok(None),
+    /// Returns a thread-safe reader over the samples in the left channel.
+    pub fn left(&self) -> SplitChannelsReader<'a, F> {
+        SplitChannelsReader { state: Arc::clone(&self.state), is_right: false }
+    }
+
+    /// Returns a thread-safe reader over the samples in the right channel.
+    pub fn right(&self) -> SplitChannelsReader<'a, F> {
+        SplitChannelsReader { state: Arc::clone(&self.state), is_right: true }
+    }
+}
+
+/// State for `SplitChannels` which is shared across readers.
+struct SplitChannelsState<'a, F>
+where
+    F: RawFormat + 'static,
+{
+    /// The inner reader to read new samples from.
+    reader: Box<dyn ReadSamples<'a, Format = F> + 'a>,
+    /// Samples which have not yet been processed by the left reader.
+    left: VecDeque<Rc<Samples<'a, F>>>,
+    /// Samples which have not yet been processed by the right reader.
+    right: VecDeque<Rc<Samples<'a, F>>>,
+}
+
+impl<'a, F> SplitChannelsState<'a, F>
+where
+    F: RawFormat + 'static,
+{
+    /// Creates a new `SplitChannelsState` wrapping `reader`.
+    fn new(reader: Box<dyn ReadSamples<'a, Format = F> + 'a>) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(Self { reader, left: VecDeque::new(), right: VecDeque::new() }))
+    }
+
+    /// Reads more samples from the inner reader and updates the queues. Returns `Ok(true)` if
+    /// samples were read and `Ok(false)` if no more samples are available.
+    fn read_next(&mut self) -> Result<bool> {
+        let samples = match self.reader.read_samples()? {
+            Some(s) => Rc::new(s),
+            None => return Ok(false),
         };
-        if stereo.channels != 2 {
+        self.left.push_back(Rc::clone(&samples));
+        self.right.push_back(samples);
+        Ok(true)
+    }
+}
+
+/// `ReadSamples` implementation for a single channel returned by a `SplitChannels`.
+pub struct SplitChannelsReader<'a, F>
+where
+    F: RawFormat + 'static,
+{
+    state: Arc<Mutex<SplitChannelsState<'a, F>>>,
+    is_right: bool,
+}
+
+impl<'a, F> ReadSamples<'a> for SplitChannelsReader<'a, F>
+where
+    F: RawFormat + 'static,
+{
+    type Format = F;
+    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
+        // We assume here that the channels can be read from in any order and that we are only
+        // expected to read as much as we need. Each channel must hold onto samples it hasn't
+        // returned yet, and we also shouldn't read every sample from the inner reader all at once.
+        // The basic idea here is that we share samples across both channels using queues with
+        // refcounted sample data. When we try to read from an empty queue, we read more samples and
+        // push them onto both queues.
+        let mut state = self.state.lock().unwrap();
+        let samples = loop {
+            let queue = if self.is_right { &mut state.right } else { &mut state.left };
+            if let Some(s) = queue.pop_front() {
+                break s;
+            } else if !state.read_next()? {
+                return Ok(None);
+            }
+        };
+        if samples.channels != 2 {
             return Err(Error::StreamNotStereo);
         }
 
-        let mut left_bytes = Vec::with_capacity(stereo.bytes.len() / 2);
-        let mut right_bytes = Vec::with_capacity(stereo.bytes.len() / 2);
-        for sample in stereo.iter() {
+        let mut channel_bytes = Vec::with_capacity(samples.bytes.len() / 2);
+        for sample in samples.iter() {
             let (left_sample, right_sample) = sample.split_at(sample.len() / 2);
-            left_bytes.extend(left_sample);
-            right_bytes.extend(right_sample);
+            channel_bytes.extend(if self.is_right { right_sample } else { left_sample });
         }
 
-        let left = Samples::<'static, F> {
+        Ok(Some(Samples::<'static, F> {
             params: (),
             start_address: 0,
-            end_address: F::byte_to_address(left_bytes.len() - 1),
+            end_address: F::byte_to_address(channel_bytes.len() - 1),
             channels: 1,
-            bytes: left_bytes.into(),
-        };
-        let right = Samples::<'static, F> {
-            params: (),
-            start_address: 0,
-            end_address: F::byte_to_address(right_bytes.len() - 1),
-            channels: 1,
-            bytes: right_bytes.into(),
-        };
-        Ok(Some(SplitChannelsResult {
-            left: Box::new(left.into_reader()),
-            right: Box::new(right.into_reader()),
+            bytes: channel_bytes.into(),
         }))
     }
-}
-
-/// A pair of streams returned by a `SplitChannels`.
-#[non_exhaustive]
-pub struct SplitChannelsResult<F> {
-    /// The left audio stream.
-    pub left: Box<dyn ReadSamples<'static, Format = F>>,
-    /// The right audio stream.
-    pub right: Box<dyn ReadSamples<'static, Format = F>>,
 }
 
 #[cfg(test)]
@@ -496,10 +543,13 @@ mod tests {
             bytes: Cow::Borrowed(&bytes),
         };
 
-        let mut splitter = SplitChannels::new(stereo.into_reader());
-        let mut split = splitter.read_next()?.unwrap();
-        let left = split.left.read_samples()?.unwrap();
-        let right = split.right.read_samples()?.unwrap();
+        let splitter = SplitChannels::new(stereo.into_reader());
+        let mut left_split = splitter.left();
+        let mut right_split = splitter.right();
+        let left = left_split.read_samples()?.unwrap();
+        let right = right_split.read_samples()?.unwrap();
+        assert!(left_split.read_samples()?.is_none());
+        assert!(right_split.read_samples()?.is_none());
 
         assert_eq!(left.start_address, 0);
         assert_eq!(left.end_address, 1);

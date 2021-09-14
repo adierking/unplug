@@ -246,11 +246,9 @@ mod tests {
 
         let mut left_encoder = Encoder::new();
         let mut right_encoder = Encoder::new();
-        let mut splitter = SplitChannels::new(samples.into_reader());
-        while let Some(mut split) = splitter.read_next()? {
-            left_encoder.enqueue(split.left.as_mut())?;
-            right_encoder.enqueue(split.right.as_mut())?;
-        }
+        let splitter = SplitChannels::new(samples.into_reader());
+        left_encoder.enqueue(&mut splitter.left())?;
+        right_encoder.enqueue(&mut splitter.right())?;
 
         let left = left_encoder.encode();
         assert_eq!(left.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);

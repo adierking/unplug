@@ -6,19 +6,18 @@ use byteorder::{WriteBytesExt, LE};
 use log::trace;
 
 /// Decodes GameCube ADPCM samples into PCM.
-#[allow(single_use_lifetimes)]
-pub struct Decoder<'a, 'b: 'a> {
-    source: Box<dyn ReadSamples<'b, Format = GcAdpcm> + 'a>,
+pub struct Decoder<'a> {
+    source: Box<dyn ReadSamples<'a, Format = GcAdpcm> + 'a>,
 }
 
-impl<'a, 'b: 'a> Decoder<'a, 'b> {
+impl<'a> Decoder<'a> {
     /// Creates a new `Decoder` which reads samples from `source`.
-    pub fn new(source: Box<dyn ReadSamples<'b, Format = GcAdpcm> + 'a>) -> Self {
+    pub fn new(source: Box<dyn ReadSamples<'a, Format = GcAdpcm> + 'a>) -> Self {
         Self { source }
     }
 }
 
-impl ReadSamples<'static> for Decoder<'_, '_> {
+impl ReadSamples<'static> for Decoder<'_> {
     type Format = PcmS16Le;
 
     #[allow(clippy::verbose_bit_mask)]
