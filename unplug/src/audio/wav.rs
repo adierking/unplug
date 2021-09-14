@@ -301,7 +301,7 @@ mod tests {
     fn test_write_wav() -> Result<()> {
         let bytes: Vec<u8> = (0..16).collect();
         let samples = Samples::<'_, PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 0,
             end_address: 0x7,
             channels: 2,

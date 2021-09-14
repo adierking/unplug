@@ -44,18 +44,18 @@ impl Default for Format {
 
 /// A type tag for an audio sample format.
 pub trait FormatTag {
-    /// The type of a format-dependent context that can be associated with samples.
-    type Context: 'static;
+    /// The type of format-dependent parameters that can be associated with samples.
+    type Params: 'static;
 
-    /// Returns a dynamic format based on the supplied context.
-    fn format(context: &Self::Context) -> Format;
+    /// Returns a dynamic format based on the supplied parameters.
+    fn format(params: &Self::Params) -> Format;
 }
 
 /// A type tag for an audio sample format which has a static `Format` mapping.
 /// This auto-implements `FormatTag`.
 pub trait StaticFormat {
-    /// The type of a format-dependent context that can be associated with samples.
-    type Context: 'static;
+    /// The type of format-dependent parameters that can be associated with samples.
+    type Params: 'static;
 
     /// Returns the static format.
     fn format_static() -> Format;
@@ -78,15 +78,15 @@ pub trait StaticFormat {
 }
 
 impl<T: StaticFormat> FormatTag for T {
-    type Context = T::Context;
-    fn format(_context: &Self::Context) -> Format {
+    type Params = T::Params;
+    fn format(_info: &Self::Params) -> Format {
         Self::format_static()
     }
 }
 
 /// Indicates that a format consists solely of raw fixed-width samples which require no context to
 /// decode - i.e. addresses and samples are the same unit.
-pub trait RawFormat: StaticFormat<Context = ()> {
+pub trait RawFormat: StaticFormat<Params = ()> {
     /// Converts a sample number and channel count to a byte offset.
     fn sample_to_byte(sample: usize, channels: usize) -> usize {
         Self::address_to_byte(sample) * channels
@@ -102,23 +102,23 @@ pub trait RawFormat: StaticFormat<Context = ()> {
 #[derive(Copy, Clone)]
 pub struct AnyFormat;
 impl FormatTag for AnyFormat {
-    type Context = AnyContext;
-    fn format(context: &Self::Context) -> Format {
-        context.format
+    type Params = AnyParams;
+    fn format(params: &Self::Params) -> Format {
+        params.format
     }
 }
 
-/// Context for `AnyFormat`.
-pub struct AnyContext {
+/// Parameters for `AnyFormat` samples.
+pub struct AnyParams {
     /// The actual sample format.
     pub(super) format: Format,
-    /// The actual context for the sample data.
+    /// The actual codec info for the sample data.
     pub(super) inner: Box<dyn Any>,
 }
 
-impl AnyContext {
-    /// Wraps a context in an `AnyContext`.
-    pub fn new<T: FormatTag>(inner: T::Context) -> Self {
+impl AnyParams {
+    /// Wraps codec info in an `AnyInfo`.
+    pub fn new<T: FormatTag>(inner: T::Params) -> Self {
         Self { format: T::format(&inner), inner: Box::new(inner) }
     }
 }
@@ -129,7 +129,7 @@ macro_rules! raw_format {
         #[derive(Copy, Clone)]
         pub struct $name;
         impl StaticFormat for $name {
-            type Context = ();
+            type Params = ();
             fn format_static() -> Format {
                 Format::$name
             }

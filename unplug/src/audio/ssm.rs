@@ -1,4 +1,4 @@
-use super::adpcm::{Context, Decoder, GcAdpcm, Info};
+use super::adpcm::{Decoder, FrameContext, GcAdpcm, Info};
 use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
@@ -66,7 +66,7 @@ struct ChannelHeader {
     /// ADPCM decoder info.
     adpcm: Info,
     /// ADPCM loop context.
-    loop_context: Context,
+    loop_context: FrameContext,
 }
 
 impl<R: Read> ReadFrom<R> for ChannelHeader {
@@ -75,7 +75,7 @@ impl<R: Read> ReadFrom<R> for ChannelHeader {
         let header = Self {
             address: AudioAddress::read_from(reader)?,
             adpcm: Info::read_from(reader)?,
-            loop_context: Context::read_from(reader)?,
+            loop_context: FrameContext::read_from(reader)?,
         };
         let _padding = reader.read_u16::<BE>()?;
         Ok(header)
@@ -132,7 +132,7 @@ impl<W: Write> WriteTo<W> for SoundHeader {
 pub struct Channel {
     pub address: AudioAddress,
     pub adpcm: Info,
-    pub loop_context: Context,
+    pub loop_context: FrameContext,
     pub data: Vec<u8>,
 }
 
@@ -146,7 +146,7 @@ impl Channel {
     pub fn decoder(&self) -> SsmDecoder<'_> {
         let reader = self.reader();
         let casted = CastSamples::new(reader);
-        Box::new(Decoder::new(Box::new(casted), &self.adpcm.coefficients))
+        Box::new(Decoder::new(Box::new(casted)))
     }
 
     fn from_bank(header: &ChannelHeader, bank_data: &[u8]) -> Self {
@@ -332,14 +332,13 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
             Some(c) => c,
             None => return Ok(None),
         };
-        let context = channel.adpcm.context;
         let start_address = channel.address.current_address as usize;
         let end_address = channel.address.end_address as usize;
         let format = channel.address.format;
         match format {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
-                    context,
+                    params: channel.adpcm,
                     start_address,
                     end_address,
                     channels: 1,
@@ -498,7 +497,7 @@ mod tests {
         assert_write_and_read!(ChannelHeader {
             address: AudioAddress::default(),
             adpcm: Info::default(),
-            loop_context: Context::default(),
+            loop_context: FrameContext::default(),
         });
     }
 

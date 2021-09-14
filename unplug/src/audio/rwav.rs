@@ -214,7 +214,7 @@ impl<R: Read> ReadFrom<R> for ChannelHeader {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct AdpcmCodecInfo {
     adpcm: adpcm::Info,
-    loop_context: adpcm::Context,
+    loop_context: adpcm::FrameContext,
 }
 
 impl<R: Read> ReadFrom<R> for AdpcmCodecInfo {
@@ -277,7 +277,7 @@ pub struct Channel {
     /// ADPCM parameters.
     pub adpcm: adpcm::Info,
     /// ADPCM loop context.
-    pub loop_context: adpcm::Context,
+    pub loop_context: adpcm::FrameContext,
     /// The channel's audio data.
     pub data: Vec<u8>,
 }
@@ -385,8 +385,7 @@ impl Rwav {
     pub fn channel_decoder(&self, channel: usize) -> RwavDecoder<'_> {
         let reader = self.reader(channel);
         let casted = CastSamples::new(reader);
-        let coefficients = &self.channels[channel].adpcm.coefficients;
-        Box::new(adpcm::Decoder::new(Box::new(casted), coefficients))
+        Box::new(adpcm::Decoder::new(Box::new(casted)))
     }
 
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
@@ -438,14 +437,13 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
             Some(c) => c,
             None => return Ok(None),
         };
-        let context = channel.adpcm.context;
         let start_address = self.start_address as usize;
         let end_address = self.end_address as usize;
         let format = self.format;
         match format {
             Format::GcAdpcm => Ok(Some(
                 Samples::<GcAdpcm> {
-                    context,
+                    params: channel.adpcm,
                     start_address,
                     end_address,
                     channels: 1,

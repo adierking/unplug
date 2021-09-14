@@ -15,21 +15,21 @@ use std::io::{Read, Write};
 #[derive(Copy, Clone)]
 pub struct GcAdpcm;
 impl StaticFormat for GcAdpcm {
-    type Context = Context;
+    type Params = Info;
     fn format_static() -> Format {
         Format::GcAdpcm
     }
 }
 
-/// GameCube ADPCM decoder info.
+/// GameCube ADPCM audio info.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct Info {
     /// ADPCM coefficients.
     pub coefficients: Coefficients,
-    /// Audio gain level.
+    /// Gain level.
     pub gain: u16,
-    /// Initial decoder parameters.
-    pub context: Context,
+    /// The initial playback context.
+    pub context: FrameContext,
 }
 
 impl<R: Read> ReadFrom<R> for Info {
@@ -38,7 +38,7 @@ impl<R: Read> ReadFrom<R> for Info {
         let mut info = Info::default();
         reader.read_i16_into::<BE>(&mut info.coefficients)?;
         info.gain = reader.read_u16::<BE>()?;
-        info.context = Context::read_from(reader)?;
+        info.context = FrameContext::read_from(reader)?;
         Ok(info)
     }
 }
@@ -55,9 +55,9 @@ impl<W: Write> WriteTo<W> for Info {
     }
 }
 
-/// GameCube ADPCM decoder context.
+/// ADPCM context for an audio frame.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
-pub struct Context {
+pub struct FrameContext {
     /// This is used as a byte where the high nibble is the predictor (coefficient index) and the
     /// low nibble is the scale. Use `predictor()` and `scale()` to unpack this.
     pub predictor_and_scale: u16,
@@ -66,8 +66,8 @@ pub struct Context {
     pub last_samples: [i16; 2],
 }
 
-impl Context {
-    /// Creates an empty `Context`.
+impl FrameContext {
+    /// Creates a zero-initialized `FrameContext`.
     pub fn new() -> Self {
         Self::default()
     }
@@ -89,7 +89,7 @@ impl Context {
     }
 }
 
-impl<R: Read> ReadFrom<R> for Context {
+impl<R: Read> ReadFrom<R> for FrameContext {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let predictor_and_scale = reader.read_u16::<BE>()?;
@@ -99,7 +99,7 @@ impl<R: Read> ReadFrom<R> for Context {
     }
 }
 
-impl<W: Write> WriteTo<W> for Context {
+impl<W: Write> WriteTo<W> for FrameContext {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u16::<BE>(self.predictor_and_scale)?;
@@ -120,7 +120,7 @@ mod tests {
         assert_write_and_read!(Info {
             coefficients: (1..=16).collect::<Vec<i16>>().try_into().unwrap(),
             gain: 1,
-            context: Context { predictor_and_scale: 2, last_samples: [3, 4] },
+            context: FrameContext { predictor_and_scale: 2, last_samples: [3, 4] },
         });
     }
 }

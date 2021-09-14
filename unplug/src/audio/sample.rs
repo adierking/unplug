@@ -1,4 +1,4 @@
-use super::format::{AnyContext, AnyFormat, Format, FormatTag, RawFormat, StaticFormat};
+use super::format::{AnyFormat, AnyParams, Format, FormatTag, RawFormat, StaticFormat};
 use super::{Error, Result};
 use std::borrow::Cow;
 use std::iter::FusedIterator;
@@ -7,8 +7,8 @@ use std::marker::PhantomData;
 /// A block of audio sample data read from an audio source.
 #[derive(Clone)]
 pub struct Samples<'a, F: FormatTag> {
-    /// The decoder context for the samples.
-    pub context: F::Context,
+    /// The decoder parameters for the samples.
+    pub params: F::Params,
     /// The address of the first unit to decode. This is in format dependent units; use
     /// `Format::address_to_byte()` and related methods to convert to and from byte offsets.
     pub start_address: usize,
@@ -24,7 +24,7 @@ pub struct Samples<'a, F: FormatTag> {
 impl<'a, F: FormatTag> Samples<'a, F> {
     /// Gets the format of the sample data.
     pub fn format(&self) -> Format {
-        F::format(&self.context)
+        F::format(&self.params)
     }
 
     /// Moves the samples into a reader which returns them.
@@ -44,7 +44,7 @@ impl<'a, F: StaticFormat> Samples<'a, F> {
     /// Converts the samples into samples tagged with `AnyFormat`.
     pub fn into_any(self) -> Samples<'a, AnyFormat> {
         Samples::<AnyFormat> {
-            context: AnyContext::new::<F>(self.context),
+            params: AnyParams::new::<F>(self.params),
             start_address: self.start_address,
             end_address: self.end_address,
             channels: self.channels,
@@ -60,16 +60,16 @@ impl<'a> Samples<'a, AnyFormat> {
         if self.format() != F::format_static() {
             return Err(self);
         }
-        match self.context.inner.downcast() {
-            Ok(context) => Ok(Samples::<F> {
-                context: *context,
+        match self.params.inner.downcast() {
+            Ok(params) => Ok(Samples::<F> {
+                params: *params,
                 start_address: self.start_address,
                 end_address: self.end_address,
                 channels: self.channels,
                 bytes: self.bytes,
             }),
-            Err(context) => {
-                self.context.inner = context;
+            Err(params) => {
+                self.params.inner = params;
                 Err(self)
             }
         }
@@ -231,7 +231,7 @@ where
         }
 
         Ok(Some(Samples {
-            context: (),
+            params: (),
             start_address: 0,
             end_address: F::byte_to_address(merged.len() - 1),
             channels: 2,
@@ -280,14 +280,14 @@ where
         }
 
         let left = Samples::<'static, F> {
-            context: (),
+            params: (),
             start_address: 0,
             end_address: F::byte_to_address(left_bytes.len() - 1),
             channels: 1,
             bytes: left_bytes.into(),
         };
         let right = Samples::<'static, F> {
-            context: (),
+            params: (),
             start_address: 0,
             end_address: F::byte_to_address(right_bytes.len() - 1),
             channels: 1,
@@ -316,9 +316,9 @@ mod tests {
     use std::convert::TryFrom;
 
     #[derive(Clone)]
-    struct PcmS16LeContext;
-    impl StaticFormat for PcmS16LeContext {
-        type Context = i32;
+    struct PcmS16LeParams;
+    impl StaticFormat for PcmS16LeParams {
+        type Params = i32;
         fn format_static() -> Format {
             Format::PcmS16Le
         }
@@ -328,7 +328,7 @@ mod tests {
     fn test_any_without_context() {
         let bytes: Vec<u8> = (0..16).collect();
         let original = Samples::<PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 2,
             end_address: 7,
             channels: 1,
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(any.channels, original.channels);
         assert_eq!(any.bytes, original.bytes);
 
-        // The contexts are the same, but this should fail because the formats differ
+        // The parameters are the same, but this should fail because the formats differ
         let casted = any.cast::<PcmS16Be>();
         assert!(casted.is_err());
         let any = casted.err().unwrap();
@@ -356,10 +356,10 @@ mod tests {
     }
 
     #[test]
-    fn test_any_with_context() {
+    fn test_any_with_params() {
         let bytes: Vec<u8> = (0..16).collect();
-        let original = Samples::<PcmS16LeContext> {
-            context: 123,
+        let original = Samples::<PcmS16LeParams> {
+            params: 123,
             start_address: 2,
             end_address: 31,
             channels: 1,
@@ -373,14 +373,14 @@ mod tests {
         assert_eq!(any.channels, original.channels);
         assert_eq!(any.bytes, original.bytes);
 
-        // The formats are the same, but this should fail because the contexts differ
+        // The formats are the same, but this should fail because the parameters differ
         let casted = any.cast::<PcmS16Le>();
         assert!(casted.is_err());
         let any = casted.err().unwrap();
 
-        let casted = any.cast::<PcmS16LeContext>().ok().unwrap();
+        let casted = any.cast::<PcmS16LeParams>().ok().unwrap();
         assert_eq!(casted.format(), Format::PcmS16Le);
-        assert_eq!(casted.context, original.context);
+        assert_eq!(casted.params, original.params);
         assert_eq!(casted.start_address, original.start_address);
         assert_eq!(casted.end_address, original.end_address);
         assert_eq!(casted.channels, original.channels);
@@ -392,7 +392,7 @@ mod tests {
     fn test_cast_samples() -> Result<()> {
         let bytes: Vec<u8> = (0..16).collect();
         let original = Samples::<PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 2,
             end_address: 31,
             channels: 1,
@@ -421,7 +421,7 @@ mod tests {
     fn test_sample_iterator_mono() {
         let bytes: Vec<u8> = (0..16).collect();
         let samples = Samples::<PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 1,
             end_address: 6,
             channels: 1,
@@ -439,7 +439,7 @@ mod tests {
     fn test_sample_iterator_stereo() {
         let bytes: Vec<u8> = (0..16).collect();
         let samples = Samples::<PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 1,
             end_address: 6,
             channels: 2,
@@ -455,14 +455,14 @@ mod tests {
         let lbytes: Vec<u8> = (0..32).step_by(2).collect();
         let rbytes: Vec<u8> = (0..32).skip(1).step_by(2).collect();
         let left = Samples::<PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 1,
             end_address: 6,
             channels: 1,
             bytes: Cow::Borrowed(&lbytes),
         };
         let right = Samples::<PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 1,
             end_address: 6,
             channels: 1,
@@ -489,7 +489,7 @@ mod tests {
     fn test_split_channels() -> Result<()> {
         let bytes: Vec<u8> = (0..16).collect();
         let stereo = Samples::<PcmS16Le> {
-            context: (),
+            params: (),
             start_address: 2,
             end_address: 5,
             channels: 2,

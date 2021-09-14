@@ -1,4 +1,4 @@
-use super::adpcm::{Context, Decoder, GcAdpcm, Info};
+use super::adpcm::{self, GcAdpcm};
 use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
@@ -62,7 +62,7 @@ impl<R: Read> ReadFrom<R> for FileHeader {
 #[read_from(error = Error)]
 pub struct Channel {
     pub address: AudioAddress,
-    pub adpcm: Info,
+    pub adpcm: adpcm::Info,
 }
 
 /// A marker in an audio stream which allows the game to trigger events when it is reached.
@@ -96,8 +96,8 @@ struct BlockHeader {
     end_address: u32,
     /// The offset of the next block to play.
     next_offset: u32,
-    /// Initial decoder parameters for each channel.
-    channel_contexts: [Context; 2],
+    /// Initial playback parameters for each channel.
+    channel_contexts: [adpcm::FrameContext; 2],
     /// Markers in this block.
     markers: Vec<Marker>,
 }
@@ -113,7 +113,7 @@ impl<R: Read> ReadFrom<R> for BlockHeader {
         };
 
         for context in &mut header.channel_contexts {
-            *context = Context::read_from(reader)?;
+            *context = adpcm::FrameContext::read_from(reader)?;
             let _padding = reader.read_u16::<BE>()?;
         }
 
@@ -155,7 +155,12 @@ impl HpsStream {
     pub fn reader(&self, channel: usize) -> ChannelReader<'_> {
         assert!(channel < self.channels.len(), "invalid channel index");
         let format = self.channels[channel].address.format;
-        ChannelReader { blocks: &self.blocks, channel, format }
+        ChannelReader {
+            blocks: &self.blocks,
+            channel,
+            format,
+            adpcm: &self.channels[channel].adpcm,
+        }
     }
 
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
@@ -174,8 +179,7 @@ impl HpsStream {
     pub fn channel_decoder(&self, channel: usize) -> HpsDecoder<'_> {
         let reader = self.reader(channel);
         let casted = CastSamples::new(reader);
-        let coefficients = &self.channels[channel].adpcm.coefficients;
-        Box::new(Decoder::new(Box::new(casted), coefficients))
+        Box::new(adpcm::Decoder::new(Box::new(casted)))
     }
 }
 
@@ -311,8 +315,8 @@ pub struct BlockChannel {
     pub data_offset: usize,
     /// The size (in bytes) of the channel data.
     pub data_size: usize,
-    /// Initial decoder parameters.
-    pub initial_context: Context,
+    /// Initial playback parameters.
+    pub initial_context: adpcm::FrameContext,
 }
 
 impl BlockChannel {
@@ -327,6 +331,7 @@ pub struct ChannelReader<'a> {
     blocks: &'a [Block],
     channel: usize,
     format: DspFormat,
+    adpcm: &'a adpcm::Info,
 }
 
 impl<'a> ReadSamples<'a> for ChannelReader<'a> {
@@ -340,7 +345,11 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         match self.format {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
-                    context: block.channels[self.channel].initial_context,
+                    params: adpcm::Info {
+                        coefficients: self.adpcm.coefficients,
+                        gain: self.adpcm.gain,
+                        context: block.channels[self.channel].initial_context,
+                    },
                     start_address: 0,
                     end_address: block.end_address as usize,
                     channels: 1,
@@ -591,7 +600,7 @@ mod tests {
                 end_address: 0x1f,
                 current_address: 0x02,
             },
-            adpcm: Info { coefficients: [0; 16], gain: 0, context: Default::default() },
+            adpcm: adpcm::Info { coefficients: [0; 16], gain: 0, context: Default::default() },
         };
         let channels = [channel, channel];
         let mut reader = Cursor::new(bytes);
