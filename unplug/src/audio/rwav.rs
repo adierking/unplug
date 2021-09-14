@@ -385,7 +385,7 @@ impl Rwav {
     pub fn channel_decoder(&self, channel: usize) -> RwavDecoder<'_> {
         let reader = self.reader(channel);
         let casted = CastSamples::new(reader);
-        Box::new(adpcm::Decoder::new(Box::new(casted)))
+        Box::new(adpcm::Decoder::new(casted))
     }
 
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.

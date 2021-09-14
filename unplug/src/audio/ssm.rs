@@ -146,7 +146,7 @@ impl Channel {
     pub fn decoder(&self) -> SsmDecoder<'_> {
         let reader = self.reader();
         let casted = CastSamples::new(reader);
-        Box::new(Decoder::new(Box::new(casted)))
+        Box::new(Decoder::new(casted))
     }
 
     fn from_bank(header: &ChannelHeader, bank_data: &[u8]) -> Self {

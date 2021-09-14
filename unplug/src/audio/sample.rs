@@ -90,7 +90,11 @@ pub trait ReadSamples<'a> {
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>>;
 }
 
-impl<'a, F: FormatTag> ReadSamples<'a> for Box<dyn ReadSamples<'a, Format = F> + '_> {
+impl<'a, F, R> ReadSamples<'a> for Box<R>
+where
+    F: FormatTag,
+    R: ReadSamples<'a, Format = F> + ?Sized,
+{
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         (**self).read_samples()
@@ -117,33 +121,21 @@ impl<'a, F: FormatTag> ReadSamples<'a> for ReadSamplesOnce<'a, F> {
 
 /// A wrapper which casts audio samples to a particular type as they are read.
 /// If a sample block is not of the expected type, this will stop with `Error::UnsupportedFormat`.
-pub struct CastSamples<'a, From, To>
-where
-    From: ReadSamples<'a, Format = AnyFormat>,
-    To: StaticFormat,
-{
-    inner: From,
-    _marker: PhantomData<&'a To>,
+pub struct CastSamples<'r, 's, F: StaticFormat> {
+    inner: Box<dyn ReadSamples<'s, Format = AnyFormat> + 'r>,
+    _marker: PhantomData<&'s F>,
 }
 
-impl<'a, From, To> CastSamples<'a, From, To>
-where
-    From: ReadSamples<'a, Format = AnyFormat>,
-    To: StaticFormat,
-{
+impl<'r, 's, F: StaticFormat> CastSamples<'r, 's, F> {
     /// Creates a new `CastSamples` which casts samples from `inner`.
-    pub fn new(inner: From) -> Self {
-        Self { inner, _marker: PhantomData }
+    pub fn new(inner: impl ReadSamples<'s, Format = AnyFormat> + 'r) -> Self {
+        Self { inner: Box::from(inner), _marker: PhantomData }
     }
 }
 
-impl<'a, From, To> ReadSamples<'a> for CastSamples<'a, From, To>
-where
-    From: ReadSamples<'a, Format = AnyFormat>,
-    To: StaticFormat,
-{
-    type Format = To;
-    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
+impl<'s, F: StaticFormat> ReadSamples<'s> for CastSamples<'_, 's, F> {
+    type Format = F;
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         match self.inner.read_samples() {
             Ok(Some(samples)) => match samples.cast() {
                 Ok(samples) => Ok(Some(samples)),
@@ -189,31 +181,22 @@ impl FusedIterator for SampleIterator<'_> {}
 
 /// Joins two raw mono streams into a single stereo stream.
 /// The streams must both come from the same source and have the same block sizes.
-pub struct JoinChannels<'a, F, R>
-where
-    F: RawFormat,
-    R: ReadSamples<'a, Format = F>,
-{
-    left: R,
-    right: R,
-    _marker: PhantomData<&'a F>,
+pub struct JoinChannels<'r, 's, F: RawFormat> {
+    left: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+    right: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+    _marker: PhantomData<F>,
 }
 
-impl<'a, F, R> JoinChannels<'a, F, R>
-where
-    F: RawFormat,
-    R: ReadSamples<'a, Format = F>,
-{
-    pub fn new(left: R, right: R) -> Self {
-        Self { left, right, _marker: PhantomData }
+impl<'r, 's, F: RawFormat> JoinChannels<'r, 's, F> {
+    pub fn new<R>(left: R, right: R) -> Self
+    where
+        R: ReadSamples<'s, Format = F> + 'r,
+    {
+        Self { left: Box::from(left), right: Box::from(right), _marker: PhantomData }
     }
 }
 
-impl<'a, F, R> ReadSamples<'static> for JoinChannels<'a, F, R>
-where
-    F: RawFormat,
-    R: ReadSamples<'a, Format = F>,
-{
+impl<F: RawFormat> ReadSamples<'static> for JoinChannels<'_, '_, F> {
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         let left = self.left.read_samples()?;
@@ -244,52 +227,52 @@ where
 }
 
 /// Splits a stereo stream into two mono streams.
-pub struct SplitChannels<'a, F>
+pub struct SplitChannels<'r, 's, F>
 where
     F: RawFormat + 'static,
 {
-    state: Arc<Mutex<SplitChannelsState<'a, F>>>,
+    state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
 }
 
-impl<'a, F> SplitChannels<'a, F>
+impl<'r, 's, F> SplitChannels<'r, 's, F>
 where
     F: RawFormat + 'static,
 {
     /// Creates a new `SplitChannels` which reads samples from `reader`.
-    pub fn new(reader: impl ReadSamples<'a, Format = F> + 'a) -> Self {
+    pub fn new(reader: impl ReadSamples<'s, Format = F> + 'r) -> Self {
         Self { state: SplitChannelsState::new(Box::from(reader)) }
     }
 
     /// Returns a thread-safe reader over the samples in the left channel.
-    pub fn left(&self) -> SplitChannelsReader<'a, F> {
+    pub fn left(&self) -> SplitChannelsReader<'r, 's, F> {
         SplitChannelsReader { state: Arc::clone(&self.state), is_right: false }
     }
 
     /// Returns a thread-safe reader over the samples in the right channel.
-    pub fn right(&self) -> SplitChannelsReader<'a, F> {
+    pub fn right(&self) -> SplitChannelsReader<'r, 's, F> {
         SplitChannelsReader { state: Arc::clone(&self.state), is_right: true }
     }
 }
 
 /// State for `SplitChannels` which is shared across readers.
-struct SplitChannelsState<'a, F>
+struct SplitChannelsState<'r, 's, F>
 where
     F: RawFormat + 'static,
 {
     /// The inner reader to read new samples from.
-    reader: Box<dyn ReadSamples<'a, Format = F> + 'a>,
+    reader: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     /// Samples which have not yet been processed by the left reader.
-    left: VecDeque<Rc<Samples<'a, F>>>,
+    left: VecDeque<Rc<Samples<'s, F>>>,
     /// Samples which have not yet been processed by the right reader.
-    right: VecDeque<Rc<Samples<'a, F>>>,
+    right: VecDeque<Rc<Samples<'s, F>>>,
 }
 
-impl<'a, F> SplitChannelsState<'a, F>
+impl<'r, 's, F> SplitChannelsState<'r, 's, F>
 where
     F: RawFormat + 'static,
 {
     /// Creates a new `SplitChannelsState` wrapping `reader`.
-    fn new(reader: Box<dyn ReadSamples<'a, Format = F> + 'a>) -> Arc<Mutex<Self>> {
+    fn new(reader: Box<dyn ReadSamples<'s, Format = F> + 'r>) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self { reader, left: VecDeque::new(), right: VecDeque::new() }))
     }
 
@@ -307,20 +290,20 @@ where
 }
 
 /// `ReadSamples` implementation for a single channel returned by a `SplitChannels`.
-pub struct SplitChannelsReader<'a, F>
+pub struct SplitChannelsReader<'r, 's, F>
 where
     F: RawFormat + 'static,
 {
-    state: Arc<Mutex<SplitChannelsState<'a, F>>>,
+    state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
     is_right: bool,
 }
 
-impl<'a, F> ReadSamples<'a> for SplitChannelsReader<'a, F>
+impl<'s, F> ReadSamples<'s> for SplitChannelsReader<'_, 's, F>
 where
     F: RawFormat + 'static,
 {
     type Format = F;
-    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         // We assume here that the channels can be read from in any order and that we are only
         // expected to read as much as we need. Each channel must hold onto samples it hasn't
         // returned yet, and we also shouldn't read every sample from the inner reader all at once.
@@ -447,7 +430,7 @@ mod tests {
         };
 
         let any = original.clone().into_any().into_reader();
-        let mut caster: CastSamples<'_, _, PcmS16Le> = CastSamples::new(any);
+        let mut caster = CastSamples::new(any);
         let casted: Samples<'_, PcmS16Le> = caster.read_samples()?.unwrap();
         assert_eq!(casted.format(), Format::PcmS16Le);
         assert_eq!(casted.start_address, original.start_address);
@@ -458,7 +441,7 @@ mod tests {
 
         // Casting to PcmS16Be should fail with UnsupportedFormat
         let any = original.clone().into_any().into_reader();
-        let mut caster: CastSamples<'_, _, PcmS16Be> = CastSamples::new(any);
+        let mut caster: CastSamples<'_, '_, PcmS16Be> = CastSamples::new(any);
         assert!(matches!(caster.read_samples(), Err(Error::UnsupportedFormat(Format::PcmS16Le))));
 
         Ok(())

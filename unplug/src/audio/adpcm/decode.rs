@@ -6,18 +6,19 @@ use byteorder::{WriteBytesExt, LE};
 use log::trace;
 
 /// Decodes GameCube ADPCM samples into PCM.
-pub struct Decoder<'a> {
-    source: Box<dyn ReadSamples<'a, Format = GcAdpcm> + 'a>,
+#[allow(single_use_lifetimes)]
+pub struct Decoder<'r, 's> {
+    source: Box<dyn ReadSamples<'s, Format = GcAdpcm> + 'r>,
 }
 
-impl<'a> Decoder<'a> {
+impl<'r, 's> Decoder<'r, 's> {
     /// Creates a new `Decoder` which reads samples from `source`.
-    pub fn new(source: Box<dyn ReadSamples<'a, Format = GcAdpcm> + 'a>) -> Self {
-        Self { source }
+    pub fn new(source: impl ReadSamples<'s, Format = GcAdpcm> + 'r) -> Self {
+        Self { source: Box::from(source) }
     }
 }
 
-impl ReadSamples<'static> for Decoder<'_> {
+impl ReadSamples<'static> for Decoder<'_, '_> {
     type Format = PcmS16Le;
 
     #[allow(clippy::verbose_bit_mask)]
@@ -141,8 +142,7 @@ mod tests {
             bytes: SINE_ENCODED.into(),
         };
 
-        let reader = encoded.into_reader();
-        let mut decoder = Decoder::new(Box::new(reader));
+        let mut decoder = Decoder::new(encoded.into_reader());
         let decoded = decoder.read_samples()?.unwrap();
         assert_eq!(decoded.bytes, SINE_DECODED);
 
