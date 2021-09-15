@@ -61,6 +61,9 @@ pub enum Error {
     #[error("unrecognized sample format: {0}")]
     UnrecognizedSampleFormat(u16),
 
+    #[error("audio stream is not mono or stereo")]
+    UnsupportedChannels,
+
     #[error("unsupported stream format: {0:?}")]
     UnsupportedFormat(Format),
 

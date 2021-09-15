@@ -1,3 +1,5 @@
+use super::adpcm::GcAdpcm;
+use super::format::{PcmS16Be, PcmS8, StaticFormat};
 use super::{Error, Format, Result};
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
@@ -49,6 +51,30 @@ impl From<DspFormat> for Format {
             DspFormat::Pcm16 => Self::PcmS16Be,
             DspFormat::Pcm8 => Self::PcmS8,
         }
+    }
+}
+
+/// Trait for a format tag which represents a GameCube DSP format.
+pub trait DspFormatTag: StaticFormat {
+    /// Returns the corresponding `DspFormat` value.
+    fn dsp_format() -> DspFormat;
+}
+
+impl DspFormatTag for GcAdpcm {
+    fn dsp_format() -> DspFormat {
+        DspFormat::Adpcm
+    }
+}
+
+impl DspFormatTag for PcmS16Be {
+    fn dsp_format() -> DspFormat {
+        DspFormat::Pcm16
+    }
+}
+
+impl DspFormatTag for PcmS8 {
+    fn dsp_format() -> DspFormat {
+        DspFormat::Pcm8
     }
 }
 

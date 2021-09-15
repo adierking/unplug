@@ -11,6 +11,8 @@ pub(crate) const TEST_WAV_DATA_OFFSET: usize = 0x24;
 
 /// Test sound left channel encoded to GC ADPCM format
 pub(crate) const TEST_WAV_LEFT_DSP: &[u8] = include_bytes!("test/ionpack-dsp-left.bin");
+/// End address of the encoded test sound
+pub(crate) const TEST_WAV_DSP_END_ADDRESS: usize = 0x30af8;
 /// Test sound left channel coefficients
 pub(crate) const TEST_WAV_LEFT_COEFFICIENTS: [i16; 16] =
     [73, 1854, 3534, -1788, 923, 977, 3818, -1807, 437, 1541, 3534, -1587, 1768, 228, 3822, -1781];
