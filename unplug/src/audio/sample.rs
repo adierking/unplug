@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 /// A block of audio sample data read from an audio source.
 #[derive(Clone)]
 pub struct Samples<'a, F: FormatTag> {
-    /// The decoder parameters for the samples.
+    /// The codec parameters for the samples.
     pub params: F::Params,
     /// The address of the first unit to decode. This is in format dependent units; use
     /// `Format::address_to_byte()` and related methods to convert to and from byte offsets.
@@ -31,8 +31,8 @@ impl<'a, F: FormatTag> Samples<'a, F> {
     }
 
     /// Moves the samples into a reader which returns them.
-    pub fn into_reader(self) -> ReadSamplesOnce<'a, F> {
-        ReadSamplesOnce::new(self)
+    pub fn into_reader(self) -> ReadSampleList<'a, F> {
+        ReadSampleList::new(vec![self])
     }
 }
 
@@ -53,6 +53,42 @@ impl<'a, F: StaticFormat> Samples<'a, F> {
             channels: self.channels,
             bytes: self.bytes,
         }
+    }
+
+    /// Appends the samples in `other` to `self`. Both sample objects must be aligned on a frame
+    /// boundary and share compatible codec parameters. On success, the sample data will become
+    /// owned by `self`.
+    pub fn append(&mut self, other: &Samples<'_, F>) -> Result<()> {
+        let format = self.format();
+        assert_eq!(format, other.format());
+
+        if self.channels != other.channels {
+            return Err(if self.channels == 1 {
+                Error::StreamNotMono
+            } else {
+                Error::StreamNotStereo
+            });
+        }
+
+        // Make sure the end of our data is frame-aligned
+        if format.frame_address(self.end_address + 1) != self.end_address + 1 {
+            return Err(Error::NotFrameAligned);
+        }
+
+        // Our end address must be at the end of the sample data or else we cannot append
+        let end_byte = format.address_to_byte(self.end_address);
+        let next_byte = format.address_to_byte(self.end_address + 1);
+        if next_byte != self.bytes.len() || next_byte <= end_byte {
+            return Err(Error::NotFrameAligned);
+        }
+
+        // Start copying at a frame boundary because some codecs (e.g. GameCube ADPCM) may have a
+        // start address past the beginning of a frame
+        let start_address = format.frame_address(other.start_address);
+        let start_byte = format.address_to_byte(start_address);
+        F::append(&mut self.bytes, &mut self.params, &other.bytes[start_byte..], &other.params)?;
+        self.end_address += other.end_address - start_address + 1;
+        Ok(())
     }
 }
 
@@ -88,6 +124,23 @@ pub trait ReadSamples<'a> {
 
     /// Reads the next block of samples. If there are no more samples, returns `Ok(None)`.
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>>;
+
+    /// Reads all available samples and appends them into a single `Samples` object. The samples
+    /// must have a static format and follow the rules for `Samples::append()`. If no samples are
+    /// available, `Err(NoSamplesAvailable)` is returned.
+    fn coalesce_samples(&mut self) -> Result<Samples<'a, Self::Format>>
+    where
+        Self::Format: StaticFormat,
+    {
+        let mut result: Option<Samples<'a, Self::Format>> = None;
+        while let Some(samples) = self.read_samples()? {
+            match &mut result {
+                Some(a) => a.append(&samples)?,
+                None => result = Some(samples),
+            }
+        }
+        result.ok_or(Error::NoSamplesAvailable)
+    }
 }
 
 impl<'a, F, R> ReadSamples<'a> for Box<R>
@@ -101,21 +154,21 @@ where
     }
 }
 
-/// `ReadSamples` implementation which yields a single `Samples` struct.
-pub struct ReadSamplesOnce<'a, F: FormatTag> {
-    samples: Option<Samples<'a, F>>,
+/// `ReadSamples` implementation which yields `Samples` structs from a queue.
+pub struct ReadSampleList<'s, F: FormatTag> {
+    samples: VecDeque<Samples<'s, F>>,
 }
 
-impl<'a, F: FormatTag> ReadSamplesOnce<'a, F> {
-    pub fn new(samples: Samples<'a, F>) -> Self {
-        Self { samples: Some(samples) }
+impl<'s, F: FormatTag> ReadSampleList<'s, F> {
+    pub fn new(samples: impl IntoIterator<Item = Samples<'s, F>>) -> Self {
+        Self { samples: samples.into_iter().collect() }
     }
 }
 
-impl<'a, F: FormatTag> ReadSamples<'a> for ReadSamplesOnce<'a, F> {
+impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
     type Format = F;
-    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
-        Ok(self.samples.take())
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+        Ok(self.samples.pop_front())
     }
 }
 
@@ -342,6 +395,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::adpcm::GcAdpcm;
     use crate::audio::format::{PcmS16Be, PcmS16Le};
     use std::convert::TryFrom;
 
@@ -351,6 +405,15 @@ mod tests {
         type Params = i32;
         fn format_static() -> Format {
             Format::PcmS16Le
+        }
+        fn append(
+            dest: &mut Cow<'_, [u8]>,
+            _dest_params: &mut Self::Params,
+            src: &[u8],
+            _src_params: &Self::Params,
+        ) -> Result<()> {
+            dest.to_mut().extend(src);
+            Ok(())
         }
     }
 
@@ -445,6 +508,108 @@ mod tests {
         assert!(matches!(caster.read_samples(), Err(Error::UnsupportedFormat(Format::PcmS16Le))));
 
         Ok(())
+    }
+
+    #[test]
+    fn test_append_samples() {
+        let mut samples1 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0x2,
+            end_address: 0x1f,
+            channels: 1,
+            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+        };
+        let samples2 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0x2,
+            end_address: 0x1f,
+            channels: 1,
+            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+        };
+        samples1.append(&samples2).unwrap();
+        assert_eq!(samples1.start_address, 0x2);
+        assert_eq!(samples1.end_address, 0x3f);
+        assert_eq!(samples1.bytes, (0..32).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_append_samples_partial() {
+        let mut samples1 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0,
+            end_address: 0x1f,
+            channels: 1,
+            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+        };
+        let samples2 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0x20,
+            end_address: 0x2f,
+            channels: 1,
+            bytes: Cow::from((0..32).collect::<Vec<_>>()),
+        };
+        samples1.append(&samples2).unwrap();
+        assert_eq!(samples1.start_address, 0);
+        assert_eq!(samples1.end_address, 0x2f);
+        assert_eq!(samples1.bytes, (0..32).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_append_samples_channel_mismatch() {
+        let mut samples1 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0,
+            end_address: 0x1f,
+            channels: 1,
+            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+        };
+        let mut samples2 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0,
+            end_address: 0x1f,
+            channels: 2,
+            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+        };
+        assert!(matches!(samples1.append(&samples2), Err(Error::StreamNotMono)));
+        assert!(matches!(samples2.append(&samples1), Err(Error::StreamNotStereo)));
+    }
+
+    #[test]
+    fn test_append_samples_unaligned() {
+        let mut samples1 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0,
+            end_address: 0x1e,
+            channels: 1,
+            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+        };
+        let samples2 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0,
+            end_address: 0x1f,
+            channels: 1,
+            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+        };
+        assert!(matches!(samples1.append(&samples2), Err(Error::NotFrameAligned)));
+    }
+
+    #[test]
+    fn test_append_samples_before_end() {
+        let mut samples1 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0,
+            end_address: 0x1f,
+            channels: 1,
+            bytes: Cow::from((0..17).collect::<Vec<_>>()),
+        };
+        let samples2 = Samples::<GcAdpcm> {
+            params: Default::default(),
+            start_address: 0,
+            end_address: 0x1f,
+            channels: 1,
+            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+        };
+        assert!(matches!(samples1.append(&samples2), Err(Error::NotFrameAligned)));
     }
 
     #[test]
@@ -545,5 +710,37 @@ mod tests {
         assert_eq!(right.bytes.as_ref(), &[0x6, 0x7, 0xa, 0xb,]);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_coalesce_samples() {
+        let samples1 = Samples::<PcmS16Le> {
+            params: (),
+            start_address: 0,
+            end_address: 7,
+            channels: 1,
+            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+        };
+        let samples2 = Samples::<PcmS16Le> {
+            params: (),
+            start_address: 0,
+            end_address: 7,
+            channels: 1,
+            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+        };
+        let samples3 = Samples::<PcmS16Le> {
+            params: (),
+            start_address: 0,
+            end_address: 7,
+            channels: 1,
+            bytes: Cow::from((32..48).collect::<Vec<_>>()),
+        };
+        let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3]);
+        let coalesced = reader.coalesce_samples().unwrap();
+        assert_eq!(coalesced.start_address, 0);
+        assert_eq!(coalesced.end_address, 0x17);
+        assert_eq!(coalesced.channels, 1);
+        assert_eq!(coalesced.bytes, (0..48).collect::<Vec<_>>());
+        assert!(matches!(reader.coalesce_samples(), Err(Error::NoSamplesAvailable)));
     }
 }

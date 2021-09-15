@@ -28,6 +28,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("cannot concatenate samples with different coefficients")]
+    DifferentCoefficients,
+
     #[error("invalid BRSAR data")]
     InvalidBrsar,
 
@@ -39,6 +42,12 @@ pub enum Error {
 
     #[error("invalid RWAV data")]
     InvalidRwav,
+
+    #[error("samples are not aligned on a frame boundary")]
+    NotFrameAligned,
+
+    #[error("no samples are available")]
+    NoSamplesAvailable,
 
     #[error("audio stream is not mono")]
     StreamNotMono,

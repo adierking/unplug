@@ -1,4 +1,6 @@
+use super::Result;
 use std::any::Any;
+use std::borrow::Cow;
 use std::fmt::Debug;
 
 /// Supported audio sample formats.
@@ -33,6 +35,14 @@ impl Format {
     /// Calculates the number of bytes necessary to fit the given number of units.
     pub fn size_of(&self, units: usize) -> usize {
         (units * self.bits_per_unit() + 7) / 8
+    }
+
+    /// Aligns `address` down to the beginning of a frame.
+    pub fn frame_address(&self, address: usize) -> usize {
+        match *self {
+            Self::PcmS8 | Self::PcmS16Le | Self::PcmS16Be => address,
+            Self::GcAdpcm => address & !0xf,
+        }
     }
 }
 
@@ -75,6 +85,20 @@ pub trait StaticFormat {
     fn size_of(units: usize) -> usize {
         Self::format_static().size_of(units)
     }
+
+    /// Aligns `address` down to the beginning of a frame.
+    fn frame_address(&self, address: usize) -> usize {
+        Self::format_static().frame_address(address)
+    }
+
+    /// Appends the sample data described by `src` and `src_params` to the sample data described by
+    /// `dest` and `dest_params`.
+    fn append(
+        dest: &mut Cow<'_, [u8]>,
+        dest_params: &mut Self::Params,
+        src: &[u8],
+        src_params: &Self::Params,
+    ) -> Result<()>;
 }
 
 impl<T: StaticFormat> FormatTag for T {
@@ -132,6 +156,16 @@ macro_rules! raw_format {
             type Params = ();
             fn format_static() -> Format {
                 Format::$name
+            }
+
+            fn append(
+                dest: &mut Cow<'_, [u8]>,
+                _dest_params: &mut Self::Params,
+                src: &[u8],
+                _src_params: &Self::Params,
+            ) -> Result<()> {
+                dest.to_mut().extend(src);
+                Ok(())
             }
         }
         impl RawFormat for $name {}
@@ -192,5 +226,13 @@ mod tests {
         assert_eq!(Format::GcAdpcm.size_of(1), 1);
         assert_eq!(Format::GcAdpcm.size_of(2), 1);
         assert_eq!(Format::GcAdpcm.size_of(3), 2);
+    }
+
+    #[test]
+    fn test_frame_address() {
+        assert_eq!(Format::PcmS16Le.frame_address(123), 123);
+        assert_eq!(Format::GcAdpcm.frame_address(0xf), 0);
+        assert_eq!(Format::GcAdpcm.frame_address(0x10), 0x10);
+        assert_eq!(Format::GcAdpcm.frame_address(0x11), 0x10);
     }
 }

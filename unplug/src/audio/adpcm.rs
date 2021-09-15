@@ -10,6 +10,7 @@ use super::format::StaticFormat;
 use super::{Error, Format, Result};
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
+use std::borrow::Cow;
 use std::io::{Read, Write};
 
 #[derive(Copy, Clone)]
@@ -18,6 +19,19 @@ impl StaticFormat for GcAdpcm {
     type Params = Info;
     fn format_static() -> Format {
         Format::GcAdpcm
+    }
+
+    fn append(
+        dest: &mut Cow<'_, [u8]>,
+        dest_params: &mut Self::Params,
+        src: &[u8],
+        src_params: &Self::Params,
+    ) -> Result<()> {
+        if src_params.coefficients != dest_params.coefficients {
+            return Err(Error::DifferentCoefficients);
+        }
+        dest.to_mut().extend(src);
+        Ok(())
     }
 }
 
@@ -115,6 +129,14 @@ mod tests {
     use crate::assert_write_and_read;
     use std::convert::TryInto;
 
+    fn make_info(coefficients: Coefficients, predictor_and_scale: u16) -> Info {
+        Info {
+            coefficients,
+            gain: 0,
+            context: FrameContext { predictor_and_scale, last_samples: [0; 2] },
+        }
+    }
+
     #[test]
     fn test_write_and_read_info() {
         assert_write_and_read!(Info {
@@ -122,5 +144,24 @@ mod tests {
             gain: 1,
             context: FrameContext { predictor_and_scale: 2, last_samples: [3, 4] },
         });
+    }
+
+    #[test]
+    fn test_append_samples() {
+        let mut dest = Cow::from(vec![0x17, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8]);
+        let mut dest_params = make_info([0; 16], 0x17);
+        let src: Vec<u8> = vec![0x27, 0x1];
+        let src_params = make_info([1; 16], 0x27);
+        assert!(matches!(
+            GcAdpcm::append(&mut dest, &mut dest_params, &src, &src_params),
+            Err(Error::DifferentCoefficients)
+        ));
+
+        let mut dest = Cow::from(vec![0x17, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8]);
+        let mut dest_params = make_info([0; 16], 0x17);
+        let src: Vec<u8> = vec![0x27, 0x1];
+        let src_params = make_info([0; 16], 0x27);
+        assert!(GcAdpcm::append(&mut dest, &mut dest_params, &src, &src_params).is_ok());
+        assert_eq!(&*dest, &[0x17, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x27, 0x1]);
     }
 }
