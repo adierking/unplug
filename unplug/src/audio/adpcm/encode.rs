@@ -26,12 +26,12 @@
  */
 
 use super::{Coefficients, GcAdpcm, Info};
-use crate::audio::adpcm::{calculate_coefficients, FrameContext};
+use crate::audio::adpcm::calculate_coefficients;
 use crate::audio::format::PcmS16Le;
 use crate::audio::{Error, ReadSamples, Result, Samples};
 use crate::common::clamp_i16;
 use byteorder::{ByteOrder, LE};
-use log::debug;
+use log::{debug, trace};
 
 const SAMPLES_PER_FRAME: usize = 14;
 const BYTES_PER_FRAME: usize = 8;
@@ -176,54 +176,92 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
 /// Encodes raw PCM data into GameCube ADPCM format.
 #[allow(single_use_lifetimes)]
 pub struct Encoder<'r, 's> {
-    reader: Option<Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>>,
+    /// The inner reader to read samples from.
+    reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
+    /// The raw PCM samples to encode.
+    pcm: Vec<i16>,
+    /// The index of the next sample to start encoding from.
+    pos: usize,
+    /// The size of each block in bytes.
+    block_size: usize,
+    /// The current encoding state.
+    state: Info,
 }
 
 impl<'r, 's> Encoder<'r, 's> {
     /// Creates an `Encoder` which reads samples from `reader`.
-    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Self {
-        Self { reader: Some(Box::from(reader)) }
+    pub fn new<R>(reader: R) -> Self
+    where
+        R: ReadSamples<'s, Format = PcmS16Le> + 'r,
+    {
+        Self::with_block_size(reader, usize::MAX)
+    }
+
+    /// Creates an `Encoder` which reads samples from `reader` and outputs blocks of data which are
+    /// no larger than `block_size`.
+    pub fn with_block_size<R>(reader: R, block_size: usize) -> Self
+    where
+        R: ReadSamples<'s, Format = PcmS16Le> + 'r,
+    {
+        let block_size_aligned = block_size & !(BYTES_PER_FRAME - 1);
+        assert!(block_size_aligned > 0, "block size is too small");
+        Self {
+            reader: Box::from(reader),
+            pcm: vec![],
+            pos: 0,
+            block_size: block_size_aligned,
+            state: Info::default(),
+        }
+    }
+
+    fn start_encoding(&mut self) -> Result<()> {
+        while let Some(samples) = self.reader.read_samples()? {
+            if samples.channels != 1 {
+                return Err(Error::StreamNotMono);
+            }
+            self.pcm.reserve(samples.bytes.len() / 2);
+            for sample in samples.iter() {
+                self.pcm.push(LE::read_i16(sample));
+            }
+        }
+        if self.pcm.is_empty() {
+            return Ok(());
+        }
+
+        debug!("Calculating ADPCM coefficients over {} samples", self.pcm.len());
+        self.state.coefficients = calculate_coefficients(&self.pcm);
+        trace!("coefficients = {:?}", self.state.coefficients);
+        Ok(())
     }
 }
 
 impl ReadSamples<'static> for Encoder<'_, '_> {
     type Format = GcAdpcm;
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
-        let mut reader = match self.reader.take() {
-            Some(reader) => reader,
-            None => return Ok(None),
-        };
-
-        let mut pcm = vec![];
-        while let Some(samples) = reader.read_samples()? {
-            if samples.channels != 1 {
-                return Err(Error::StreamNotMono);
-            }
-            pcm.reserve(samples.bytes.len() / 2);
-            for sample in samples.iter() {
-                pcm.push(LE::read_i16(sample));
-            }
+        if self.pcm.is_empty() {
+            self.start_encoding()?;
+        }
+        if self.pos >= self.pcm.len() {
+            return Ok(None);
         }
 
-        debug!("Calculating coefficients");
-        let coefficients = calculate_coefficients(&pcm);
+        let start = self.pos;
+        let remaining = self.pcm.len() - start;
+        let remaining_frames = (remaining + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
+        let num_frames = remaining_frames.min(self.block_size / BYTES_PER_FRAME);
+        let num_samples = (num_frames * SAMPLES_PER_FRAME).min(remaining);
+        let end = start + num_samples;
 
-        debug!("Encoding {} samples using {:?}", pcm.len(), coefficients);
-        let mut info = Info { coefficients, ..Default::default() };
-        let bytes = encode(&pcm, &mut info);
+        debug!("Encoding {} samples to ADPCM", num_samples);
+        let mut initial_state = self.state;
+        let bytes = encode(&self.pcm[start..end], &mut self.state);
+        initial_state.context.predictor_and_scale = bytes[0] as u16;
+        self.pos = end;
 
-        debug!("Encoded to {} bytes", bytes.len());
         Ok(Some(Samples {
-            params: Info {
-                coefficients: info.coefficients,
-                gain: 0,
-                context: FrameContext {
-                    predictor_and_scale: bytes[0] as u16,
-                    last_samples: [0, 0],
-                },
-            },
+            params: initial_state,
             start_address: 2,
-            end_address: bytes.len() * 2 - pcm.len() % 2 - 1,
+            end_address: bytes.len() * 2 - num_samples % 2 - 1,
             channels: 1,
             bytes: bytes.into(),
         }))
@@ -233,6 +271,7 @@ impl ReadSamples<'static> for Encoder<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::adpcm::FrameContext;
     use crate::audio::sample::SplitChannels;
     use crate::audio::Result;
     use crate::test;
@@ -274,6 +313,47 @@ mod tests {
         assert_eq!(right.end_address, 0x30af8);
         assert_eq!(right.channels, 1);
         assert!(right.bytes == test::TEST_WAV_RIGHT_DSP);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_encode_in_blocks() -> Result<()> {
+        let bytes = test::open_test_wav().into_inner();
+        let samples = Samples::<PcmS16Le> {
+            params: (),
+            start_address: 0,
+            end_address: bytes.len() / 2 - 1,
+            channels: 2,
+            bytes: bytes.into(),
+        };
+
+        let splitter = SplitChannels::new(samples.into_reader());
+        let block_size = 0x8000;
+        let mut encoder = Encoder::with_block_size(splitter.left(), block_size);
+        let mut blocks = vec![];
+        while let Some(block) = encoder.read_samples()? {
+            blocks.push(block);
+        }
+        assert_eq!(blocks.len(), 4);
+
+        const EXPECTED_BLOCK_LENGTHS: &[usize] = &[0x8000, 0x8000, 0x8000, 0x57d];
+        const EXPECTED_END_ADDRESSES: &[usize] = &[0xffff, 0xffff, 0xffff, 0xaf8];
+        const EXPECTED_LAST_SAMPLES: &[[i16; 2]] =
+            &[[0, 0], [-5232, -5240], [1236, 1218], [33, 42]];
+
+        let mut offset = 0;
+        for (i, block) in blocks.iter().enumerate() {
+            let end_offset = offset + block.bytes.len();
+            assert_eq!(block.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
+            assert_eq!(block.params.context.predictor_and_scale, block.bytes[0] as u16);
+            assert_eq!(block.params.context.last_samples, EXPECTED_LAST_SAMPLES[i]);
+            assert_eq!(block.start_address, 0x2);
+            assert_eq!(block.end_address, EXPECTED_END_ADDRESSES[i]);
+            assert_eq!(block.bytes, &test::TEST_WAV_LEFT_DSP[offset..end_offset]);
+            assert_eq!(block.bytes.len(), EXPECTED_BLOCK_LENGTHS[i]);
+            offset = end_offset;
+        }
 
         Ok(())
     }
