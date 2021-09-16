@@ -3,18 +3,20 @@ use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
-use crate::common::{align, ReadFrom, Region};
+use crate::common::io::pad;
+use crate::common::{align, ReadFrom, Region, WriteTo};
 use arrayvec::ArrayVec;
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use log::{debug, error, trace};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fmt::{self, Debug};
-use std::io::{self, Read, Seek, SeekFrom};
-use unplug_proc::ReadFrom;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use unplug_proc::{ReadFrom, WriteTo};
 
 /// The magic string at the beginning of an HPS file.
-const HPS_MAGIC: &[u8; 8] = b" HALPST\0";
+const HPS_MAGIC: [u8; 8] = *b" HALPST\0";
 
 /// The offset of the first block in an HPS file.
 const FIRST_BLOCK_OFFSET: u32 = 0x80;
@@ -22,7 +24,7 @@ const FIRST_BLOCK_OFFSET: u32 = 0x80;
 const END_BLOCK_OFFSET: u32 = u32::MAX;
 
 /// The alignment of data in an HPS file.
-const DATA_ALIGN: u64 = 0x20;
+const DATA_ALIGN: usize = 0x20;
 
 /// Convenience type for an opaque decoder.
 type HpsDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
@@ -45,7 +47,7 @@ impl<R: Read> ReadFrom<R> for FileHeader {
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut header = Self::default();
         reader.read_exact(&mut header.magic)?;
-        if header.magic != *HPS_MAGIC {
+        if header.magic != HPS_MAGIC {
             return Err(Error::InvalidHpsMagic);
         }
         header.sample_rate = reader.read_u32::<BE>()?;
@@ -58,13 +60,28 @@ impl<R: Read> ReadFrom<R> for FileHeader {
     }
 }
 
+impl<W: Write> WriteTo<W> for FileHeader {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(&self.magic)?;
+        writer.write_u32::<BE>(self.sample_rate)?;
+        writer.write_u32::<BE>(self.num_channels)?;
+        Channel::write_all_to(writer, &self.channels)?;
+        Ok(())
+    }
+}
+
 /// Audio channel header.
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ReadFrom)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ReadFrom, WriteTo)]
 #[read_from(error = Error)]
+#[write_to(error = Error)]
 pub struct Channel {
     pub address: AudioAddress,
     pub adpcm: adpcm::Info,
 }
+
+/// Size of a marker in bytes.
+const MARKER_SIZE: usize = 0x8;
 
 /// A marker in an audio stream which allows the game to trigger events when it is reached.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -87,6 +104,18 @@ impl<R: Read> ReadFrom<R> for Marker {
         Ok(Self { sample_index: reader.read_i32::<BE>()?, id: reader.read_u32::<BE>()? })
     }
 }
+
+impl<W: Write> WriteTo<W> for Marker {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_i32::<BE>(self.sample_index)?;
+        writer.write_u32::<BE>(self.id)?;
+        Ok(())
+    }
+}
+
+/// Size of a block header in bytes.
+const BLOCK_HEADER_SIZE: usize = 0x20;
 
 /// Audio block header.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -126,13 +155,37 @@ impl<R: Read> ReadFrom<R> for BlockHeader {
             header.markers.push(Marker::read_from(reader)?);
         }
 
-        // In order to preserve alignment, data is always reserved for a multiple of 4 markers
-        let aligned = align(num_markers, 4);
-        for _ in num_markers..aligned {
+        // In order to preserve alignment, data is padded with extra markers
+        let aligned = align(num_markers, DATA_ALIGN / MARKER_SIZE);
+        for _ in (num_markers as usize)..aligned {
             Marker::read_from(reader)?;
         }
 
         Ok(header)
+    }
+}
+
+impl<W: Write> WriteTo<W> for BlockHeader {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        writer.write_u32::<BE>(self.size)?;
+        writer.write_u32::<BE>(self.end_address)?;
+        writer.write_u32::<BE>(self.next_offset)?;
+        for context in &self.channel_contexts {
+            context.write_to(writer)?;
+            writer.write_u16::<BE>(0)?; // padding
+        }
+        writer.write_u8(self.markers.len() as u8)?;
+        writer.write_u24::<BE>(0)?; // padding
+        for marker in &self.markers {
+            marker.write_to(writer)?;
+        }
+        let aligned = align(self.markers.len(), DATA_ALIGN / MARKER_SIZE);
+        for _ in self.markers.len()..aligned {
+            // Writing default markers gives us parity with the official files
+            Marker::default().write_to(writer)?;
+        }
+        Ok(())
     }
 }
 
@@ -228,6 +281,40 @@ impl<R: Read + Seek> ReadFrom<R> for HpsStream {
     }
 }
 
+impl<W: Write + Seek> WriteTo<W> for HpsStream {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        if !(1..=2).contains(&self.channels.len()) {
+            return Err(Error::UnsupportedChannels);
+        }
+
+        let mut channels = self.channels.to_vec();
+        channels.resize_with(2, Default::default);
+        let header = FileHeader {
+            magic: HPS_MAGIC,
+            sample_rate: self.sample_rate,
+            num_channels: self.channels.len() as u32,
+            channels: channels.try_into().unwrap(),
+        };
+        header.write_to(writer)?;
+        pad(&mut *writer, FIRST_BLOCK_OFFSET as u64, 0)?;
+
+        let mut loop_offset = u32::MAX;
+        for (i, block) in self.blocks.iter().enumerate() {
+            if self.loop_start == Some(i) {
+                loop_offset = writer.seek(SeekFrom::Current(0))? as u32;
+            }
+            if i == self.blocks.len() - 1 {
+                block.write_to(writer, Some(loop_offset))?;
+            } else {
+                block.write_to(writer, None)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// A block within an HPS stream.
 #[derive(Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -268,7 +355,7 @@ impl Block {
             if data.len() < data_size as usize {
                 return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
             }
-            data_offset = align(data_offset + data_size, DATA_ALIGN);
+            data_offset = align(data_offset + data_size, DATA_ALIGN as u64);
             block_channels.push(BlockChannel { initial_context: header.channel_contexts[i], data });
         }
 
@@ -277,6 +364,44 @@ impl Block {
             channels: block_channels,
             markers: header.markers.clone(),
         })
+    }
+
+    /// Writes the block header and data to `writer`. If `next_offset` is not `None`, it will be
+    /// used as the block's `next_offset` instead of the offset after this block.
+    fn write_to<W: Write + Seek>(&self, writer: &mut W, next_offset: Option<u32>) -> Result<()> {
+        if !(1..=2).contains(&self.channels.len()) {
+            return Err(Error::UnsupportedChannels);
+        }
+        let mut channel_contexts = [adpcm::FrameContext::default(); 2];
+        let mut data_size = 0;
+        for (i, channel) in self.channels.iter().enumerate() {
+            channel_contexts[i] = channel.initial_context;
+            data_size += align(channel.data.len(), DATA_ALIGN);
+        }
+
+        let next_offset = if let Some(offset) = next_offset {
+            offset
+        } else {
+            let current_offset = writer.seek(SeekFrom::Current(0))?;
+            let total_size =
+                BLOCK_HEADER_SIZE + align(MARKER_SIZE * self.markers.len(), DATA_ALIGN) + data_size;
+            (current_offset + total_size as u64) as u32
+        };
+
+        let header = BlockHeader {
+            size: data_size as u32,
+            end_address: self.end_address,
+            next_offset,
+            channel_contexts,
+            markers: self.markers.clone(),
+        };
+        header.write_to(writer)?;
+
+        for channel in &self.channels {
+            writer.write_all(&channel.data)?;
+            pad(&mut *writer, DATA_ALIGN as u64, 0)?;
+        }
+        Ok(())
     }
 }
 
@@ -350,6 +475,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assert_write_and_read;
     use std::io::Cursor;
 
     #[test]
@@ -386,7 +512,7 @@ mod tests {
         let header = FileHeader::read_from(&mut reader)?;
         assert_eq!(reader.seek(SeekFrom::Current(0))?, FIRST_BLOCK_OFFSET as u64);
 
-        assert_eq!(header.magic, *HPS_MAGIC);
+        assert_eq!(header.magic, HPS_MAGIC);
         assert_eq!(header.sample_rate, 44100);
         assert_eq!(header.num_channels, 1);
 
@@ -446,7 +572,7 @@ mod tests {
         let header = FileHeader::read_from(&mut reader)?;
         assert_eq!(reader.seek(SeekFrom::Current(0))?, FIRST_BLOCK_OFFSET as u64);
 
-        assert_eq!(header.magic, *HPS_MAGIC);
+        assert_eq!(header.magic, HPS_MAGIC);
         assert_eq!(header.sample_rate, 44100);
         assert_eq!(header.num_channels, 2);
 
@@ -477,6 +603,35 @@ mod tests {
         assert_eq!(ch1.adpcm.context.last_samples, [13, 14]);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_write_and_read_header() {
+        assert_write_and_read!(FileHeader {
+            magic: HPS_MAGIC,
+            sample_rate: 44100,
+            num_channels: 1,
+            channels: [
+                Channel {
+                    address: AudioAddress {
+                        looping: true,
+                        format: DspFormat::Adpcm,
+                        loop_address: 1,
+                        end_address: 2,
+                        current_address: 3,
+                    },
+                    adpcm: adpcm::Info {
+                        coefficients: (1..=16).collect::<Vec<_>>().try_into().unwrap(),
+                        gain: 4,
+                        context: adpcm::FrameContext {
+                            predictor_and_scale: 5,
+                            last_samples: [6, 7],
+                        },
+                    },
+                },
+                Default::default(),
+            ]
+        });
     }
 
     #[test]
@@ -561,6 +716,20 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_write_and_read_block_header() {
+        assert_write_and_read!(BlockHeader {
+            size: 1,
+            end_address: 2,
+            next_offset: 3,
+            channel_contexts: [
+                adpcm::FrameContext { predictor_and_scale: 4, last_samples: [5, 6] },
+                adpcm::FrameContext { predictor_and_scale: 7, last_samples: [8, 9] },
+            ],
+            markers: vec![Marker { sample_index: 10, id: 11 }, Marker { sample_index: 12, id: 13 },],
+        });
     }
 
     #[test]
