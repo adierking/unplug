@@ -3,13 +3,14 @@ use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Le};
 use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
-use crate::common::{align, ReadFrom};
+use crate::common::{align, ReadFrom, Region};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
 use log::{debug, error, trace};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom};
 use unplug_proc::ReadFrom;
 
 /// The magic string at the beginning of an HPS file.
@@ -21,7 +22,7 @@ const FIRST_BLOCK_OFFSET: u32 = 0x80;
 const END_BLOCK_OFFSET: u32 = u32::MAX;
 
 /// The alignment of data in an HPS file.
-const DATA_ALIGN: usize = 0x20;
+const DATA_ALIGN: u64 = 0x20;
 
 /// Convenience type for an opaque decoder.
 type HpsDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
@@ -237,8 +238,6 @@ pub struct Block {
     pub channels: ArrayVec<[BlockChannel; 2]>,
     /// The markers in the block.
     pub markers: Vec<Marker>,
-    /// The complete block data.
-    pub data: Vec<u8>,
 }
 
 impl Block {
@@ -247,52 +246,36 @@ impl Block {
         Self::default()
     }
 
-    /// Returns a slice over the data for channel `i`.
-    pub fn channel_data(&self, i: usize) -> &[u8] {
-        let ch = &self.channels[i];
-        let start = ch.data_offset;
-        let end = start + ch.data_size;
-        &self.data[start..end]
-    }
-
-    /// Returns a mutable slice over the data for channel `i`.
-    pub fn channel_data_mut(&mut self, i: usize) -> &mut [u8] {
-        let ch = &self.channels[i];
-        let start = ch.data_offset;
-        let end = start + ch.data_size;
-        &mut self.data[start..end]
-    }
-
     /// Reads block data from `reader` using information from `header` and `channels`.
     fn read_from<R: Read + Seek>(
         reader: &mut R,
         header: &BlockHeader,
         channels: &[Channel],
     ) -> Result<Block> {
-        let data_size = header.size as usize;
-        let mut data = Vec::with_capacity(data_size);
-        reader.take(data_size as u64).read_to_end(&mut data)?;
+        // Constrain the reader to the block data
+        let start_offset = reader.seek(SeekFrom::Current(0))?;
+        let mut data_reader = Region::new(reader, start_offset, header.size as u64)?;
 
-        // Calculate the size of each channel and use this to determine their offsets. Channel
-        // data is aligned to a multiple of the alignment size.
+        // The left channel data is stored followed by the right data after alignment
         let mut block_channels = ArrayVec::new();
         let mut data_offset = 0;
         for (i, channel) in channels.iter().enumerate() {
+            let mut data = vec![];
             let format = Format::from(channel.address.format);
-            let data_size = format.size_of(header.end_address as usize + 1);
-            block_channels.push(BlockChannel {
-                data_offset,
-                data_size,
-                initial_context: header.channel_contexts[i],
-            });
+            let data_size = format.size_of(header.end_address as usize + 1) as u64;
+            data_reader.seek(SeekFrom::Start(data_offset))?;
+            (&mut data_reader).take(data_size).read_to_end(&mut data)?;
+            if data.len() < data_size as usize {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+            }
             data_offset = align(data_offset + data_size, DATA_ALIGN);
+            block_channels.push(BlockChannel { initial_context: header.channel_contexts[i], data });
         }
 
         Ok(Block {
             end_address: header.end_address,
             channels: block_channels,
             markers: header.markers.clone(),
-            data,
         })
     }
 }
@@ -308,15 +291,13 @@ impl Debug for Block {
 }
 
 /// A channel within an HPS block.
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct BlockChannel {
-    /// The offset of the channel data within the block's data.
-    pub data_offset: usize,
-    /// The size (in bytes) of the channel data.
-    pub data_size: usize,
     /// Initial playback parameters.
     pub initial_context: adpcm::FrameContext,
+    /// The channel's audio data.
+    pub data: Vec<u8>,
 }
 
 impl BlockChannel {
@@ -353,7 +334,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                     start_address: 0,
                     end_address: block.end_address as usize,
                     channels: 1,
-                    bytes: block.channel_data(self.channel).into(),
+                    bytes: Cow::from(&block.channels[self.channel].data),
                 }
                 .into_any(),
             )),
@@ -605,15 +586,10 @@ mod tests {
         let channels = [channel, channel];
         let mut reader = Cursor::new(bytes);
         let block = Block::read_from(&mut reader, &header, &channels)?;
-        assert_eq!(reader.seek(SeekFrom::Current(0))?, 0x40);
 
         assert_eq!(block.end_address, 0x1f);
-        assert_eq!(block.data.len(), 0x40);
-
-        assert_eq!(block.channels[0].data_offset, 0);
-        assert_eq!(block.channels[0].data_size, 0x10);
-        assert_eq!(block.channels[1].data_offset, 0x20);
-        assert_eq!(block.channels[1].data_size, 0x10);
+        assert_eq!(block.channels[0].data.len(), 0x10);
+        assert_eq!(block.channels[1].data.len(), 0x10);
 
         Ok(())
     }

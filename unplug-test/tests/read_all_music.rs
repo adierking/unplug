@@ -18,7 +18,7 @@ fn validate_channel(hps: &HpsStream, block: &Block, channel: usize) {
     }
     // Basic validity check: the first byte should match the context's predictor_and_scale
     // TODO: anything else?
-    let data = block.channel_data(channel);
+    let data = &block.channels[channel].data;
     let expected = block.channels[channel].initial_context.predictor_and_scale;
     assert_eq!(data[0] as u16, expected);
 }
