@@ -135,7 +135,7 @@ pub fn derive_write_to(input: TokenStream) -> TokenStream {
         },
         None => AttributeArgs { stream: None, error: None },
     };
-    let bounds = args.stream.unwrap_or_else(|| parse_quote!(::std::io::Read));
+    let bounds = args.stream.unwrap_or_else(|| parse_quote!(::std::io::Write));
     let error = args.error.unwrap_or_else(|| parse_quote!(::std::io::Error));
 
     let data = match &input.data {
