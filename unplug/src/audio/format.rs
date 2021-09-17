@@ -87,7 +87,7 @@ pub trait StaticFormat {
     }
 
     /// Aligns `address` down to the beginning of a frame.
-    fn frame_address(&self, address: usize) -> usize {
+    fn frame_address(address: usize) -> usize {
         Self::format_static().frame_address(address)
     }
 

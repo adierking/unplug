@@ -1,7 +1,7 @@
 use super::adpcm::{self, GcAdpcm};
-use super::dsp::{AudioAddress, DspFormat};
+use super::dsp::{AudioAddress, DspFormat, DspFormatTag};
 use super::format::{AnyFormat, Format, PcmS16Le};
-use super::sample::{CastSamples, JoinChannels};
+use super::sample::{CastSamples, JoinChannels, SplitChannels};
 use super::{Error, ReadSamples, Result, Samples};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, Region, WriteTo};
@@ -25,6 +25,11 @@ const END_BLOCK_OFFSET: u32 = u32::MAX;
 
 /// The alignment of data in an HPS file.
 const DATA_ALIGN: usize = 0x20;
+
+/// The ADPCM encoder block size for mono audio data.
+const MONO_BLOCK_SIZE: usize = 0x10000;
+/// The ADPCM encoder block size for stereo audio data.
+const STEREO_BLOCK_SIZE: usize = MONO_BLOCK_SIZE / 2;
 
 /// Convenience type for an opaque decoder.
 type HpsDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
@@ -235,6 +240,122 @@ impl HpsStream {
         let casted = CastSamples::new(reader);
         Box::new(adpcm::Decoder::new(casted))
     }
+
+    /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
+    #[allow(single_use_lifetimes)]
+    pub fn from_pcm<'a, R>(mut reader: R, sample_rate: u32) -> Result<Self>
+    where
+        R: ReadSamples<'a, Format = PcmS16Le>,
+    {
+        let coalesced = reader.coalesce_samples()?;
+        if coalesced.channels == 2 {
+            let splitter = SplitChannels::new(coalesced.into_reader());
+            let left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
+            let right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
+            Self::from_stereo(left, right, sample_rate)
+        } else if coalesced.channels == 1 {
+            let encoder = adpcm::Encoder::with_block_size(coalesced.into_reader(), MONO_BLOCK_SIZE);
+            Self::from_mono(encoder, sample_rate)
+        } else {
+            Err(Error::UnsupportedChannels)
+        }
+    }
+
+    /// Creates a new `HpsStream` from mono DSP-encoded sample data.
+    #[allow(single_use_lifetimes)]
+    pub fn from_mono<'a, F, R>(mut reader: R, sample_rate: u32) -> Result<Self>
+    where
+        F: DspFormatTag,
+        R: ReadSamples<'a, Format = F>,
+    {
+        let mut channel = Channel::default();
+        let mut blocks = vec![];
+        let mut first = true;
+        while let Some(samples) = reader.read_samples()? {
+            let adpcm = F::adpcm_info(&samples.params);
+            let block = Block::from_mono(samples)?;
+            if first {
+                first = false;
+                channel = Channel {
+                    address: AudioAddress {
+                        looping: true, // TODO
+                        format: F::dsp_format(),
+                        loop_address: 0x2,
+                        end_address: block.end_address,
+                        current_address: 0x2,
+                    },
+                    adpcm,
+                };
+            } else {
+                if adpcm.coefficients != channel.adpcm.coefficients {
+                    return Err(Error::DifferentCoefficients);
+                }
+                channel.address.end_address += block.end_address + 1;
+            }
+            blocks.push(block);
+        }
+
+        let mut channels = ArrayVec::new();
+        channels.push(channel);
+        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks })
+    }
+
+    /// Creates a new `HpsStream` from stereo DSP-encoded sample data.
+    #[allow(single_use_lifetimes)]
+    pub fn from_stereo<'a, F, R>(
+        mut left_reader: R,
+        mut right_reader: R,
+        sample_rate: u32,
+    ) -> Result<Self>
+    where
+        F: DspFormatTag,
+        R: ReadSamples<'a, Format = F>,
+    {
+        let mut left_channel = Channel::default();
+        let mut right_channel = Channel::default();
+        let mut blocks = vec![];
+        let mut first = true;
+        loop {
+            let left = left_reader.read_samples()?;
+            let right = right_reader.read_samples()?;
+            let (left, right) = match (left, right) {
+                (Some(l), Some(r)) => (l, r),
+                (None, None) => break,
+                _ => return Err(Error::DifferentChannelSizes),
+            };
+
+            let left_adpcm = F::adpcm_info(&left.params);
+            let right_adpcm = F::adpcm_info(&right.params);
+            let block = Block::from_stereo(left, right)?;
+            if first {
+                first = false;
+                let address = AudioAddress {
+                    looping: true, // TODO
+                    format: F::dsp_format(),
+                    loop_address: 0x2,
+                    end_address: block.end_address,
+                    current_address: 0x2,
+                };
+                left_channel = Channel { address, adpcm: left_adpcm };
+                right_channel = Channel { address, adpcm: right_adpcm };
+            } else {
+                if left_adpcm.coefficients != left_channel.adpcm.coefficients {
+                    return Err(Error::DifferentCoefficients);
+                }
+                if right_adpcm.coefficients != right_channel.adpcm.coefficients {
+                    return Err(Error::DifferentCoefficients);
+                }
+                left_channel.address.end_address += block.end_address + 1;
+                right_channel.address.end_address = left_channel.address.end_address;
+            }
+            blocks.push(block);
+        }
+
+        let mut channels = ArrayVec::new();
+        channels.push(left_channel);
+        channels.push(right_channel);
+        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks })
+    }
 }
 
 impl<R: Read + Seek> ReadFrom<R> for HpsStream {
@@ -331,6 +452,33 @@ impl Block {
     /// Creates an empty `Block`.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Creates a `Block` from mono DSP-encoded sample data.
+    fn from_mono<F: DspFormatTag>(samples: Samples<'_, F>) -> Result<Self> {
+        if samples.channels != 1 {
+            return Err(Error::StreamNotMono);
+        }
+        let end_address = samples.end_address - F::frame_address(samples.start_address);
+        let mut channels = ArrayVec::new();
+        channels.push(BlockChannel::from_samples(samples)?);
+        Ok(Self { end_address: end_address as u32, channels, markers: vec![] })
+    }
+
+    /// Creates a `Block` from stereo DSP-encoded sample data.
+    fn from_stereo<F: DspFormatTag>(left: Samples<'_, F>, right: Samples<'_, F>) -> Result<Self> {
+        if left.channels != 1 || right.channels != 1 {
+            return Err(Error::StreamNotMono);
+        }
+        let left_end = left.end_address - F::frame_address(left.start_address);
+        let right_end = right.end_address - F::frame_address(right.start_address);
+        if left_end != right_end {
+            return Err(Error::DifferentChannelSizes);
+        }
+        let mut channels = ArrayVec::new();
+        channels.push(BlockChannel::from_samples(left)?);
+        channels.push(BlockChannel::from_samples(right)?);
+        Ok(Self { end_address: left_end as u32, channels, markers: vec![] })
     }
 
     /// Reads block data from `reader` using information from `header` and `channels`.
@@ -430,6 +578,17 @@ impl BlockChannel {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Creates a `BlockChannel` with sample data from `samples`.
+    fn from_samples<F: DspFormatTag>(samples: Samples<'_, F>) -> Result<Self> {
+        let start_address = F::frame_address(samples.start_address);
+        let start_offset = F::address_to_byte(start_address);
+        let mut data = samples.bytes.into_owned();
+        if start_offset > 0 {
+            data = data.split_off(start_offset);
+        }
+        Ok(Self { initial_context: F::adpcm_info(&samples.params).context, data })
+    }
 }
 
 /// Reads sample data from a single HPS channel.
@@ -475,7 +634,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assert_write_and_read;
+    use crate::{assert_write_and_read, test};
     use std::io::Cursor;
 
     #[test]
@@ -760,6 +919,103 @@ mod tests {
         assert_eq!(block.channels[0].data.len(), 0x10);
         assert_eq!(block.channels[1].data.len(), 0x10);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_hps_from_pcm_mono() -> Result<()> {
+        let bytes = test::open_test_wav().into_inner();
+        let samples = Samples::<PcmS16Le> {
+            params: (),
+            start_address: 0,
+            end_address: bytes.len() / 2 - 1,
+            channels: 2,
+            bytes: bytes.into(),
+        };
+
+        let splitter = SplitChannels::new(samples.into_reader());
+        let hps = HpsStream::from_pcm(splitter.left(), 44100)?;
+        assert_eq!(hps.sample_rate, 44100);
+        assert_eq!(hps.channels.len(), 1);
+        assert_eq!(hps.loop_start, Some(0));
+        assert_eq!(hps.blocks.len(), 2);
+
+        let left = &hps.channels[0];
+        assert_eq!(left.address.end_address, 0x30af8);
+        assert_eq!(left.adpcm.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
+        assert_eq!(left.adpcm.context.predictor_and_scale, test::TEST_WAV_LEFT_DSP[0] as u16);
+
+        const EXPECTED_BLOCK_LENGTHS: &[usize] = &[0x10000, 0x857d];
+        const EXPECTED_END_ADDRESSES: &[u32] = &[0x1ffff, 0x10af8];
+        const EXPECTED_LAST_SAMPLES: &[[i16; 2]] = &[[0, 0], [1236, 1218]];
+
+        let mut offset = 0;
+        for (i, block) in hps.blocks.iter().enumerate() {
+            let end_offset = offset + block.channels[0].data.len();
+            assert_eq!(block.end_address, EXPECTED_END_ADDRESSES[i]);
+
+            let left = &block.channels[0];
+            assert_eq!(left.initial_context.predictor_and_scale, left.data[0] as u16);
+            assert_eq!(left.initial_context.last_samples, EXPECTED_LAST_SAMPLES[i]);
+            assert_eq!(left.data, &test::TEST_WAV_LEFT_DSP[offset..end_offset]);
+            assert_eq!(left.data.len(), EXPECTED_BLOCK_LENGTHS[i]);
+            offset = end_offset;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_hps_from_pcm_stereo() -> Result<()> {
+        let bytes = test::open_test_wav().into_inner();
+        let samples = Samples::<PcmS16Le> {
+            params: (),
+            start_address: 0,
+            end_address: bytes.len() / 2 - 1,
+            channels: 2,
+            bytes: bytes.into(),
+        };
+
+        let hps = HpsStream::from_pcm(samples.into_reader(), 44100)?;
+        assert_eq!(hps.sample_rate, 44100);
+        assert_eq!(hps.channels.len(), 2);
+        assert_eq!(hps.loop_start, Some(0));
+        assert_eq!(hps.blocks.len(), 4);
+
+        let left = &hps.channels[0];
+        assert_eq!(left.address.end_address, 0x30af8);
+        assert_eq!(left.adpcm.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
+        assert_eq!(left.adpcm.context.predictor_and_scale, test::TEST_WAV_LEFT_DSP[0] as u16);
+
+        let right = &hps.channels[1];
+        assert_eq!(right.address.end_address, 0x30af8);
+        assert_eq!(right.adpcm.coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
+        assert_eq!(right.adpcm.context.predictor_and_scale, test::TEST_WAV_RIGHT_DSP[0] as u16);
+
+        const EXPECTED_BLOCK_LENGTHS: &[usize] = &[0x8000, 0x8000, 0x8000, 0x57d];
+        const EXPECTED_END_ADDRESSES: &[u32] = &[0xffff, 0xffff, 0xffff, 0xaf8];
+        const EXPECTED_LAST_SAMPLES_LEFT: &[[i16; 2]] =
+            &[[0, 0], [-5232, -5240], [1236, 1218], [33, 42]];
+        const EXPECTED_LAST_SAMPLES_RIGHT: &[[i16; 2]] =
+            &[[0, 0], [730, 618], [1751, 1697], [-9, -3]];
+
+        let mut offset = 0;
+        for (i, block) in hps.blocks.iter().enumerate() {
+            let end_offset = offset + block.channels[0].data.len();
+            assert_eq!(block.end_address, EXPECTED_END_ADDRESSES[i]);
+
+            let left = &block.channels[0];
+            assert_eq!(left.initial_context.predictor_and_scale, left.data[0] as u16);
+            assert_eq!(left.initial_context.last_samples, EXPECTED_LAST_SAMPLES_LEFT[i]);
+            assert_eq!(left.data, &test::TEST_WAV_LEFT_DSP[offset..end_offset]);
+            assert_eq!(left.data.len(), EXPECTED_BLOCK_LENGTHS[i]);
+
+            let right = &block.channels[1];
+            assert_eq!(right.initial_context.predictor_and_scale, right.data[0] as u16);
+            assert_eq!(right.initial_context.last_samples, EXPECTED_LAST_SAMPLES_RIGHT[i]);
+            assert_eq!(right.data, &test::TEST_WAV_RIGHT_DSP[offset..end_offset]);
+            assert_eq!(right.data.len(), EXPECTED_BLOCK_LENGTHS[i]);
+            offset = end_offset;
+        }
         Ok(())
     }
 }

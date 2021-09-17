@@ -162,32 +162,26 @@ impl Channel {
             return Err(Error::StreamNotMono);
         }
         match F::dsp_format() {
-            DspFormat::Adpcm => Self::from_adpcm(samples.into_any()),
+            DspFormat::Adpcm => {
+                Ok(Self {
+                    address: AudioAddress {
+                        looping: false, // TODO
+                        format: DspFormat::Adpcm,
+                        loop_address: samples.start_address as u32,
+                        end_address: samples.end_address as u32,
+                        current_address: samples.start_address as u32,
+                    },
+                    adpcm: F::adpcm_info(&samples.params),
+                    loop_context: FrameContext::default(), // TODO
+                    data: samples.bytes.into_owned(),
+                })
+            }
             _ => {
                 // TODO
                 error!("Sample format not supported yet: {:?}", F::format_static());
                 Err(Error::UnsupportedFormat(F::format_static()))
             }
         }
-    }
-
-    fn from_adpcm(samples: Samples<'_, AnyFormat>) -> Result<Self> {
-        let samples = match samples.cast::<GcAdpcm>() {
-            Ok(s) => s,
-            Err(_) => panic!("expected ADPCM samples"),
-        };
-        Ok(Self {
-            address: AudioAddress {
-                looping: false, // TODO
-                format: DspFormat::Adpcm,
-                loop_address: samples.start_address as u32,
-                end_address: samples.end_address as u32,
-                current_address: samples.start_address as u32,
-            },
-            adpcm: samples.params,
-            loop_context: FrameContext::default(), // TODO
-            data: samples.bytes.into_owned(),
-        })
     }
 
     fn from_bank(header: &ChannelHeader, bank_data: &[u8]) -> Self {

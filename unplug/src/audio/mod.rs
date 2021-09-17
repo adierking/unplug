@@ -28,6 +28,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("channels have different sizes")]
+    DifferentChannelSizes,
+
     #[error("cannot concatenate samples with different coefficients")]
     DifferentCoefficients,
 

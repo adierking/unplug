@@ -1,4 +1,4 @@
-use super::adpcm::GcAdpcm;
+use super::adpcm::{self, GcAdpcm};
 use super::format::{PcmS16Be, PcmS8, StaticFormat};
 use super::{Error, Format, Result};
 use crate::common::{ReadFrom, WriteTo};
@@ -58,11 +58,19 @@ impl From<DspFormat> for Format {
 pub trait DspFormatTag: StaticFormat {
     /// Returns the corresponding `DspFormat` value.
     fn dsp_format() -> DspFormat;
+
+    /// If the format is ADPCM, returns `*params`, otherwise returns default values.
+    fn adpcm_info(_params: &Self::Params) -> adpcm::Info {
+        Default::default()
+    }
 }
 
 impl DspFormatTag for GcAdpcm {
     fn dsp_format() -> DspFormat {
         DspFormat::Adpcm
+    }
+    fn adpcm_info(params: &Self::Params) -> adpcm::Info {
+        *params
     }
 }
 
