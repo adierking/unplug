@@ -117,7 +117,10 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
     for s in pcm.windows(3) {
         let predicted = (c0 * (s[1] as i32) + c1 * (s[0] as i32)) / 2048;
         let distance = clamp_i16(s[2] as i32 - predicted);
-        if distance.abs() > max_distance.abs() {
+        if distance == i16::MIN {
+            max_distance = i16::MIN;
+            break;
+        } else if distance.abs() > max_distance.abs() {
             max_distance = distance;
         }
     }
@@ -155,7 +158,7 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
             *adpcm = clamped;
             frame.pcm[s + 2] = clamp_i16((predicted + clamped * scale + 0x400) >> 11);
 
-            let actual_distance = (pcm[s + 2] - frame.pcm[s + 2]) as f64;
+            let actual_distance = (pcm[s + 2] as i32 - frame.pcm[s + 2] as i32) as f64;
             frame.distance += actual_distance * actual_distance;
         }
 
