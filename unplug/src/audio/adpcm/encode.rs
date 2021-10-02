@@ -50,9 +50,7 @@ fn encode(pcm: &[i16], info: &mut Info) -> Vec<u8> {
         // The first two pcm_buf values are from the last frame, the rest are from this frame
         let end = samples.len() + 2;
         pcm_buf[2..end].copy_from_slice(samples);
-        for x in &mut pcm_buf[end..] {
-            *x = 0;
-        }
+        pcm_buf[end..].fill(0);
 
         // Write ADPCM bytes to adpcm_buf and update pcm_buf with the re-decoded samples
         encode_frame(&mut pcm_buf, &info.coefficients, &mut adpcm_buf);

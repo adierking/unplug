@@ -53,9 +53,7 @@ pub fn calculate_coefficients(samples: &[i16]) -> Coefficients {
         let frame_len = SAMPLES_PER_FRAME.min(remaining);
         let end = SAMPLES_PER_FRAME + frame_len;
         pcm_hist[SAMPLES_PER_FRAME..end].copy_from_slice(&samples[i..(i + frame_len)]);
-        for x in &mut pcm_hist[end..] {
-            *x = 0;
-        }
+        pcm_hist[end..].fill(0);
 
         inner_product_merge(&mut vec1, &pcm_hist);
         if vec1[0].abs() > 10.0 {

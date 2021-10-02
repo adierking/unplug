@@ -48,7 +48,7 @@ Refer to the [examples guide](docs/examples.md) for examples of how to use each 
 
 ## Compiling
 
-Unplug requires Rust 1.45+ in order to compile. You can compile it with Cargo as usual:
+Unplug requires Rust 1.50+ in order to compile. You can compile it with Cargo as usual:
 
 ```sh
 cargo build
