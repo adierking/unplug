@@ -1,4 +1,4 @@
-use super::GcAdpcm;
+use super::{GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::PcmS16Le;
 use crate::audio::{ReadSamples, Result, Samples};
 use crate::common::clamp_i16;
@@ -39,8 +39,9 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
             context.last_samples[1],
         );
 
-        // There are 14 samples for every 16 bytes, so we can estimate the final sample count
-        let estimated = ((encoded.end_address - encoded.start_address) * 14 + 15) / 16;
+        // Estimate the final sample count based on how many bytes there are
+        let num_bytes = (encoded.end_address - encoded.start_address) / 2 + 1;
+        let estimated = (num_bytes + BYTES_PER_FRAME - 1) / BYTES_PER_FRAME * SAMPLES_PER_FRAME;
         let mut decoded: Vec<u8> = Vec::with_capacity(estimated * 2);
 
         let mut address = encoded.start_address;
