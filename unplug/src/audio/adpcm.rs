@@ -1,8 +1,7 @@
-mod coefficients;
 mod decode;
 mod encode;
+mod vgaudio;
 
-pub use coefficients::*;
 pub use decode::*;
 pub use encode::*;
 
@@ -12,6 +11,9 @@ use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
 use std::borrow::Cow;
 use std::io::{Read, Write};
+
+const SAMPLES_PER_FRAME: usize = 14;
+const BYTES_PER_FRAME: usize = 8;
 
 #[derive(Copy, Clone)]
 pub struct GcAdpcm;
@@ -34,6 +36,9 @@ impl StaticFormat for GcAdpcm {
         Ok(())
     }
 }
+
+/// GameCube ADPCM coefficients.
+pub type Coefficients = [i16; 16];
 
 /// GameCube ADPCM audio info.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
