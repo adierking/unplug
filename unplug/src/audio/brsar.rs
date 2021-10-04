@@ -203,7 +203,7 @@ impl<R: Read + Seek> ReadFrom<R> for SymbSection {
         let section_header = SectionHeader::read_from(reader)?;
         let start_offset = reader.seek(SeekFrom::Current(0))?;
         let mut section =
-            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE)?;
+            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
         let header = SymbHeader::read_from(&mut section)?;
 
         // Unfortunately we can't use `read_list()` here because the offsets aren't tagged...
@@ -407,7 +407,7 @@ impl<R: Read + Seek> ReadFrom<R> for InfoSection {
         let section_header = SectionHeader::read_from(reader)?;
         let start_offset = reader.seek(SeekFrom::Current(0))?;
         let mut section =
-            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE)?;
+            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
         let header = InfoHeader::read_from(&mut section)?;
 
         let mut sounds = vec![];

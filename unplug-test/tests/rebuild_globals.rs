@@ -67,10 +67,10 @@ fn test_rebuild_globals_metadata() -> Result<()> {
 
     info!("Comparing other partitions");
     assert!(common::compare_streams(
-        &mut original.open_colliders()?,
-        &mut rebuilt.open_colliders()?
+        &mut original.open_colliders(),
+        &mut rebuilt.open_colliders()
     )?);
-    assert!(common::compare_streams(&mut original.open_libs()?, &mut rebuilt.open_libs()?)?);
+    assert!(common::compare_streams(&mut original.open_libs(), &mut rebuilt.open_libs())?);
 
     Ok(())
 }
@@ -112,11 +112,8 @@ fn test_rebuild_globals_colliders() -> Result<()> {
     }
 
     info!("Comparing other partitions");
-    assert!(common::compare_streams(
-        &mut original.open_metadata()?,
-        &mut rebuilt.open_metadata()?
-    )?);
-    assert!(common::compare_streams(&mut original.open_libs()?, &mut rebuilt.open_libs()?)?);
+    assert!(common::compare_streams(&mut original.open_metadata(), &mut rebuilt.open_metadata())?);
+    assert!(common::compare_streams(&mut original.open_libs(), &mut rebuilt.open_libs())?);
 
     Ok(())
 }
@@ -158,13 +155,10 @@ fn test_rebuild_globals_libs() -> Result<()> {
     );
 
     info!("Comparing other partitions");
+    assert!(common::compare_streams(&mut original.open_metadata(), &mut rebuilt.open_metadata())?);
     assert!(common::compare_streams(
-        &mut original.open_metadata()?,
-        &mut rebuilt.open_metadata()?
-    )?);
-    assert!(common::compare_streams(
-        &mut original.open_colliders()?,
-        &mut rebuilt.open_colliders()?
+        &mut original.open_colliders(),
+        &mut rebuilt.open_colliders(),
     )?);
 
     Ok(())

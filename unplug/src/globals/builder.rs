@@ -63,7 +63,7 @@ impl<'a> GlobalsBuilder<'a> {
         // Metadata
         let metadata_start = writer.seek(SeekFrom::Current(0))? as u32;
         if let Some(metadata) = self.metadata {
-            let region = Region::with_inf_max_len(&mut writer, metadata_start as u64, 0)?;
+            let region = Region::with_inf_max_len(&mut writer, metadata_start as u64, 0);
             let mut buf = BufWriter::new(region);
             metadata.write_to(&mut buf)?;
             buf.flush()?;
@@ -77,7 +77,7 @@ impl<'a> GlobalsBuilder<'a> {
         // Collision
         let collision_start = writer.seek(SeekFrom::Current(0))? as u32;
         if let Some(colliders) = self.colliders {
-            let region = Region::with_inf_max_len(&mut writer, collision_start as u64, 0)?;
+            let region = Region::with_inf_max_len(&mut writer, collision_start as u64, 0);
             let mut buf = BufWriter::new(region);
             colliders.write_to(&mut buf)?;
             buf.flush()?;
@@ -91,7 +91,7 @@ impl<'a> GlobalsBuilder<'a> {
         // Libs
         let libs_start = writer.seek(SeekFrom::Current(0))? as u32;
         if let Some(libs) = self.libs {
-            let region = Region::with_inf_max_len(&mut writer, libs_start as u64, 0)?;
+            let region = Region::with_inf_max_len(&mut writer, libs_start as u64, 0);
             let mut buf = BufWriter::new(region);
             libs.write_to(&mut buf)?;
             buf.flush()?;

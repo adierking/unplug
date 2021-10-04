@@ -245,7 +245,7 @@ impl<R: Read + Seek> ReadFrom<R> for InfoSection {
         let section_header = SectionHeader::read_from(reader)?;
         let start_offset = reader.seek(SeekFrom::Current(0))?;
         let mut section =
-            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE)?;
+            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
         let header = InfoHeader::read_from(&mut section)?;
 
         // channels_offset is an offset to a list of offsets to channel headers
@@ -309,7 +309,7 @@ impl DataSection {
         let section_header = SectionHeader::read_from(reader)?;
         let start_offset = reader.seek(SeekFrom::Current(0))?;
         let mut section =
-            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE)?;
+            Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
 
         // Read the data for each channel
         let mut channels: ArrayVec<[Channel; 2]> = ArrayVec::new();

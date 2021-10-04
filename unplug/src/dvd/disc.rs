@@ -175,7 +175,7 @@ impl<S: Read + Seek> DiscStream<S> {
         self.stream.seek(SeekFrom::Start(start))?;
         let header = DolHeader::read_from(&mut BufReader::new(&mut self.stream))?;
         let len = header.file_size() as u64;
-        let region: Box<dyn ReadSeek> = Box::new(Region::new(&mut self.stream, start, len)?);
+        let region: Box<dyn ReadSeek> = Box::new(Region::new(&mut self.stream, start, len));
         Ok((header, region))
     }
 
@@ -441,13 +441,13 @@ impl<S: Read + Write + Seek> EditFile for DiscStream<S> {
     fn edit_file<'s>(&'s mut self, id: EntryId) -> fst::Result<Box<dyn ReadWriteSeek + 's>> {
         let file = self.files.file(id)?;
         let max_size = self.max_region_size(file.offset, file.size);
-        file.edit(&mut self.stream, max_size)
+        Ok(file.edit(&mut self.stream, max_size))
     }
 
     fn edit_file_at<'s>(&'s mut self, path: &str) -> fst::Result<Box<dyn ReadWriteSeek + 's>> {
         let file = self.files.file_at(path)?;
         let max_size = self.max_region_size(file.offset, file.size);
-        file.edit(&mut self.stream, max_size)
+        Ok(file.edit(&mut self.stream, max_size))
     }
 }
 

@@ -290,7 +290,7 @@ impl FileEntry {
     /// Returns a wrapper around a reader which reads the contents of this file.
     pub fn open<'a>(&self, reader: (impl Read + Seek + 'a)) -> Result<Box<dyn ReadSeek + 'a>> {
         trace!("Opening entry \"{}\" at {:#x} (size = {:#x})", self.name, self.offset, self.size);
-        Ok(Box::new(Region::new(reader, self.offset as u64, self.size as u64)?))
+        Ok(Box::new(Region::new(reader, self.offset as u64, self.size as u64)))
     }
 
     /// Returns a wrapper around a stream which can read and write the contents of this file
@@ -300,7 +300,7 @@ impl FileEntry {
         &self,
         stream: (impl Read + Write + Seek + 'a),
         max_size: u32,
-    ) -> Result<Box<dyn ReadWriteSeek + 'a>> {
+    ) -> Box<dyn ReadWriteSeek + 'a> {
         trace!(
             "Opening entry \"{}\" at {:#x} (size = {:#x}, max size = {:#x})",
             self.name,
@@ -308,12 +308,12 @@ impl FileEntry {
             self.size,
             max_size,
         );
-        Ok(Box::new(Region::with_max_len(
+        Box::new(Region::with_max_len(
             stream,
             self.offset as u64,
             self.size as u64,
             max_size as u64,
-        )?))
+        ))
     }
 
     /// Constructs a `FileEntry` from an FST entry.

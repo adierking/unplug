@@ -489,7 +489,7 @@ impl Block {
     ) -> Result<Block> {
         // Constrain the reader to the block data
         let start_offset = reader.seek(SeekFrom::Current(0))?;
-        let mut data_reader = Region::new(reader, start_offset, header.size as u64)?;
+        let mut data_reader = Region::new(reader, start_offset, header.size as u64);
 
         // The left channel data is stored followed by the right data after alignment
         let mut block_channels = ArrayVec::new();
