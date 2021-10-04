@@ -7,8 +7,7 @@ pub mod rwav;
 pub mod sample;
 pub mod sem;
 pub mod ssm;
-
-mod wav;
+pub mod wav;
 
 pub use brsar::Brsar;
 pub use format::{Format, FormatTag};
@@ -16,7 +15,7 @@ pub use hps::HpsStream;
 pub use sample::{ReadSamples, Samples};
 pub use sem::EventBank;
 pub use ssm::SoundBank;
-pub use wav::WavBuilder;
+pub use wav::{WavBuilder, WavReader};
 
 use std::io;
 use thiserror::Error;
@@ -43,8 +42,14 @@ pub enum Error {
     #[error("invalid HPS magic")]
     InvalidHpsMagic,
 
+    #[error("invalid RIFF data")]
+    InvalidRiff,
+
     #[error("invalid RWAV data")]
     InvalidRwav,
+
+    #[error("invalid WAV data")]
+    InvalidWav,
 
     #[error("samples are not aligned on a frame boundary")]
     NotFrameAligned,
