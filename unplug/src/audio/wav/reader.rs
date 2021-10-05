@@ -202,7 +202,7 @@ impl ReadSamples<'static> for WavReader<'_> {
         } else {
             Ok(Some(Samples::<Self::Format> {
                 params: (),
-                end_address: data.len() / 2,
+                end_address: data.len() / 2 - 1,
                 channels: self.channels,
                 bytes: data.into(),
             }))
@@ -214,6 +214,7 @@ impl ReadSamples<'static> for WavReader<'_> {
 mod tests {
     use super::*;
     use crate::test::{open_test_wav, TEST_WAV};
+    use crate::audio::format::{PcmS16Le, StaticFormat};
     use std::io::Cursor;
 
     #[test]
@@ -225,9 +226,10 @@ mod tests {
         assert_eq!(wav.channels, 2);
 
         let samples = wav.coalesce_samples()?;
-        assert_eq!(samples.end_address, expected.len() / 2);
+        assert_eq!(samples.end_address, expected.len() / 2 - 1);
         assert_eq!(samples.channels, 2);
-        assert!(samples.bytes == expected);
+        let end = PcmS16Le::size_of(samples.end_address + 1);
+        assert!(&samples.bytes[..end] == expected);
         Ok(())
     }
 }
