@@ -459,10 +459,10 @@ impl Block {
         if samples.channels != 1 {
             return Err(Error::StreamNotMono);
         }
-        let end_address = samples.end_address - F::frame_address(samples.start_address);
         let mut channels = ArrayVec::new();
+        let end_address = samples.end_address as u32;
         channels.push(BlockChannel::from_samples(samples)?);
-        Ok(Self { end_address: end_address as u32, channels, markers: vec![] })
+        Ok(Self { end_address, channels, markers: vec![] })
     }
 
     /// Creates a `Block` from stereo DSP-encoded sample data.
@@ -470,15 +470,14 @@ impl Block {
         if left.channels != 1 || right.channels != 1 {
             return Err(Error::StreamNotMono);
         }
-        let left_end = left.end_address - F::frame_address(left.start_address);
-        let right_end = right.end_address - F::frame_address(right.start_address);
-        if left_end != right_end {
+        if left.end_address != right.end_address {
             return Err(Error::DifferentChannelSizes);
         }
         let mut channels = ArrayVec::new();
+        let end_address = left.end_address as u32;
         channels.push(BlockChannel::from_samples(left)?);
         channels.push(BlockChannel::from_samples(right)?);
-        Ok(Self { end_address: left_end as u32, channels, markers: vec![] })
+        Ok(Self { end_address, channels, markers: vec![] })
     }
 
     /// Reads block data from `reader` using information from `header` and `channels`.
@@ -581,13 +580,10 @@ impl BlockChannel {
 
     /// Creates a `BlockChannel` with sample data from `samples`.
     fn from_samples<F: DspFormatTag>(samples: Samples<'_, F>) -> Result<Self> {
-        let start_address = F::frame_address(samples.start_address);
-        let start_offset = F::address_to_byte(start_address);
-        let mut data = samples.bytes.into_owned();
-        if start_offset > 0 {
-            data = data.split_off(start_offset);
-        }
-        Ok(Self { initial_context: F::adpcm_info(&samples.params).context, data })
+        Ok(Self {
+            initial_context: F::adpcm_info(&samples.params).context,
+            data: samples.bytes.into_owned(),
+        })
     }
 }
 
@@ -615,7 +611,6 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                         gain: self.adpcm.gain,
                         context: block.channels[self.channel].initial_context,
                     },
-                    start_address: 0,
                     end_address: block.end_address as usize,
                     channels: 1,
                     bytes: Cow::from(&block.channels[self.channel].data),
@@ -927,7 +922,6 @@ mod tests {
         let bytes = test::open_test_wav().into_inner();
         let samples = Samples::<PcmS16Le> {
             params: (),
-            start_address: 0,
             end_address: bytes.len() / 2 - 1,
             channels: 2,
             bytes: bytes.into(),
@@ -969,7 +963,6 @@ mod tests {
         let bytes = test::open_test_wav().into_inner();
         let samples = Samples::<PcmS16Le> {
             params: (),
-            start_address: 0,
             end_address: bytes.len() / 2 - 1,
             channels: 2,
             bytes: bytes.into(),

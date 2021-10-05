@@ -167,9 +167,9 @@ impl Channel {
                     address: AudioAddress {
                         looping: false, // TODO
                         format: DspFormat::Adpcm,
-                        loop_address: samples.start_address as u32,
+                        loop_address: 2,
                         end_address: samples.end_address as u32,
-                        current_address: samples.start_address as u32,
+                        current_address: 2,
                     },
                     adpcm: F::adpcm_info(&samples.params),
                     loop_context: FrameContext::default(), // TODO
@@ -187,23 +187,18 @@ impl Channel {
     fn from_bank(header: &ChannelHeader, bank_data: &[u8]) -> Self {
         // Copying into a standalone buffer will make it easier to edit sounds in the future
         let format = Format::from(header.address.format);
-        let start_address = if format == Format::GcAdpcm {
-            // Align to a frame boundary
-            header.address.current_address & !0xf
-        } else {
-            header.address.current_address
-        };
-        let end_address = header.address.end_address;
-        let nibbles = (end_address - start_address + 1) as usize;
-        let start_offset = format.address_to_byte(start_address as usize);
+        let start_address = format.frame_address(header.address.current_address as usize);
+        let end_address = header.address.end_address as usize;
+        let nibbles = end_address - start_address + 1;
+        let start_offset = format.address_to_byte(start_address);
         let end_offset = align(start_offset + format.size_of(nibbles), FRAME_ALIGN as usize);
         let data = Vec::from(&bank_data[start_offset..end_offset]);
 
         // Since we have a separate data buffer now, we have to update the addresses
         let mut address = header.address;
-        address.loop_address -= start_address;
-        address.end_address -= start_address;
-        address.current_address -= start_address;
+        address.loop_address -= start_address as u32;
+        address.end_address -= start_address as u32;
+        address.current_address -= start_address as u32;
 
         Channel { address, adpcm: header.adpcm, loop_context: header.loop_context, data }
     }
@@ -412,15 +407,12 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
             Some(c) => c,
             None => return Ok(None),
         };
-        let start_address = channel.address.current_address as usize;
-        let end_address = channel.address.end_address as usize;
         let format = channel.address.format;
         match format {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
                     params: channel.adpcm,
-                    start_address,
-                    end_address,
+                    end_address: channel.address.end_address as usize,
                     channels: 1,
                     bytes: Cow::Borrowed(&channel.data),
                 }
@@ -533,21 +525,18 @@ mod tests {
 
         let samples0_0 = ssm.sounds[0].channels[0].reader().read_samples()?.unwrap();
         assert_eq!(samples0_0.format(), Format::GcAdpcm);
-        assert_eq!(samples0_0.start_address, 0x2);
         assert_eq!(samples0_0.end_address, 0x1f);
         assert_eq!(samples0_0.channels, 1);
         assert_eq!(samples0_0.bytes, &SSM_BYTES[0xe0..0xf0]);
 
         let samples1_0 = ssm.sounds[1].channels[0].reader().read_samples()?.unwrap();
         assert_eq!(samples1_0.format(), Format::GcAdpcm);
-        assert_eq!(samples1_0.start_address, 0x2);
         assert_eq!(samples1_0.end_address, 0x1f);
         assert_eq!(samples1_0.channels, 1);
         assert_eq!(samples1_0.bytes, &SSM_BYTES[0xf0..0x100]);
 
         let samples1_1 = ssm.sounds[1].channels[1].reader().read_samples()?.unwrap();
         assert_eq!(samples1_1.format(), Format::GcAdpcm);
-        assert_eq!(samples1_1.start_address, 0x2);
         assert_eq!(samples1_1.end_address, 0x1f);
         assert_eq!(samples1_1.channels, 1);
         assert_eq!(samples1_1.bytes, &SSM_BYTES[0x100..0x110]);
@@ -618,7 +607,6 @@ mod tests {
                 gain: 0,
                 context: FrameContext::default(),
             },
-            start_address: 0x2,
             end_address: test::TEST_WAV_DSP_END_ADDRESS,
             channels: 1,
             bytes: Cow::from(test::TEST_WAV_LEFT_DSP),
@@ -638,7 +626,6 @@ mod tests {
                 gain: 0,
                 context: FrameContext::default(),
             },
-            start_address: 0x2,
             end_address: test::TEST_WAV_DSP_END_ADDRESS,
             channels: 1,
             bytes: Cow::from(test::TEST_WAV_LEFT_DSP),
@@ -649,7 +636,6 @@ mod tests {
                 gain: 0,
                 context: FrameContext::default(),
             },
-            start_address: 0x2,
             end_address: test::TEST_WAV_DSP_END_ADDRESS,
             channels: 1,
             bytes: Cow::from(test::TEST_WAV_RIGHT_DSP),
@@ -667,7 +653,6 @@ mod tests {
         let bytes = test::open_test_wav().into_inner();
         let samples = Samples::<PcmS16Le> {
             params: (),
-            start_address: 0,
             end_address: bytes.len() / 2 - 1,
             channels: 2,
             bytes: bytes.into(),

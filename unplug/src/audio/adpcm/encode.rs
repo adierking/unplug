@@ -92,7 +92,6 @@ impl ReadSamples<'static> for Encoder<'_, '_> {
 
         Ok(Some(Samples {
             params: initial_state,
-            start_address: 2,
             end_address: bytes.len() * 2 - num_samples % 2 - 1,
             channels: 1,
             bytes: bytes.into(),
@@ -113,7 +112,6 @@ mod tests {
         let bytes = test::open_test_wav().into_inner();
         let samples = Samples::<PcmS16Le> {
             params: (),
-            start_address: 0,
             end_address: bytes.len() / 2 - 1,
             channels: 2,
             bytes: bytes.into(),
@@ -132,7 +130,6 @@ mod tests {
             left.params.context,
             FrameContext { predictor_and_scale: 0x75, last_samples: [0; 2] }
         );
-        assert_eq!(left.start_address, 2);
         assert_eq!(left.end_address, 0x30af8);
         assert_eq!(left.channels, 1);
         assert!(left.bytes == test::TEST_WAV_LEFT_DSP);
@@ -141,7 +138,6 @@ mod tests {
             right.params.context,
             FrameContext { predictor_and_scale: 0x16, last_samples: [0; 2] }
         );
-        assert_eq!(right.start_address, 2);
         assert_eq!(right.end_address, 0x30af8);
         assert_eq!(right.channels, 1);
         assert!(right.bytes == test::TEST_WAV_RIGHT_DSP);
@@ -154,7 +150,6 @@ mod tests {
         let bytes = test::open_test_wav().into_inner();
         let samples = Samples::<PcmS16Le> {
             params: (),
-            start_address: 0,
             end_address: bytes.len() / 2 - 1,
             channels: 2,
             bytes: bytes.into(),
@@ -180,7 +175,6 @@ mod tests {
             assert_eq!(block.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
             assert_eq!(block.params.context.predictor_and_scale, block.bytes[0] as u16);
             assert_eq!(block.params.context.last_samples, EXPECTED_LAST_SAMPLES[i]);
-            assert_eq!(block.start_address, 0x2);
             assert_eq!(block.end_address, EXPECTED_END_ADDRESSES[i]);
             assert_eq!(block.bytes, &test::TEST_WAV_LEFT_DSP[offset..end_offset]);
             assert_eq!(block.bytes.len(), EXPECTED_BLOCK_LENGTHS[i]);

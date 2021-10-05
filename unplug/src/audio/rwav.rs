@@ -375,7 +375,6 @@ impl Rwav {
         ChannelReader {
             channel: Some(&self.channels[channel]),
             format: self.format,
-            start_address: self.start_address,
             end_address: self.end_address,
         }
     }
@@ -426,7 +425,6 @@ impl<R: Read + Seek> ReadFrom<R> for Rwav {
 pub struct ChannelReader<'a> {
     channel: Option<&'a Channel>,
     format: Format,
-    start_address: u32,
     end_address: u32,
 }
 
@@ -437,15 +435,12 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
             Some(c) => c,
             None => return Ok(None),
         };
-        let start_address = self.start_address as usize;
-        let end_address = self.end_address as usize;
         let format = self.format;
         match format {
             Format::GcAdpcm => Ok(Some(
                 Samples::<GcAdpcm> {
                     params: channel.adpcm,
-                    start_address,
-                    end_address,
+                    end_address: self.end_address as usize,
                     channels: 1,
                     bytes: Cow::Borrowed(&channel.data),
                 }
@@ -575,14 +570,12 @@ mod tests {
 
         let samples0 = rwav.reader(0).read_samples()?.unwrap();
         assert_eq!(samples0.format(), Format::GcAdpcm);
-        assert_eq!(samples0.start_address, 0x2);
         assert_eq!(samples0.end_address, 0x1f);
         assert_eq!(samples0.channels, 1);
         assert_eq!(samples0.bytes, &RWAV_BYTES[0x108..0x118]);
 
         let samples1 = rwav.reader(1).read_samples()?.unwrap();
         assert_eq!(samples1.format(), Format::GcAdpcm);
-        assert_eq!(samples1.start_address, 0x2);
         assert_eq!(samples1.end_address, 0x1f);
         assert_eq!(samples1.channels, 1);
         assert_eq!(samples1.bytes, &RWAV_BYTES[0x118..0x128]);

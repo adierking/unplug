@@ -40,11 +40,12 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
         );
 
         // Estimate the final sample count based on how many bytes there are
-        let num_bytes = (encoded.end_address - encoded.start_address) / 2 + 1;
+        let start_address = 2; // Skip the first predictor/scale byte
+        let num_bytes = (encoded.end_address - start_address) / 2 + 1;
         let estimated = (num_bytes + BYTES_PER_FRAME - 1) / BYTES_PER_FRAME * SAMPLES_PER_FRAME;
         let mut decoded: Vec<u8> = Vec::with_capacity(estimated * 2);
 
-        let mut address = encoded.start_address;
+        let mut address = start_address;
         while address <= encoded.end_address {
             if address & 0xf == 0 {
                 // Frames are aligned on 16-byte boundaries and each begins with a new
@@ -79,7 +80,6 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
 
         Ok(Some(Samples {
             params: (),
-            start_address: 0,
             end_address: decoded.len() / 2 - 1,
             channels: 1,
             bytes: decoded.into(),
@@ -137,7 +137,6 @@ mod tests {
                 gain: 0,
                 context: FrameContext { predictor_and_scale: 0x18, last_samples: [0, 0] },
             },
-            start_address: 0x2,
             end_address: 0x93,
             channels: 1,
             bytes: SINE_ENCODED.into(),
