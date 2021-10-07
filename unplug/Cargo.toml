@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 arrayvec = "0.5"
 bitflags = "1.2.1"
+byte-slice-cast = "1.1.0"
 byteorder = "1"
 encoding_rs = "0.8.26"
 log = { version = "0.4", features = ["release_max_level_debug"] }
