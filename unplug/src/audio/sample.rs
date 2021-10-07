@@ -1,4 +1,4 @@
-use super::format::{AnyFormat, AnyParams, Format, FormatTag, RawFormat, StaticFormat};
+use super::format::{AnyData, AnyFormat, AnyParams, Format, FormatTag, RawFormat, StaticFormat};
 use super::{Error, Result};
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -13,12 +13,13 @@ pub struct Samples<'a, F: FormatTag> {
     /// The codec parameters for the samples.
     pub params: F::Params,
     /// The address of the last unit to decode. This is in format dependent units; use
-    /// `Format::address_to_byte()` and related methods to convert to and from byte offsets.
+    /// `Format::address_to_index()` and related methods to convert to and from data indexes.
     pub end_address: usize,
     /// The number of channels in the data.
     pub channels: usize,
-    /// The raw sample data.
-    pub bytes: Cow<'a, [u8]>,
+    /// The raw sample data. This is not necessarily a list of samples; for example, GameCube ADPCM
+    /// has packed samples which need to be decoded first.
+    pub data: Cow<'a, [F::Data]>,
 }
 
 impl<'a, F: FormatTag> Samples<'a, F> {
@@ -35,7 +36,7 @@ impl<'a, F: FormatTag> Samples<'a, F> {
 
 impl<F: RawFormat> Samples<'_, F> {
     /// Returns an iterator over the slices for each sample.
-    pub fn iter(&self) -> SampleIterator<'_> {
+    pub fn iter(&self) -> SampleIterator<'_, F> {
         SampleIterator::new(self)
     }
 }
@@ -43,11 +44,11 @@ impl<F: RawFormat> Samples<'_, F> {
 impl<'a, F: StaticFormat> Samples<'a, F> {
     /// Converts the samples into samples tagged with `AnyFormat`.
     pub fn into_any(self) -> Samples<'a, AnyFormat> {
-        Samples::<AnyFormat> {
+        Samples {
             params: AnyParams::new::<F>(self.params),
             end_address: self.end_address,
             channels: self.channels,
-            bytes: self.bytes,
+            data: AnyData::from_data(self.data),
         }
     }
 
@@ -72,13 +73,13 @@ impl<'a, F: StaticFormat> Samples<'a, F> {
         }
 
         // Our end address must be at the end of the sample data or else we cannot append
-        let end_byte = format.address_to_byte(self.end_address);
-        let next_byte = format.address_to_byte(self.end_address + 1);
-        if next_byte != self.bytes.len() || next_byte <= end_byte {
+        let end_index = format.address_to_index(self.end_address);
+        let next_index = format.address_to_index(self.end_address + 1);
+        if next_index != self.data.len() || next_index <= end_index {
             return Err(Error::NotFrameAligned);
         }
 
-        F::append(&mut self.bytes, &mut self.params, &other.bytes, &other.params)?;
+        F::append(&mut self.data, &mut self.params, &other.data, &other.params)?;
         self.end_address += other.end_address + 1;
         Ok(())
     }
@@ -96,7 +97,7 @@ impl<'a> Samples<'a, AnyFormat> {
                 params: *params,
                 end_address: self.end_address,
                 channels: self.channels,
-                bytes: self.bytes,
+                data: AnyData::to_data(self.data),
             }),
             Err(params) => {
                 self.params.inner = params;
@@ -192,27 +193,25 @@ impl<'s, F: StaticFormat> ReadSamples<'s> for CastSamples<'_, 's, F> {
 }
 
 /// An iterator over raw audio samples.
-pub struct SampleIterator<'a> {
-    bytes: &'a [u8],
+pub struct SampleIterator<'a, F: RawFormat> {
+    samples: &'a [F::Data],
     step: usize,
 }
 
-impl<'a> SampleIterator<'a> {
+impl<'a, F: RawFormat> SampleIterator<'a, F> {
     /// Creates a `SampleIterator` which iterates over the data in `samples`.
-    pub fn new<F: RawFormat>(samples: &'a Samples<'a, F>) -> Self {
-        let step = F::sample_to_byte(1, samples.channels);
-        assert!(step > 0);
-        let end = F::address_to_byte(samples.end_address + 1);
-        Self { bytes: &samples.bytes[..end], step }
+    pub fn new(samples: &'a Samples<'a, F>) -> Self {
+        let end = samples.end_address + 1;
+        Self { samples: &samples.data[..end], step: samples.channels }
     }
 }
 
-impl<'a> Iterator for SampleIterator<'a> {
-    type Item = &'a [u8];
+impl<'a, F: RawFormat> Iterator for SampleIterator<'a, F> {
+    type Item = &'a [F::Data];
     fn next(&mut self) -> Option<Self::Item> {
-        if self.bytes.len() >= self.step {
-            let sample = &self.bytes[..self.step];
-            self.bytes = &self.bytes[self.step..];
+        if self.samples.len() >= self.step {
+            let sample = &self.samples[..self.step];
+            self.samples = &self.samples[self.step..];
             Some(sample)
         } else {
             None
@@ -220,7 +219,7 @@ impl<'a> Iterator for SampleIterator<'a> {
     }
 }
 
-impl FusedIterator for SampleIterator<'_> {}
+impl<F: RawFormat> FusedIterator for SampleIterator<'_, F> {}
 
 /// Joins two raw mono streams into a single stereo stream.
 /// The streams must both come from the same source and have the same block sizes.
@@ -253,17 +252,19 @@ impl<F: RawFormat> ReadSamples<'static> for JoinChannels<'_, '_, F> {
         }
 
         // TODO: Optimize?
-        let mut merged = Vec::with_capacity(left.bytes.len() + right.bytes.len());
-        for (l, r) in left.iter().zip(right.iter()) {
-            merged.extend(l);
-            merged.extend(r);
+        let mut merged = Vec::with_capacity(left.data.len() + right.data.len());
+        let left_end = left.end_address + 1;
+        let right_end = right.end_address + 1;
+        for (&l, &r) in left.data.iter().take(left_end).zip(&right.data[..right_end]) {
+            merged.push(l);
+            merged.push(r);
         }
 
         Ok(Some(Samples {
             params: (),
-            end_address: F::byte_to_address(merged.len() - 1),
+            end_address: merged.len() - 1,
             channels: 2,
-            bytes: merged.into(),
+            data: merged.into(),
         }))
     }
 }
@@ -340,12 +341,12 @@ where
     is_right: bool,
 }
 
-impl<'s, F> ReadSamples<'s> for SplitChannelsReader<'_, 's, F>
+impl<F> ReadSamples<'static> for SplitChannelsReader<'_, '_, F>
 where
     F: RawFormat + 'static,
 {
     type Format = F;
-    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+    fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         // We assume here that the channels can be read from in any order and that we are only
         // expected to read as much as we need. Each channel must hold onto samples it hasn't
         // returned yet, and we also shouldn't read every sample from the inner reader all at once.
@@ -365,17 +366,17 @@ where
             return Err(Error::StreamNotStereo);
         }
 
-        let mut channel_bytes = Vec::with_capacity(samples.bytes.len() / 2);
+        let mut channel_data = Vec::with_capacity(samples.data.len() / 2);
         for sample in samples.iter() {
-            let (left_sample, right_sample) = sample.split_at(sample.len() / 2);
-            channel_bytes.extend(if self.is_right { right_sample } else { left_sample });
+            let (left_sample, right_sample) = (sample[0], sample[1]);
+            channel_data.push(if self.is_right { right_sample } else { left_sample });
         }
 
         Ok(Some(Samples::<'static, F> {
             params: (),
-            end_address: F::byte_to_address(channel_bytes.len() - 1),
+            end_address: channel_data.len() - 1,
             channels: 1,
-            bytes: channel_bytes.into(),
+            data: channel_data.into(),
         }))
     }
 }
@@ -386,18 +387,26 @@ mod tests {
     use crate::audio::adpcm::GcAdpcm;
     use crate::audio::format::{PcmS16Be, PcmS16Le};
     use std::convert::TryFrom;
+    use std::io::{Read, Write};
 
     #[derive(Clone)]
     struct PcmS16LeParams;
     impl StaticFormat for PcmS16LeParams {
+        type Data = i16;
         type Params = i32;
         fn format_static() -> Format {
             Format::PcmS16Le
         }
+        fn write_bytes(writer: impl Write, data: &[Self::Data]) -> Result<()> {
+            PcmS16Le::write_bytes(writer, data)
+        }
+        fn read_bytes(reader: impl Read) -> Result<Vec<Self::Data>> {
+            PcmS16Le::read_bytes(reader)
+        }
         fn append(
-            dest: &mut Cow<'_, [u8]>,
+            dest: &mut Cow<'_, [i16]>,
             _dest_params: &mut Self::Params,
-            src: &[u8],
+            src: &[i16],
             _src_params: &Self::Params,
         ) -> Result<()> {
             dest.to_mut().extend(src);
@@ -407,19 +416,14 @@ mod tests {
 
     #[test]
     fn test_any_without_context() {
-        let bytes: Vec<u8> = (0..16).collect();
-        let original = Samples::<PcmS16Le> {
-            params: (),
-            end_address: 7,
-            channels: 1,
-            bytes: Cow::Borrowed(&bytes),
-        };
+        let samples: Vec<i16> = (0..16).collect();
+        let original =
+            Samples::<PcmS16Le> { params: (), end_address: 7, channels: 1, data: samples.into() };
 
         let any = original.clone().into_any();
         assert_eq!(any.format(), Format::PcmS16Le);
         assert_eq!(any.end_address, original.end_address);
         assert_eq!(any.channels, original.channels);
-        assert_eq!(any.bytes, original.bytes);
 
         // The parameters are the same, but this should fail because the formats differ
         let casted = any.cast::<PcmS16Be>();
@@ -430,24 +434,24 @@ mod tests {
         assert_eq!(casted.format(), Format::PcmS16Le);
         assert_eq!(casted.end_address, original.end_address);
         assert_eq!(casted.channels, original.channels);
-        assert_eq!(casted.bytes, original.bytes);
+        assert_eq!(casted.data, original.data);
+        assert!(matches!(casted.data, Cow::Owned(_)));
     }
 
     #[test]
     fn test_any_with_params() {
-        let bytes: Vec<u8> = (0..16).collect();
+        let samples: Vec<i16> = (0..16).collect();
         let original = Samples::<PcmS16LeParams> {
             params: 123,
             end_address: 31,
             channels: 1,
-            bytes: Cow::Borrowed(&bytes),
+            data: Cow::Borrowed(&samples),
         };
 
         let any = original.clone().into_any();
         assert_eq!(any.format(), Format::PcmS16Le);
         assert_eq!(any.end_address, original.end_address);
         assert_eq!(any.channels, original.channels);
-        assert_eq!(any.bytes, original.bytes);
 
         // The formats are the same, but this should fail because the parameters differ
         let casted = any.cast::<PcmS16Le>();
@@ -459,18 +463,18 @@ mod tests {
         assert_eq!(casted.params, original.params);
         assert_eq!(casted.end_address, original.end_address);
         assert_eq!(casted.channels, original.channels);
-        assert_eq!(casted.bytes, original.bytes);
-        assert!(matches!(casted.bytes, Cow::Borrowed(_)));
+        assert_eq!(casted.data, original.data);
+        assert!(matches!(casted.data, Cow::Borrowed(_)));
     }
 
     #[test]
     fn test_cast_samples() -> Result<()> {
-        let bytes: Vec<u8> = (0..16).collect();
+        let samples: Vec<i16> = (0..16).collect();
         let original = Samples::<PcmS16Le> {
             params: (),
             end_address: 31,
             channels: 1,
-            bytes: Cow::Borrowed(&bytes),
+            data: Cow::Borrowed(&samples),
         };
 
         let any = original.clone().into_any().into_reader();
@@ -479,8 +483,8 @@ mod tests {
         assert_eq!(casted.format(), Format::PcmS16Le);
         assert_eq!(casted.end_address, original.end_address);
         assert_eq!(casted.channels, original.channels);
-        assert_eq!(casted.bytes, original.bytes);
-        assert!(matches!(casted.bytes, Cow::Borrowed(_)));
+        assert_eq!(casted.data, original.data);
+        assert!(matches!(casted.data, Cow::Borrowed(_)));
 
         // Casting to PcmS16Be should fail with UnsupportedFormat
         let any = original.clone().into_any().into_reader();
@@ -496,17 +500,17 @@ mod tests {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+            data: Cow::from((0..16).collect::<Vec<_>>()),
         };
         let samples2 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+            data: Cow::from((16..32).collect::<Vec<_>>()),
         };
         samples1.append(&samples2).unwrap();
         assert_eq!(samples1.end_address, 0x3f);
-        assert_eq!(samples1.bytes, (0..32).collect::<Vec<_>>());
+        assert_eq!(samples1.data, (0..32).collect::<Vec<_>>());
     }
 
     #[test]
@@ -515,17 +519,17 @@ mod tests {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+            data: Cow::from((0..16).collect::<Vec<_>>()),
         };
         let samples2 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((16..48).collect::<Vec<_>>()),
+            data: Cow::from((16..48).collect::<Vec<_>>()),
         };
         samples1.append(&samples2).unwrap();
         assert_eq!(samples1.end_address, 0x3f);
-        assert_eq!(samples1.bytes, (0..48).collect::<Vec<_>>());
+        assert_eq!(samples1.data, (0..48).collect::<Vec<_>>());
     }
 
     #[test]
@@ -534,13 +538,13 @@ mod tests {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+            data: Cow::from((0..16).collect::<Vec<_>>()),
         };
         let mut samples2 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
             channels: 2,
-            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+            data: Cow::from((16..32).collect::<Vec<_>>()),
         };
         assert!(matches!(samples1.append(&samples2), Err(Error::StreamNotMono)));
         assert!(matches!(samples2.append(&samples1), Err(Error::StreamNotStereo)));
@@ -552,13 +556,13 @@ mod tests {
             params: Default::default(),
             end_address: 0x1e,
             channels: 1,
-            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+            data: Cow::from((0..16).collect::<Vec<_>>()),
         };
         let samples2 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+            data: Cow::from((16..32).collect::<Vec<_>>()),
         };
         assert!(matches!(samples1.append(&samples2), Err(Error::NotFrameAligned)));
     }
@@ -569,63 +573,60 @@ mod tests {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((0..17).collect::<Vec<_>>()),
+            data: Cow::from((0..17).collect::<Vec<_>>()),
         };
         let samples2 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
             channels: 1,
-            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+            data: Cow::from((16..32).collect::<Vec<_>>()),
         };
         assert!(matches!(samples1.append(&samples2), Err(Error::NotFrameAligned)));
     }
 
     #[test]
     fn test_sample_iterator_mono() {
-        let bytes: Vec<u8> = (0..16).collect();
+        let data: Vec<i16> = (0..8).collect();
         let samples = Samples::<PcmS16Le> {
             params: (),
             end_address: 6,
             channels: 1,
-            bytes: Cow::Borrowed(&bytes),
+            data: Cow::Borrowed(&data),
         };
         let iterated: Vec<_> =
-            samples.iter().map(|s| <[u8; 2]>::try_from(s).ok().unwrap()).collect();
-        assert_eq!(
-            iterated,
-            &[[0x0, 0x1], [0x2, 0x3], [0x4, 0x5], [0x6, 0x7], [0x8, 0x9], [0xa, 0xb], [0xc, 0xd]]
-        );
+            samples.iter().map(|s| <[i16; 1]>::try_from(s).ok().unwrap()).collect();
+        assert_eq!(iterated, &[[0x0], [0x1], [0x2], [0x3], [0x4], [0x5], [0x6]]);
     }
 
     #[test]
     fn test_sample_iterator_stereo() {
-        let bytes: Vec<u8> = (0..16).collect();
+        let data: Vec<i16> = (0..8).collect();
         let samples = Samples::<PcmS16Le> {
             params: (),
-            end_address: 6,
+            end_address: 5,
             channels: 2,
-            bytes: Cow::Borrowed(&bytes),
+            data: Cow::Borrowed(&data),
         };
         let iterated: Vec<_> =
-            samples.iter().map(|s| <[u8; 4]>::try_from(s).ok().unwrap()).collect();
-        assert_eq!(iterated, &[[0x0, 0x1, 0x2, 0x3], [0x4, 0x5, 0x6, 0x7], [0x8, 0x9, 0xa, 0xb]]);
+            samples.iter().map(|s| <[i16; 2]>::try_from(s).ok().unwrap()).collect();
+        assert_eq!(iterated, &[[0x0, 0x1], [0x2, 0x3], [0x4, 0x5]]);
     }
 
     #[test]
     fn test_join_channels() -> Result<()> {
-        let lbytes: Vec<u8> = (0..32).step_by(2).collect();
-        let rbytes: Vec<u8> = (0..32).skip(1).step_by(2).collect();
+        let ldata: Vec<i16> = (0..16).step_by(2).collect();
+        let rdata: Vec<i16> = (0..16).skip(1).step_by(2).collect();
         let left = Samples::<PcmS16Le> {
             params: (),
             end_address: 6,
             channels: 1,
-            bytes: Cow::Borrowed(&lbytes),
+            data: Cow::Borrowed(&ldata),
         };
         let right = Samples::<PcmS16Le> {
             params: (),
             end_address: 6,
             channels: 1,
-            bytes: Cow::Borrowed(&rbytes),
+            data: Cow::Borrowed(&rdata),
         };
 
         let mut joiner = JoinChannels::new(left.into_reader(), right.into_reader());
@@ -633,11 +634,8 @@ mod tests {
         assert_eq!(joined.end_address, 13);
         assert_eq!(joined.channels, 2);
         assert_eq!(
-            joined.bytes.as_ref(),
-            &[
-                0x0, 0x2, 0x1, 0x3, 0x4, 0x6, 0x5, 0x7, 0x8, 0xa, 0x9, 0xb, 0xc, 0xe, 0xd, 0xf,
-                0x10, 0x12, 0x11, 0x13, 0x14, 0x16, 0x15, 0x17, 0x18, 0x1a, 0x19, 0x1b,
-            ]
+            joined.data.as_ref(),
+            &[0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd]
         );
 
         Ok(())
@@ -645,13 +643,9 @@ mod tests {
 
     #[test]
     fn test_split_channels() -> Result<()> {
-        let bytes: Vec<u8> = (0..16).collect();
-        let stereo = Samples::<PcmS16Le> {
-            params: (),
-            end_address: 5,
-            channels: 2,
-            bytes: Cow::Borrowed(&bytes),
-        };
+        let samples: Vec<i16> = (0..16).collect();
+        let stereo =
+            Samples::<PcmS16Le> { params: (), end_address: 13, channels: 2, data: samples.into() };
 
         let splitter = SplitChannels::new(stereo.into_reader());
         let mut left_split = splitter.left();
@@ -661,13 +655,13 @@ mod tests {
         assert!(left_split.read_samples()?.is_none());
         assert!(right_split.read_samples()?.is_none());
 
-        assert_eq!(left.end_address, 2);
+        assert_eq!(left.end_address, 6);
         assert_eq!(left.channels, 1);
-        assert_eq!(left.bytes.as_ref(), &[0x0, 0x1, 0x4, 0x5, 0x8, 0x9]);
+        assert_eq!(left.data.as_ref(), &[0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc]);
 
-        assert_eq!(right.end_address, 2);
+        assert_eq!(right.end_address, 6);
         assert_eq!(right.channels, 1);
-        assert_eq!(right.bytes.as_ref(), &[0x2, 0x3, 0x6, 0x7, 0xa, 0xb]);
+        assert_eq!(right.data.as_ref(), &[0x1, 0x3, 0x5, 0x7, 0x9, 0xb, 0xd]);
 
         Ok(())
     }
@@ -676,27 +670,27 @@ mod tests {
     fn test_coalesce_samples() {
         let samples1 = Samples::<PcmS16Le> {
             params: (),
-            end_address: 7,
+            end_address: 0xf,
             channels: 1,
-            bytes: Cow::from((0..16).collect::<Vec<_>>()),
+            data: Cow::from((0..16).collect::<Vec<_>>()),
         };
         let samples2 = Samples::<PcmS16Le> {
             params: (),
-            end_address: 7,
+            end_address: 0xf,
             channels: 1,
-            bytes: Cow::from((16..32).collect::<Vec<_>>()),
+            data: Cow::from((16..32).collect::<Vec<_>>()),
         };
         let samples3 = Samples::<PcmS16Le> {
             params: (),
-            end_address: 7,
+            end_address: 0xf,
             channels: 1,
-            bytes: Cow::from((32..48).collect::<Vec<_>>()),
+            data: Cow::from((32..48).collect::<Vec<_>>()),
         };
         let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3]);
         let coalesced = reader.coalesce_samples().unwrap();
-        assert_eq!(coalesced.end_address, 0x17);
+        assert_eq!(coalesced.end_address, 0x2f);
         assert_eq!(coalesced.channels, 1);
-        assert_eq!(coalesced.bytes, (0..48).collect::<Vec<_>>());
+        assert_eq!(coalesced.data, (0..48).collect::<Vec<_>>());
         assert!(matches!(reader.coalesce_samples(), Err(Error::NoSamplesAvailable)));
     }
 }

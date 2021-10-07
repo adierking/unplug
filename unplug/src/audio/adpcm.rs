@@ -18,9 +18,22 @@ const BYTES_PER_FRAME: usize = 8;
 #[derive(Copy, Clone)]
 pub struct GcAdpcm;
 impl StaticFormat for GcAdpcm {
+    type Data = u8;
     type Params = Info;
+
     fn format_static() -> Format {
         Format::GcAdpcm
+    }
+
+    fn write_bytes(mut writer: impl Write, data: &[Self::Data]) -> Result<()> {
+        writer.write_all(data)?;
+        Ok(())
+    }
+
+    fn read_bytes(mut reader: impl Read) -> Result<Vec<Self::Data>> {
+        let mut bytes = vec![];
+        reader.read_to_end(&mut bytes)?;
+        Ok(bytes)
     }
 
     fn append(

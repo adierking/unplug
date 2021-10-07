@@ -2,6 +2,7 @@ use anyhow::Result;
 use crc32fast::Hasher;
 use log::info;
 use std::io::BufReader;
+use unplug::audio::format::{PcmS16Le, StaticFormat};
 use unplug::audio::SoundBank;
 use unplug::common::ReadFrom;
 use unplug::dvd::OpenFile;
@@ -20,7 +21,9 @@ fn test_read_all_sounds() -> Result<()> {
         for sound in &ssm.sounds {
             let mut decoder = sound.decoder();
             while let Some(samples) = decoder.read_samples()? {
-                hasher.update(&samples.bytes);
+                let mut bytes = vec![];
+                PcmS16Le::write_bytes(&mut bytes, &samples.data)?;
+                hasher.update(&bytes);
             }
         }
         let actual = hasher.finalize();

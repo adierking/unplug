@@ -1,5 +1,5 @@
 use super::*;
-use crate::audio::format::PcmS16Le;
+use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Error, ReadSamples, Result, Samples};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use log::{error, trace};
@@ -192,19 +192,19 @@ impl ReadSamples<'static> for WavReader<'_> {
         if !self.data_available {
             return Ok(None);
         }
-        let mut data = vec![];
-        if let Some(mut chunk) = self.open_chunk(ID_DATA)? {
-            chunk.read_to_end(&mut data)?;
+        let mut samples = vec![];
+        if let Some(chunk) = self.open_chunk(ID_DATA)? {
+            samples = PcmS16Le::read_bytes(chunk)?;
         }
         self.data_available = false;
-        if data.is_empty() {
+        if samples.is_empty() {
             Ok(None)
         } else {
             Ok(Some(Samples::<Self::Format> {
                 params: (),
-                end_address: data.len() / 2 - 1,
+                end_address: samples.len() - 1,
                 channels: self.channels,
-                bytes: data.into(),
+                data: samples.into(),
             }))
         }
     }
@@ -214,22 +214,21 @@ impl ReadSamples<'static> for WavReader<'_> {
 mod tests {
     use super::*;
     use crate::test::{open_test_wav, TEST_WAV};
-    use crate::audio::format::{PcmS16Le, StaticFormat};
     use std::io::Cursor;
 
     #[test]
     fn test_read_wav() -> Result<()> {
-        let expected = open_test_wav().into_inner();
+        let expected = open_test_wav();
 
         let mut wav = WavReader::open(Cursor::new(TEST_WAV))?;
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
 
         let samples = wav.coalesce_samples()?;
-        assert_eq!(samples.end_address, expected.len() / 2 - 1);
+        assert_eq!(samples.end_address, expected.len() - 1);
         assert_eq!(samples.channels, 2);
-        let end = PcmS16Le::size_of(samples.end_address + 1);
-        assert!(&samples.bytes[..end] == expected);
+        let end = samples.end_address + 1;
+        assert!(samples.data[..end] == expected);
         Ok(())
     }
 }

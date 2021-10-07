@@ -147,7 +147,7 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
     /// Writes the `fmt ` chunk.
     fn write_format(&self, riff: &mut RiffWriter<impl Write + Seek>) -> Result<()> {
         riff.open_chunk(ID_FMT)?;
-        let block_align = PcmS16Le::sample_to_byte(1, self.channels);
+        let block_align = PcmS16Le::sample_to_index(1, self.channels) * 2;
         let avg_bytes_per_sec = self.sample_rate * (block_align as u32);
         let format = FormatChunk {
             format_tag: WAVE_FORMAT_PCM,
@@ -180,9 +180,9 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
         let mut num_samples = 0;
         if let Some(mut reader) = self.samples.take() {
             while let Some(samples) = reader.read_samples()? {
-                let end = PcmS16Le::address_to_byte(samples.end_address + 1);
-                riff.write_all(&samples.bytes[..end])?;
-                num_samples += PcmS16Le::byte_to_sample(end, self.channels);
+                let end = samples.end_address + 1;
+                PcmS16Le::write_bytes(&mut *riff, &samples.data[..end])?;
+                num_samples += PcmS16Le::index_to_sample(end, self.channels);
             }
         }
         riff.close_chunk(ID_DATA)?;
@@ -232,18 +232,18 @@ mod tests {
         b't', b'e', b's', b't', 0x00, 0x00, // software_name + padding
 
         b'd', b'a', b't', b'a', 0x10, 0x00, 0x00, 0x00,
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, // samples
-        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, // samples
+        0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, 0x00,
     ];
 
     #[test]
     fn test_write_wav() -> Result<()> {
-        let bytes: Vec<u8> = (0..16).collect();
+        let samples: Vec<i16> = (0..8).collect();
         let samples = Samples::<'_, PcmS16Le> {
             params: (),
             end_address: 0x7,
             channels: 2,
-            bytes: Cow::Borrowed(&bytes),
+            data: samples.into(),
         };
         let mut cursor = Cursor::new(Vec::<u8>::new());
         WavBuilder::new()

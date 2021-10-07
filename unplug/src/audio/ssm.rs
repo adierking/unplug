@@ -163,6 +163,8 @@ impl Channel {
         }
         match F::dsp_format() {
             DspFormat::Adpcm => {
+                let mut data = vec![];
+                F::write_bytes(&mut data, &samples.data)?;
                 Ok(Self {
                     address: AudioAddress {
                         looping: false, // TODO
@@ -173,7 +175,7 @@ impl Channel {
                     },
                     adpcm: F::adpcm_info(&samples.params),
                     loop_context: FrameContext::default(), // TODO
-                    data: samples.bytes.into_owned(),
+                    data,
                 })
             }
             _ => {
@@ -190,7 +192,7 @@ impl Channel {
         let start_address = format.frame_address(header.address.current_address as usize);
         let end_address = header.address.end_address as usize;
         let nibbles = end_address - start_address + 1;
-        let start_offset = format.address_to_byte(start_address);
+        let start_offset = format.address_to_index(start_address);
         let end_offset = align(start_offset + format.size_of(nibbles), FRAME_ALIGN as usize);
         let data = Vec::from(&bank_data[start_offset..end_offset]);
 
@@ -206,7 +208,7 @@ impl Channel {
     fn make_header(&self, data_offset: u64) -> ChannelHeader {
         let mut address = self.address;
         let format = Format::from(address.format);
-        let start_address = format.byte_to_address(data_offset as usize) as u32;
+        let start_address = format.index_to_address(data_offset as usize) as u32;
         address.loop_address += start_address;
         address.end_address += start_address;
         address.current_address += start_address;
@@ -414,7 +416,7 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
                     params: channel.adpcm,
                     end_address: channel.address.end_address as usize,
                     channels: 1,
-                    bytes: Cow::Borrowed(&channel.data),
+                    data: Cow::Borrowed(&channel.data),
                 }
                 .into_any(),
             )),
@@ -524,22 +526,25 @@ mod tests {
         assert_eq!(ssm.sounds.len(), 2);
 
         let samples0_0 = ssm.sounds[0].channels[0].reader().read_samples()?.unwrap();
+        let samples0_0: Samples<'_, GcAdpcm> = samples0_0.cast().ok().unwrap();
         assert_eq!(samples0_0.format(), Format::GcAdpcm);
         assert_eq!(samples0_0.end_address, 0x1f);
         assert_eq!(samples0_0.channels, 1);
-        assert_eq!(samples0_0.bytes, &SSM_BYTES[0xe0..0xf0]);
+        assert_eq!(samples0_0.data, &SSM_BYTES[0xe0..0xf0]);
 
         let samples1_0 = ssm.sounds[1].channels[0].reader().read_samples()?.unwrap();
+        let samples1_0: Samples<'_, GcAdpcm> = samples1_0.cast().ok().unwrap();
         assert_eq!(samples1_0.format(), Format::GcAdpcm);
         assert_eq!(samples1_0.end_address, 0x1f);
         assert_eq!(samples1_0.channels, 1);
-        assert_eq!(samples1_0.bytes, &SSM_BYTES[0xf0..0x100]);
+        assert_eq!(samples1_0.data, &SSM_BYTES[0xf0..0x100]);
 
         let samples1_1 = ssm.sounds[1].channels[1].reader().read_samples()?.unwrap();
+        let samples1_1: Samples<'_, GcAdpcm> = samples1_1.cast().ok().unwrap();
         assert_eq!(samples1_1.format(), Format::GcAdpcm);
         assert_eq!(samples1_1.end_address, 0x1f);
         assert_eq!(samples1_1.channels, 1);
-        assert_eq!(samples1_1.bytes, &SSM_BYTES[0x100..0x110]);
+        assert_eq!(samples1_1.data, &SSM_BYTES[0x100..0x110]);
         Ok(())
     }
 
@@ -609,7 +614,7 @@ mod tests {
             },
             end_address: test::TEST_WAV_DSP_END_ADDRESS,
             channels: 1,
-            bytes: Cow::from(test::TEST_WAV_LEFT_DSP),
+            data: Cow::from(test::TEST_WAV_LEFT_DSP),
         };
         let sound = Sound::from_mono(samples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
@@ -628,7 +633,7 @@ mod tests {
             },
             end_address: test::TEST_WAV_DSP_END_ADDRESS,
             channels: 1,
-            bytes: Cow::from(test::TEST_WAV_LEFT_DSP),
+            data: Cow::from(test::TEST_WAV_LEFT_DSP),
         };
         let rsamples = Samples::<GcAdpcm> {
             params: Info {
@@ -638,7 +643,7 @@ mod tests {
             },
             end_address: test::TEST_WAV_DSP_END_ADDRESS,
             channels: 1,
-            bytes: Cow::from(test::TEST_WAV_RIGHT_DSP),
+            data: Cow::from(test::TEST_WAV_RIGHT_DSP),
         };
         let sound = Sound::from_stereo(lsamples.into_reader(), rsamples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
@@ -650,12 +655,12 @@ mod tests {
 
     #[test]
     fn test_sound_from_pcm() -> Result<()> {
-        let bytes = test::open_test_wav().into_inner();
+        let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le> {
             params: (),
-            end_address: bytes.len() / 2 - 1,
+            end_address: data.len() - 1,
             channels: 2,
-            bytes: bytes.into(),
+            data: data.into(),
         };
         let sound = Sound::from_pcm(samples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);

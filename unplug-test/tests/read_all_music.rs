@@ -3,6 +3,7 @@ use crc32fast::Hasher;
 use log::info;
 use std::io::BufReader;
 use unplug::audio::dsp::DspFormat;
+use unplug::audio::format::{PcmS16Le, StaticFormat};
 use unplug::audio::hps::{Block, HpsStream};
 use unplug::common::ReadFrom;
 use unplug::data::music::{Music, MusicDefinition};
@@ -27,7 +28,9 @@ fn decode_and_crc32(hps: &HpsStream) -> Result<u32> {
     let mut hasher = Hasher::new();
     let mut decoder = hps.decoder();
     while let Some(samples) = decoder.read_samples()? {
-        hasher.update(&samples.bytes);
+        let mut bytes = vec![];
+        PcmS16Le::write_bytes(&mut bytes, &samples.data)?;
+        hasher.update(&bytes);
     }
     Ok(hasher.finalize())
 }

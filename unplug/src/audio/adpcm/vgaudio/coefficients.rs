@@ -323,17 +323,16 @@ mod test {
     use super::*;
     use crate::audio::Result;
     use crate::test;
-    use byteorder::{ReadBytesExt, LE};
 
     #[test]
     fn test_calculate_coefficients() -> Result<()> {
-        let mut reader = test::open_test_wav();
-        let num_samples = reader.get_ref().len() / 4;
+        let data = test::open_test_wav();
+        let num_samples = data.len() / 2;
         let mut left_samples = Vec::with_capacity(num_samples);
         let mut right_samples = Vec::with_capacity(num_samples);
-        for _ in 0..num_samples {
-            left_samples.push(reader.read_i16::<LE>()?);
-            right_samples.push(reader.read_i16::<LE>()?);
+        for samples in data.chunks(2) {
+            left_samples.push(samples[0]);
+            right_samples.push(samples[1]);
         }
         let left_coefficients = calculate_coefficients(&left_samples);
         let right_coefficients = calculate_coefficients(&right_samples);

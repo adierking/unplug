@@ -2,7 +2,6 @@ use super::vgaudio::{calculate_coefficients, encode};
 use super::{GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::PcmS16Le;
 use crate::audio::{Error, ReadSamples, Result, Samples};
-use byteorder::{ByteOrder, LE};
 use log::{debug, trace};
 
 /// Encodes raw PCM data into GameCube ADPCM format.
@@ -51,10 +50,7 @@ impl<'r, 's> Encoder<'r, 's> {
             if samples.channels != 1 {
                 return Err(Error::StreamNotMono);
             }
-            self.pcm.reserve(samples.bytes.len() / 2);
-            for sample in samples.iter() {
-                self.pcm.push(LE::read_i16(sample));
-            }
+            self.pcm.extend(&*samples.data);
         }
         if self.pcm.is_empty() {
             return Ok(());
@@ -94,7 +90,7 @@ impl ReadSamples<'static> for Encoder<'_, '_> {
             params: initial_state,
             end_address: bytes.len() * 2 - num_samples % 2 - 1,
             channels: 1,
-            bytes: bytes.into(),
+            data: bytes.into(),
         }))
     }
 }
@@ -109,12 +105,12 @@ mod tests {
 
     #[test]
     fn test_encode() -> Result<()> {
-        let bytes = test::open_test_wav().into_inner();
-        let samples = Samples::<PcmS16Le> {
+        let data = test::open_test_wav();
+        let samples = Samples::<'_, PcmS16Le> {
             params: (),
-            end_address: bytes.len() / 2 - 1,
+            end_address: data.len() - 1,
             channels: 2,
-            bytes: bytes.into(),
+            data: data.into(),
         };
 
         let splitter = SplitChannels::new(samples.into_reader());
@@ -132,7 +128,7 @@ mod tests {
         );
         assert_eq!(left.end_address, 0x30af8);
         assert_eq!(left.channels, 1);
-        assert!(left.bytes == test::TEST_WAV_LEFT_DSP);
+        assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
         assert_eq!(
             right.params.context,
@@ -140,19 +136,19 @@ mod tests {
         );
         assert_eq!(right.end_address, 0x30af8);
         assert_eq!(right.channels, 1);
-        assert!(right.bytes == test::TEST_WAV_RIGHT_DSP);
+        assert!(right.data == test::TEST_WAV_RIGHT_DSP);
 
         Ok(())
     }
 
     #[test]
     fn test_encode_in_blocks() -> Result<()> {
-        let bytes = test::open_test_wav().into_inner();
-        let samples = Samples::<PcmS16Le> {
+        let data = test::open_test_wav();
+        let samples = Samples::<'_, PcmS16Le> {
             params: (),
-            end_address: bytes.len() / 2 - 1,
+            end_address: data.len() - 1,
             channels: 2,
-            bytes: bytes.into(),
+            data: data.into(),
         };
 
         let splitter = SplitChannels::new(samples.into_reader());
@@ -171,13 +167,13 @@ mod tests {
 
         let mut offset = 0;
         for (i, block) in blocks.iter().enumerate() {
-            let end_offset = offset + block.bytes.len();
+            let end_offset = offset + block.data.len();
             assert_eq!(block.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
-            assert_eq!(block.params.context.predictor_and_scale, block.bytes[0] as u16);
+            assert_eq!(block.params.context.predictor_and_scale, block.data[0] as u16);
             assert_eq!(block.params.context.last_samples, EXPECTED_LAST_SAMPLES[i]);
             assert_eq!(block.end_address, EXPECTED_END_ADDRESSES[i]);
-            assert_eq!(block.bytes, &test::TEST_WAV_LEFT_DSP[offset..end_offset]);
-            assert_eq!(block.bytes.len(), EXPECTED_BLOCK_LENGTHS[i]);
+            assert_eq!(block.data, &test::TEST_WAV_LEFT_DSP[offset..end_offset]);
+            assert_eq!(block.data.len(), EXPECTED_BLOCK_LENGTHS[i]);
             offset = end_offset;
         }
 

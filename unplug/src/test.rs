@@ -1,3 +1,4 @@
+use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::block::{Ip, WriteIp};
 use byteorder::{ByteOrder, WriteBytesExt, LE};
@@ -78,8 +79,8 @@ impl WriteIp for Cursor<Vec<u8>> {
     }
 }
 
-/// Returns a cursor over the sample data in the test WAV. The data is stereo PCMS16LE.
-pub(crate) fn open_test_wav() -> Cursor<&'static [u8]> {
+/// Returns the sample data from the test WAV. The data is stereo PCMS16LE.
+pub(crate) fn open_test_wav() -> Vec<i16> {
     let data_header = &TEST_WAV[TEST_WAV_DATA_OFFSET..(TEST_WAV_DATA_OFFSET + 8)];
     let data_id = LE::read_u32(&data_header[0..4]);
     let data_size = LE::read_u32(&data_header[4..8]) as usize;
@@ -87,5 +88,5 @@ pub(crate) fn open_test_wav() -> Cursor<&'static [u8]> {
 
     let samples_start = TEST_WAV_DATA_OFFSET + 8;
     let samples_end = samples_start + data_size;
-    Cursor::new(&TEST_WAV[samples_start..samples_end])
+    PcmS16Le::read_bytes(&TEST_WAV[samples_start..samples_end]).unwrap()
 }

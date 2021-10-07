@@ -580,10 +580,9 @@ impl BlockChannel {
 
     /// Creates a `BlockChannel` with sample data from `samples`.
     fn from_samples<F: DspFormatTag>(samples: Samples<'_, F>) -> Result<Self> {
-        Ok(Self {
-            initial_context: F::adpcm_info(&samples.params).context,
-            data: samples.bytes.into_owned(),
-        })
+        let mut data = vec![];
+        F::write_bytes(&mut data, &samples.data)?;
+        Ok(Self { initial_context: F::adpcm_info(&samples.params).context, data })
     }
 }
 
@@ -613,7 +612,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                     },
                     end_address: block.end_address as usize,
                     channels: 1,
-                    bytes: Cow::from(&block.channels[self.channel].data),
+                    data: Cow::from(&block.channels[self.channel].data),
                 }
                 .into_any(),
             )),
@@ -919,12 +918,12 @@ mod tests {
 
     #[test]
     fn test_hps_from_pcm_mono() -> Result<()> {
-        let bytes = test::open_test_wav().into_inner();
-        let samples = Samples::<PcmS16Le> {
+        let data = test::open_test_wav();
+        let samples = Samples::<'_, PcmS16Le> {
             params: (),
-            end_address: bytes.len() / 2 - 1,
+            end_address: data.len() - 1,
             channels: 2,
-            bytes: bytes.into(),
+            data: data.into(),
         };
 
         let splitter = SplitChannels::new(samples.into_reader());
@@ -960,12 +959,12 @@ mod tests {
 
     #[test]
     fn test_hps_from_pcm_stereo() -> Result<()> {
-        let bytes = test::open_test_wav().into_inner();
-        let samples = Samples::<PcmS16Le> {
+        let data = test::open_test_wav();
+        let samples = Samples::<'_, PcmS16Le> {
             params: (),
-            end_address: bytes.len() / 2 - 1,
+            end_address: data.len() - 1,
             channels: 2,
-            bytes: bytes.into(),
+            data: data.into(),
         };
 
         let hps = HpsStream::from_pcm(samples.into_reader(), 44100)?;

@@ -317,16 +317,11 @@ impl DataSection {
             // Correct the data offset and addresses in the INFO section so that we don't include
             // data that never gets decoded. This is not strictly necessary, but it is more
             // technically correct and ensures we don't read data we don't need.
-            let start_aligned = if format == Format::GcAdpcm {
-                // Align to a frame boundary
-                start_address & !0xf
-            } else {
-                start_address
-            };
-            start_address -= start_aligned;
-            end_address -= start_aligned;
+            let start_aligned = format.frame_address(start_address as usize);
+            start_address -= start_aligned as u32;
+            end_address -= start_aligned as u32;
             let start_offset =
-                channel.data_offset as usize + format.address_to_byte(start_aligned as usize);
+                channel.data_offset as usize + format.address_to_index(start_aligned);
             let size = format.size_of((end_address + 1) as usize);
 
             section.seek(SeekFrom::Start(start_offset as u64))?;
@@ -438,11 +433,11 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         let format = self.format;
         match format {
             Format::GcAdpcm => Ok(Some(
-                Samples::<GcAdpcm> {
+                Samples::<'a, GcAdpcm> {
                     params: channel.adpcm,
                     end_address: self.end_address as usize,
                     channels: 1,
-                    bytes: Cow::Borrowed(&channel.data),
+                    data: Cow::Borrowed(&channel.data),
                 }
                 .into_any(),
             )),
@@ -569,16 +564,18 @@ mod tests {
         assert_eq!(channel1.data, &RWAV_BYTES[0x118..0x128]);
 
         let samples0 = rwav.reader(0).read_samples()?.unwrap();
+        let samples0: Samples<'_, GcAdpcm> = samples0.cast().ok().unwrap();
         assert_eq!(samples0.format(), Format::GcAdpcm);
         assert_eq!(samples0.end_address, 0x1f);
         assert_eq!(samples0.channels, 1);
-        assert_eq!(samples0.bytes, &RWAV_BYTES[0x108..0x118]);
+        assert_eq!(samples0.data, &RWAV_BYTES[0x108..0x118]);
 
         let samples1 = rwav.reader(1).read_samples()?.unwrap();
+        let samples1: Samples<'_, GcAdpcm> = samples1.cast().ok().unwrap();
         assert_eq!(samples1.format(), Format::GcAdpcm);
         assert_eq!(samples1.end_address, 0x1f);
         assert_eq!(samples1.channels, 1);
-        assert_eq!(samples1.bytes, &RWAV_BYTES[0x118..0x128]);
+        assert_eq!(samples1.data, &RWAV_BYTES[0x118..0x128]);
         Ok(())
     }
 }

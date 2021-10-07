@@ -2,7 +2,6 @@ use super::{GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::PcmS16Le;
 use crate::audio::{ReadSamples, Result, Samples};
 use crate::common::clamp_i16;
-use byteorder::{WriteBytesExt, LE};
 use log::trace;
 
 /// Decodes GameCube ADPCM samples into PCM.
@@ -33,7 +32,7 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
         let mut context = info.context;
         trace!(
             "Decoding ADPCM block: len={:#x} ps={:#x} s0={:#x} s1={:#x}",
-            encoded.bytes.len(),
+            encoded.data.len(),
             context.predictor_and_scale,
             context.last_samples[0],
             context.last_samples[1],
@@ -43,23 +42,23 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
         let start_address = 2; // Skip the first predictor/scale byte
         let num_bytes = (encoded.end_address - start_address) / 2 + 1;
         let estimated = (num_bytes + BYTES_PER_FRAME - 1) / BYTES_PER_FRAME * SAMPLES_PER_FRAME;
-        let mut decoded: Vec<u8> = Vec::with_capacity(estimated * 2);
+        let mut decoded: Vec<i16> = Vec::with_capacity(estimated);
 
         let mut address = start_address;
         while address <= encoded.end_address {
             if address & 0xf == 0 {
                 // Frames are aligned on 16-byte boundaries and each begins with a new
                 // predictor_and_scale byte
-                context.predictor_and_scale = encoded.bytes[address / 2] as u16;
+                context.predictor_and_scale = encoded.data[address / 2] as u16;
                 address += 2;
                 continue;
             }
 
             // Read next nibble
             let mut val = if address % 2 == 0 {
-                (encoded.bytes[address / 2] >> 4) as i32
+                (encoded.data[address / 2] >> 4) as i32
             } else {
-                (encoded.bytes[address / 2] & 0xf) as i32
+                (encoded.data[address / 2] & 0xf) as i32
             };
             if val >= 8 {
                 val -= 16; // Sign-extend
@@ -74,15 +73,15 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
             let predicted = (c0 * s0 + c1 * s1 + 0x400) >> 11;
             let pcm = clamp_i16(predicted + val * context.scale());
 
-            decoded.write_i16::<LE>(pcm)?;
+            decoded.push(pcm);
             context.push_sample(pcm);
         }
 
         Ok(Some(Samples {
             params: (),
-            end_address: decoded.len() / 2 - 1,
+            end_address: decoded.len() - 1,
             channels: 1,
-            bytes: decoded.into(),
+            data: decoded.into(),
         }))
     }
 }
@@ -91,6 +90,7 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
 mod tests {
     use super::*;
     use crate::audio::adpcm::{Coefficients, FrameContext, Info};
+    use crate::audio::format::StaticFormat;
 
     /// 128-sample sine wave encoded to GameCube ADPCM
     const SINE_ENCODED: &[u8] = &[
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_decode_sine() -> Result<()> {
-        let encoded = Samples::<GcAdpcm> {
+        let encoded = Samples::<'_, GcAdpcm> {
             params: Info {
                 coefficients: SINE_COEFFICIENTS,
                 gain: 0,
@@ -139,12 +139,14 @@ mod tests {
             },
             end_address: 0x93,
             channels: 1,
-            bytes: SINE_ENCODED.into(),
+            data: SINE_ENCODED.into(),
         };
 
         let mut decoder = Decoder::new(encoded.into_reader());
         let decoded = decoder.read_samples()?.unwrap();
-        assert_eq!(decoded.bytes, SINE_DECODED);
+
+        let expected = PcmS16Le::read_bytes(SINE_DECODED)?;
+        assert_eq!(decoded.data, expected);
 
         Ok(())
     }
