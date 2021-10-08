@@ -180,8 +180,8 @@ impl Channel {
             }
             _ => {
                 // TODO
-                error!("Sample format not supported yet: {:?}", F::format_static());
-                Err(Error::UnsupportedFormat(F::format_static()))
+                error!("Sample format not supported yet: {:?}", F::format());
+                Err(Error::UnsupportedFormat(F::format()))
             }
         }
     }

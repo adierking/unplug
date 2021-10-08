@@ -90,7 +90,7 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
 mod tests {
     use super::*;
     use crate::audio::adpcm::{Coefficients, FrameContext, Info};
-    use crate::audio::format::StaticFormat;
+    use crate::audio::format::ReadWriteBytes;
 
     /// 128-sample sine wave encoded to GameCube ADPCM
     const SINE_ENCODED: &[u8] = &[

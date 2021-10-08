@@ -3,7 +3,7 @@ use crc32fast::Hasher;
 use log::info;
 use std::io::BufReader;
 use unplug::audio::dsp::DspFormat;
-use unplug::audio::format::{PcmS16Le, StaticFormat};
+use unplug::audio::format::{PcmS16Le, ReadWriteBytes};
 use unplug::audio::hps::{Block, HpsStream};
 use unplug::common::ReadFrom;
 use unplug::data::music::{Music, MusicDefinition};

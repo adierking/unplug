@@ -1,5 +1,5 @@
 use super::adpcm::{self, GcAdpcm};
-use super::format::{PcmS16Be, PcmS8, StaticFormat};
+use super::format::{ExtendSamples, PcmS16Be, PcmS8, ReadWriteBytes, StaticFormat};
 use super::{Error, Format, Result};
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
@@ -55,7 +55,7 @@ impl From<DspFormat> for Format {
 }
 
 /// Trait for a format tag which represents a GameCube DSP format.
-pub trait DspFormatTag: StaticFormat {
+pub trait DspFormatTag: StaticFormat + ReadWriteBytes + ExtendSamples {
     /// Returns the corresponding `DspFormat` value.
     fn dsp_format() -> DspFormat;
 

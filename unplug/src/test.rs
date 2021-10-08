@@ -1,4 +1,4 @@
-use crate::audio::format::{PcmS16Le, StaticFormat};
+use crate::audio::format::{PcmS16Le, ReadWriteBytes};
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::block::{Ip, WriteIp};
 use byteorder::{ByteOrder, WriteBytesExt, LE};

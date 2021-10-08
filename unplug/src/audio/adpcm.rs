@@ -5,7 +5,7 @@ mod vgaudio;
 pub use decode::*;
 pub use encode::*;
 
-use super::format::StaticFormat;
+use super::format::{ExtendSamples, FormatTag, ReadWriteBytes, StaticFormat};
 use super::{Error, Format, Result};
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
@@ -17,26 +17,20 @@ const BYTES_PER_FRAME: usize = 8;
 
 #[derive(Copy, Clone)]
 pub struct GcAdpcm;
-impl StaticFormat for GcAdpcm {
+
+impl FormatTag for GcAdpcm {
     type Data = u8;
     type Params = Info;
+}
 
-    fn format_static() -> Format {
+impl StaticFormat for GcAdpcm {
+    fn format() -> Format {
         Format::GcAdpcm
     }
+}
 
-    fn write_bytes(mut writer: impl Write, data: &[Self::Data]) -> Result<()> {
-        writer.write_all(data)?;
-        Ok(())
-    }
-
-    fn read_bytes(mut reader: impl Read) -> Result<Vec<Self::Data>> {
-        let mut bytes = vec![];
-        reader.read_to_end(&mut bytes)?;
-        Ok(bytes)
-    }
-
-    fn append(
+impl ExtendSamples for GcAdpcm {
+    fn extend_samples(
         dest: &mut Cow<'_, [u8]>,
         dest_params: &mut Self::Params,
         src: &[u8],
@@ -46,6 +40,19 @@ impl StaticFormat for GcAdpcm {
             return Err(Error::DifferentCoefficients);
         }
         dest.to_mut().extend(src);
+        Ok(())
+    }
+}
+
+impl ReadWriteBytes for GcAdpcm {
+    fn read_bytes(mut reader: impl Read) -> Result<Vec<Self::Data>> {
+        let mut bytes = vec![];
+        reader.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    }
+
+    fn write_bytes(mut writer: impl Write, data: &[Self::Data]) -> Result<()> {
+        writer.write_all(data)?;
         Ok(())
     }
 }
@@ -165,13 +172,13 @@ mod tests {
     }
 
     #[test]
-    fn test_append_samples() {
+    fn test_extend_samples() {
         let mut dest = Cow::from(vec![0x17, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8]);
         let mut dest_params = make_info([0; 16], 0x17);
         let src: Vec<u8> = vec![0x27, 0x1];
         let src_params = make_info([1; 16], 0x27);
         assert!(matches!(
-            GcAdpcm::append(&mut dest, &mut dest_params, &src, &src_params),
+            GcAdpcm::extend_samples(&mut dest, &mut dest_params, &src, &src_params),
             Err(Error::DifferentCoefficients)
         ));
 
@@ -179,7 +186,7 @@ mod tests {
         let mut dest_params = make_info([0; 16], 0x17);
         let src: Vec<u8> = vec![0x27, 0x1];
         let src_params = make_info([0; 16], 0x27);
-        assert!(GcAdpcm::append(&mut dest, &mut dest_params, &src, &src_params).is_ok());
+        assert!(GcAdpcm::extend_samples(&mut dest, &mut dest_params, &src, &src_params).is_ok());
         assert_eq!(&*dest, &[0x17, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x27, 0x1]);
     }
 }

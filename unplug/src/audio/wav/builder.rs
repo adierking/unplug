@@ -1,5 +1,5 @@
 use super::*;
-use crate::audio::format::{PcmS16Le, RawFormat, StaticFormat};
+use crate::audio::format::{PcmFormat, PcmS16Le, ReadWriteBytes};
 use crate::audio::{ReadSamples, Result};
 use crate::common::WriteTo;
 use byteorder::{WriteBytesExt, LE};

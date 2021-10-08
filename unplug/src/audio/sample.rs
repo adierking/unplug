@@ -1,4 +1,6 @@
-use super::format::{AnyData, AnyFormat, AnyParams, Format, FormatTag, RawFormat, StaticFormat};
+use super::format::{
+    AnyFormat, AnyParams, DynamicFormat, ExtendSamples, Format, FormatTag, PcmFormat, ToFromAny,
+};
 use super::{Error, Result};
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -23,39 +25,43 @@ pub struct Samples<'a, F: FormatTag> {
 }
 
 impl<'a, F: FormatTag> Samples<'a, F> {
-    /// Gets the format of the sample data.
-    pub fn format(&self) -> Format {
-        F::format(&self.params)
-    }
-
     /// Moves the samples into a reader which returns them.
     pub fn into_reader(self) -> ReadSampleList<'a, F> {
         ReadSampleList::new(vec![self])
     }
 }
 
-impl<F: RawFormat> Samples<'_, F> {
-    /// Returns an iterator over the slices for each sample.
+impl<F: DynamicFormat> Samples<'_, F> {
+    /// Gets the format of the sample data.
+    pub fn format(&self) -> Format {
+        F::format_from_params(&self.params)
+    }
+}
+
+impl<F: PcmFormat> Samples<'_, F> {
+    /// Returns an iterator over the samples.
     pub fn iter(&self) -> SampleIterator<'_, F> {
         SampleIterator::new(self)
     }
 }
 
-impl<'a, F: StaticFormat> Samples<'a, F> {
+impl<'a, F: ToFromAny> Samples<'a, F> {
     /// Converts the samples into samples tagged with `AnyFormat`.
     pub fn into_any(self) -> Samples<'a, AnyFormat> {
         Samples {
             params: AnyParams::new::<F>(self.params),
             end_address: self.end_address,
             channels: self.channels,
-            data: AnyData::from_data(self.data),
+            data: F::into_any(self.data),
         }
     }
+}
 
+impl<F: ExtendSamples> Samples<'_, F> {
     /// Appends the samples in `other` to `self`. Both sample objects must be aligned on a frame
     /// boundary and share compatible codec parameters. On success, the sample data will become
     /// owned by `self`.
-    pub fn append(&mut self, other: &Samples<'_, F>) -> Result<()> {
+    pub fn extend(&mut self, other: &Samples<'_, F>) -> Result<()> {
         let format = self.format();
         assert_eq!(format, other.format());
 
@@ -79,7 +85,7 @@ impl<'a, F: StaticFormat> Samples<'a, F> {
             return Err(Error::NotFrameAligned);
         }
 
-        F::append(&mut self.data, &mut self.params, &other.data, &other.params)?;
+        F::extend_samples(&mut self.data, &mut self.params, &other.data, &other.params)?;
         self.end_address += other.end_address + 1;
         Ok(())
     }
@@ -88,8 +94,8 @@ impl<'a, F: StaticFormat> Samples<'a, F> {
 impl<'a> Samples<'a, AnyFormat> {
     /// Casts the `AnyFormat` sample into a concrete sample type. If the samples do not have the
     /// expected format, this will fail and the samples will be returned back uncasted.
-    pub fn cast<F: StaticFormat>(mut self) -> SampleCastResult<'a, F> {
-        if self.format() != F::format_static() {
+    pub fn cast<F: ToFromAny>(mut self) -> SampleCastResult<'a, F> {
+        if self.format() != F::format() {
             return Err(self);
         }
         match self.params.inner.downcast() {
@@ -97,7 +103,7 @@ impl<'a> Samples<'a, AnyFormat> {
                 params: *params,
                 end_address: self.end_address,
                 channels: self.channels,
-                data: AnyData::to_data(self.data),
+                data: F::from_any(self.data),
             }),
             Err(params) => {
                 self.params.inner = params;
@@ -117,17 +123,17 @@ pub trait ReadSamples<'a> {
     /// Reads the next block of samples. If there are no more samples, returns `Ok(None)`.
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>>;
 
-    /// Reads all available samples and appends them into a single `Samples` object. The samples
-    /// must have a static format and follow the rules for `Samples::append()`. If no samples are
-    /// available, `Err(NoSamplesAvailable)` is returned.
+    /// Reads all available samples and concatenates them into a single `Samples` object. The
+    /// samples must have a static format and follow the rules for `Samples::append()`. If no
+    /// samples are available, `Err(NoSamplesAvailable)` is returned.
     fn coalesce_samples(&mut self) -> Result<Samples<'a, Self::Format>>
     where
-        Self::Format: StaticFormat,
+        Self::Format: ExtendSamples,
     {
         let mut result: Option<Samples<'a, Self::Format>> = None;
         while let Some(samples) = self.read_samples()? {
             match &mut result {
-                Some(a) => a.append(&samples)?,
+                Some(a) => a.extend(&samples)?,
                 None => result = Some(samples),
             }
         }
@@ -166,19 +172,19 @@ impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
 
 /// A wrapper which casts audio samples to a particular type as they are read.
 /// If a sample block is not of the expected type, this will stop with `Error::UnsupportedFormat`.
-pub struct CastSamples<'r, 's, F: StaticFormat> {
+pub struct CastSamples<'r, 's, F: ToFromAny> {
     inner: Box<dyn ReadSamples<'s, Format = AnyFormat> + 'r>,
     _marker: PhantomData<&'s F>,
 }
 
-impl<'r, 's, F: StaticFormat> CastSamples<'r, 's, F> {
+impl<'r, 's, F: ToFromAny> CastSamples<'r, 's, F> {
     /// Creates a new `CastSamples` which casts samples from `inner`.
     pub fn new(inner: impl ReadSamples<'s, Format = AnyFormat> + 'r) -> Self {
         Self { inner: Box::from(inner), _marker: PhantomData }
     }
 }
 
-impl<'s, F: StaticFormat> ReadSamples<'s> for CastSamples<'_, 's, F> {
+impl<'s, F: ToFromAny> ReadSamples<'s> for CastSamples<'_, 's, F> {
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         match self.inner.read_samples() {
@@ -192,13 +198,13 @@ impl<'s, F: StaticFormat> ReadSamples<'s> for CastSamples<'_, 's, F> {
     }
 }
 
-/// An iterator over raw audio samples.
-pub struct SampleIterator<'a, F: RawFormat> {
+/// An iterator over PCM audio samples. Items are slices containing the samples from left to right.
+pub struct SampleIterator<'a, F: PcmFormat> {
     samples: &'a [F::Data],
     step: usize,
 }
 
-impl<'a, F: RawFormat> SampleIterator<'a, F> {
+impl<'a, F: PcmFormat> SampleIterator<'a, F> {
     /// Creates a `SampleIterator` which iterates over the data in `samples`.
     pub fn new(samples: &'a Samples<'a, F>) -> Self {
         let end = samples.end_address + 1;
@@ -206,7 +212,7 @@ impl<'a, F: RawFormat> SampleIterator<'a, F> {
     }
 }
 
-impl<'a, F: RawFormat> Iterator for SampleIterator<'a, F> {
+impl<'a, F: PcmFormat> Iterator for SampleIterator<'a, F> {
     type Item = &'a [F::Data];
     fn next(&mut self) -> Option<Self::Item> {
         if self.samples.len() >= self.step {
@@ -219,17 +225,17 @@ impl<'a, F: RawFormat> Iterator for SampleIterator<'a, F> {
     }
 }
 
-impl<F: RawFormat> FusedIterator for SampleIterator<'_, F> {}
+impl<F: PcmFormat> FusedIterator for SampleIterator<'_, F> {}
 
 /// Joins two raw mono streams into a single stereo stream.
 /// The streams must both come from the same source and have the same block sizes.
-pub struct JoinChannels<'r, 's, F: RawFormat> {
+pub struct JoinChannels<'r, 's, F: PcmFormat> {
     left: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     right: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     _marker: PhantomData<F>,
 }
 
-impl<'r, 's, F: RawFormat> JoinChannels<'r, 's, F> {
+impl<'r, 's, F: PcmFormat> JoinChannels<'r, 's, F> {
     pub fn new<R>(left: R, right: R) -> Self
     where
         R: ReadSamples<'s, Format = F> + 'r,
@@ -238,7 +244,7 @@ impl<'r, 's, F: RawFormat> JoinChannels<'r, 's, F> {
     }
 }
 
-impl<F: RawFormat> ReadSamples<'static> for JoinChannels<'_, '_, F> {
+impl<F: PcmFormat> ReadSamples<'static> for JoinChannels<'_, '_, F> {
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         let left = self.left.read_samples()?;
@@ -272,14 +278,14 @@ impl<F: RawFormat> ReadSamples<'static> for JoinChannels<'_, '_, F> {
 /// Splits a stereo stream into two mono streams.
 pub struct SplitChannels<'r, 's, F>
 where
-    F: RawFormat + 'static,
+    F: PcmFormat + 'static,
 {
     state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
 }
 
 impl<'r, 's, F> SplitChannels<'r, 's, F>
 where
-    F: RawFormat + 'static,
+    F: PcmFormat + 'static,
 {
     /// Creates a new `SplitChannels` which reads samples from `reader`.
     pub fn new(reader: impl ReadSamples<'s, Format = F> + 'r) -> Self {
@@ -300,7 +306,7 @@ where
 /// State for `SplitChannels` which is shared across readers.
 struct SplitChannelsState<'r, 's, F>
 where
-    F: RawFormat + 'static,
+    F: PcmFormat + 'static,
 {
     /// The inner reader to read new samples from.
     reader: Box<dyn ReadSamples<'s, Format = F> + 'r>,
@@ -312,7 +318,7 @@ where
 
 impl<'r, 's, F> SplitChannelsState<'r, 's, F>
 where
-    F: RawFormat + 'static,
+    F: PcmFormat + 'static,
 {
     /// Creates a new `SplitChannelsState` wrapping `reader`.
     fn new(reader: Box<dyn ReadSamples<'s, Format = F> + 'r>) -> Arc<Mutex<Self>> {
@@ -335,7 +341,7 @@ where
 /// `ReadSamples` implementation for a single channel returned by a `SplitChannels`.
 pub struct SplitChannelsReader<'r, 's, F>
 where
-    F: RawFormat + 'static,
+    F: PcmFormat + 'static,
 {
     state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
     is_right: bool,
@@ -343,7 +349,7 @@ where
 
 impl<F> ReadSamples<'static> for SplitChannelsReader<'_, '_, F>
 where
-    F: RawFormat + 'static,
+    F: PcmFormat + 'static,
 {
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
@@ -385,25 +391,22 @@ where
 mod tests {
     use super::*;
     use crate::audio::adpcm::GcAdpcm;
-    use crate::audio::format::{PcmS16Be, PcmS16Le};
+    use crate::audio::format::{PcmS16Be, PcmS16Le, StaticFormat};
     use std::convert::TryFrom;
-    use std::io::{Read, Write};
 
     #[derive(Clone)]
     struct PcmS16LeParams;
-    impl StaticFormat for PcmS16LeParams {
+    impl FormatTag for PcmS16LeParams {
         type Data = i16;
         type Params = i32;
-        fn format_static() -> Format {
+    }
+    impl StaticFormat for PcmS16LeParams {
+        fn format() -> Format {
             Format::PcmS16Le
         }
-        fn write_bytes(writer: impl Write, data: &[Self::Data]) -> Result<()> {
-            PcmS16Le::write_bytes(writer, data)
-        }
-        fn read_bytes(reader: impl Read) -> Result<Vec<Self::Data>> {
-            PcmS16Le::read_bytes(reader)
-        }
-        fn append(
+    }
+    impl ExtendSamples for PcmS16LeParams {
+        fn extend_samples(
             dest: &mut Cow<'_, [i16]>,
             _dest_params: &mut Self::Params,
             src: &[i16],
@@ -495,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn test_append_samples() {
+    fn test_extend_samples() {
         let mut samples1 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
@@ -508,13 +511,13 @@ mod tests {
             channels: 1,
             data: Cow::from((16..32).collect::<Vec<_>>()),
         };
-        samples1.append(&samples2).unwrap();
+        samples1.extend(&samples2).unwrap();
         assert_eq!(samples1.end_address, 0x3f);
         assert_eq!(samples1.data, (0..32).collect::<Vec<_>>());
     }
 
     #[test]
-    fn test_append_samples_partial() {
+    fn test_extend_samples_partial() {
         let mut samples1 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
@@ -527,13 +530,13 @@ mod tests {
             channels: 1,
             data: Cow::from((16..48).collect::<Vec<_>>()),
         };
-        samples1.append(&samples2).unwrap();
+        samples1.extend(&samples2).unwrap();
         assert_eq!(samples1.end_address, 0x3f);
         assert_eq!(samples1.data, (0..48).collect::<Vec<_>>());
     }
 
     #[test]
-    fn test_append_samples_channel_mismatch() {
+    fn test_extend_samples_channel_mismatch() {
         let mut samples1 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
@@ -546,12 +549,12 @@ mod tests {
             channels: 2,
             data: Cow::from((16..32).collect::<Vec<_>>()),
         };
-        assert!(matches!(samples1.append(&samples2), Err(Error::StreamNotMono)));
-        assert!(matches!(samples2.append(&samples1), Err(Error::StreamNotStereo)));
+        assert!(matches!(samples1.extend(&samples2), Err(Error::StreamNotMono)));
+        assert!(matches!(samples2.extend(&samples1), Err(Error::StreamNotStereo)));
     }
 
     #[test]
-    fn test_append_samples_unaligned() {
+    fn test_extend_samples_unaligned() {
         let mut samples1 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1e,
@@ -564,11 +567,11 @@ mod tests {
             channels: 1,
             data: Cow::from((16..32).collect::<Vec<_>>()),
         };
-        assert!(matches!(samples1.append(&samples2), Err(Error::NotFrameAligned)));
+        assert!(matches!(samples1.extend(&samples2), Err(Error::NotFrameAligned)));
     }
 
     #[test]
-    fn test_append_samples_before_end() {
+    fn test_extend_samples_before_end() {
         let mut samples1 = Samples::<GcAdpcm> {
             params: Default::default(),
             end_address: 0x1f,
@@ -581,7 +584,7 @@ mod tests {
             channels: 1,
             data: Cow::from((16..32).collect::<Vec<_>>()),
         };
-        assert!(matches!(samples1.append(&samples2), Err(Error::NotFrameAligned)));
+        assert!(matches!(samples1.extend(&samples2), Err(Error::NotFrameAligned)));
     }
 
     #[test]

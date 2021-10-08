@@ -1,5 +1,5 @@
 use super::*;
-use crate::audio::format::{PcmS16Le, StaticFormat};
+use crate::audio::format::{PcmS16Le, ReadWriteBytes};
 use crate::audio::{Error, ReadSamples, Result, Samples};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use log::{error, trace};
