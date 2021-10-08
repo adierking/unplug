@@ -237,9 +237,7 @@ mod tests {
 
     #[test]
     fn test_write_wav() -> Result<()> {
-        let samples: Vec<i16> = (0..8).collect();
-        let samples =
-            Samples::<'_, PcmS16Le> { channels: 2, len: 8, data: samples.into(), params: () };
+        let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2);
         let mut cursor = Cursor::new(Vec::<u8>::new());
         WavBuilder::new()
             .channels(2)

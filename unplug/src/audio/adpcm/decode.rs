@@ -77,7 +77,7 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
             context.push_sample(pcm);
         }
         debug_assert!(estimated >= decoded.len());
-        Ok(Some(Samples { channels: 1, len: decoded.len(), data: decoded.into(), params: () }))
+        Ok(Some(Samples::from_pcm(decoded, 1)))
     }
 }
 

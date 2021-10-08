@@ -200,12 +200,7 @@ impl ReadSamples<'static> for WavReader<'_> {
         if samples.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(Samples::<Self::Format> {
-                channels: self.channels,
-                len: samples.len(),
-                data: samples.into(),
-                params: (),
-            }))
+            Ok(Some(Samples::from_pcm(samples, self.channels)))
         }
     }
 }

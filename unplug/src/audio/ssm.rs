@@ -656,8 +656,7 @@ mod tests {
     #[test]
     fn test_sound_from_pcm() -> Result<()> {
         let data = test::open_test_wav();
-        let samples =
-            Samples::<PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
         let sound = Sound::from_pcm(samples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 2);

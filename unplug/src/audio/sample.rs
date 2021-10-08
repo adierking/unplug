@@ -91,6 +91,14 @@ impl<F: ExtendSamples> Samples<'_, F> {
     }
 }
 
+impl<'a, F: PcmFormat> Samples<'a, F> {
+    /// Creates a sample block from PCM data.
+    pub fn from_pcm(data: impl Into<Cow<'a, [F::Data]>>, channels: usize) -> Self {
+        let data = data.into();
+        Self { channels, len: data.len(), data, params: () }
+    }
+}
+
 impl<'a> Samples<'a, AnyFormat> {
     /// Casts the `AnyFormat` sample into a concrete sample type. If the samples do not have the
     /// expected format, this will fail and the samples will be returned back uncasted.
@@ -262,8 +270,7 @@ impl<F: PcmFormat> ReadSamples<'static> for JoinChannels<'_, '_, F> {
             merged.push(l);
             merged.push(r);
         }
-
-        Ok(Some(Samples { channels: 2, len: merged.len(), data: merged.into(), params: () }))
+        Ok(Some(Samples::from_pcm(merged, 2)))
     }
 }
 
@@ -369,13 +376,7 @@ where
             let (left_sample, right_sample) = (sample[0], sample[1]);
             channel_data.push(if self.is_right { right_sample } else { left_sample });
         }
-
-        Ok(Some(Samples::<'static, F> {
-            channels: 1,
-            len: channel_data.len(),
-            data: channel_data.into(),
-            params: (),
-        }))
+        Ok(Some(Samples::from_pcm(channel_data, 1)))
     }
 }
 
@@ -412,8 +413,7 @@ mod tests {
     #[test]
     fn test_any_without_context() {
         let samples: Vec<i16> = (0..16).collect();
-        let original =
-            Samples::<PcmS16Le> { channels: 1, len: 8, data: samples.into(), params: () };
+        let original = Samples::<PcmS16Le>::from_pcm(samples, 1);
 
         let any = original.clone().into_any();
         assert_eq!(any.format(), Format::PcmS16Le);
@@ -465,8 +465,7 @@ mod tests {
     #[test]
     fn test_cast_samples() -> Result<()> {
         let samples: Vec<i16> = (0..16).collect();
-        let original =
-            Samples::<PcmS16Le> { channels: 1, len: 16, data: Cow::Borrowed(&samples), params: () };
+        let original = Samples::<PcmS16Le>::from_pcm(&samples, 1);
 
         let any = original.clone().into_any().into_reader();
         let mut caster = CastSamples::new(any);
@@ -642,24 +641,9 @@ mod tests {
 
     #[test]
     fn test_coalesce_samples() {
-        let samples1 = Samples::<PcmS16Le> {
-            channels: 1,
-            len: 16,
-            data: Cow::from((0..16).collect::<Vec<_>>()),
-            params: (),
-        };
-        let samples2 = Samples::<PcmS16Le> {
-            channels: 1,
-            len: 16,
-            data: Cow::from((16..32).collect::<Vec<_>>()),
-            params: (),
-        };
-        let samples3 = Samples::<PcmS16Le> {
-            channels: 1,
-            len: 16,
-            data: Cow::from((32..48).collect::<Vec<_>>()),
-            params: (),
-        };
+        let samples1 = Samples::<PcmS16Le>::from_pcm((0..16).collect::<Vec<_>>(), 1);
+        let samples2 = Samples::<PcmS16Le>::from_pcm((16..32).collect::<Vec<_>>(), 1);
+        let samples3 = Samples::<PcmS16Le>::from_pcm((32..48).collect::<Vec<_>>(), 1);
         let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3]);
         let coalesced = reader.coalesce_samples().unwrap();
         assert_eq!(coalesced.len, 48);

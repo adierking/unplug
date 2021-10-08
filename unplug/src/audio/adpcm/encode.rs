@@ -106,8 +106,7 @@ mod tests {
     #[test]
     fn test_encode() -> Result<()> {
         let data = test::open_test_wav();
-        let samples =
-            Samples::<'_, PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
         let splitter = SplitChannels::new(samples.into_reader());
         let mut left_encoder = Encoder::new(splitter.left());
@@ -140,8 +139,7 @@ mod tests {
     #[test]
     fn test_encode_in_blocks() -> Result<()> {
         let data = test::open_test_wav();
-        let samples =
-            Samples::<'_, PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
         let splitter = SplitChannels::new(samples.into_reader());
         let block_size = 0x8000;
