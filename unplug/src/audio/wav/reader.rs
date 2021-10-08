@@ -201,10 +201,10 @@ impl ReadSamples<'static> for WavReader<'_> {
             Ok(None)
         } else {
             Ok(Some(Samples::<Self::Format> {
-                params: (),
-                end_address: samples.len() - 1,
                 channels: self.channels,
+                len: samples.len(),
                 data: samples.into(),
+                params: (),
             }))
         }
     }
@@ -225,10 +225,9 @@ mod tests {
         assert_eq!(wav.channels, 2);
 
         let samples = wav.coalesce_samples()?;
-        assert_eq!(samples.end_address, expected.len() - 1);
+        assert_eq!(samples.len, expected.len());
         assert_eq!(samples.channels, 2);
-        let end = samples.end_address + 1;
-        assert!(samples.data[..end] == expected);
+        assert!(samples.data[..samples.len] == expected);
         Ok(())
     }
 }

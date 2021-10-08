@@ -460,7 +460,7 @@ impl Block {
             return Err(Error::StreamNotMono);
         }
         let mut channels = ArrayVec::new();
-        let end_address = samples.end_address as u32;
+        let end_address = (samples.len - 1) as u32;
         channels.push(BlockChannel::from_samples(samples)?);
         Ok(Self { end_address, channels, markers: vec![] })
     }
@@ -470,11 +470,11 @@ impl Block {
         if left.channels != 1 || right.channels != 1 {
             return Err(Error::StreamNotMono);
         }
-        if left.end_address != right.end_address {
+        if left.len != right.len {
             return Err(Error::DifferentChannelSizes);
         }
         let mut channels = ArrayVec::new();
-        let end_address = left.end_address as u32;
+        let end_address = (left.len - 1) as u32;
         channels.push(BlockChannel::from_samples(left)?);
         channels.push(BlockChannel::from_samples(right)?);
         Ok(Self { end_address, channels, markers: vec![] })
@@ -605,14 +605,14 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         match self.format {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
+                    channels: 1,
+                    len: block.end_address as usize + 1,
+                    data: Cow::from(&block.channels[self.channel].data),
                     params: adpcm::Info {
                         coefficients: self.adpcm.coefficients,
                         gain: self.adpcm.gain,
                         context: block.channels[self.channel].initial_context,
                     },
-                    end_address: block.end_address as usize,
-                    channels: 1,
-                    data: Cow::from(&block.channels[self.channel].data),
                 }
                 .into_any(),
             )),
@@ -919,12 +919,8 @@ mod tests {
     #[test]
     fn test_hps_from_pcm_mono() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<'_, PcmS16Le> {
-            params: (),
-            end_address: data.len() - 1,
-            channels: 2,
-            data: data.into(),
-        };
+        let samples =
+            Samples::<'_, PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
 
         let splitter = SplitChannels::new(samples.into_reader());
         let hps = HpsStream::from_pcm(splitter.left(), 44100)?;
@@ -960,12 +956,8 @@ mod tests {
     #[test]
     fn test_hps_from_pcm_stereo() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<'_, PcmS16Le> {
-            params: (),
-            end_address: data.len() - 1,
-            channels: 2,
-            data: data.into(),
-        };
+        let samples =
+            Samples::<'_, PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
 
         let hps = HpsStream::from_pcm(samples.into_reader(), 44100)?;
         assert_eq!(hps.sample_rate, 44100);

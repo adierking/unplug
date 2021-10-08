@@ -180,9 +180,8 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
         let mut num_samples = 0;
         if let Some(mut reader) = self.samples.take() {
             while let Some(samples) = reader.read_samples()? {
-                let end = samples.end_address + 1;
-                PcmS16Le::write_bytes(&mut *riff, &samples.data[..end])?;
-                num_samples += PcmS16Le::index_to_sample(end, self.channels);
+                PcmS16Le::write_bytes(&mut *riff, &samples.data[..samples.len])?;
+                num_samples += PcmS16Le::index_to_sample(samples.len, self.channels);
             }
         }
         riff.close_chunk(ID_DATA)?;
@@ -239,12 +238,8 @@ mod tests {
     #[test]
     fn test_write_wav() -> Result<()> {
         let samples: Vec<i16> = (0..8).collect();
-        let samples = Samples::<'_, PcmS16Le> {
-            params: (),
-            end_address: 0x7,
-            channels: 2,
-            data: samples.into(),
-        };
+        let samples =
+            Samples::<'_, PcmS16Le> { channels: 2, len: 8, data: samples.into(), params: () };
         let mut cursor = Cursor::new(Vec::<u8>::new());
         WavBuilder::new()
             .channels(2)

@@ -170,7 +170,7 @@ impl Channel {
                         looping: false, // TODO
                         format: DspFormat::Adpcm,
                         loop_address: 2,
-                        end_address: samples.end_address as u32,
+                        end_address: (samples.len - 1) as u32,
                         current_address: 2,
                     },
                     adpcm: F::adpcm_info(&samples.params),
@@ -413,10 +413,10 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
         match format {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
-                    params: channel.adpcm,
-                    end_address: channel.address.end_address as usize,
                     channels: 1,
+                    len: channel.address.end_address as usize + 1,
                     data: Cow::Borrowed(&channel.data),
+                    params: channel.adpcm,
                 }
                 .into_any(),
             )),
@@ -528,21 +528,21 @@ mod tests {
         let samples0_0 = ssm.sounds[0].channels[0].reader().read_samples()?.unwrap();
         let samples0_0: Samples<'_, GcAdpcm> = samples0_0.cast().ok().unwrap();
         assert_eq!(samples0_0.format(), Format::GcAdpcm);
-        assert_eq!(samples0_0.end_address, 0x1f);
+        assert_eq!(samples0_0.len, 32);
         assert_eq!(samples0_0.channels, 1);
         assert_eq!(samples0_0.data, &SSM_BYTES[0xe0..0xf0]);
 
         let samples1_0 = ssm.sounds[1].channels[0].reader().read_samples()?.unwrap();
         let samples1_0: Samples<'_, GcAdpcm> = samples1_0.cast().ok().unwrap();
         assert_eq!(samples1_0.format(), Format::GcAdpcm);
-        assert_eq!(samples1_0.end_address, 0x1f);
+        assert_eq!(samples1_0.len, 32);
         assert_eq!(samples1_0.channels, 1);
         assert_eq!(samples1_0.data, &SSM_BYTES[0xf0..0x100]);
 
         let samples1_1 = ssm.sounds[1].channels[1].reader().read_samples()?.unwrap();
         let samples1_1: Samples<'_, GcAdpcm> = samples1_1.cast().ok().unwrap();
         assert_eq!(samples1_1.format(), Format::GcAdpcm);
-        assert_eq!(samples1_1.end_address, 0x1f);
+        assert_eq!(samples1_1.len, 32);
         assert_eq!(samples1_1.channels, 1);
         assert_eq!(samples1_1.data, &SSM_BYTES[0x100..0x110]);
         Ok(())
@@ -607,14 +607,14 @@ mod tests {
     #[test]
     fn test_sound_from_mono() -> Result<()> {
         let samples = Samples::<GcAdpcm> {
+            channels: 1,
+            len: test::TEST_WAV_DSP_END_ADDRESS + 1,
+            data: Cow::from(test::TEST_WAV_LEFT_DSP),
             params: Info {
                 coefficients: test::TEST_WAV_LEFT_COEFFICIENTS,
                 gain: 0,
                 context: FrameContext::default(),
             },
-            end_address: test::TEST_WAV_DSP_END_ADDRESS,
-            channels: 1,
-            data: Cow::from(test::TEST_WAV_LEFT_DSP),
         };
         let sound = Sound::from_mono(samples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
@@ -626,24 +626,24 @@ mod tests {
     #[test]
     fn test_sound_from_stereo() -> Result<()> {
         let lsamples = Samples::<GcAdpcm> {
+            channels: 1,
+            len: test::TEST_WAV_DSP_END_ADDRESS + 1,
+            data: Cow::from(test::TEST_WAV_LEFT_DSP),
             params: Info {
                 coefficients: test::TEST_WAV_LEFT_COEFFICIENTS,
                 gain: 0,
                 context: FrameContext::default(),
             },
-            end_address: test::TEST_WAV_DSP_END_ADDRESS,
-            channels: 1,
-            data: Cow::from(test::TEST_WAV_LEFT_DSP),
         };
         let rsamples = Samples::<GcAdpcm> {
+            channels: 1,
+            len: test::TEST_WAV_DSP_END_ADDRESS + 1,
+            data: Cow::from(test::TEST_WAV_RIGHT_DSP),
             params: Info {
                 coefficients: test::TEST_WAV_RIGHT_COEFFICIENTS,
                 gain: 0,
                 context: FrameContext::default(),
             },
-            end_address: test::TEST_WAV_DSP_END_ADDRESS,
-            channels: 1,
-            data: Cow::from(test::TEST_WAV_RIGHT_DSP),
         };
         let sound = Sound::from_stereo(lsamples.into_reader(), rsamples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
@@ -656,12 +656,8 @@ mod tests {
     #[test]
     fn test_sound_from_pcm() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le> {
-            params: (),
-            end_address: data.len() - 1,
-            channels: 2,
-            data: data.into(),
-        };
+        let samples =
+            Samples::<PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
         let sound = Sound::from_pcm(samples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 2);

@@ -39,13 +39,13 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
         );
 
         // Estimate the final sample count based on how many bytes there are
-        let start_address = 2; // Skip the first predictor/scale byte
-        let num_bytes = (encoded.end_address - start_address) / 2 + 1;
+        let num_bytes = (encoded.len + 1) / 2;
         let estimated = (num_bytes + BYTES_PER_FRAME - 1) / BYTES_PER_FRAME * SAMPLES_PER_FRAME;
         let mut decoded: Vec<i16> = Vec::with_capacity(estimated);
 
-        let mut address = start_address;
-        while address <= encoded.end_address {
+        let mut address = 2; // Skip the first predictor/scale byte
+        let end_address = encoded.len - 1;
+        while address <= end_address {
             if address & 0xf == 0 {
                 // Frames are aligned on 16-byte boundaries and each begins with a new
                 // predictor_and_scale byte
@@ -76,13 +76,8 @@ impl ReadSamples<'static> for Decoder<'_, '_> {
             decoded.push(pcm);
             context.push_sample(pcm);
         }
-
-        Ok(Some(Samples {
-            params: (),
-            end_address: decoded.len() - 1,
-            channels: 1,
-            data: decoded.into(),
-        }))
+        debug_assert!(estimated >= decoded.len());
+        Ok(Some(Samples { channels: 1, len: decoded.len(), data: decoded.into(), params: () }))
     }
 }
 
@@ -132,14 +127,14 @@ mod tests {
     #[test]
     fn test_decode_sine() -> Result<()> {
         let encoded = Samples::<'_, GcAdpcm> {
+            channels: 1,
+            len: 0x94,
+            data: SINE_ENCODED.into(),
             params: Info {
                 coefficients: SINE_COEFFICIENTS,
                 gain: 0,
                 context: FrameContext { predictor_and_scale: 0x18, last_samples: [0, 0] },
             },
-            end_address: 0x93,
-            channels: 1,
-            data: SINE_ENCODED.into(),
         };
 
         let mut decoder = Decoder::new(encoded.into_reader());

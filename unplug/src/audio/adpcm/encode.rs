@@ -87,10 +87,10 @@ impl ReadSamples<'static> for Encoder<'_, '_> {
         self.pos = end;
 
         Ok(Some(Samples {
-            params: initial_state,
-            end_address: bytes.len() * 2 - num_samples % 2 - 1,
             channels: 1,
+            len: bytes.len() * 2 - num_samples % 2,
             data: bytes.into(),
+            params: initial_state,
         }))
     }
 }
@@ -106,12 +106,8 @@ mod tests {
     #[test]
     fn test_encode() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<'_, PcmS16Le> {
-            params: (),
-            end_address: data.len() - 1,
-            channels: 2,
-            data: data.into(),
-        };
+        let samples =
+            Samples::<'_, PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
 
         let splitter = SplitChannels::new(samples.into_reader());
         let mut left_encoder = Encoder::new(splitter.left());
@@ -126,7 +122,7 @@ mod tests {
             left.params.context,
             FrameContext { predictor_and_scale: 0x75, last_samples: [0; 2] }
         );
-        assert_eq!(left.end_address, 0x30af8);
+        assert_eq!(left.len, 0x30af9);
         assert_eq!(left.channels, 1);
         assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
@@ -134,7 +130,7 @@ mod tests {
             right.params.context,
             FrameContext { predictor_and_scale: 0x16, last_samples: [0; 2] }
         );
-        assert_eq!(right.end_address, 0x30af8);
+        assert_eq!(right.len, 0x30af9);
         assert_eq!(right.channels, 1);
         assert!(right.data == test::TEST_WAV_RIGHT_DSP);
 
@@ -144,12 +140,8 @@ mod tests {
     #[test]
     fn test_encode_in_blocks() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<'_, PcmS16Le> {
-            params: (),
-            end_address: data.len() - 1,
-            channels: 2,
-            data: data.into(),
-        };
+        let samples =
+            Samples::<'_, PcmS16Le> { channels: 2, len: data.len(), data: data.into(), params: () };
 
         let splitter = SplitChannels::new(samples.into_reader());
         let block_size = 0x8000;
@@ -171,7 +163,7 @@ mod tests {
             assert_eq!(block.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
             assert_eq!(block.params.context.predictor_and_scale, block.data[0] as u16);
             assert_eq!(block.params.context.last_samples, EXPECTED_LAST_SAMPLES[i]);
-            assert_eq!(block.end_address, EXPECTED_END_ADDRESSES[i]);
+            assert_eq!(block.len, EXPECTED_END_ADDRESSES[i] + 1);
             assert_eq!(block.data, &test::TEST_WAV_LEFT_DSP[offset..end_offset]);
             assert_eq!(block.data.len(), EXPECTED_BLOCK_LENGTHS[i]);
             offset = end_offset;
