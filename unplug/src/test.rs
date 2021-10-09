@@ -24,6 +24,14 @@ pub(crate) const TEST_WAV_RIGHT_DSP: &[u8] = include_bytes!("test/ionpack-dsp-ri
 pub(crate) const TEST_WAV_RIGHT_COEFFICIENTS: [i16; 16] =
     [49, 1829, 3542, -1781, 784, 1112, 3720, -1707, 374, 1605, 3677, -1738, 1630, 371, 3840, -1800];
 
+/// `ionpack.wav` as PCMS32LE
+pub(crate) const TEST_WAV_S32: &[u8] = include_bytes!("test/ionpack-s32.wav");
+pub(crate) const TEST_WAV_S32_DATA_OFFSET: usize = 0x66;
+
+/// `ionpack.wav` as PCMF32LE
+pub(crate) const TEST_WAV_F32: &[u8] = include_bytes!("test/ionpack-f32.wav");
+pub(crate) const TEST_WAV_F32_DATA_OFFSET: usize = 0x72;
+
 /// Asserts that writing a value to a byte array and reading it back produces the same value.
 #[macro_export]
 macro_rules! assert_write_and_read {
