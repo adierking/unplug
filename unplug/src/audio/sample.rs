@@ -1,6 +1,4 @@
-use super::format::{
-    AnyFormat, AnyParams, DynamicFormat, ExtendSamples, Format, FormatTag, PcmFormat, ToFromAny,
-};
+use super::format::*;
 use super::{Error, Result};
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -52,10 +50,45 @@ impl<'a, F: ToFromAny> Samples<'a, F> {
             channels: self.channels,
             len: self.len,
             data: F::into_any(self.data),
-            params: AnyParams::new::<F>(self.params),
+            params: F::wrap_params(self.params),
         }
     }
 }
+
+impl<'a> Samples<'a, AnyFormat> {
+    /// Casts the `AnyFormat` sample into a concrete sample type. If the samples do not have the
+    /// expected format, this will fail and the samples will be returned back uncasted.
+    pub fn try_cast<F: StaticFormat + ToFromAny>(mut self) -> SampleCastResult<'a, F> {
+        if self.format() != F::format() {
+            return Err(self);
+        }
+        match F::unwrap_params(self.params) {
+            Ok(params) => Ok(Samples::<F> {
+                channels: self.channels,
+                len: self.len,
+                data: F::from_any(self.data),
+                params,
+            }),
+            Err(params) => {
+                self.params = params;
+                Err(self)
+            }
+        }
+    }
+
+    /// Casts the `AnyFormat` sample into a concrete sample type.
+    /// ***Panics*** if the cast fails.
+    pub fn cast<F: StaticFormat + ToFromAny>(self) -> Samples<'a, F> {
+        match self.try_cast() {
+            Ok(s) => s,
+            Err(s) => {
+                panic!("invalid sample cast: cannot cast {:?} to {:?}", s.format(), F::format())
+            }
+        }
+    }
+}
+
+type SampleCastResult<'a, F> = std::result::Result<Samples<'a, F>, Samples<'a, AnyFormat>>;
 
 impl<F: ExtendSamples> Samples<'_, F> {
     /// Appends the samples in `other` to `self`. Both sample objects must be aligned on a frame
@@ -98,30 +131,6 @@ impl<'a, F: PcmFormat> Samples<'a, F> {
         Self { channels, len: data.len(), data, params: () }
     }
 }
-
-impl<'a> Samples<'a, AnyFormat> {
-    /// Casts the `AnyFormat` sample into a concrete sample type. If the samples do not have the
-    /// expected format, this will fail and the samples will be returned back uncasted.
-    pub fn cast<F: ToFromAny>(mut self) -> SampleCastResult<'a, F> {
-        if self.format() != F::format() {
-            return Err(self);
-        }
-        match self.params.inner.downcast() {
-            Ok(params) => Ok(Samples::<F> {
-                channels: self.channels,
-                len: self.len,
-                data: F::from_any(self.data),
-                params: *params,
-            }),
-            Err(params) => {
-                self.params.inner = params;
-                Err(self)
-            }
-        }
-    }
-}
-
-type SampleCastResult<'a, F> = std::result::Result<Samples<'a, F>, Samples<'a, AnyFormat>>;
 
 /// Trait for an audio source.
 pub trait ReadSamples<'a> {
@@ -178,25 +187,49 @@ impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
     }
 }
 
-/// A wrapper which casts audio samples to a particular type as they are read.
-/// If a sample block is not of the expected type, this will stop with `Error::UnsupportedFormat`.
-pub struct CastSamples<'r, 's, F: ToFromAny> {
-    inner: Box<dyn ReadSamples<'s, Format = AnyFormat> + 'r>,
-    _marker: PhantomData<&'s F>,
+/// An adaptor which casts samples into `AnyFormat` as they are read.
+#[allow(single_use_lifetimes)]
+pub struct AnySamples<'r, 's, F: ToFromAny> {
+    inner: Box<dyn ReadSamples<'s, Format = F> + 'r>,
 }
 
-impl<'r, 's, F: ToFromAny> CastSamples<'r, 's, F> {
+impl<'r, 's, F: ToFromAny> AnySamples<'r, 's, F> {
+    pub fn new(inner: impl ReadSamples<'s, Format = F> + 'r) -> Self {
+        Self { inner: Box::from(inner) }
+    }
+}
+
+impl<'s, F: ToFromAny> ReadSamples<'s> for AnySamples<'_, 's, F> {
+    type Format = AnyFormat;
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+        match self.inner.read_samples() {
+            Ok(Some(s)) => Ok(Some(s.into_any())),
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+}
+
+/// An adaptor which casts audio samples to a particular type as they are read. If a sample block
+/// is not of the expected type, this will stop with `Error::UnsupportedFormat`.
+#[allow(single_use_lifetimes)]
+pub struct CastSamples<'r, 's, F: StaticFormat + ToFromAny> {
+    inner: Box<dyn ReadSamples<'s, Format = AnyFormat> + 'r>,
+    _marker: PhantomData<F>,
+}
+
+impl<'r, 's, F: StaticFormat + ToFromAny> CastSamples<'r, 's, F> {
     /// Creates a new `CastSamples` which casts samples from `inner`.
     pub fn new(inner: impl ReadSamples<'s, Format = AnyFormat> + 'r) -> Self {
         Self { inner: Box::from(inner), _marker: PhantomData }
     }
 }
 
-impl<'s, F: ToFromAny> ReadSamples<'s> for CastSamples<'_, 's, F> {
+impl<'s, F: StaticFormat + ToFromAny> ReadSamples<'s> for CastSamples<'_, 's, F> {
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         match self.inner.read_samples() {
-            Ok(Some(samples)) => match samples.cast() {
+            Ok(Some(samples)) => match samples.try_cast() {
                 Ok(samples) => Ok(Some(samples)),
                 Err(samples) => Err(Error::UnsupportedFormat(samples.format())),
             },
@@ -421,11 +454,11 @@ mod tests {
         assert_eq!(any.len, original.len);
 
         // The parameters are the same, but this should fail because the formats differ
-        let casted = any.cast::<PcmS16Be>();
+        let casted = any.try_cast::<PcmS16Be>();
         assert!(casted.is_err());
         let any = casted.err().unwrap();
 
-        let casted = any.cast::<PcmS16Le>().ok().unwrap();
+        let casted = any.cast::<PcmS16Le>();
         assert_eq!(casted.format(), Format::PcmS16Le);
         assert_eq!(casted.channels, original.channels);
         assert_eq!(casted.len, original.len);
@@ -449,17 +482,47 @@ mod tests {
         assert_eq!(any.len, original.len);
 
         // The formats are the same, but this should fail because the parameters differ
-        let casted = any.cast::<PcmS16Le>();
+        let casted = any.try_cast::<PcmS16Le>();
         assert!(casted.is_err());
         let any = casted.err().unwrap();
 
-        let casted = any.cast::<PcmS16LeParams>().ok().unwrap();
+        let casted = any.cast::<PcmS16LeParams>();
         assert_eq!(casted.format(), Format::PcmS16Le);
         assert_eq!(casted.channels, original.channels);
         assert_eq!(casted.len, original.len);
         assert_eq!(casted.data, original.data);
         assert_eq!(casted.params, original.params);
         assert!(matches!(casted.data, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_any_into_any() {
+        let samples: Vec<i16> = (0..16).collect();
+        let original = Samples::<PcmS16Le>::from_pcm(samples, 1);
+
+        let any = original.clone().into_any().into_any();
+        assert_eq!(any.format(), Format::PcmS16Le);
+        assert_eq!(any.channels, original.channels);
+        assert_eq!(any.len, original.len);
+
+        let casted = any.cast::<PcmS16Le>();
+        assert_eq!(casted.format(), Format::PcmS16Le);
+        assert_eq!(casted.channels, original.channels);
+        assert_eq!(casted.len, original.len);
+        assert_eq!(casted.data, original.data);
+        assert!(matches!(casted.data, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn test_any_samples() -> Result<()> {
+        let samples: Vec<i16> = (0..16).collect();
+        let original = Samples::<PcmS16Le>::from_pcm(&samples, 1);
+
+        let mut caster = AnySamples::new(original.into_reader());
+        let casted: Samples<'_, AnyFormat> = caster.read_samples()?.unwrap();
+        assert_eq!(casted.format(), Format::PcmS16Le);
+        assert!(matches!(casted.data, Cow::Borrowed(_)));
+        Ok(())
     }
 
     #[test]

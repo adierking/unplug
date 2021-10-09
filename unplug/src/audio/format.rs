@@ -196,23 +196,47 @@ pub struct AnyParams {
     pub(super) inner: Box<dyn Any>,
 }
 
-impl AnyParams {
-    /// Wraps codec info in an `AnyInfo`.
-    pub fn new<T: ToFromAny>(inner: T::Params) -> Self {
-        Self { format: T::format(), inner: Box::from(inner) }
-    }
-}
-
 /// Implementation detail for formats that can be converted to/from `AnyFormat`.
-pub trait ToFromAny: StaticFormat {
+pub trait ToFromAny: FormatTag {
+    fn wrap_params(params: Self::Params) -> AnyParams;
+    fn unwrap_params(params: AnyParams) -> std::result::Result<Self::Params, AnyParams>;
     fn into_any(data: Cow<'_, [Self::Data]>) -> Cow<'_, [AnyData]>;
     fn from_any(data: Cow<'_, [AnyData]>) -> Cow<'_, [Self::Data]>;
+}
+
+impl ToFromAny for AnyFormat {
+    fn wrap_params(params: Self::Params) -> AnyParams {
+        params
+    }
+    fn unwrap_params(params: AnyParams) -> std::result::Result<Self::Params, AnyParams> {
+        Ok(params)
+    }
+    fn into_any(data: Cow<'_, [Self::Data]>) -> Cow<'_, [AnyData]> {
+        data
+    }
+    fn from_any(data: Cow<'_, [AnyData]>) -> Cow<'_, [Self::Data]> {
+        data
+    }
 }
 
 impl<T: StaticFormat> ToFromAny for T
 where
     T::Data: ToByteSlice + ToMutByteSlice + FromByteSlice,
 {
+    fn wrap_params(params: Self::Params) -> AnyParams {
+        AnyParams { format: T::format(), inner: Box::from(params) }
+    }
+
+    fn unwrap_params(mut params: AnyParams) -> std::result::Result<Self::Params, AnyParams> {
+        match params.inner.downcast() {
+            Ok(p) => Ok(*p),
+            Err(p) => {
+                params.inner = p;
+                Err(params)
+            }
+        }
+    }
+
     fn into_any(data: Cow<'_, [Self::Data]>) -> Cow<'_, [AnyData]> {
         match data {
             // &[Data] -> &[u8] -> &[AnyData]

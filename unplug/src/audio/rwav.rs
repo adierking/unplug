@@ -564,14 +564,14 @@ mod tests {
         assert_eq!(channel1.data, &RWAV_BYTES[0x118..0x128]);
 
         let samples0 = rwav.reader(0).read_samples()?.unwrap();
-        let samples0: Samples<'_, GcAdpcm> = samples0.cast().ok().unwrap();
+        let samples0: Samples<'_, GcAdpcm> = samples0.cast();
         assert_eq!(samples0.format(), Format::GcAdpcm);
         assert_eq!(samples0.len, 32);
         assert_eq!(samples0.channels, 1);
         assert_eq!(samples0.data, &RWAV_BYTES[0x108..0x118]);
 
         let samples1 = rwav.reader(1).read_samples()?.unwrap();
-        let samples1: Samples<'_, GcAdpcm> = samples1.cast().ok().unwrap();
+        let samples1: Samples<'_, GcAdpcm> = samples1.cast();
         assert_eq!(samples1.format(), Format::GcAdpcm);
         assert_eq!(samples1.len, 32);
         assert_eq!(samples1.channels, 1);

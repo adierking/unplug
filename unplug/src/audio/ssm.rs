@@ -526,21 +526,21 @@ mod tests {
         assert_eq!(ssm.sounds.len(), 2);
 
         let samples0_0 = ssm.sounds[0].channels[0].reader().read_samples()?.unwrap();
-        let samples0_0: Samples<'_, GcAdpcm> = samples0_0.cast().ok().unwrap();
+        let samples0_0: Samples<'_, GcAdpcm> = samples0_0.cast();
         assert_eq!(samples0_0.format(), Format::GcAdpcm);
         assert_eq!(samples0_0.len, 32);
         assert_eq!(samples0_0.channels, 1);
         assert_eq!(samples0_0.data, &SSM_BYTES[0xe0..0xf0]);
 
         let samples1_0 = ssm.sounds[1].channels[0].reader().read_samples()?.unwrap();
-        let samples1_0: Samples<'_, GcAdpcm> = samples1_0.cast().ok().unwrap();
+        let samples1_0: Samples<'_, GcAdpcm> = samples1_0.cast();
         assert_eq!(samples1_0.format(), Format::GcAdpcm);
         assert_eq!(samples1_0.len, 32);
         assert_eq!(samples1_0.channels, 1);
         assert_eq!(samples1_0.data, &SSM_BYTES[0xf0..0x100]);
 
         let samples1_1 = ssm.sounds[1].channels[1].reader().read_samples()?.unwrap();
-        let samples1_1: Samples<'_, GcAdpcm> = samples1_1.cast().ok().unwrap();
+        let samples1_1: Samples<'_, GcAdpcm> = samples1_1.cast();
         assert_eq!(samples1_1.format(), Format::GcAdpcm);
         assert_eq!(samples1_1.len, 32);
         assert_eq!(samples1_1.channels, 1);
