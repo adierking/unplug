@@ -4,68 +4,14 @@ use super::{Error, Result};
 use float_cmp::approx_eq;
 use std::marker::PhantomData;
 
-/// Returns the number of bits needed to represent all values between `min` and `max`.
-const fn num_bits(min: u64, max: u64) -> u32 {
-    64 - max.wrapping_sub(min).leading_zeros()
-}
-
-/// Scales `val` from the range `[from_min, from_max]` into `[to_min, to_max]`. The ranges must
-/// cover all the bits of their respective data types.
-const fn scale(val: u64, from_min: u64, from_max: u64, to_min: u64, to_max: u64) -> u64 {
-    if from_min == to_min && from_max == to_max {
-        val
-    } else if val == from_min {
-        to_min
-    } else if val == from_max {
-        to_max
-    } else {
-        let unsigned = val.wrapping_sub(from_min);
-        let from_bits = num_bits(from_min, from_max);
-        let to_bits = num_bits(to_min, to_max);
-        let scaled = if to_bits >= from_bits {
-            unsigned.overflowing_shl(to_bits - from_bits).0
-        } else {
-            // Banker's rounding
-            let shift = from_bits - to_bits;
-            let half = 1 << (from_bits - to_bits - 1);
-            if unsigned & (1 << shift) == 0 {
-                unsigned.wrapping_add(half - 1).overflowing_shr(shift).0
-            } else {
-                unsigned.wrapping_add(half).overflowing_shr(shift).0
-            }
-        };
-        scaled.wrapping_add(to_min)
-    }
-}
-
-/// Scales `val` from the range `[min, max]` into `[-1.0, 1.0]`.
-fn scale_to_f64(val: u32, min: u32, max: u32) -> f64 {
-    if val == min {
-        -1.0
-    } else if val == max {
-        1.0
-    } else {
-        let unsigned = val.wrapping_sub(min);
-        let range = max.wrapping_sub(min) + 1;
-        f64::from(unsigned) / f64::from(range / 2) - 1.0
-    }
-}
-
-/// Scales `val` from the range `[-1.0, 1.0]` into `[min, max]`.
-fn scale_from_f64(val: f64, min: u32, max: u32) -> u32 {
-    let clamped = val.clamp(-1.0, 1.0);
-    if approx_eq!(f64, clamped, -1.0, ulps = 2) {
-        min
-    } else if approx_eq!(f64, clamped, 1.0, ulps = 2) {
-        max
-    } else {
-        let range = max.wrapping_sub(min) + 1;
-        let scaled = ((clamped + 1.0) * f64::from(range / 2)).round() as u32;
-        scaled.wrapping_add(min)
-    }
-}
-
 mod private {
+    pub struct TypeInfo {
+        pub is_float: bool,
+        pub min: u64,
+        pub max: u64,
+        pub bits: u32,
+    }
+
     pub trait Sealed {}
     impl Sealed for i8 {}
     impl Sealed for u8 {}
@@ -78,12 +24,61 @@ mod private {
     impl Sealed for f32 {}
     impl Sealed for f64 {}
 }
+use private::*;
+
+/// Scales `val` between two data types.
+const fn scale(val: u64, from: TypeInfo, to: TypeInfo) -> u64 {
+    if from.bits == to.bits && from.min == to.min {
+        val
+    } else {
+        let unsigned = val.wrapping_sub(from.min);
+        let scaled = if to.bits >= from.bits {
+            // Scale up
+            unsigned.overflowing_shl(to.bits - from.bits).0
+        } else if val == from.max {
+            // Scaling down with the code below will cause overflow if we don't special-case this
+            return to.max;
+        } else {
+            // Scale down with banker's rounding
+            let shift = from.bits - to.bits;
+            let half = 1 << (from.bits - to.bits - 1);
+            if unsigned & (1 << shift) == 0 {
+                unsigned.wrapping_add(half - 1).overflowing_shr(shift).0
+            } else {
+                unsigned.wrapping_add(half).overflowing_shr(shift).0
+            }
+        };
+        scaled.wrapping_add(to.min)
+    }
+}
+
+/// Scales `val` from the range `[min, max]` into `[-1.0, 1.0]`.
+fn scale_to_f64(val: u32, min: u32, max: u32) -> f64 {
+    let unsigned = val.wrapping_sub(min);
+    let range = max.wrapping_sub(min) + 1;
+    f64::from(unsigned) / f64::from(range / 2) - 1.0
+}
+
+/// Scales `val` from the range `[-1.0, 1.0]` into `[min, max]`.
+fn scale_from_f64(val: f64, min: u32, max: u32) -> u32 {
+    if !val.is_finite() {
+        return 0;
+    }
+    let clamped = val.clamp(-1.0, 1.0);
+    if approx_eq!(f64, clamped, -1.0, ulps = 2) {
+        min
+    } else if approx_eq!(f64, clamped, 1.0, ulps = 2) {
+        max
+    } else {
+        let range = max.wrapping_sub(min) + 1;
+        let scaled = ((clamped + 1.0) * f64::from(range / 2)).round() as u32;
+        scaled.wrapping_add(min)
+    }
+}
 
 /// Internal trait used to scale PCM samples.
-pub trait Scalable: Sized + private::Sealed {
-    const IS_FLOAT: bool;
-    const MIN: u64;
-    const MAX: u64;
+pub trait Scalable: Sized + Sealed {
+    const INFO: TypeInfo;
 
     fn to_u64(self) -> u64;
     fn from_u64(val: u64) -> Self;
@@ -92,10 +87,10 @@ pub trait Scalable: Sized + private::Sealed {
     fn from_f64(val: f64) -> Self;
 
     fn scale<T: Scalable>(self) -> T {
-        if Self::IS_FLOAT || T::IS_FLOAT {
+        if Self::INFO.is_float || T::INFO.is_float {
             T::from_f64(self.to_f64())
         } else {
-            T::from_u64(scale(self.to_u64(), Self::MIN, Self::MAX, T::MIN, T::MAX))
+            T::from_u64(scale(self.to_u64(), Self::INFO, T::INFO))
         }
     }
 }
@@ -104,9 +99,12 @@ macro_rules! scalable {
     ($int:ty) => {
         #[allow(trivial_numeric_casts)]
         impl Scalable for $int {
-            const IS_FLOAT: bool = false;
-            const MIN: u64 = <$int>::MIN as u64;
-            const MAX: u64 = <$int>::MAX as u64;
+            const INFO: TypeInfo = TypeInfo {
+                is_float: false,
+                min: <$int>::MIN as u64,
+                max: <$int>::MAX as u64,
+                bits: <$int>::BITS,
+            };
 
             fn to_u64(self) -> u64 {
                 self as u64
@@ -117,24 +115,20 @@ macro_rules! scalable {
             }
 
             fn to_f64(self) -> f64 {
-                let from_min = <Self as Scalable>::MIN;
-                let from_max = <Self as Scalable>::MAX;
-                if from_max > (u32::MAX as u64) {
+                if Self::INFO.max > (u32::MAX as u64) {
                     // Scale to u32 to avoid floating-point precision loss
                     scale_to_f64(self.scale(), u32::MIN, u32::MAX)
                 } else {
-                    scale_to_f64(self as u32, from_min as u32, from_max as u32)
+                    scale_to_f64(self as u32, Self::INFO.min as u32, Self::INFO.max as u32)
                 }
             }
 
             fn from_f64(val: f64) -> Self {
-                let to_min = <Self as Scalable>::MIN;
-                let to_max = <Self as Scalable>::MAX;
-                if to_max > (u32::MAX as u64) {
+                if Self::INFO.max > (u32::MAX as u64) {
                     // Scale to u32 to avoid floating-point precision loss
                     scale_from_f64(val, u32::MIN, u32::MAX).scale()
                 } else {
-                    scale_from_f64(val, to_min as u32, to_max as u32) as Self
+                    scale_from_f64(val, Self::INFO.min as u32, Self::INFO.max as u32) as Self
                 }
             }
         }
@@ -150,9 +144,8 @@ scalable!(i64);
 scalable!(u64);
 
 impl Scalable for f32 {
-    const IS_FLOAT: bool = true;
-    const MIN: u64 = i64::MIN as u64;
-    const MAX: u64 = i64::MAX as u64;
+    const INFO: TypeInfo =
+        TypeInfo { is_float: true, min: i64::MIN as u64, max: i64::MAX as u64, bits: 32 };
 
     fn to_u64(self) -> u64 {
         u64::from_f64(self as f64)
@@ -172,9 +165,8 @@ impl Scalable for f32 {
 }
 
 impl Scalable for f64 {
-    const IS_FLOAT: bool = true;
-    const MIN: u64 = i64::MIN as u64;
-    const MAX: u64 = i64::MAX as u64;
+    const INFO: TypeInfo =
+        TypeInfo { is_float: true, min: i64::MIN as u64, max: i64::MAX as u64, bits: 64 };
 
     fn to_u64(self) -> u64 {
         u64::from_f64(self)
@@ -270,17 +262,9 @@ mod tests {
     use std::borrow::Cow;
 
     #[test]
-    fn test_num_bits() {
-        assert_eq!(num_bits(i8::MIN as u64, i8::MAX as u64), 8);
-        assert_eq!(num_bits(u8::MIN as u64, u8::MAX as u64), 8);
-        assert_eq!(num_bits(i64::MIN as u64, i64::MAX as u64), 64);
-        assert_eq!(num_bits(u64::MIN, u64::MAX), 64);
-    }
-
-    #[test]
     fn test_scale_up() {
         assert_eq!(i16::MIN.scale::<u64>(), u64::MIN);
-        assert_eq!(i16::MAX.scale::<u64>(), u64::MAX);
+        assert_eq!(i16::MAX.scale::<u64>(), 0xffff000000000000);
 
         assert_eq!((-1i16).scale::<u64>(), 0x7fff000000000000);
         assert_eq!(0i16.scale::<u64>(), 0x8000000000000000);
@@ -313,7 +297,7 @@ mod tests {
     fn test_scale_to_float() {
         assert_approx_eq!(f64, i8::MIN.scale::<f64>(), -1.0, ulps = 2);
         assert_approx_eq!(f64, 0i8.scale::<f64>(), 0.0, ulps = 2);
-        assert_approx_eq!(f64, i8::MAX.scale::<f64>(), 1.0, ulps = 2);
+        assert_approx_eq!(f64, i8::MAX.scale::<f64>(), 127.0 / 128.0, ulps = 2);
 
         assert_approx_eq!(f64, (-1i8).scale::<f64>(), -1.0 / 128.0, ulps = 2);
         assert_approx_eq!(f64, (1i8).scale::<f64>(), 1.0 / 128.0, ulps = 2);
@@ -330,6 +314,7 @@ mod tests {
         assert_eq!((-1.0).scale::<i8>(), i8::MIN);
         assert_eq!((0.0).scale::<i8>(), 0);
         assert_eq!((1.0).scale::<i8>(), i8::MAX);
+        assert_eq!((127.0 / 128.0).scale::<i8>(), i8::MAX);
 
         assert_eq!((-1.0 / 128.0).scale::<i8>(), -1);
         assert_eq!((1.0 / 128.0).scale::<i8>(), 1);
