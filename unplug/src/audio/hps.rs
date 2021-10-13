@@ -611,7 +611,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                         context: block.channels[self.channel].initial_context,
                     },
                 }
-                .into_any(),
+                .cast(),
             )),
             other => {
                 // TODO

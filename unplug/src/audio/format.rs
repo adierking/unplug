@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::mem;
+use std::result::Result as StdResult;
 use std::slice;
 
 /// Supported audio sample formats.
@@ -50,6 +51,18 @@ impl Format {
         match *self {
             Self::GcAdpcm => address & !0xf,
             _ => address,
+        }
+    }
+
+    /// Checks whether the format is compatible with data from `other` without conversion. If this
+    /// returns `true`, casting sample data between the two formats must be legal.
+    pub fn compatible_with(&self, other: Format) -> bool {
+        if *self == Format::PcmS16Le || *self == Format::PcmS16Be {
+            assert_cast::<PcmS16Le, PcmS16Be>();
+            assert_cast::<PcmS16Be, PcmS16Le>();
+            other == Format::PcmS16Le || other == Format::PcmS16Be
+        } else {
+            *self == other
         }
     }
 }
@@ -197,48 +210,35 @@ pub struct AnyParams {
     pub(super) inner: Box<dyn Any>,
 }
 
-/// Implementation detail for formats that can be converted to/from `AnyFormat`.
-pub trait ToFromAny: FormatTag {
-    fn wrap_params(params: Self::Params) -> AnyParams;
-    fn unwrap_params(params: AnyParams) -> std::result::Result<Self::Params, AnyParams>;
-    fn into_any(data: Cow<'_, [Self::Data]>) -> Cow<'_, [AnyData]>;
-    fn from_any(data: Cow<'_, [AnyData]>) -> Cow<'_, [Self::Data]>;
+type DataCow<'a, F> = Cow<'a, [<F as FormatTag>::Data]>;
+
+/// Internal trait for a sample format which can be casted to another.
+pub trait Cast<F: DynamicFormat>: DynamicFormat {
+    fn cast_params(params: Self::Params) -> StdResult<F::Params, Self::Params>;
+    fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, F>;
 }
 
-impl ToFromAny for AnyFormat {
-    fn wrap_params(params: Self::Params) -> AnyParams {
-        params
-    }
-    fn unwrap_params(params: AnyParams) -> std::result::Result<Self::Params, AnyParams> {
+/// Asserts at compile time that `From` can be casted to `To`.
+fn assert_cast<From: Cast<To>, To: DynamicFormat>() {}
+
+impl<F: DynamicFormat> Cast<F> for F {
+    fn cast_params(params: Self::Params) -> StdResult<F::Params, Self::Params> {
         Ok(params)
     }
-    fn into_any(data: Cow<'_, [Self::Data]>) -> Cow<'_, [AnyData]> {
-        data
-    }
-    fn from_any(data: Cow<'_, [AnyData]>) -> Cow<'_, [Self::Data]> {
+    fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, F> {
         data
     }
 }
 
-impl<T: StaticFormat> ToFromAny for T
+impl<F: StaticFormat> Cast<AnyFormat> for F
 where
-    T::Data: ToByteSlice + ToMutByteSlice + FromByteSlice,
+    F::Data: ToByteSlice + ToMutByteSlice,
 {
-    fn wrap_params(params: Self::Params) -> AnyParams {
-        AnyParams { format: T::format(), inner: Box::from(params) }
+    fn cast_params(params: Self::Params) -> StdResult<AnyParams, Self::Params> {
+        Ok(AnyParams { format: F::format(), inner: Box::from(params) })
     }
 
-    fn unwrap_params(mut params: AnyParams) -> std::result::Result<Self::Params, AnyParams> {
-        match params.inner.downcast() {
-            Ok(p) => Ok(*p),
-            Err(p) => {
-                params.inner = p;
-                Err(params)
-            }
-        }
-    }
-
-    fn into_any(data: Cow<'_, [Self::Data]>) -> Cow<'_, [AnyData]> {
+    fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, AnyFormat> {
         match data {
             // &[Data] -> &[u8] -> &[AnyData]
             Cow::Borrowed(s) => {
@@ -271,8 +271,26 @@ where
             }
         }
     }
+}
 
-    fn from_any(data: Cow<'_, [AnyData]>) -> Cow<'_, [Self::Data]> {
+impl<F: StaticFormat> Cast<F> for AnyFormat
+where
+    F::Data: FromByteSlice,
+{
+    fn cast_params(mut params: Self::Params) -> StdResult<F::Params, Self::Params> {
+        if !F::format().compatible_with(params.format) {
+            return Err(params);
+        }
+        match params.inner.downcast() {
+            Ok(p) => Ok(*p),
+            Err(p) => {
+                params.inner = p;
+                Err(params)
+            }
+        }
+    }
+
+    fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, F> {
         match data {
             // &[AnyData] -> &[u8] -> &[Data]
             Cow::Borrowed(s) => {
@@ -332,6 +350,24 @@ pcm_format!(PcmS16Le, i16, LE);
 pcm_format!(PcmS16Be, i16, BE);
 pcm_format!(PcmS32Le, i32, LE);
 pcm_format!(PcmF32Le, f32, LE);
+
+/// Implements support for zero-cost casting between two PCM formats.
+macro_rules! pcm_cast {
+    ($from:ty, $to:ty) => {
+        impl Cast<$to> for $from {
+            fn cast_params(params: ()) -> StdResult<(), ()> {
+                Ok(params)
+            }
+            fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, $to> {
+                data
+            }
+        }
+    };
+}
+
+// Format::compatible_with() above must match these!
+pcm_cast!(PcmS16Le, PcmS16Be);
+pcm_cast!(PcmS16Be, PcmS16Le);
 
 #[cfg(test)]
 mod tests {
@@ -394,14 +430,25 @@ mod tests {
     }
 
     #[test]
+    fn test_compatible_with() {
+        assert!(Format::GcAdpcm.compatible_with(Format::GcAdpcm));
+        assert!(!Format::GcAdpcm.compatible_with(Format::PcmS16Le));
+
+        assert!(Format::PcmS16Le.compatible_with(Format::PcmS16Le));
+        assert!(Format::PcmS16Le.compatible_with(Format::PcmS16Be));
+        assert!(Format::PcmS16Be.compatible_with(Format::PcmS16Le));
+        assert!(Format::PcmS16Be.compatible_with(Format::PcmS16Be));
+    }
+
+    #[test]
     fn test_anydata_borrowed() {
         let values: Vec<i16> = (0..100).collect();
 
         let borrowed = Cow::from(&values);
-        let any = PcmS16Le::into_any(borrowed);
+        let any = <PcmS16Le as Cast<AnyFormat>>::cast_data(borrowed);
         assert!(matches!(any, Cow::Borrowed(_)));
 
-        let unwrapped = PcmS16Le::from_any(any);
+        let unwrapped = <AnyFormat as Cast<PcmS16Le>>::cast_data(any);
         assert!(matches!(unwrapped, Cow::Borrowed(_)));
         assert_eq!(unwrapped, values);
     }
@@ -411,10 +458,10 @@ mod tests {
         let values: Vec<i16> = (0..100).collect();
 
         let owned = Cow::from(values.clone());
-        let any = PcmS16Le::into_any(owned);
+        let any = <PcmS16Le as Cast<AnyFormat>>::cast_data(owned);
         assert!(matches!(any, Cow::Owned(_)));
 
-        let unwrapped = PcmS16Le::from_any(any);
+        let unwrapped = <AnyFormat as Cast<PcmS16Le>>::cast_data(any);
         assert!(matches!(unwrapped, Cow::Owned(_)));
         assert_eq!(unwrapped, values);
     }

@@ -439,7 +439,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                     data: Cow::Borrowed(&channel.data),
                     params: channel.adpcm,
                 }
-                .into_any(),
+                .cast(),
             )),
             other => {
                 // TODO

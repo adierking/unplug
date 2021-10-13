@@ -1,5 +1,5 @@
 use super::format::*;
-use super::sample::{AnySamples, ReadSamples, Samples};
+use super::sample::{CastSamples, ReadSamples, Samples};
 use super::{Error, Result};
 use float_cmp::approx_eq;
 use std::marker::PhantomData;
@@ -186,16 +186,17 @@ impl Scalable for f64 {
 }
 
 /// Internal trait for samples that are either PCM or `AnyFormat`.
-pub trait AnyPcm: ToFromAny {}
-impl<T: PcmFormat + ToFromAny> AnyPcm for T {}
+pub trait AnyPcm: DynamicFormat + Cast<AnyFormat> {}
+impl<T: PcmFormat + Cast<AnyFormat>> AnyPcm for T {}
 impl AnyPcm for AnyFormat {}
 
 /// Wraps a stream of PCM samples and converts them to another PCM format as they are read. If the
 /// samples are already in the target format, they will be passed through.
 pub struct ConvertPcm<'r, 's: 'r, To>
 where
-    To: PcmFormat + ToFromAny,
+    To: PcmFormat + Cast<AnyFormat>,
     To::Data: Scalable,
+    AnyFormat: Cast<To>,
 {
     inner: Box<dyn ReadSamples<'s, Format = AnyFormat> + 'r>,
     _marker: PhantomData<To>,
@@ -203,12 +204,13 @@ where
 
 impl<'r, 's: 'r, To> ConvertPcm<'r, 's, To>
 where
-    To: PcmFormat + ToFromAny,
+    To: PcmFormat + Cast<AnyFormat>,
     To::Data: Scalable,
+    AnyFormat: Cast<To>,
 {
     /// Creates a new converter which reads samples from `inner`.
     pub fn new<From: AnyPcm + 'r>(inner: impl ReadSamples<'s, Format = From> + 'r) -> Self {
-        Self { inner: Box::new(AnySamples::new(inner)), _marker: PhantomData }
+        Self { inner: Box::new(CastSamples::new(inner)), _marker: PhantomData }
     }
 
     /// Converts samples from the `From` format to the `To` format.
@@ -226,8 +228,9 @@ where
 
 impl<'r, 's: 'r, To> ReadSamples<'s> for ConvertPcm<'r, 's, To>
 where
-    To: PcmFormat + ToFromAny,
+    To: PcmFormat + Cast<AnyFormat>,
     To::Data: Scalable,
+    AnyFormat: Cast<To>,
 {
     type Format = To;
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
@@ -373,6 +376,18 @@ mod tests {
         let mut converter = ConvertPcm::<PcmS16Le>::new(samples_f32.into_reader());
         let samples_s16 = converter.coalesce_samples()?;
         assert!(samples_s16.data == open_test_wav());
+        Ok(())
+    }
+
+    #[test]
+    fn test_pcms16le_to_pcms16be() -> Result<()> {
+        let data = open_test_wav();
+        let samples_le = Samples::<PcmS16Le>::from_pcm(&data, 2);
+        let mut converter = ConvertPcm::<PcmS16Be>::new(samples_le.into_reader());
+        let converted = converter.coalesce_samples()?;
+        // The conversion should have been zero-cost
+        assert!(matches!(converted.data, Cow::Borrowed(_)));
+        assert!(converted.data == data);
         Ok(())
     }
 }
