@@ -1,5 +1,3 @@
-#![allow(single_use_lifetimes)]
-
 use crate::common::{
     edit_iso_optional, open_iso_optional, open_qp_optional, read_globals_qp_or_file, QP_PATH,
 };
@@ -90,7 +88,6 @@ mod item_flags {
         .serialize(serializer)
     }
 
-    #[allow(single_use_lifetimes)]
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<ItemFlags, D::Error> {

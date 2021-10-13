@@ -72,7 +72,6 @@ impl<T: AsMut<[i8]>> ConvertEndian<i8> for T {
 pub trait ReadValuesExt: Read {
     /// Reads to the end of the stream using the endianness specified by `E` and then returns a
     /// `Vec<T>` of the values.
-    #[allow(single_use_lifetimes)]
     fn read_values_to_end<E, T>(&mut self) -> io::Result<Vec<T>>
     where
         T: Clone + Copy + FromByteSlice,
@@ -102,7 +101,6 @@ impl<R: Read> ReadValuesExt for R {}
 /// `Write` extension for writing values with an endianness selected at runtime.
 pub trait WriteValuesExt: Write {
     /// Writes all of the values in `values` using the endianness specified by `E`.
-    #[allow(single_use_lifetimes)]
     fn write_all_values<E, T>(&mut self, values: &[T]) -> io::Result<()>
     where
         T: Clone + Copy + ToByteSlice,
@@ -135,7 +133,6 @@ impl<W: Write> WriteValuesExt for W {}
 mod tests {
     use super::*;
 
-    #[allow(single_use_lifetimes)]
     fn test_read_values<E, T, I, F>(values: I, to_bytes: F)
     where
         E: ByteOrder + IsNative,
@@ -152,7 +149,6 @@ mod tests {
         assert!(expected == actual);
     }
 
-    #[allow(single_use_lifetimes)]
     fn test_write_values<E, T, I, F>(values: I, to_bytes: F)
     where
         E: ByteOrder + IsNative,

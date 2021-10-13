@@ -87,7 +87,6 @@ impl<W: Write + Seek> Write for RiffWriter<W> {
 }
 
 /// Builds up a WAV file from sample data.
-#[allow(single_use_lifetimes)]
 pub struct WavBuilder<'a, 'b: 'a> {
     channels: usize,
     sample_rate: u32,

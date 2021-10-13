@@ -192,7 +192,6 @@ impl AnyPcm for AnyFormat {}
 
 /// Wraps a stream of PCM samples and converts them to another PCM format as they are read. If the
 /// samples are already in the target format, they will be passed through.
-#[allow(single_use_lifetimes)]
 pub struct ConvertPcm<'r, 's: 'r, To>
 where
     To: PcmFormat + ToFromAny,

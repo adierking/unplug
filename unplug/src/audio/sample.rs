@@ -188,7 +188,6 @@ impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
 }
 
 /// An adaptor which casts samples into `AnyFormat` as they are read.
-#[allow(single_use_lifetimes)]
 pub struct AnySamples<'r, 's, F: ToFromAny> {
     inner: Box<dyn ReadSamples<'s, Format = F> + 'r>,
 }
@@ -212,7 +211,6 @@ impl<'s, F: ToFromAny> ReadSamples<'s> for AnySamples<'_, 's, F> {
 
 /// An adaptor which casts audio samples to a particular type as they are read. If a sample block
 /// is not of the expected type, this will stop with `Error::UnsupportedFormat`.
-#[allow(single_use_lifetimes)]
 pub struct CastSamples<'r, 's, F: StaticFormat + ToFromAny> {
     inner: Box<dyn ReadSamples<'s, Format = AnyFormat> + 'r>,
     _marker: PhantomData<F>,

@@ -242,7 +242,6 @@ impl HpsStream {
     }
 
     /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
-    #[allow(single_use_lifetimes)]
     pub fn from_pcm<'a, R>(mut reader: R, sample_rate: u32) -> Result<Self>
     where
         R: ReadSamples<'a, Format = PcmS16Le>,
@@ -262,7 +261,6 @@ impl HpsStream {
     }
 
     /// Creates a new `HpsStream` from mono DSP-encoded sample data.
-    #[allow(single_use_lifetimes)]
     pub fn from_mono<'a, F, R>(mut reader: R, sample_rate: u32) -> Result<Self>
     where
         F: DspFormatTag,
@@ -301,7 +299,6 @@ impl HpsStream {
     }
 
     /// Creates a new `HpsStream` from stereo DSP-encoded sample data.
-    #[allow(single_use_lifetimes)]
     pub fn from_stereo<'a, F, R>(
         mut left_reader: R,
         mut right_reader: R,

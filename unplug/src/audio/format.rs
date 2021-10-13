@@ -157,7 +157,6 @@ impl<F: PcmFormat> ExtendSamples for F {
     }
 }
 
-#[allow(single_use_lifetimes)]
 impl<F: PcmFormat> ReadWriteBytes for F
 where
     Self::Data: ToByteSlice + ToMutByteSlice + FromByteSlice,

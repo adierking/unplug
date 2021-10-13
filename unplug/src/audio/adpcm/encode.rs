@@ -5,7 +5,6 @@ use crate::audio::{Error, ReadSamples, Result, Samples};
 use log::{debug, trace};
 
 /// Encodes raw PCM data into GameCube ADPCM format.
-#[allow(single_use_lifetimes)]
 pub struct Encoder<'r, 's> {
     /// The inner reader to read samples from.
     reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,

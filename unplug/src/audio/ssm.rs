@@ -151,7 +151,6 @@ impl Channel {
     }
 
     /// Creates a new `Channel` from DSP-encoded sample data.
-    #[allow(single_use_lifetimes)]
     pub fn from_samples<'a, F, R>(mut reader: R) -> Result<Self>
     where
         F: DspFormatTag,
@@ -249,7 +248,6 @@ impl Sound {
     }
 
     /// Creates a new `Sound` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
-    #[allow(single_use_lifetimes)]
     pub fn from_pcm<'a, R>(mut reader: R, sample_rate: u32) -> Result<Self>
     where
         R: ReadSamples<'a, Format = PcmS16Le>,
@@ -269,7 +267,6 @@ impl Sound {
     }
 
     /// Creates a new `Sound` from mono DSP-encoded sample data.
-    #[allow(single_use_lifetimes)]
     pub fn from_mono<'a, F, R>(reader: R, sample_rate: u32) -> Result<Self>
     where
         F: DspFormatTag,
@@ -281,7 +278,6 @@ impl Sound {
     }
 
     /// Creates a new `Sound` from stereo DSP-encoded sample data.
-    #[allow(single_use_lifetimes)]
     pub fn from_stereo<'a, F, R>(left: R, right: R, sample_rate: u32) -> Result<Self>
     where
         F: DspFormatTag,

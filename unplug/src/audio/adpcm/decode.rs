@@ -5,7 +5,6 @@ use crate::common::clamp_i16;
 use log::trace;
 
 /// Decodes GameCube ADPCM samples into PCM.
-#[allow(single_use_lifetimes)]
 pub struct Decoder<'r, 's> {
     source: Box<dyn ReadSamples<'s, Format = GcAdpcm> + 'r>,
 }
