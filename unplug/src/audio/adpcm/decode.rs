@@ -16,11 +16,11 @@ impl<'r, 's> Decoder<'r, 's> {
     }
 }
 
-impl ReadSamples<'static> for Decoder<'_, '_> {
+impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
     type Format = PcmS16Le;
 
     #[allow(clippy::verbose_bit_mask)]
-    fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         let encoded = match self.source.read_samples() {
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),

@@ -23,7 +23,7 @@ const BIG_ENDIAN: u16 = 0xfeff;
 const SECTION_HEADER_SIZE: u64 = 0x8;
 
 /// Convenience type for an opaque decoder.
-type RwavDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
+type RwavDecoder<'r, 's> = Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>;
 
 /// The RWAV file header.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -376,14 +376,14 @@ impl Rwav {
 
     /// Creates a decoder which decodes the samples in `channel` into PCM16 format.
     /// ***Panics*** if the channel index is out-of-bounds.
-    pub fn channel_decoder(&self, channel: usize) -> RwavDecoder<'_> {
+    pub fn channel_decoder(&self, channel: usize) -> RwavDecoder<'_, '_> {
         let reader = self.reader(channel);
         let casted = CastSamples::new(reader);
         Box::new(adpcm::Decoder::new(casted))
     }
 
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
-    pub fn decoder(&self) -> RwavDecoder<'_> {
+    pub fn decoder(&self) -> RwavDecoder<'_, '_> {
         if self.channels.len() == 1 {
             self.channel_decoder(0)
         } else {

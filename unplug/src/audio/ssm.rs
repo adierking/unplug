@@ -21,7 +21,7 @@ const DATA_ALIGN: u64 = 0x20;
 const FRAME_ALIGN: u64 = 8;
 
 /// Convenience type for an opaque decoder.
-type SsmDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
+type SsmDecoder<'r, 's> = Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>;
 
 /// SSM file header.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -144,7 +144,7 @@ impl Channel {
     }
 
     /// Creates a decoder which decodes the channel into PCM16 format.
-    pub fn decoder(&self) -> SsmDecoder<'_> {
+    pub fn decoder(&self) -> SsmDecoder<'_, '_> {
         let reader = self.reader();
         let casted = CastSamples::new(reader);
         Box::new(Decoder::new(casted))
@@ -237,7 +237,7 @@ pub struct Sound {
 
 impl Sound {
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
-    pub fn decoder(&self) -> SsmDecoder<'_> {
+    pub fn decoder(&self) -> SsmDecoder<'_, '_> {
         if self.channels.len() == 1 {
             self.channels[0].decoder()
         } else {

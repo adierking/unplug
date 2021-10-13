@@ -32,7 +32,7 @@ const MONO_BLOCK_SIZE: usize = 0x10000;
 const STEREO_BLOCK_SIZE: usize = MONO_BLOCK_SIZE / 2;
 
 /// Convenience type for an opaque decoder.
-type HpsDecoder<'a> = Box<dyn ReadSamples<'static, Format = PcmS16Le> + 'a>;
+type HpsDecoder<'r, 's> = Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>;
 
 /// HPS file header.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -223,7 +223,7 @@ impl HpsStream {
     }
 
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
-    pub fn decoder(&self) -> HpsDecoder<'_> {
+    pub fn decoder(&self) -> HpsDecoder<'_, '_> {
         if self.channels.len() == 1 {
             self.channel_decoder(0)
         } else {
@@ -235,7 +235,7 @@ impl HpsStream {
 
     /// Creates a decoder which decodes the samples in `channel` into PCM16 format.
     /// ***Panics*** if the channel index is out-of-bounds.
-    pub fn channel_decoder(&self, channel: usize) -> HpsDecoder<'_> {
+    pub fn channel_decoder(&self, channel: usize) -> HpsDecoder<'_, '_> {
         let reader = self.reader(channel);
         let casted = CastSamples::new(reader);
         Box::new(adpcm::Decoder::new(casted))

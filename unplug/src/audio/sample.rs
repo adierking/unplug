@@ -27,6 +27,16 @@ impl<'a, F: FormatTag> Samples<'a, F> {
     pub fn into_reader(self) -> ReadSampleList<'a, F> {
         ReadSampleList::new(vec![self])
     }
+
+    /// Ensures that the sample data is owned, cloning it if necessary.
+    pub fn into_owned(self) -> Samples<'static, F> {
+        Samples {
+            channels: self.channels,
+            len: self.len,
+            data: Cow::Owned(self.data.into_owned()),
+            params: self.params,
+        }
+    }
 }
 
 impl<F: DynamicFormat> Samples<'_, F> {
@@ -187,7 +197,26 @@ impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
     }
 }
 
-/// An adaptor which casts samples into `AnyFormat` as they are read.
+/// An adapter which ensures that sample data is owned, cloning it if necessary.
+pub struct OwnedSamples<'s, R: ReadSamples<'s>> {
+    inner: R,
+    _marker: PhantomData<&'s ()>,
+}
+
+impl<'s, R: ReadSamples<'s>> OwnedSamples<'s, R> {
+    pub fn new(inner: R) -> Self {
+        Self { inner, _marker: PhantomData }
+    }
+}
+
+impl<'s, R: ReadSamples<'s>> ReadSamples<'static> for OwnedSamples<'s, R> {
+    type Format = R::Format;
+    fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
+        self.inner.read_samples().map(|s| s.map(Samples::into_owned))
+    }
+}
+
+/// An adapter which casts samples into `AnyFormat` as they are read.
 pub struct AnySamples<'r, 's, F: ToFromAny> {
     inner: Box<dyn ReadSamples<'s, Format = F> + 'r>,
 }
@@ -201,15 +230,11 @@ impl<'r, 's, F: ToFromAny> AnySamples<'r, 's, F> {
 impl<'s, F: ToFromAny> ReadSamples<'s> for AnySamples<'_, 's, F> {
     type Format = AnyFormat;
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
-        match self.inner.read_samples() {
-            Ok(Some(s)) => Ok(Some(s.into_any())),
-            Ok(None) => Ok(None),
-            Err(err) => Err(err),
-        }
+        self.inner.read_samples().map(|s| s.map(Samples::into_any))
     }
 }
 
-/// An adaptor which casts audio samples to a particular type as they are read. If a sample block
+/// An adapter which casts audio samples to a particular type as they are read. If a sample block
 /// is not of the expected type, this will stop with `Error::UnsupportedFormat`.
 pub struct CastSamples<'r, 's, F: StaticFormat + ToFromAny> {
     inner: Box<dyn ReadSamples<'s, Format = AnyFormat> + 'r>,
@@ -282,9 +307,9 @@ impl<'r, 's, F: PcmFormat> JoinChannels<'r, 's, F> {
     }
 }
 
-impl<F: PcmFormat> ReadSamples<'static> for JoinChannels<'_, '_, F> {
+impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
     type Format = F;
-    fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         let left = self.left.read_samples()?;
         let right = self.right.read_samples()?;
         let (left, right) = match (left, right) {
@@ -377,12 +402,12 @@ where
     is_right: bool,
 }
 
-impl<F> ReadSamples<'static> for SplitChannelsReader<'_, '_, F>
+impl<'s, F> ReadSamples<'s> for SplitChannelsReader<'_, 's, F>
 where
     F: PcmFormat + 'static,
 {
     type Format = F;
-    fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         // We assume here that the channels can be read from in any order and that we are only
         // expected to read as much as we need. Each channel must hold onto samples it hasn't
         // returned yet, and we also shouldn't read every sample from the inner reader all at once.
@@ -439,6 +464,17 @@ mod tests {
             dest.to_mut().extend(src);
             Ok(())
         }
+    }
+
+    #[test]
+    fn test_owned() {
+        let samples: Vec<i16> = (0..16).collect();
+        let borrowed = Samples::<PcmS16Le>::from_pcm(&samples, 1).into_reader();
+        let owned = OwnedSamples::new(borrowed).coalesce_samples().unwrap();
+        assert!(owned.channels == 1);
+        assert!(owned.len == 16);
+        assert!(matches!(owned.data, Cow::Owned(_)));
+        assert!(owned.data == samples);
     }
 
     #[test]

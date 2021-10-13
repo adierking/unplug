@@ -62,7 +62,7 @@ impl<'r, 's> Encoder<'r, 's> {
     }
 }
 
-impl ReadSamples<'static> for Encoder<'_, '_> {
+impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
     type Format = GcAdpcm;
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         if self.pcm.is_empty() {
