@@ -22,6 +22,31 @@ pub enum Format {
 }
 
 impl Format {
+    /// Gets the width of the format's smallest addressable unit in bits.
+    pub fn bits(&self) -> usize {
+        match *self {
+            Self::PcmS8 => 8,
+            Self::PcmS16Le | Self::PcmS16Be => 16,
+            Self::PcmS32Le | Self::PcmF32Le => 32,
+            Self::GcAdpcm => 4,
+        }
+    }
+
+    /// Converts an address to a byte offset.
+    pub fn address_to_byte(&self, address: usize) -> usize {
+        address * self.bits() / 8
+    }
+
+    /// Converts an address to a byte offset, rounding up.
+    pub fn address_to_byte_up(&self, address: usize) -> usize {
+        (address * self.bits() + 7) / 8
+    }
+
+    /// Converts a byte offset to an address.
+    pub fn byte_to_address(&self, byte: usize) -> usize {
+        byte * 8 / self.bits()
+    }
+
     /// Converts an address to a value index.
     pub fn address_to_index(&self, address: usize) -> usize {
         match *self {
@@ -35,14 +60,6 @@ impl Format {
         match *self {
             Self::GcAdpcm => index * 2,
             _ => index,
-        }
-    }
-
-    /// Calculates the number of values necessary to fit the given number of units.
-    pub fn size_of(&self, units: usize) -> usize {
-        match *self {
-            Self::GcAdpcm => (units + 1) / 2,
-            _ => units,
         }
     }
 
@@ -92,6 +109,27 @@ pub trait StaticFormat: FormatTag {
     /// Returns the static `Format`.
     fn format() -> Format;
 
+    /// Gets the width of the format's smallest addressable unit in bits. See
+    /// `Format::bits_per_sample()`.
+    fn bits(&self) -> usize {
+        Self::format().bits()
+    }
+
+    /// Converts an address to a byte offset. See `Format::address_to_byte()`.
+    fn address_to_byte(address: usize) -> usize {
+        Self::format().address_to_byte(address)
+    }
+
+    /// Converts an address to a byte offset, rounding up. See `Format::address_to_byte()`.
+    fn address_to_byte_up(address: usize) -> usize {
+        Self::format().address_to_byte_up(address)
+    }
+
+    /// Converts a byte offset to an address. See `Format::byte_to_address()`.
+    fn byte_to_address(byte: usize) -> usize {
+        Self::format().byte_to_address(byte)
+    }
+
     /// Converts an address to a value index. See `Format::address_to_index()`.
     fn address_to_index(address: usize) -> usize {
         Self::format().address_to_index(address)
@@ -100,12 +138,6 @@ pub trait StaticFormat: FormatTag {
     /// Converts a value index to an address. See `Format::index_to_address()`.
     fn index_to_address(index: usize) -> usize {
         Self::format().index_to_address(index)
-    }
-
-    /// Calculates the number of values necessary to fit the given number of units. See
-    /// `Format::size_of()`.
-    fn size_of(units: usize) -> usize {
-        Self::format().size_of(units)
     }
 
     /// Aligns `address` down to the beginning of a frame.
@@ -374,6 +406,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_address_to_byte() {
+        assert_eq!(Format::PcmS8.address_to_byte(0), 0);
+        assert_eq!(Format::PcmS8.address_to_byte(1), 1);
+        assert_eq!(Format::PcmS8.address_to_byte(2), 2);
+
+        assert_eq!(Format::PcmS16Le.address_to_byte(0), 0);
+        assert_eq!(Format::PcmS16Le.address_to_byte(1), 2);
+        assert_eq!(Format::PcmS16Le.address_to_byte(2), 4);
+
+        assert_eq!(Format::GcAdpcm.address_to_byte(0), 0);
+        assert_eq!(Format::GcAdpcm.address_to_byte(1), 0);
+        assert_eq!(Format::GcAdpcm.address_to_byte(2), 1);
+    }
+
+    #[test]
+    fn test_address_to_byte_up() {
+        assert_eq!(Format::PcmS8.address_to_byte_up(0), 0);
+        assert_eq!(Format::PcmS8.address_to_byte_up(1), 1);
+        assert_eq!(Format::PcmS8.address_to_byte_up(2), 2);
+
+        assert_eq!(Format::PcmS16Le.address_to_byte_up(0), 0);
+        assert_eq!(Format::PcmS16Le.address_to_byte_up(1), 2);
+        assert_eq!(Format::PcmS16Le.address_to_byte_up(2), 4);
+
+        assert_eq!(Format::GcAdpcm.address_to_byte_up(0), 0);
+        assert_eq!(Format::GcAdpcm.address_to_byte_up(1), 1);
+        assert_eq!(Format::GcAdpcm.address_to_byte_up(2), 1);
+        assert_eq!(Format::GcAdpcm.address_to_byte_up(3), 2);
+    }
+
+    #[test]
+    fn test_byte_to_address() {
+        assert_eq!(Format::PcmS8.byte_to_address(0), 0);
+        assert_eq!(Format::PcmS8.byte_to_address(1), 1);
+        assert_eq!(Format::PcmS8.byte_to_address(2), 2);
+
+        assert_eq!(Format::PcmS16Le.byte_to_address(0), 0);
+        assert_eq!(Format::PcmS16Le.byte_to_address(1), 0);
+        assert_eq!(Format::PcmS16Le.byte_to_address(2), 1);
+
+        assert_eq!(Format::GcAdpcm.byte_to_address(0), 0);
+        assert_eq!(Format::GcAdpcm.byte_to_address(1), 2);
+        assert_eq!(Format::GcAdpcm.byte_to_address(2), 4);
+    }
+
+    #[test]
     fn test_address_to_index() {
         assert_eq!(Format::PcmS8.address_to_index(0), 0);
         assert_eq!(Format::PcmS8.address_to_index(1), 1);
@@ -401,24 +479,6 @@ mod tests {
         assert_eq!(Format::GcAdpcm.index_to_address(0), 0);
         assert_eq!(Format::GcAdpcm.index_to_address(1), 2);
         assert_eq!(Format::GcAdpcm.index_to_address(2), 4);
-    }
-
-    #[test]
-    fn test_size_of() {
-        assert_eq!(Format::PcmS8.size_of(0), 0);
-        assert_eq!(Format::PcmS8.size_of(1), 1);
-        assert_eq!(Format::PcmS8.size_of(2), 2);
-        assert_eq!(Format::PcmS8.size_of(3), 3);
-
-        assert_eq!(Format::PcmS16Le.size_of(0), 0);
-        assert_eq!(Format::PcmS16Le.size_of(1), 1);
-        assert_eq!(Format::PcmS16Le.size_of(2), 2);
-        assert_eq!(Format::PcmS16Le.size_of(3), 3);
-
-        assert_eq!(Format::GcAdpcm.size_of(0), 0);
-        assert_eq!(Format::GcAdpcm.size_of(1), 1);
-        assert_eq!(Format::GcAdpcm.size_of(2), 1);
-        assert_eq!(Format::GcAdpcm.size_of(3), 2);
     }
 
     #[test]

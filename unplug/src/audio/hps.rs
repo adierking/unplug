@@ -1,14 +1,14 @@
 use super::adpcm::{self, GcAdpcm};
-use super::dsp::{AudioAddress, DspFormat, DspFormatTag};
-use super::format::{AnyFormat, Format, PcmS16Le};
+use super::dsp::{AudioAddress, DspFormat};
+use super::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat};
+use super::pcm::ConvertPcm;
 use super::sample::{CastSamples, JoinChannels, SplitChannels};
 use super::{Error, ReadSamples, Result, Samples};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, Region, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
-use log::{debug, error, trace};
-use std::borrow::Cow;
+use log::{debug, trace};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
@@ -213,11 +213,10 @@ impl HpsStream {
     /// ***Panics*** if the channel index is out-of-bounds.
     pub fn reader(&self, channel: usize) -> ChannelReader<'_> {
         assert!(channel < self.channels.len(), "invalid channel index");
-        let format = self.channels[channel].address.format;
         ChannelReader {
             blocks: &self.blocks,
             channel,
-            format,
+            format: self.channels[channel].address.format,
             adpcm: &self.channels[channel].adpcm,
         }
     }
@@ -237,47 +236,49 @@ impl HpsStream {
     /// ***Panics*** if the channel index is out-of-bounds.
     pub fn channel_decoder(&self, channel: usize) -> HpsDecoder<'_, '_> {
         let reader = self.reader(channel);
-        let casted = CastSamples::new(reader);
-        Box::new(adpcm::Decoder::new(casted))
+        match self.channels[channel].address.format {
+            DspFormat::Adpcm => Box::new(adpcm::Decoder::new(CastSamples::new(reader))),
+            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(ConvertPcm::<PcmS16Le>::new(reader)),
+        }
     }
 
     /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
-    pub fn from_pcm<'a, R>(mut reader: R, sample_rate: u32) -> Result<Self>
-    where
-        R: ReadSamples<'a, Format = PcmS16Le>,
-    {
+    pub fn from_pcm(
+        reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>,
+        sample_rate: u32,
+    ) -> Result<Self> {
         let coalesced = reader.coalesce_samples()?;
         if coalesced.channels == 2 {
             let splitter = SplitChannels::new(coalesced.into_reader());
-            let left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
-            let right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
-            Self::from_stereo(left, right, sample_rate)
+            let mut left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
+            let mut right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
+            Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
         } else if coalesced.channels == 1 {
-            let encoder = adpcm::Encoder::with_block_size(coalesced.into_reader(), MONO_BLOCK_SIZE);
-            Self::from_mono(encoder, sample_rate)
+            let mut encoder =
+                adpcm::Encoder::with_block_size(coalesced.into_reader(), MONO_BLOCK_SIZE);
+            Self::from_adpcm_mono(&mut encoder, sample_rate)
         } else {
             Err(Error::UnsupportedChannels)
         }
     }
 
-    /// Creates a new `HpsStream` from mono DSP-encoded sample data.
-    pub fn from_mono<'a, F, R>(mut reader: R, sample_rate: u32) -> Result<Self>
-    where
-        F: DspFormatTag,
-        R: ReadSamples<'a, Format = F>,
-    {
+    /// Creates a new `HpsStream` from mono ADPCM sample data.
+    pub fn from_adpcm_mono(
+        reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
+        sample_rate: u32,
+    ) -> Result<Self> {
         let mut channel = Channel::default();
         let mut blocks = vec![];
         let mut first = true;
         while let Some(samples) = reader.read_samples()? {
-            let adpcm = F::adpcm_info(&samples.params);
+            let adpcm = samples.params;
             let block = Block::from_mono(samples)?;
             if first {
                 first = false;
                 channel = Channel {
                     address: AudioAddress {
                         looping: true, // TODO
-                        format: F::dsp_format(),
+                        format: DspFormat::Adpcm,
                         loop_address: 0x2,
                         end_address: block.end_address,
                         current_address: 0x2,
@@ -298,16 +299,12 @@ impl HpsStream {
         Ok(Self { sample_rate, channels, loop_start: Some(0), blocks })
     }
 
-    /// Creates a new `HpsStream` from stereo DSP-encoded sample data.
-    pub fn from_stereo<'a, F, R>(
-        mut left_reader: R,
-        mut right_reader: R,
+    /// Creates a new `HpsStream` from stereo ADPCM sample data.
+    pub fn from_adpcm_stereo(
+        left_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
+        right_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
         sample_rate: u32,
-    ) -> Result<Self>
-    where
-        F: DspFormatTag,
-        R: ReadSamples<'a, Format = F>,
-    {
+    ) -> Result<Self> {
         let mut left_channel = Channel::default();
         let mut right_channel = Channel::default();
         let mut blocks = vec![];
@@ -321,14 +318,14 @@ impl HpsStream {
                 _ => return Err(Error::DifferentChannelSizes),
             };
 
-            let left_adpcm = F::adpcm_info(&left.params);
-            let right_adpcm = F::adpcm_info(&right.params);
+            let left_adpcm = left.params;
+            let right_adpcm = right.params;
             let block = Block::from_stereo(left, right)?;
             if first {
                 first = false;
                 let address = AudioAddress {
                     looping: true, // TODO
-                    format: F::dsp_format(),
+                    format: DspFormat::Adpcm,
                     loop_address: 0x2,
                     end_address: block.end_address,
                     current_address: 0x2,
@@ -451,10 +448,14 @@ impl Block {
         Self::default()
     }
 
-    /// Creates a `Block` from mono DSP-encoded sample data.
-    fn from_mono<F: DspFormatTag>(samples: Samples<'_, F>) -> Result<Self> {
+    /// Creates a `Block` from mono ADPCM sample data.
+    fn from_mono(samples: Samples<'_, GcAdpcm>) -> Result<Self> {
         if samples.channels != 1 {
             return Err(Error::StreamNotMono);
+        }
+        let size = GcAdpcm::address_to_byte_up(samples.len);
+        if size > MONO_BLOCK_SIZE {
+            return Err(Error::BlockTooLarge(size, MONO_BLOCK_SIZE));
         }
         let mut channels = ArrayVec::new();
         let end_address = (samples.len - 1) as u32;
@@ -462,13 +463,17 @@ impl Block {
         Ok(Self { end_address, channels, markers: vec![] })
     }
 
-    /// Creates a `Block` from stereo DSP-encoded sample data.
-    fn from_stereo<F: DspFormatTag>(left: Samples<'_, F>, right: Samples<'_, F>) -> Result<Self> {
+    /// Creates a `Block` from stereo ADPCM sample data.
+    fn from_stereo(left: Samples<'_, GcAdpcm>, right: Samples<'_, GcAdpcm>) -> Result<Self> {
         if left.channels != 1 || right.channels != 1 {
             return Err(Error::StreamNotMono);
         }
         if left.len != right.len {
             return Err(Error::DifferentChannelSizes);
+        }
+        let size = GcAdpcm::address_to_byte_up(left.len);
+        if size > STEREO_BLOCK_SIZE {
+            return Err(Error::BlockTooLarge(size, STEREO_BLOCK_SIZE));
         }
         let mut channels = ArrayVec::new();
         let end_address = (left.len - 1) as u32;
@@ -493,7 +498,7 @@ impl Block {
         for (i, channel) in channels.iter().enumerate() {
             let mut data = vec![];
             let format = Format::from(channel.address.format);
-            let data_size = format.size_of(header.end_address as usize + 1) as u64;
+            let data_size = format.address_to_byte_up(header.end_address as usize + 1) as u64;
             data_reader.seek(SeekFrom::Start(data_offset))?;
             (&mut data_reader).take(data_size).read_to_end(&mut data)?;
             if data.len() < data_size as usize {
@@ -576,10 +581,8 @@ impl BlockChannel {
     }
 
     /// Creates a `BlockChannel` with sample data from `samples`.
-    fn from_samples<F: DspFormatTag>(samples: Samples<'_, F>) -> Result<Self> {
-        let mut data = vec![];
-        F::write_bytes(&mut data, &samples.data)?;
-        Ok(Self { initial_context: F::adpcm_info(&samples.params).context, data })
+    fn from_samples(samples: Samples<'_, GcAdpcm>) -> Result<Self> {
+        Ok(Self { initial_context: samples.params.context, data: samples.data.into_owned() })
     }
 }
 
@@ -599,12 +602,14 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         }
         let block = &self.blocks[0];
         self.blocks = &self.blocks[1..];
+        let len = block.end_address as usize + 1;
+        let data = &block.channels[self.channel].data;
         match self.format {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
                     channels: 1,
-                    len: block.end_address as usize + 1,
-                    data: Cow::from(&block.channels[self.channel].data),
+                    len,
+                    data: data.into(),
                     params: adpcm::Info {
                         coefficients: self.adpcm.coefficients,
                         gain: self.adpcm.gain,
@@ -613,10 +618,17 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                 }
                 .cast(),
             )),
-            other => {
-                // TODO
-                error!("Sample format not supported yet: {:?}", other);
-                Err(Error::UnsupportedFormat(self.format.into()))
+
+            // Chibi-Robo's engine doesn't actually play HPS files with non-ADPCM samples correctly,
+            // but the format *technically* should support it and there's even some code referencing
+            // other formats...
+            DspFormat::Pcm16 => {
+                let samples = PcmS16Be::read_bytes(&data[..(len * 2)])?;
+                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1).cast()))
+            }
+            DspFormat::Pcm8 => {
+                let samples = PcmS8::read_bytes(&data[..len])?;
+                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1).cast()))
             }
         }
     }
@@ -919,7 +931,7 @@ mod tests {
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
         let splitter = SplitChannels::new(samples.into_reader());
-        let hps = HpsStream::from_pcm(splitter.left(), 44100)?;
+        let hps = HpsStream::from_pcm(&mut splitter.left(), 44100)?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 1);
         assert_eq!(hps.loop_start, Some(0));
@@ -954,7 +966,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let hps = HpsStream::from_pcm(samples.into_reader(), 44100)?;
+        let hps = HpsStream::from_pcm(&mut samples.into_reader(), 44100)?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 2);
         assert_eq!(hps.loop_start, Some(0));

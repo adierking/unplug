@@ -1,6 +1,7 @@
 use super::adpcm::{Decoder, Encoder, FrameContext, GcAdpcm, Info};
-use super::dsp::{AudioAddress, DspFormat, DspFormatTag};
-use super::format::{AnyFormat, Format, PcmS16Le};
+use super::dsp::{AudioAddress, DspFormat};
+use super::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
+use super::pcm::ConvertPcm;
 use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
 use crate::audio::sample::SplitChannels;
@@ -9,7 +10,6 @@ use crate::common::{align, ReadFrom, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use log::{debug, error};
-use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
@@ -146,43 +146,32 @@ impl Channel {
     /// Creates a decoder which decodes the channel into PCM16 format.
     pub fn decoder(&self) -> SsmDecoder<'_, '_> {
         let reader = self.reader();
-        let casted = CastSamples::new(reader);
-        Box::new(Decoder::new(casted))
+        match self.address.format {
+            DspFormat::Adpcm => Box::new(Decoder::new(CastSamples::new(reader))),
+            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(ConvertPcm::<PcmS16Le>::new(reader)),
+        }
     }
 
-    /// Creates a new `Channel` from DSP-encoded sample data.
-    pub fn from_samples<'a, F, R>(mut reader: R) -> Result<Self>
-    where
-        F: DspFormatTag,
-        R: ReadSamples<'a, Format = F>,
-    {
+    /// Creates a new `Channel` from ADPCM sample data.
+    pub fn from_adpcm(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
         let samples = reader.coalesce_samples()?;
         if samples.channels != 1 {
             return Err(Error::StreamNotMono);
         }
-        match F::dsp_format() {
-            DspFormat::Adpcm => {
-                let mut data = vec![];
-                F::write_bytes(&mut data, &samples.data)?;
-                Ok(Self {
-                    address: AudioAddress {
-                        looping: false, // TODO
-                        format: DspFormat::Adpcm,
-                        loop_address: 2,
-                        end_address: (samples.len - 1) as u32,
-                        current_address: 2,
-                    },
-                    adpcm: F::adpcm_info(&samples.params),
-                    loop_context: FrameContext::default(), // TODO
-                    data,
-                })
-            }
-            _ => {
-                // TODO
-                error!("Sample format not supported yet: {:?}", F::format());
-                Err(Error::UnsupportedFormat(F::format()))
-            }
-        }
+        let mut data = vec![];
+        GcAdpcm::write_bytes(&mut data, &samples.data)?;
+        Ok(Self {
+            address: AudioAddress {
+                looping: false, // TODO
+                format: DspFormat::Adpcm,
+                loop_address: 0x2,
+                end_address: (samples.len - 1) as u32,
+                current_address: 0x2,
+            },
+            adpcm: samples.params,
+            loop_context: FrameContext::default(), // TODO
+            data,
+        })
     }
 
     fn from_bank(header: &ChannelHeader, bank_data: &[u8]) -> Self {
@@ -190,9 +179,9 @@ impl Channel {
         let format = Format::from(header.address.format);
         let start_address = format.frame_address(header.address.current_address as usize);
         let end_address = header.address.end_address as usize;
-        let nibbles = end_address - start_address + 1;
-        let start_offset = format.address_to_index(start_address);
-        let end_offset = align(start_offset + format.size_of(nibbles), FRAME_ALIGN as usize);
+        let len = end_address - start_address + 1;
+        let start_offset = format.address_to_byte(start_address);
+        let end_offset = align(start_offset + format.address_to_byte_up(len), FRAME_ALIGN as usize);
         let data = Vec::from(&bank_data[start_offset..end_offset]);
 
         // Since we have a separate data buffer now, we have to update the addresses
@@ -207,7 +196,7 @@ impl Channel {
     fn make_header(&self, data_offset: u64) -> ChannelHeader {
         let mut address = self.address;
         let format = Format::from(address.format);
-        let start_address = format.index_to_address(data_offset as usize) as u32;
+        let start_address = format.byte_to_address(data_offset as usize) as u32;
         address.loop_address += start_address;
         address.end_address += start_address;
         address.current_address += start_address;
@@ -248,44 +237,43 @@ impl Sound {
     }
 
     /// Creates a new `Sound` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
-    pub fn from_pcm<'a, R>(mut reader: R, sample_rate: u32) -> Result<Self>
-    where
-        R: ReadSamples<'a, Format = PcmS16Le>,
-    {
+    pub fn from_pcm(
+        reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>,
+        sample_rate: u32,
+    ) -> Result<Self> {
         let coalesced = reader.coalesce_samples()?;
         if coalesced.channels == 2 {
             let splitter = SplitChannels::new(coalesced.into_reader());
-            let left = Encoder::new(splitter.left());
-            let right = Encoder::new(splitter.right());
-            Self::from_stereo(left, right, sample_rate)
+            let mut left = Encoder::new(splitter.left());
+            let mut right = Encoder::new(splitter.right());
+            Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
         } else if coalesced.channels == 1 {
-            let encoder = Encoder::new(coalesced.into_reader());
-            Self::from_mono(encoder, sample_rate)
+            let mut encoder = Encoder::new(coalesced.into_reader());
+            Self::from_adpcm_mono(&mut encoder, sample_rate)
         } else {
             Err(Error::UnsupportedChannels)
         }
     }
 
-    /// Creates a new `Sound` from mono DSP-encoded sample data.
-    pub fn from_mono<'a, F, R>(reader: R, sample_rate: u32) -> Result<Self>
-    where
-        F: DspFormatTag,
-        R: ReadSamples<'a, Format = F>,
-    {
+    /// Creates a new `Sound` from mono ADPCM sample data.
+    pub fn from_adpcm_mono(
+        reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
+        sample_rate: u32,
+    ) -> Result<Self> {
         let mut channels = ArrayVec::new();
-        channels.push(Channel::from_samples(reader)?);
+        channels.push(Channel::from_adpcm(reader)?);
         Ok(Self { sample_rate, channels })
     }
 
-    /// Creates a new `Sound` from stereo DSP-encoded sample data.
-    pub fn from_stereo<'a, F, R>(left: R, right: R, sample_rate: u32) -> Result<Self>
-    where
-        F: DspFormatTag,
-        R: ReadSamples<'a, Format = F>,
-    {
+    /// Creates a new `Sound` from stereo ADPCM sample data.
+    pub fn from_adpcm_stereo(
+        left: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
+        right: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
+        sample_rate: u32,
+    ) -> Result<Self> {
         let mut channels = ArrayVec::new();
-        channels.push(Channel::from_samples(left)?);
-        channels.push(Channel::from_samples(right)?);
+        channels.push(Channel::from_adpcm(left)?);
+        channels.push(Channel::from_adpcm(right)?);
         Ok(Self { sample_rate, channels })
     }
 
@@ -405,21 +393,21 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
             Some(c) => c,
             None => return Ok(None),
         };
+        let data = &channel.data;
+        let len = channel.address.end_address as usize + 1;
         let format = channel.address.format;
         match format {
             DspFormat::Adpcm => Ok(Some(
-                Samples::<GcAdpcm> {
-                    channels: 1,
-                    len: channel.address.end_address as usize + 1,
-                    data: Cow::Borrowed(&channel.data),
-                    params: channel.adpcm,
-                }
-                .cast(),
+                Samples::<GcAdpcm> { channels: 1, len, data: data.into(), params: channel.adpcm }
+                    .cast(),
             )),
-            other => {
-                // TODO
-                error!("Sample format not supported yet: {:?}", other);
-                Err(Error::UnsupportedFormat(format.into()))
+            DspFormat::Pcm16 => {
+                let samples = PcmS16Be::read_bytes(&data[..(len * 2)])?;
+                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1).cast()))
+            }
+            DspFormat::Pcm8 => {
+                let samples = PcmS8::read_bytes(&data[..len])?;
+                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1).cast()))
             }
         }
     }
@@ -605,14 +593,14 @@ mod tests {
         let samples = Samples::<GcAdpcm> {
             channels: 1,
             len: test::TEST_WAV_DSP_END_ADDRESS + 1,
-            data: Cow::from(test::TEST_WAV_LEFT_DSP),
+            data: test::TEST_WAV_LEFT_DSP.into(),
             params: Info {
                 coefficients: test::TEST_WAV_LEFT_COEFFICIENTS,
                 gain: 0,
                 context: FrameContext::default(),
             },
         };
-        let sound = Sound::from_mono(samples.into_reader(), 44100)?;
+        let sound = Sound::from_adpcm_mono(&mut samples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 1);
         assert_left_channel(&sound.channels[0]);
@@ -624,7 +612,7 @@ mod tests {
         let lsamples = Samples::<GcAdpcm> {
             channels: 1,
             len: test::TEST_WAV_DSP_END_ADDRESS + 1,
-            data: Cow::from(test::TEST_WAV_LEFT_DSP),
+            data: test::TEST_WAV_LEFT_DSP.into(),
             params: Info {
                 coefficients: test::TEST_WAV_LEFT_COEFFICIENTS,
                 gain: 0,
@@ -634,14 +622,18 @@ mod tests {
         let rsamples = Samples::<GcAdpcm> {
             channels: 1,
             len: test::TEST_WAV_DSP_END_ADDRESS + 1,
-            data: Cow::from(test::TEST_WAV_RIGHT_DSP),
+            data: test::TEST_WAV_RIGHT_DSP.into(),
             params: Info {
                 coefficients: test::TEST_WAV_RIGHT_COEFFICIENTS,
                 gain: 0,
                 context: FrameContext::default(),
             },
         };
-        let sound = Sound::from_stereo(lsamples.into_reader(), rsamples.into_reader(), 44100)?;
+        let sound = Sound::from_adpcm_stereo(
+            &mut lsamples.into_reader(),
+            &mut rsamples.into_reader(),
+            44100,
+        )?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 2);
         assert_left_channel(&sound.channels[0]);
@@ -653,7 +645,7 @@ mod tests {
     fn test_sound_from_pcm() -> Result<()> {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
-        let sound = Sound::from_pcm(samples.into_reader(), 44100)?;
+        let sound = Sound::from_pcm(&mut samples.into_reader(), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 2);
         assert_left_channel(&sound.channels[0]);

@@ -320,9 +320,8 @@ impl DataSection {
             let start_aligned = format.frame_address(start_address as usize);
             start_address -= start_aligned as u32;
             end_address -= start_aligned as u32;
-            let start_offset =
-                channel.data_offset as usize + format.address_to_index(start_aligned);
-            let size = format.size_of((end_address + 1) as usize);
+            let start_offset = channel.data_offset as usize + format.address_to_byte(start_aligned);
+            let size = format.address_to_byte_up((end_address + 1) as usize);
 
             section.seek(SeekFrom::Start(start_offset as u64))?;
             let mut data = vec![];

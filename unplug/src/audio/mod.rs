@@ -29,6 +29,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("sample block too large: {0:#x} > {1:#x}")]
+    BlockTooLarge(usize, usize),
+
     #[error("channels have different sizes")]
     DifferentChannelSizes,
 
