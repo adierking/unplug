@@ -1,3 +1,4 @@
+use super::I24;
 use byte_slice_cast::{self as bsc, AsByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice};
 use byteorder::{ByteOrder, NativeEndian, BE, LE};
 use std::convert::AsMut;
@@ -25,7 +26,7 @@ impl IsNative for BE {
 /// Trait for a mutable slice that can be converted between endians.
 pub trait ConvertEndian<T>: AsMut<[T]> {
     /// Converts the values from the native endianness. Use `convert_endian()` instead.
-    fn convert_from_native<E: ByteOrder>(&mut self);
+    fn convert_from_native<E: ByteOrder + IsNative>(&mut self);
 
     /// Converts the values from the `From` endianness to the `To` endianness.
     fn convert_endian<From, To>(&mut self)
@@ -44,7 +45,7 @@ pub trait ConvertEndian<T>: AsMut<[T]> {
 macro_rules! impl_convert {
     ($ty:ty, $fn:ident) => {
         impl<T: AsMut<[$ty]> + ?Sized> ConvertEndian<$ty> for T {
-            fn convert_from_native<E: ByteOrder>(&mut self) {
+            fn convert_from_native<E: ByteOrder + IsNative>(&mut self) {
                 E::$fn(self.as_mut())
             }
         }
@@ -62,10 +63,20 @@ impl_convert!(f32, from_slice_f32);
 impl_convert!(f64, from_slice_f64);
 
 impl<T: AsMut<[u8]>> ConvertEndian<u8> for T {
-    fn convert_from_native<E: ByteOrder>(&mut self) {}
+    fn convert_from_native<E: ByteOrder + IsNative>(&mut self) {}
 }
 impl<T: AsMut<[i8]>> ConvertEndian<i8> for T {
-    fn convert_from_native<E: ByteOrder>(&mut self) {}
+    fn convert_from_native<E: ByteOrder + IsNative>(&mut self) {}
+}
+
+impl<T: AsMut<[I24]>> ConvertEndian<I24> for T {
+    fn convert_from_native<E: ByteOrder + IsNative>(&mut self) {
+        if !E::is_native() {
+            for val in self.as_mut() {
+                *val = val.swap_bytes();
+            }
+        }
+    }
 }
 
 /// `Read` extension for reading values with an endianness selected at runtime.
@@ -166,6 +177,18 @@ mod tests {
         assert!(bytes == expected);
     }
 
+    fn write_i24_into<E: ByteOrder + IsNative>(values: &[I24], bytes: &mut [u8]) {
+        assert_eq!(bytes.len(), values.len() * 3);
+        for (v, c) in values.iter().copied().zip(bytes.chunks_exact_mut(3)) {
+            let b = &v.to_ne_bytes();
+            if E::is_native() {
+                c.copy_from_slice(b);
+            } else {
+                c.copy_from_slice(&[b[2], b[1], b[0]]);
+            }
+        }
+    }
+
     macro_rules! do_test {
         ($fn:ident, $et:ty, $ee:expr) => {{
             type E = $et;
@@ -179,6 +202,7 @@ mod tests {
             $fn::<E, _, _, _>(0..1000000i128, E::write_i128_into);
             $fn::<E, _, _, _>((0..1000000i32).map(|i| i as f32), E::write_f32_into);
             $fn::<E, _, _, _>((0..1000000i32).map(|i| i as f64), E::write_f64_into);
+            $fn::<E, _, _, _>((0..1000000).map(I24::new), write_i24_into::<E>);
         }};
     }
 
