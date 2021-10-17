@@ -20,28 +20,26 @@ pub struct Encoder<'r, 's> {
 
 impl<'r, 's> Encoder<'r, 's> {
     /// Creates an `Encoder` which reads samples from `reader`.
-    pub fn new<R>(reader: R) -> Self
-    where
-        R: ReadSamples<'s, Format = PcmS16Le> + 'r,
-    {
-        Self::with_block_size(reader, usize::MAX)
+    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Self {
+        Self::with_block_size_impl(Box::from(reader), usize::MAX)
     }
 
     /// Creates an `Encoder` which reads samples from `reader` and outputs blocks of data which are
     /// no larger than `block_size`.
-    pub fn with_block_size<R>(reader: R, block_size: usize) -> Self
-    where
-        R: ReadSamples<'s, Format = PcmS16Le> + 'r,
-    {
+    pub fn with_block_size(
+        reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r,
+        block_size: usize,
+    ) -> Self {
+        Self::with_block_size_impl(Box::from(reader), block_size)
+    }
+
+    fn with_block_size_impl(
+        reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
+        block_size: usize,
+    ) -> Self {
         let block_size_aligned = block_size & !(BYTES_PER_FRAME - 1);
         assert!(block_size_aligned > 0, "block size is too small");
-        Self {
-            reader: Box::from(reader),
-            pcm: vec![],
-            pos: 0,
-            block_size: block_size_aligned,
-            state: Info::default(),
-        }
+        Self { reader, pcm: vec![], pos: 0, block_size: block_size_aligned, state: Info::default() }
     }
 
     fn start_encoding(&mut self) -> Result<()> {
