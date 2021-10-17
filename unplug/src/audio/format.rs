@@ -1,5 +1,6 @@
 use super::Result;
 use crate::common::endian::{ConvertEndian, IsNative, ReadValuesExt, WriteValuesExt};
+use crate::common::I24;
 use byte_slice_cast::*;
 use byteorder::{ByteOrder, NativeEndian as NE, BE, LE};
 use std::any::Any;
@@ -16,6 +17,7 @@ pub enum Format {
     PcmS8,
     PcmS16Le,
     PcmS16Be,
+    PcmS24Le,
     PcmS32Le,
     PcmF32Le,
     GcAdpcm,
@@ -27,6 +29,7 @@ impl Format {
         match *self {
             Self::PcmS8 => 8,
             Self::PcmS16Le | Self::PcmS16Be => 16,
+            Self::PcmS24Le => 24,
             Self::PcmS32Le | Self::PcmF32Le => 32,
             Self::GcAdpcm => 4,
         }
@@ -380,6 +383,7 @@ macro_rules! pcm_format {
 pcm_format!(PcmS8, i8, NE);
 pcm_format!(PcmS16Le, i16, LE);
 pcm_format!(PcmS16Be, i16, BE);
+pcm_format!(PcmS24Le, I24, LE);
 pcm_format!(PcmS32Le, i32, LE);
 pcm_format!(PcmF32Le, f32, LE);
 

@@ -1,6 +1,7 @@
 use super::format::*;
 use super::sample::{CastSamples, ReadSamples, Samples};
 use super::{Error, Result};
+use crate::common::I24;
 use float_cmp::approx_eq;
 use std::marker::PhantomData;
 
@@ -23,6 +24,7 @@ mod private {
     impl Sealed for u64 {}
     impl Sealed for f32 {}
     impl Sealed for f64 {}
+    impl Sealed for crate::common::I24 {}
 }
 use private::*;
 
@@ -143,6 +145,31 @@ scalable!(u32);
 scalable!(i64);
 scalable!(u64);
 
+impl Scalable for I24 {
+    const INFO: TypeInfo = TypeInfo {
+        is_float: false,
+        min: I24::MIN.get() as u64,
+        max: I24::MAX.get() as u64,
+        bits: I24::BITS,
+    };
+
+    fn to_u64(self) -> u64 {
+        self.get() as u64
+    }
+
+    fn from_u64(val: u64) -> Self {
+        Self::new(val as i32)
+    }
+
+    fn to_f64(self) -> f64 {
+        scale_to_f64(self.get() as u32, Self::INFO.min as u32, Self::INFO.max as u32)
+    }
+
+    fn from_f64(val: f64) -> Self {
+        Self::new(scale_from_f64(val, Self::INFO.min as u32, Self::INFO.max as u32) as i32)
+    }
+}
+
 impl Scalable for f32 {
     const INFO: TypeInfo =
         TypeInfo { is_float: true, min: i64::MIN as u64, max: i64::MAX as u64, bits: 32 };
@@ -244,6 +271,7 @@ where
                 Format::PcmS8 => Self::convert(samples.cast::<PcmS8>()),
                 Format::PcmS16Le => Self::convert(samples.cast::<PcmS16Le>()),
                 Format::PcmS16Be => Self::convert(samples.cast::<PcmS16Be>()),
+                Format::PcmS24Le => Self::convert(samples.cast::<PcmS24Le>()),
                 Format::PcmS32Le => Self::convert(samples.cast::<PcmS32Le>()),
                 Format::PcmF32Le => Self::convert(samples.cast::<PcmF32Le>()),
                 f @ Format::GcAdpcm => return Err(Error::UnsupportedFormat(f)),
@@ -326,6 +354,22 @@ mod tests {
 
         assert_eq!((-0.5).scale::<i8>(), -64);
         assert_eq!((0.5).scale::<i8>(), 64);
+    }
+
+    #[test]
+    fn test_scale_i24() {
+        assert_eq!((-1i16).scale::<I24>(), I24::new(-0x100));
+        assert_eq!(0i16.scale::<I24>(), I24::new(0));
+        assert_eq!(1i16.scale::<I24>(), I24::new(0x100));
+
+        assert_eq!(I24::new(-0x100).scale::<i16>(), -1i16);
+        assert_eq!(I24::new(0).scale::<i16>(), 0);
+        assert_eq!(I24::new(0x100).scale::<i16>(), 1);
+
+        assert_eq!((0.5).scale::<I24>(), I24::new(0x400000));
+        assert_eq!((-0.5).scale::<I24>(), I24::new(-0x400000));
+        assert_approx_eq!(f64, I24::new(0x400000).scale::<f64>(), 0.5, ulps = 2);
+        assert_approx_eq!(f64, I24::new(-0x400000).scale::<f64>(), -0.5, ulps = 2);
     }
 
     #[test]
