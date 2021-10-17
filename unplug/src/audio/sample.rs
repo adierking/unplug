@@ -161,6 +161,17 @@ pub trait ReadSamples<'a> {
     }
 }
 
+impl<'a, F, R> ReadSamples<'a> for &mut R
+where
+    F: FormatTag,
+    R: ReadSamples<'a, Format = F> + ?Sized,
+{
+    type Format = F;
+    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
+        (**self).read_samples()
+    }
+}
+
 impl<'a, F, R> ReadSamples<'a> for Box<R>
 where
     F: FormatTag,
