@@ -57,7 +57,10 @@ impl<'r, 's> Encoder<'r, 's> {
 
         debug!("Calculating ADPCM coefficients over {} samples", self.pcm.len());
         self.state.coefficients = calculate_coefficients(&self.pcm);
-        trace!("coefficients = {:?}", self.state.coefficients);
+        debug!(
+            "Encoder context initialized (block size = {:#x}, coefficients = {:?})",
+            self.block_size, self.state.coefficients
+        );
         Ok(())
     }
 }
@@ -79,7 +82,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
         let num_samples = (num_frames * SAMPLES_PER_FRAME).min(remaining);
         let end = start + num_samples;
 
-        debug!("Encoding {} samples to ADPCM", num_samples);
+        trace!("Encoding {} samples to ADPCM", num_samples);
         let mut initial_state = self.state;
         let bytes = encode(&self.pcm[start..end], &mut self.state);
         initial_state.context.predictor_and_scale = bytes[0] as u16;
