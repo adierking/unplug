@@ -9,6 +9,7 @@ arrayvec = "0.5"
 bitflags = "1.2.1"
 byte-slice-cast = "1.1.0"
 byteorder = "1"
+claxon = "0.4.3"
 encoding_rs = "0.8.26"
 float-cmp = { version = "0.9.0", default_features = false, features = ["std"] }
 log = { version = "0.4", features = ["release_max_level_debug"] }

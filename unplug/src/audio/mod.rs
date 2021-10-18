@@ -1,6 +1,7 @@
 pub mod adpcm;
 pub mod brsar;
 pub mod dsp;
+pub mod flac;
 pub mod format;
 pub mod hps;
 pub mod pcm;
@@ -74,6 +75,9 @@ pub enum Error {
     #[error("unrecognized sample format: {0}")]
     UnrecognizedSampleFormat(u16),
 
+    #[error("unsupported bit depth: {0}")]
+    UnsupportedBitDepth(u32),
+
     #[error("audio stream is not mono or stereo")]
     UnsupportedChannels,
 
@@ -81,7 +85,11 @@ pub enum Error {
     UnsupportedFormat(Format),
 
     #[error(transparent)]
+    Flac(Box<claxon::Error>),
+
+    #[error(transparent)]
     Io(Box<io::Error>),
 }
 
+from_error_boxed!(Error::Flac, claxon::Error);
 from_error_boxed!(Error::Io, io::Error);
