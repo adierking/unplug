@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
 
-        let samples = wav.coalesce_samples()?;
+        let samples = wav.read_all_samples()?;
         assert_eq!(samples.len, expected.len());
         assert_eq!(samples.channels, 2);
         assert!(samples.data[..samples.len] == expected);

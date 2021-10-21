@@ -247,15 +247,15 @@ impl HpsStream {
         reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>,
         sample_rate: u32,
     ) -> Result<Self> {
-        let coalesced = reader.coalesce_samples()?;
-        if coalesced.channels == 2 {
-            let splitter = SplitChannels::new(coalesced.into_reader());
+        let samples = reader.read_all_samples()?;
+        if samples.channels == 2 {
+            let splitter = SplitChannels::new(samples.into_reader());
             let mut left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
             let mut right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
             Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
-        } else if coalesced.channels == 1 {
+        } else if samples.channels == 1 {
             let mut encoder =
-                adpcm::Encoder::with_block_size(coalesced.into_reader(), MONO_BLOCK_SIZE);
+                adpcm::Encoder::with_block_size(samples.into_reader(), MONO_BLOCK_SIZE);
             Self::from_adpcm_mono(&mut encoder, sample_rate)
         } else {
             Err(Error::UnsupportedChannels)

@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(flac.channels(), 2);
         assert_eq!(flac.sample_rate(), 44100);
         let mut converter = ConvertPcm::<PcmS16Le>::new(flac);
-        let samples = converter.coalesce_samples()?;
+        let samples = converter.read_all_samples()?;
         assert_eq!(samples.data, open_test_wav());
         Ok(())
     }

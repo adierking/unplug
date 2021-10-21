@@ -141,8 +141,8 @@ pub trait ReadSamples<'a> {
 
     /// Reads all available samples and concatenates them into a single `Samples` object. The
     /// samples must have a static format and follow the rules for `Samples::append()`. If no
-    /// samples are available, `Err(NoSamplesAvailable)` is returned.
-    fn coalesce_samples(&mut self) -> Result<Samples<'a, Self::Format>>
+    /// samples are available, `Err(EmptyStream)` is returned.
+    fn read_all_samples(&mut self) -> Result<Samples<'a, Self::Format>>
     where
         Self::Format: ExtendSamples,
     {
@@ -460,7 +460,7 @@ mod tests {
     fn test_owned() {
         let samples: Vec<i16> = (0..16).collect();
         let borrowed = Samples::<PcmS16Le>::from_pcm(&samples, 1).into_reader();
-        let owned = OwnedSamples::new(borrowed).coalesce_samples().unwrap();
+        let owned = OwnedSamples::new(borrowed).read_all_samples().unwrap();
         assert!(owned.channels == 1);
         assert!(owned.len == 16);
         assert!(matches!(owned.data, Cow::Owned(_)));
@@ -728,15 +728,15 @@ mod tests {
     }
 
     #[test]
-    fn test_coalesce_samples() {
+    fn test_read_all_samples() {
         let samples1 = Samples::<PcmS16Le>::from_pcm((0..16).collect::<Vec<_>>(), 1);
         let samples2 = Samples::<PcmS16Le>::from_pcm((16..32).collect::<Vec<_>>(), 1);
         let samples3 = Samples::<PcmS16Le>::from_pcm((32..48).collect::<Vec<_>>(), 1);
         let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3]);
-        let coalesced = reader.coalesce_samples().unwrap();
-        assert_eq!(coalesced.len, 48);
-        assert_eq!(coalesced.channels, 1);
-        assert_eq!(coalesced.data, (0..48).collect::<Vec<_>>());
-        assert!(matches!(reader.coalesce_samples(), Err(Error::EmptyStream)));
+        let all = reader.read_all_samples().unwrap();
+        assert_eq!(all.len, 48);
+        assert_eq!(all.channels, 1);
+        assert_eq!(all.data, (0..48).collect::<Vec<_>>());
+        assert!(matches!(reader.read_all_samples(), Err(Error::EmptyStream)));
     }
 }

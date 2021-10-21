@@ -325,9 +325,9 @@ mod tests {
         let mut mp3 = Mp3Reader::new(Cursor::new(TEST_MP3))?;
         assert_eq!(mp3.sample_rate(), 44100);
         assert_eq!(mp3.channels(), 2);
-        let samples = mp3.coalesce_samples()?;
+        let samples = mp3.read_all_samples()?;
 
-        let reference = WavReader::open(Cursor::new(TEST_MP3_WAV))?.coalesce_samples()?;
+        let reference = WavReader::open(Cursor::new(TEST_MP3_WAV))?.read_all_samples()?;
         assert_eq!(samples.len, reference.len);
 
         // Compare with a tolerance of +/- 1 (minimp3 vs ffmpeg)

@@ -377,7 +377,7 @@ mod tests {
         let data = open_test_wav();
         let samples_s16 = Samples::<PcmS16Le>::from_pcm(&data, 2);
         let mut converter = ConvertPcm::<PcmS16Le>::new(samples_s16.into_reader());
-        let converted = converter.coalesce_samples()?;
+        let converted = converter.read_all_samples()?;
         assert!(matches!(converted.data, Cow::Borrowed(_)));
         assert!(converted.data == data);
         Ok(())
@@ -387,7 +387,7 @@ mod tests {
     fn test_pcms16le_to_pcms32le() -> Result<()> {
         let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2);
         let mut converter = ConvertPcm::<PcmS32Le>::new(samples_s16.into_reader());
-        let samples_s32 = converter.coalesce_samples()?;
+        let samples_s32 = converter.read_all_samples()?;
         let expected = PcmS32Le::read_bytes(&TEST_WAV_S32[TEST_WAV_S32_DATA_OFFSET..])?;
         assert!(samples_s32.data == expected);
         Ok(())
@@ -398,7 +398,7 @@ mod tests {
         let data = PcmS32Le::read_bytes(&TEST_WAV_S32[TEST_WAV_S32_DATA_OFFSET..])?;
         let samples_s32 = Samples::<PcmS32Le>::from_pcm(data, 2);
         let mut converter = ConvertPcm::<PcmS16Le>::new(samples_s32.into_reader());
-        let samples_s16 = converter.coalesce_samples()?;
+        let samples_s16 = converter.read_all_samples()?;
         assert!(samples_s16.data == open_test_wav());
         Ok(())
     }
@@ -407,7 +407,7 @@ mod tests {
     fn test_pcms16le_to_pcmf32le() -> Result<()> {
         let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2);
         let mut converter = ConvertPcm::<PcmF32Le>::new(samples_s16.into_reader());
-        let samples_f32 = converter.coalesce_samples()?;
+        let samples_f32 = converter.read_all_samples()?;
         let expected = PcmF32Le::read_bytes(&TEST_WAV_F32[TEST_WAV_F32_DATA_OFFSET..])?;
         assert!(samples_f32.data == expected);
         Ok(())
@@ -418,7 +418,7 @@ mod tests {
         let data = PcmF32Le::read_bytes(&TEST_WAV_F32[TEST_WAV_F32_DATA_OFFSET..])?;
         let samples_f32 = Samples::<PcmF32Le>::from_pcm(data, 2);
         let mut converter = ConvertPcm::<PcmS16Le>::new(samples_f32.into_reader());
-        let samples_s16 = converter.coalesce_samples()?;
+        let samples_s16 = converter.read_all_samples()?;
         assert!(samples_s16.data == open_test_wav());
         Ok(())
     }
@@ -428,7 +428,7 @@ mod tests {
         let data = open_test_wav();
         let samples_le = Samples::<PcmS16Le>::from_pcm(&data, 2);
         let mut converter = ConvertPcm::<PcmS16Be>::new(samples_le.into_reader());
-        let converted = converter.coalesce_samples()?;
+        let converted = converter.read_all_samples()?;
         // The conversion should have been zero-cost
         assert!(matches!(converted.data, Cow::Borrowed(_)));
         assert!(converted.data == data);

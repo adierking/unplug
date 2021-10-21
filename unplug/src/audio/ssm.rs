@@ -154,7 +154,7 @@ impl Channel {
 
     /// Creates a new `Channel` from ADPCM sample data.
     pub fn from_adpcm(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
-        let samples = reader.coalesce_samples()?;
+        let samples = reader.read_all_samples()?;
         if samples.channels != 1 {
             return Err(Error::StreamNotMono);
         }
@@ -241,14 +241,14 @@ impl Sound {
         reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>,
         sample_rate: u32,
     ) -> Result<Self> {
-        let coalesced = reader.coalesce_samples()?;
-        if coalesced.channels == 2 {
-            let splitter = SplitChannels::new(coalesced.into_reader());
+        let samples = reader.read_all_samples()?;
+        if samples.channels == 2 {
+            let splitter = SplitChannels::new(samples.into_reader());
             let mut left = Encoder::new(splitter.left());
             let mut right = Encoder::new(splitter.right());
             Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
-        } else if coalesced.channels == 1 {
-            let mut encoder = Encoder::new(coalesced.into_reader());
+        } else if samples.channels == 1 {
+            let mut encoder = Encoder::new(samples.into_reader());
             Self::from_adpcm_mono(&mut encoder, sample_rate)
         } else {
             Err(Error::UnsupportedChannels)
