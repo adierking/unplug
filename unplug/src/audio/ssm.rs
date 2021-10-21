@@ -1,10 +1,7 @@
 use super::adpcm::{Decoder, Encoder, FrameContext, GcAdpcm, Info};
 use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
-use super::pcm::ConvertPcm;
-use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
-use crate::audio::sample::SplitChannels;
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, WriteTo};
 use arrayvec::ArrayVec;
@@ -147,8 +144,8 @@ impl Channel {
     pub fn decoder(&self) -> SsmDecoder<'_, '_> {
         let reader = self.reader();
         match self.address.format {
-            DspFormat::Adpcm => Box::new(Decoder::new(CastSamples::new(reader))),
-            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(ConvertPcm::<PcmS16Le>::new(reader)),
+            DspFormat::Adpcm => Box::new(Decoder::new(reader.cast())),
+            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(reader.convert()),
         }
     }
 
@@ -232,7 +229,7 @@ impl Sound {
         } else {
             let left = self.channels[0].decoder();
             let right = self.channels[1].decoder();
-            Box::new(JoinChannels::new(left, right))
+            Box::new(left.with_right_channel(right))
         }
     }
 
@@ -243,7 +240,7 @@ impl Sound {
     ) -> Result<Self> {
         let samples = reader.read_all_samples()?;
         if samples.channels == 2 {
-            let splitter = SplitChannels::new(samples.into_reader());
+            let splitter = samples.into_reader().split_channels();
             let mut left = Encoder::new(splitter.left());
             let mut right = Encoder::new(splitter.right());
             Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)

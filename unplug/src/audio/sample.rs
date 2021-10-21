@@ -1,4 +1,5 @@
 use super::format::*;
+use super::pcm::{AnyPcm, ConvertPcm, Scalable};
 use super::{Error, Result};
 use std::any;
 use std::borrow::Cow;
@@ -132,21 +133,21 @@ impl<'a, F: PcmFormat> Samples<'a, F> {
 }
 
 /// Trait for an audio source.
-pub trait ReadSamples<'a> {
+pub trait ReadSamples<'s> {
     /// The format that samples are decoded as.
     type Format: FormatTag;
 
     /// Reads the next block of samples. If there are no more samples, returns `Ok(None)`.
-    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>>;
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>>;
 
     /// Reads all available samples and concatenates them into a single `Samples` object. The
     /// samples must have a static format and follow the rules for `Samples::append()`. If no
     /// samples are available, `Err(EmptyStream)` is returned.
-    fn read_all_samples(&mut self) -> Result<Samples<'a, Self::Format>>
+    fn read_all_samples(&mut self) -> Result<Samples<'s, Self::Format>>
     where
         Self::Format: ExtendSamples,
     {
-        let mut result: Option<Samples<'a, Self::Format>> = None;
+        let mut result: Option<Samples<'s, Self::Format>> = None;
         while let Some(samples) = self.read_samples()? {
             match &mut result {
                 Some(a) => a.extend(&samples)?,
@@ -154,6 +155,60 @@ pub trait ReadSamples<'a> {
             }
         }
         result.ok_or(Error::EmptyStream)
+    }
+
+    /// Creates an adapter which ensures all samples contain owned data. Borrowed sample data
+    /// returned by the underlying reader will be cloned.
+    fn owned(self) -> OwnedSamples<'s, Self>
+    where
+        Self: Sized,
+    {
+        OwnedSamples::new(self)
+    }
+
+    /// Creates an adapter which casts audio samples to a compatible format as they are read. If a
+    /// cast fails, this will stop with `Error::UnsupportedFormat`.
+    fn cast<F: DynamicFormat>(self) -> CastSamples<'s, Self, F>
+    where
+        Self: Sized,
+        Self::Format: Cast<F>,
+    {
+        CastSamples::new(self)
+    }
+
+    /// Creates an adapter which converts PCM audio samples to another PCM format.
+    fn convert<'r, To>(self) -> ConvertPcm<'r, 's, To>
+    where
+        Self: Sized + 'r,
+        Self::Format: AnyPcm,
+        To: PcmFormat + Cast<AnyFormat>,
+        To::Data: Scalable,
+        AnyFormat: Cast<To>,
+    {
+        ConvertPcm::new(self)
+    }
+
+    /// Creates an adaptor which joins this mono stream with another mono stream to form a single
+    /// stereo stream. The streams must return sample blocks whose sizes match. This stream will be
+    /// the left channel, and `right` will be the right channel.
+    fn with_right_channel<'r>(
+        self,
+        right: impl ReadSamples<'s, Format = Self::Format> + 'r,
+    ) -> JoinChannels<'r, 's, Self::Format>
+    where
+        Self: Sized + 'r,
+        Self::Format: PcmFormat,
+    {
+        JoinChannels::new(self, right)
+    }
+
+    /// Creates an adapter which splits a stereo stream into two mono streams.
+    fn split_channels<'r>(self) -> SplitChannels<'r, 's, Self::Format>
+    where
+        Self: Sized + 'r,
+        Self::Format: PcmFormat,
+    {
+        SplitChannels::new(self)
     }
 }
 
@@ -197,7 +252,8 @@ impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
     }
 }
 
-/// An adapter which ensures that sample data is owned, cloning it if necessary.
+/// An adapter which ensures all samples contain owned data. Borrowed sample data returned by the
+/// underlying reader will be cloned.
 pub struct OwnedSamples<'s, R: ReadSamples<'s>> {
     inner: R,
     _marker: PhantomData<&'s ()>,
@@ -281,8 +337,8 @@ impl<'a, F: PcmFormat> Iterator for SampleIterator<'a, F> {
 
 impl<F: PcmFormat> FusedIterator for SampleIterator<'_, F> {}
 
-/// Joins two raw mono streams into a single stereo stream.
-/// The streams must both come from the same source and have the same block sizes.
+/// Joins two raw mono streams into a single stereo stream. The streams must return sample blocks
+/// whose sizes match.
 pub struct JoinChannels<'r, 's, F: PcmFormat> {
     left: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     right: Box<dyn ReadSamples<'s, Format = F> + 'r>,
@@ -290,10 +346,10 @@ pub struct JoinChannels<'r, 's, F: PcmFormat> {
 }
 
 impl<'r, 's, F: PcmFormat> JoinChannels<'r, 's, F> {
-    pub fn new<R>(left: R, right: R) -> Self
-    where
-        R: ReadSamples<'s, Format = F> + 'r,
-    {
+    pub fn new(
+        left: impl ReadSamples<'s, Format = F> + 'r,
+        right: impl ReadSamples<'s, Format = F> + 'r,
+    ) -> Self {
         Self { left: Box::from(left), right: Box::from(right), _marker: PhantomData }
     }
 }
@@ -321,7 +377,7 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
     }
 }
 
-/// Splits a stereo stream into two mono streams.
+/// An adapter which splits a stereo stream into two mono streams.
 pub struct SplitChannels<'r, 's, F>
 where
     F: PcmFormat + 'static,

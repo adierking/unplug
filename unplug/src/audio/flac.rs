@@ -107,7 +107,6 @@ impl ReadSamples<'static> for FlacReader<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::ConvertPcm;
     use crate::test::{open_test_wav, TEST_FLAC};
 
     #[test]
@@ -116,7 +115,7 @@ mod tests {
         assert_eq!(flac.format(), Format::PcmS16Le);
         assert_eq!(flac.channels(), 2);
         assert_eq!(flac.sample_rate(), 44100);
-        let mut converter = ConvertPcm::<PcmS16Le>::new(flac);
+        let mut converter = flac.convert::<PcmS16Le>();
         let samples = converter.read_all_samples()?;
         assert_eq!(samples.data, open_test_wav());
         Ok(())

@@ -1,5 +1,5 @@
 use super::format::*;
-use super::sample::{CastSamples, ReadSamples, Samples};
+use super::sample::{ReadSamples, Samples};
 use super::{Error, Result};
 use crate::common::I24;
 use float_cmp::approx_eq;
@@ -236,8 +236,8 @@ where
     AnyFormat: Cast<To>,
 {
     /// Creates a new converter which reads samples from `inner`.
-    pub fn new<From: AnyPcm + 'r>(inner: impl ReadSamples<'s, Format = From> + 'r) -> Self {
-        Self { inner: Box::new(CastSamples::new(inner)), _marker: PhantomData }
+    pub fn new<From: AnyPcm>(inner: impl ReadSamples<'s, Format = From> + 'r) -> Self {
+        Self { inner: Box::new(inner.cast()), _marker: PhantomData }
     }
 
     /// Converts samples from the `From` format to the `To` format.

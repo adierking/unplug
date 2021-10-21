@@ -17,7 +17,6 @@ pub use flac::FlacReader;
 pub use format::{Format, FormatTag};
 pub use hps::HpsStream;
 pub use mp3::Mp3Reader;
-pub use pcm::ConvertPcm;
 pub use sample::{ReadSamples, Samples};
 pub use sem::EventBank;
 pub use ssm::SoundBank;

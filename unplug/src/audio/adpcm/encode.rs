@@ -99,7 +99,6 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
 mod tests {
     use super::*;
     use crate::audio::adpcm::FrameContext;
-    use crate::audio::sample::SplitChannels;
     use crate::audio::Result;
     use crate::test;
 
@@ -108,7 +107,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let splitter = SplitChannels::new(samples.into_reader());
+        let splitter = samples.into_reader().split_channels();
         let mut left_encoder = Encoder::new(splitter.left());
         let mut right_encoder = Encoder::new(splitter.right());
 
@@ -141,7 +140,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let splitter = SplitChannels::new(samples.into_reader());
+        let splitter = samples.into_reader().split_channels();
         let block_size = 0x8000;
         let mut encoder = Encoder::with_block_size(splitter.left(), block_size);
         let mut blocks = vec![];

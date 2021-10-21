@@ -1,8 +1,6 @@
 use super::adpcm::{self, GcAdpcm};
 use super::dsp::{AudioAddress, DspFormat};
 use super::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat};
-use super::pcm::ConvertPcm;
-use super::sample::{CastSamples, JoinChannels, SplitChannels};
 use super::{Error, ReadSamples, Result, Samples};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, Region, WriteTo};
@@ -228,7 +226,7 @@ impl HpsStream {
         } else {
             let left = self.channel_decoder(0);
             let right = self.channel_decoder(1);
-            Box::new(JoinChannels::new(left, right))
+            Box::new(left.with_right_channel(right))
         }
     }
 
@@ -237,8 +235,8 @@ impl HpsStream {
     pub fn channel_decoder(&self, channel: usize) -> HpsDecoder<'_, '_> {
         let reader = self.reader(channel);
         match self.channels[channel].address.format {
-            DspFormat::Adpcm => Box::new(adpcm::Decoder::new(CastSamples::new(reader))),
-            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(ConvertPcm::<PcmS16Le>::new(reader)),
+            DspFormat::Adpcm => Box::new(adpcm::Decoder::new(reader.cast())),
+            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(reader.convert()),
         }
     }
 
@@ -249,7 +247,7 @@ impl HpsStream {
     ) -> Result<Self> {
         let samples = reader.read_all_samples()?;
         if samples.channels == 2 {
-            let splitter = SplitChannels::new(samples.into_reader());
+            let splitter = samples.into_reader().split_channels();
             let mut left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
             let mut right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
             Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
@@ -930,7 +928,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let splitter = SplitChannels::new(samples.into_reader());
+        let splitter = samples.into_reader().split_channels();
         let hps = HpsStream::from_pcm(&mut splitter.left(), 44100)?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 1);

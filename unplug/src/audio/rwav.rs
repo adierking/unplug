@@ -3,7 +3,6 @@
 
 use super::adpcm::{self, GcAdpcm};
 use super::format::{AnyFormat, Format, PcmS16Le};
-use super::sample::{CastSamples, JoinChannels};
 use super::{Error, ReadSamples, Result, Samples};
 use crate::common::{ReadFrom, Region};
 use arrayvec::ArrayVec;
@@ -377,8 +376,7 @@ impl Rwav {
     /// ***Panics*** if the channel index is out-of-bounds.
     pub fn channel_decoder(&self, channel: usize) -> RwavDecoder<'_, '_> {
         let reader = self.reader(channel);
-        let casted = CastSamples::new(reader);
-        Box::new(adpcm::Decoder::new(casted))
+        Box::new(adpcm::Decoder::new(reader.cast()))
     }
 
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
@@ -388,7 +386,7 @@ impl Rwav {
         } else {
             let left = self.channel_decoder(0);
             let right = self.channel_decoder(1);
-            Box::new(JoinChannels::new(left, right))
+            Box::new(left.with_right_channel(right))
         }
     }
 }
