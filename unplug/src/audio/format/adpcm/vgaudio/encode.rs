@@ -1,4 +1,4 @@
-use crate::audio::adpcm::{Coefficients, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
+use crate::audio::format::adpcm::{Coefficients, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::common::clamp_i16;
 
 pub(crate) fn encode(pcm: &[i16], info: &mut Info) -> Vec<u8> {

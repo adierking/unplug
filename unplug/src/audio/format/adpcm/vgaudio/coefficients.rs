@@ -1,6 +1,6 @@
 #![allow(clippy::needless_range_loop)]
 
-use crate::audio::adpcm::{Coefficients, SAMPLES_PER_FRAME};
+use crate::audio::format::adpcm::{Coefficients, SAMPLES_PER_FRAME};
 
 type Matrix3 = [[f64; 3]; 3];
 type Vec3 = [f64; 3];

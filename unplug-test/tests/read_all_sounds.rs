@@ -3,7 +3,7 @@ use crc32fast::Hasher;
 use log::info;
 use std::io::BufReader;
 use unplug::audio::format::{PcmS16Le, ReadWriteBytes};
-use unplug::audio::SoundBank;
+use unplug::audio::transport::SoundBank;
 use unplug::common::ReadFrom;
 use unplug::dvd::OpenFile;
 use unplug_test as common;

@@ -1,5 +1,5 @@
-use super::format::{AnyFormat, Cast, PcmFormat, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
-use super::{Error, Format, ReadSamples, Result, Samples};
+use crate::audio::format::{AnyFormat, Cast, PcmFormat, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
+use crate::audio::{Error, Format, ReadSamples, Result, Samples};
 use claxon::{self};
 use log::debug;
 use std::convert::TryFrom;

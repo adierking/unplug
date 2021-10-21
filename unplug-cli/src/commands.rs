@@ -10,7 +10,7 @@ use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::Path;
 use std::time::Instant;
 use unicase::UniCase;
-use unplug::audio::{HpsStream, SoundBank, WavBuilder};
+use unplug::audio::transport::{HpsStream, SoundBank, WavBuilder};
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::ReadFrom;
 use unplug::data::atc::ATCS;

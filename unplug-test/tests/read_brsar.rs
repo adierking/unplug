@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::fs::File;
 use std::io::BufReader;
-use unplug::audio::Brsar;
+use unplug::audio::transport::Brsar;
 use unplug::common::ReadFrom;
 use unplug_test as common;
 

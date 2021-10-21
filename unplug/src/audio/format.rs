@@ -1,8 +1,15 @@
+pub mod adpcm;
+pub mod dsp;
+pub mod pcm;
+
+pub use adpcm::GcAdpcm;
+pub use dsp::DspFormat;
+pub use pcm::{PcmF32Le, PcmS16Be, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
+
 use super::Result;
 use crate::common::endian::{ConvertEndian, IsNative, ReadValuesExt, WriteValuesExt};
-use crate::common::I24;
 use byte_slice_cast::*;
-use byteorder::{ByteOrder, NativeEndian as NE, BE, LE};
+use byteorder::ByteOrder;
 use std::any::Any;
 use std::borrow::Cow;
 use std::fmt::Debug;
@@ -359,51 +366,6 @@ where
         }
     }
 }
-
-/// Declares a PCM format.
-macro_rules! pcm_format {
-    ($name:ident, $data:ty, $endian:ty) => {
-        #[derive(Copy, Clone)]
-        pub struct $name;
-        impl FormatTag for $name {
-            type Data = $data;
-            type Params = ();
-        }
-        impl StaticFormat for $name {
-            fn format() -> Format {
-                Format::$name
-            }
-        }
-        impl PcmFormat for $name {
-            type Endian = $endian;
-        }
-    };
-}
-
-pcm_format!(PcmS8, i8, NE);
-pcm_format!(PcmS16Le, i16, LE);
-pcm_format!(PcmS16Be, i16, BE);
-pcm_format!(PcmS24Le, I24, LE);
-pcm_format!(PcmS32Le, i32, LE);
-pcm_format!(PcmF32Le, f32, LE);
-
-/// Implements support for zero-cost casting between two PCM formats.
-macro_rules! pcm_cast {
-    ($from:ty, $to:ty) => {
-        impl Cast<$to> for $from {
-            fn cast_params(params: ()) -> StdResult<(), ()> {
-                Ok(params)
-            }
-            fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, $to> {
-                data
-            }
-        }
-    };
-}
-
-// Format::compatible_with() above must match these!
-pcm_cast!(PcmS16Le, PcmS16Be);
-pcm_cast!(PcmS16Be, PcmS16Le);
 
 #[cfg(test)]
 mod tests {

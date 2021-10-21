@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::info;
 use std::io::BufReader;
-use unplug::audio::sem::{Action, Command, Event, EventBank};
+use unplug::audio::metadata::sem::{Action, Command, Event, EventBank};
 use unplug::common::ReadFrom;
 use unplug::dvd::OpenFile;
 use unplug_test as common;

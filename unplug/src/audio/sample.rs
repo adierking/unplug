@@ -1,5 +1,5 @@
+use super::format::pcm::{AnyPcm, ConvertPcm, Scalable};
 use super::format::*;
-use super::pcm::{AnyPcm, ConvertPcm, Scalable};
 use super::{Error, Result};
 use std::any;
 use std::borrow::Cow;
@@ -486,7 +486,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::adpcm::GcAdpcm;
+    use crate::audio::format::GcAdpcm;
     use std::convert::TryFrom;
 
     #[derive(Clone)]

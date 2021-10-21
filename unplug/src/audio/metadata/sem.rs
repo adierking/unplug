@@ -1,4 +1,4 @@
-use super::{Error, Result};
+use crate::audio::{Error, Result};
 use crate::common::ReadFrom;
 use byteorder::{ReadBytesExt, BE};
 use log::debug;

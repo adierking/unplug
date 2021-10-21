@@ -1,7 +1,7 @@
 // NOTE: This is intentionally incomplete and only implemented enough to retrieve sound names from
 // New Play Control's cb_robo.brsar. Fully supporting this format is not useful.
 
-use super::{Error, Result};
+use crate::audio::{Error, Result};
 use crate::common::{ReadFrom, Region};
 use byteorder::{ReadBytesExt, BE};
 use log::{debug, error};

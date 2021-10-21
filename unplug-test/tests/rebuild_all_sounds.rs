@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::{info, warn};
 use std::io::Cursor;
-use unplug::audio::SoundBank;
+use unplug::audio::transport::SoundBank;
 use unplug::common::{ReadFrom, WriteTo};
 use unplug::data::sound_bank::{SoundBank as SoundBankId, SOUND_BANKS};
 use unplug::dvd::OpenFile;

@@ -1,5 +1,5 @@
-use super::format::PcmS16Le;
-use super::{Error, ReadSamples, Result, Samples};
+use crate::audio::format::PcmS16Le;
+use crate::audio::{Error, ReadSamples, Result, Samples};
 use crate::common::{ReadSeek, Region};
 use byteorder::{ReadBytesExt, BE};
 use log::{debug, error, trace, warn};
@@ -316,7 +316,7 @@ fn analyze_mp3(reader: &mut (impl Read + Seek), info: &mut Info) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::WavReader;
+    use crate::audio::transport::WavReader;
     use crate::test::{TEST_MP3, TEST_MP3_WAV};
     use std::io::Cursor;
 

@@ -1,7 +1,8 @@
-use super::format::*;
-use super::sample::{ReadSamples, Samples};
-use super::{Error, Result};
+use super::{AnyFormat, Cast, DataCow, DynamicFormat, Format, FormatTag, PcmFormat, StaticFormat};
+use crate::audio::sample::{ReadSamples, Samples};
+use crate::audio::{Error, Result};
 use crate::common::I24;
+use byteorder::{NativeEndian as NE, BE, LE};
 use float_cmp::approx_eq;
 use std::marker::PhantomData;
 
@@ -27,6 +28,51 @@ mod private {
     impl Sealed for crate::common::I24 {}
 }
 use private::*;
+
+/// Declares a PCM format.
+macro_rules! pcm_format {
+    ($name:ident, $data:ty, $endian:ty) => {
+        #[derive(Copy, Clone)]
+        pub struct $name;
+        impl FormatTag for $name {
+            type Data = $data;
+            type Params = ();
+        }
+        impl StaticFormat for $name {
+            fn format() -> Format {
+                Format::$name
+            }
+        }
+        impl PcmFormat for $name {
+            type Endian = $endian;
+        }
+    };
+}
+
+pcm_format!(PcmS8, i8, NE);
+pcm_format!(PcmS16Le, i16, LE);
+pcm_format!(PcmS16Be, i16, BE);
+pcm_format!(PcmS24Le, I24, LE);
+pcm_format!(PcmS32Le, i32, LE);
+pcm_format!(PcmF32Le, f32, LE);
+
+/// Implements support for zero-cost casting between two PCM formats.
+macro_rules! pcm_cast {
+    ($from:ty, $to:ty) => {
+        impl Cast<$to> for $from {
+            fn cast_params(params: ()) -> std::result::Result<(), ()> {
+                Ok(params)
+            }
+            fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, $to> {
+                data
+            }
+        }
+    };
+}
+
+// Format::compatible_with() in format.rs must match these!
+pcm_cast!(PcmS16Le, PcmS16Be);
+pcm_cast!(PcmS16Be, PcmS16Le);
 
 /// Scales `val` between two data types.
 const fn scale(val: u64, from: TypeInfo, to: TypeInfo) -> u64 {
@@ -283,7 +329,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::format::{PcmS16Le, PcmS32Le, ReadWriteBytes};
+    use crate::audio::format::ReadWriteBytes;
     use crate::test::{
         open_test_wav, TEST_WAV_F32, TEST_WAV_F32_DATA_OFFSET, TEST_WAV_S32,
         TEST_WAV_S32_DATA_OFFSET,

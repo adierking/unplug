@@ -83,7 +83,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::adpcm::{Coefficients, FrameContext, Info};
+    use crate::audio::format::adpcm::{Coefficients, FrameContext, Info};
     use crate::audio::format::ReadWriteBytes;
 
     /// 128-sample sine wave encoded to GameCube ADPCM

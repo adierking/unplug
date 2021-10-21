@@ -1,7 +1,9 @@
-use super::adpcm::{self, GcAdpcm};
-use super::dsp::{AudioAddress, DspFormat};
-use super::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat};
-use super::{Error, ReadSamples, Result, Samples};
+use crate::audio::format::adpcm::{self, GcAdpcm};
+use crate::audio::format::dsp::{AudioAddress, DspFormat};
+use crate::audio::format::{
+    AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat,
+};
+use crate::audio::{Error, ReadSamples, Result, Samples};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, Region, WriteTo};
 use arrayvec::ArrayVec;

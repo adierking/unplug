@@ -1,9 +1,9 @@
 // rwav is a Wii-specific format, but supporting it allows us to read sounds from the New Play
 // Control release.
 
-use super::adpcm::{self, GcAdpcm};
-use super::format::{AnyFormat, Format, PcmS16Le};
-use super::{Error, ReadSamples, Result, Samples};
+use crate::audio::format::adpcm::{self, GcAdpcm};
+use crate::audio::format::{AnyFormat, Format, PcmS16Le};
+use crate::audio::{Error, ReadSamples, Result, Samples};
 use crate::common::{ReadFrom, Region};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};

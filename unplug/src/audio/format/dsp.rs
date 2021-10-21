@@ -1,4 +1,4 @@
-use super::{Error, Format, Result};
+use crate::audio::{Error, Format, Result};
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::info;
 use std::io::Cursor;
-use unplug::audio::HpsStream;
+use unplug::audio::transport::HpsStream;
 use unplug::common::{ReadFrom, WriteTo};
 use unplug::data::music::MUSIC;
 use unplug::dvd::OpenFile;

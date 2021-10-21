@@ -5,8 +5,8 @@ mod vgaudio;
 pub use decode::*;
 pub use encode::*;
 
-use super::format::{ExtendSamples, FormatTag, ReadWriteBytes, StaticFormat};
-use super::{Error, Format, Result};
+use super::{ExtendSamples, Format, FormatTag, ReadWriteBytes, StaticFormat};
+use crate::audio::{Error, Result};
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
 use std::borrow::Cow;

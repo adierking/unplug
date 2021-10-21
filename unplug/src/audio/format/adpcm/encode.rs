@@ -98,7 +98,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::adpcm::FrameContext;
+    use crate::audio::format::adpcm::FrameContext;
     use crate::audio::Result;
     use crate::test;
 
