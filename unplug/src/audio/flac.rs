@@ -57,7 +57,7 @@ impl<'r> FlacReader<'r> {
         self.channels
     }
 
-    /// Gets the number of channels in the stream.
+    /// Gets the audio sample rate.
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }

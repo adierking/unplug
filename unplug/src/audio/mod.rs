@@ -4,6 +4,7 @@ pub mod dsp;
 pub mod flac;
 pub mod format;
 pub mod hps;
+pub mod mp3;
 pub mod pcm;
 pub mod rwav;
 pub mod sample;
@@ -12,8 +13,10 @@ pub mod ssm;
 pub mod wav;
 
 pub use brsar::Brsar;
+pub use flac::FlacReader;
 pub use format::{Format, FormatTag};
 pub use hps::HpsStream;
+pub use mp3::Mp3Reader;
 pub use pcm::ConvertPcm;
 pub use sample::{ReadSamples, Samples};
 pub use sem::EventBank;
@@ -39,6 +42,15 @@ pub enum Error {
     #[error("cannot concatenate samples with different coefficients")]
     DifferentCoefficients,
 
+    #[error("audio stream is empty")]
+    EmptyStream,
+
+    #[error("audio stream does not have a consistent channel count")]
+    InconsistentChannels,
+
+    #[error("audio stream does not have a consistent sample rate")]
+    InconsistentSampleRate,
+
     #[error("invalid BRSAR data")]
     InvalidBrsar,
 
@@ -59,9 +71,6 @@ pub enum Error {
 
     #[error("samples are not aligned on a frame boundary")]
     NotFrameAligned,
-
-    #[error("no samples are available")]
-    NoSamplesAvailable,
 
     #[error("audio stream is not mono")]
     StreamNotMono,
@@ -89,7 +98,11 @@ pub enum Error {
 
     #[error(transparent)]
     Io(Box<io::Error>),
+
+    #[error(transparent)]
+    Mp3(Box<minimp3::Error>),
 }
 
 from_error_boxed!(Error::Flac, claxon::Error);
 from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Mp3, minimp3::Error);

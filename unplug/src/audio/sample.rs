@@ -102,11 +102,7 @@ impl<F: ExtendSamples> Samples<'_, F> {
         assert_eq!(format, other.format());
 
         if self.channels != other.channels {
-            return Err(if self.channels == 1 {
-                Error::StreamNotMono
-            } else {
-                Error::StreamNotStereo
-            });
+            return Err(Error::InconsistentChannels);
         }
 
         // Make sure the end of our data is frame-aligned
@@ -157,7 +153,7 @@ pub trait ReadSamples<'a> {
                 None => result = Some(samples),
             }
         }
-        result.ok_or(Error::NoSamplesAvailable)
+        result.ok_or(Error::EmptyStream)
     }
 }
 
@@ -628,8 +624,8 @@ mod tests {
             data: Cow::from((16..32).collect::<Vec<_>>()),
             params: Default::default(),
         };
-        assert!(matches!(samples1.extend(&samples2), Err(Error::StreamNotMono)));
-        assert!(matches!(samples2.extend(&samples1), Err(Error::StreamNotStereo)));
+        assert!(matches!(samples1.extend(&samples2), Err(Error::InconsistentChannels)));
+        assert!(matches!(samples2.extend(&samples1), Err(Error::InconsistentChannels)));
     }
 
     #[test]
@@ -741,6 +737,6 @@ mod tests {
         assert_eq!(coalesced.len, 48);
         assert_eq!(coalesced.channels, 1);
         assert_eq!(coalesced.data, (0..48).collect::<Vec<_>>());
-        assert!(matches!(reader.coalesce_samples(), Err(Error::NoSamplesAvailable)));
+        assert!(matches!(reader.coalesce_samples(), Err(Error::EmptyStream)));
     }
 }

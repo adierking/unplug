@@ -35,6 +35,11 @@ pub(crate) const TEST_WAV_F32_DATA_OFFSET: usize = 0x72;
 /// `ionpack.wav` as FLAC
 pub(crate) const TEST_FLAC: &[u8] = include_bytes!("test/ionpack.flac");
 
+/// `ionpack.wav` as MP3
+pub(crate) const TEST_MP3: &[u8] = include_bytes!("test/ionpack.mp3");
+/// `ionpack.wav` encoded to MP3 and back to WAV
+pub(crate) const TEST_MP3_WAV: &[u8] = include_bytes!("test/ionpack-mp3.wav");
+
 /// Asserts that writing a value to a byte array and reading it back produces the same value.
 #[macro_export]
 macro_rules! assert_write_and_read {
