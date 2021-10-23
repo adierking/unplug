@@ -6,6 +6,7 @@ pub mod transport;
 pub use format::{Format, FormatTag};
 pub use sample::{ReadSamples, Samples};
 
+use lewton::VorbisError;
 use std::io;
 use thiserror::Error;
 
@@ -84,8 +85,12 @@ pub enum Error {
 
     #[error(transparent)]
     Mp3(Box<minimp3::Error>),
+
+    #[error(transparent)]
+    Vorbis(Box<VorbisError>),
 }
 
 from_error_boxed!(Error::Flac, claxon::Error);
 from_error_boxed!(Error::Io, io::Error);
 from_error_boxed!(Error::Mp3, minimp3::Error);
+from_error_boxed!(Error::Vorbis, VorbisError);

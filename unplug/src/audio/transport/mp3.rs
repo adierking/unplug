@@ -317,7 +317,7 @@ fn analyze_mp3(reader: &mut (impl Read + Seek), info: &mut Info) -> Result<()> {
 mod tests {
     use super::*;
     use crate::audio::transport::WavReader;
-    use crate::test::{TEST_MP3, TEST_MP3_WAV};
+    use crate::test::{assert_samples_close, TEST_MP3, TEST_MP3_WAV};
     use std::io::Cursor;
 
     #[test]
@@ -326,18 +326,9 @@ mod tests {
         assert_eq!(mp3.sample_rate(), 44100);
         assert_eq!(mp3.channels(), 2);
         let samples = mp3.read_all_samples()?;
-
         let reference = WavReader::open(Cursor::new(TEST_MP3_WAV))?.read_all_samples()?;
-        assert_eq!(samples.len, reference.len);
-
         // Compare with a tolerance of +/- 1 (minimp3 vs ffmpeg)
-        for (&actual, &expected) in samples.data.iter().zip(reference.data.iter()) {
-            if actual >= expected {
-                assert!(actual - expected <= 1);
-            } else {
-                assert!(expected - actual <= 1);
-            }
-        }
+        assert_samples_close(&samples, &reference, 1);
         Ok(())
     }
 }

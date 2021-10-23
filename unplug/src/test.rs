@@ -1,9 +1,11 @@
-use crate::audio::format::{PcmS16Le, ReadWriteBytes};
+use crate::audio::format::{FormatTag, PcmS16Le, ReadWriteBytes};
+use crate::audio::Samples;
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::block::{Ip, WriteIp};
 use byteorder::{ByteOrder, WriteBytesExt, LE};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::io::{self, Cursor, Seek, SeekFrom};
+use std::ops::Sub;
 
 /// Test sound provided by whirligig231
 pub(crate) const TEST_WAV: &[u8] = include_bytes!("test/ionpack.wav");
@@ -39,6 +41,11 @@ pub(crate) const TEST_FLAC: &[u8] = include_bytes!("test/ionpack.flac");
 pub(crate) const TEST_MP3: &[u8] = include_bytes!("test/ionpack.mp3");
 /// `ionpack.wav` encoded to MP3 and back to WAV
 pub(crate) const TEST_MP3_WAV: &[u8] = include_bytes!("test/ionpack-mp3.wav");
+
+/// `ionpack.wav` as Ogg Vorbis
+pub(crate) const TEST_OGG: &[u8] = include_bytes!("test/ionpack.ogg");
+/// `ionpack.wav` encoded to Ogg Vorbis and back to WAV
+pub(crate) const TEST_OGG_WAV: &[u8] = include_bytes!("test/ionpack-ogg.wav");
 
 /// Asserts that writing a value to a byte array and reading it back produces the same value.
 #[macro_export]
@@ -105,4 +112,20 @@ pub(crate) fn open_test_wav() -> Vec<i16> {
     let samples_start = TEST_WAV_DATA_OFFSET + 8;
     let samples_end = samples_start + data_size;
     PcmS16Le::read_bytes(&TEST_WAV[samples_start..samples_end]).unwrap()
+}
+
+/// Asserts that two sets of samples are close to each other within a tolerance band.
+pub(crate) fn assert_samples_close<F: FormatTag>(
+    actual: &Samples<'_, F>,
+    expected: &Samples<'_, F>,
+    tolerance: F::Data,
+) where
+    F::Data: PartialOrd + Sub<Output = F::Data> + Display,
+{
+    assert_eq!(actual.channels, expected.channels);
+    assert_eq!(actual.len, expected.len);
+    for (&a, &e) in actual.data.iter().take(actual.len).zip(&expected.data[..expected.len]) {
+        let delta = if a >= e { a - e } else { e - a };
+        assert!(delta <= tolerance, "actual = {}, expected = {}, delta = {}", a, e, delta);
+    }
 }
