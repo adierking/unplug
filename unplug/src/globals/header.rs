@@ -39,7 +39,7 @@ impl FileHeader {
     }
 }
 
-impl<R: Read> ReadFrom<R> for FileHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let metadata_offset = reader.read_u32::<LE>()?;
@@ -58,7 +58,7 @@ impl<R: Read> ReadFrom<R> for FileHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for FileHeader {
+impl<W: Write + ?Sized> WriteTo<W> for FileHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<LE>(self.metadata_offset)?;

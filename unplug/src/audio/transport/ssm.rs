@@ -33,7 +33,7 @@ struct FileHeader {
     base_index: u32,
 }
 
-impl<R: Read> ReadFrom<R> for FileHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -45,7 +45,7 @@ impl<R: Read> ReadFrom<R> for FileHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for FileHeader {
+impl<W: Write + ?Sized> WriteTo<W> for FileHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<BE>(self.index_size)?;
@@ -67,7 +67,7 @@ struct ChannelHeader {
     loop_context: FrameContext,
 }
 
-impl<R: Read> ReadFrom<R> for ChannelHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for ChannelHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let header = Self {
@@ -80,7 +80,7 @@ impl<R: Read> ReadFrom<R> for ChannelHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for ChannelHeader {
+impl<W: Write + ?Sized> WriteTo<W> for ChannelHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         self.address.write_to(writer)?;
@@ -100,7 +100,7 @@ struct SoundHeader {
     channels: ArrayVec<[ChannelHeader; 2]>,
 }
 
-impl<R: Read> ReadFrom<R> for SoundHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for SoundHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let num_channels = reader.read_u32::<BE>()?;
@@ -113,7 +113,7 @@ impl<R: Read> ReadFrom<R> for SoundHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for SoundHeader {
+impl<W: Write + ?Sized> WriteTo<W> for SoundHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<BE>(self.channels.len() as u32)?;
@@ -291,7 +291,7 @@ pub struct SoundBank {
     pub sounds: Vec<Sound>,
 }
 
-impl<R: Read + Seek> ReadFrom<R> for SoundBank {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for SoundBank {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;
@@ -321,7 +321,7 @@ impl<R: Read + Seek> ReadFrom<R> for SoundBank {
     }
 }
 
-impl<W: Write + Seek> WriteTo<W> for SoundBank {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for SoundBank {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         assert_eq!(writer.seek(SeekFrom::Current(0))?, 0);

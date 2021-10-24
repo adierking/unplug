@@ -13,7 +13,7 @@ impl<T: Clone> NonNoneList<'_, T> {
     }
 }
 
-impl<R: Read, T: Clone + ReadOptionFrom<R>> ReadFrom<R> for NonNoneList<'_, T> {
+impl<R: Read + ?Sized, T: Clone + ReadOptionFrom<R>> ReadFrom<R> for NonNoneList<'_, T> {
     type Error = T::Error;
     fn read_from(reader: &mut R) -> Result<Self, Self::Error> {
         let mut list = vec![];
@@ -25,7 +25,7 @@ impl<R: Read, T: Clone + ReadOptionFrom<R>> ReadFrom<R> for NonNoneList<'_, T> {
     }
 }
 
-impl<W: Write, T: Clone + WriteOptionTo<W>> WriteTo<W> for NonNoneList<'_, T> {
+impl<W: Write + ?Sized, T: Clone + WriteOptionTo<W>> WriteTo<W> for NonNoneList<'_, T> {
     type Error = T::Error;
     fn write_to(&self, writer: &mut W) -> Result<(), Self::Error> {
         for item in &*self.0 {

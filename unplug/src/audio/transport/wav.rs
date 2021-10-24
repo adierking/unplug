@@ -34,14 +34,14 @@ struct ChunkHeader {
     size: u32,
 }
 
-impl<R: Read> ReadFrom<R> for ChunkHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for ChunkHeader {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self { id: reader.read_u32::<LE>()?, size: reader.read_u32::<LE>()? })
     }
 }
 
-impl<W: Write> WriteTo<W> for ChunkHeader {
+impl<W: Write + ?Sized> WriteTo<W> for ChunkHeader {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u32::<LE>(self.id)?;
@@ -67,7 +67,7 @@ struct FormatChunk {
     bits_per_sample: u16,
 }
 
-impl<R: Read> ReadFrom<R> for FormatChunk {
+impl<R: Read + ?Sized> ReadFrom<R> for FormatChunk {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
@@ -81,7 +81,7 @@ impl<R: Read> ReadFrom<R> for FormatChunk {
     }
 }
 
-impl<W: Write> WriteTo<W> for FormatChunk {
+impl<W: Write + ?Sized> WriteTo<W> for FormatChunk {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u16::<LE>(self.format_tag)?;

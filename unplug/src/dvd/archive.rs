@@ -54,7 +54,7 @@ impl Header {
     }
 }
 
-impl<R: Read> ReadFrom<R> for Header {
+impl<R: Read + ?Sized> ReadFrom<R> for Header {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let magic = reader.read_u32::<BE>()?;
@@ -70,7 +70,7 @@ impl<R: Read> ReadFrom<R> for Header {
     }
 }
 
-impl<W: Write> WriteTo<W> for Header {
+impl<W: Write + ?Sized> WriteTo<W> for Header {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<BE>(self.magic)?;

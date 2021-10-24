@@ -49,7 +49,7 @@ struct FileHeader {
     data_size: u32,
 }
 
-impl<R: Read> ReadFrom<R> for FileHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let magic = reader.read_u32::<BE>()?;
@@ -97,7 +97,7 @@ struct SectionHeader {
     size: u32,
 }
 
-impl<R: Read> ReadFrom<R> for SectionHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for SectionHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self { magic: reader.read_u32::<BE>()?, size: reader.read_u32::<BE>()? })
@@ -145,7 +145,7 @@ struct InfoHeader {
     unk_18: u32,
 }
 
-impl<R: Read> ReadFrom<R> for InfoHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for InfoHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let codec_byte = reader.read_u8()?;
@@ -194,7 +194,7 @@ struct ChannelHeader {
     unk_18: u32,
 }
 
-impl<R: Read> ReadFrom<R> for ChannelHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for ChannelHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -216,7 +216,7 @@ struct AdpcmCodecInfo {
     loop_context: adpcm::FrameContext,
 }
 
-impl<R: Read> ReadFrom<R> for AdpcmCodecInfo {
+impl<R: Read + ?Sized> ReadFrom<R> for AdpcmCodecInfo {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let info = Self {
@@ -236,7 +236,7 @@ struct InfoSection {
     codec_info: ArrayVec<[AdpcmCodecInfo; 2]>,
 }
 
-impl<R: Read + Seek> ReadFrom<R> for InfoSection {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for InfoSection {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // Wrap the reader in a region which locks it to the section data. All seeks will now be
@@ -298,7 +298,7 @@ struct DataSection {
 }
 
 impl DataSection {
-    fn read_from(reader: &mut (impl Read + Seek), info: &InfoSection) -> Result<Self> {
+    fn read_from(reader: &mut (impl Read + Seek + ?Sized), info: &InfoSection) -> Result<Self> {
         let format = Format::from(info.header.codec);
         let mut start_address = info.header.start_address;
         let mut end_address = info.header.end_address;
@@ -391,7 +391,7 @@ impl Rwav {
     }
 }
 
-impl<R: Read + Seek> ReadFrom<R> for Rwav {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for Rwav {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;

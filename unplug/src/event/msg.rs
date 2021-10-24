@@ -152,7 +152,7 @@ impl<T: Into<Vec<MsgCommand>>> From<T> for MsgArgs {
     }
 }
 
-impl<R: Read + Seek> ReadFrom<R> for MsgArgs {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // The message string is prefixed with the offset of the next command. Technically this can
@@ -269,7 +269,7 @@ impl<R: Read + Seek> ReadFrom<R> for MsgArgs {
     }
 }
 
-impl<W: Write + Seek> WriteTo<W> for MsgArgs {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for MsgArgs {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         // Write a end offset of 0 for now
@@ -427,7 +427,7 @@ pub enum MsgWaitType {
     RightPlug,
 }
 
-impl<R: Read> ReadFrom<R> for MsgWaitType {
+impl<R: Read + ?Sized> ReadFrom<R> for MsgWaitType {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         let ty = reader.read_u8()?;
@@ -441,7 +441,7 @@ impl<R: Read> ReadFrom<R> for MsgWaitType {
     }
 }
 
-impl<W: Write> WriteTo<W> for MsgWaitType {
+impl<W: Write + ?Sized> WriteTo<W> for MsgWaitType {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         match self {
@@ -462,7 +462,7 @@ pub struct MsgAnimArgs {
     pub anim: i32,
 }
 
-impl<R: Read> ReadFrom<R> for MsgAnimArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for MsgAnimArgs {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
@@ -473,7 +473,7 @@ impl<R: Read> ReadFrom<R> for MsgAnimArgs {
     }
 }
 
-impl<W: Write> WriteTo<W> for MsgAnimArgs {
+impl<W: Write + ?Sized> WriteTo<W> for MsgAnimArgs {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u8(self.flags)?;
@@ -501,7 +501,7 @@ pub enum MsgSfxType {
     Unk6,
 }
 
-impl<R: Read> ReadFrom<R> for MsgSfxType {
+impl<R: Read + ?Sized> ReadFrom<R> for MsgSfxType {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let ty = reader.read_i8()?;
@@ -519,7 +519,7 @@ impl<R: Read> ReadFrom<R> for MsgSfxType {
     }
 }
 
-impl<W: Write> WriteTo<W> for MsgSfxType {
+impl<W: Write + ?Sized> WriteTo<W> for MsgSfxType {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         match self {
@@ -553,14 +553,14 @@ pub struct MsgSfxFadeArgs {
     pub volume: u8,
 }
 
-impl<R: Read> ReadFrom<R> for MsgSfxFadeArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for MsgSfxFadeArgs {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self { duration: reader.read_u16::<LE>()?, volume: reader.read_u8()? })
     }
 }
 
-impl<W: Write> WriteTo<W> for MsgSfxFadeArgs {
+impl<W: Write + ?Sized> WriteTo<W> for MsgSfxFadeArgs {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u16::<LE>(self.duration)?;
@@ -577,7 +577,7 @@ pub struct DefaultArgs {
     pub index: i32,
 }
 
-impl<R: Read> ReadFrom<R> for DefaultArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for DefaultArgs {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
@@ -587,7 +587,7 @@ impl<R: Read> ReadFrom<R> for DefaultArgs {
     }
 }
 
-impl<W: Write> WriteTo<W> for DefaultArgs {
+impl<W: Write + ?Sized> WriteTo<W> for DefaultArgs {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u8(self.flags.bits())?;
@@ -704,7 +704,7 @@ pub struct ShakeArgs {
     pub speed: u8,
 }
 
-impl<R: Read> ReadFrom<R> for ShakeArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for ShakeArgs {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
@@ -715,7 +715,7 @@ impl<R: Read> ReadFrom<R> for ShakeArgs {
     }
 }
 
-impl<W: Write> WriteTo<W> for ShakeArgs {
+impl<W: Write + ?Sized> WriteTo<W> for ShakeArgs {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u8(self.flags.bits())?;
@@ -752,7 +752,7 @@ pub struct NumInputArgs {
     pub selected: u8,
 }
 
-impl<R: Read> ReadFrom<R> for NumInputArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for NumInputArgs {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
@@ -763,7 +763,7 @@ impl<R: Read> ReadFrom<R> for NumInputArgs {
     }
 }
 
-impl<W: Write> WriteTo<W> for NumInputArgs {
+impl<W: Write + ?Sized> WriteTo<W> for NumInputArgs {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u8(self.digits)?;
@@ -781,7 +781,7 @@ pub struct QuestionArgs {
     pub default: u8,
 }
 
-impl<R: Read> ReadFrom<R> for QuestionArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for QuestionArgs {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
@@ -791,7 +791,7 @@ impl<R: Read> ReadFrom<R> for QuestionArgs {
     }
 }
 
-impl<W: Write> WriteTo<W> for QuestionArgs {
+impl<W: Write + ?Sized> WriteTo<W> for QuestionArgs {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_u8(self.flags.bits())?;

@@ -149,7 +149,7 @@ struct MetadataHeader {
     stats_offset: u32,
 }
 
-impl<R: Read> ReadFrom<R> for MetadataHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for MetadataHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -178,7 +178,7 @@ impl<R: Read> ReadFrom<R> for MetadataHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for MetadataHeader {
+impl<W: Write + ?Sized> WriteTo<W> for MetadataHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<LE>(self.battery_globals_offset)?;
@@ -258,7 +258,7 @@ impl BatteryGlobals {
     }
 }
 
-impl<R: Read> ReadFrom<R> for BatteryGlobals {
+impl<R: Read + ?Sized> ReadFrom<R> for BatteryGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -305,7 +305,7 @@ impl<R: Read> ReadFrom<R> for BatteryGlobals {
     }
 }
 
-impl<W: Write> WriteTo<W> for BatteryGlobals {
+impl<W: Write + ?Sized> WriteTo<W> for BatteryGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.idle)?;
@@ -372,7 +372,7 @@ impl PopperGlobals {
     }
 }
 
-impl<R: Read> ReadFrom<R> for PopperGlobals {
+impl<R: Read + ?Sized> ReadFrom<R> for PopperGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -384,7 +384,7 @@ impl<R: Read> ReadFrom<R> for PopperGlobals {
     }
 }
 
-impl<W: Write> WriteTo<W> for PopperGlobals {
+impl<W: Write + ?Sized> WriteTo<W> for PopperGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.range_default)?;
@@ -414,7 +414,7 @@ impl CopterGlobals {
     }
 }
 
-impl<R: Read> ReadFrom<R> for CopterGlobals {
+impl<R: Read + ?Sized> ReadFrom<R> for CopterGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -425,7 +425,7 @@ impl<R: Read> ReadFrom<R> for CopterGlobals {
     }
 }
 
-impl<W: Write> WriteTo<W> for CopterGlobals {
+impl<W: Write + ?Sized> WriteTo<W> for CopterGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.hover_duration)?;
@@ -452,14 +452,14 @@ impl RadarGlobals {
     }
 }
 
-impl<R: Read> ReadFrom<R> for RadarGlobals {
+impl<R: Read + ?Sized> ReadFrom<R> for RadarGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self { red_range: reader.read_i32::<LE>()?, yellow_range: reader.read_i32::<LE>()? })
     }
 }
 
-impl<W: Write> WriteTo<W> for RadarGlobals {
+impl<W: Write + ?Sized> WriteTo<W> for RadarGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.red_range)?;
@@ -486,7 +486,7 @@ impl TimeLimit {
     }
 }
 
-impl<R: Read> ReadFrom<R> for TimeLimit {
+impl<R: Read + ?Sized> ReadFrom<R> for TimeLimit {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -497,7 +497,7 @@ impl<R: Read> ReadFrom<R> for TimeLimit {
     }
 }
 
-impl<W: Write> WriteTo<W> for TimeLimit {
+impl<W: Write + ?Sized> WriteTo<W> for TimeLimit {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.hours)?;
@@ -533,7 +533,7 @@ impl PlayerGlobals {
     }
 }
 
-impl<R: Read> ReadFrom<R> for PlayerGlobals {
+impl<R: Read + ?Sized> ReadFrom<R> for PlayerGlobals {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -545,7 +545,7 @@ impl<R: Read> ReadFrom<R> for PlayerGlobals {
     }
 }
 
-impl<W: Write> WriteTo<W> for PlayerGlobals {
+impl<W: Write + ?Sized> WriteTo<W> for PlayerGlobals {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<LE>(self.climb_duration)?;
@@ -575,7 +575,7 @@ impl DefaultAtcs {
     }
 }
 
-impl<R: Read> ReadFrom<R> for DefaultAtcs {
+impl<R: Read + ?Sized> ReadFrom<R> for DefaultAtcs {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -586,7 +586,7 @@ impl<R: Read> ReadFrom<R> for DefaultAtcs {
     }
 }
 
-impl<W: Write> WriteTo<W> for DefaultAtcs {
+impl<W: Write + ?Sized> WriteTo<W> for DefaultAtcs {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<LE>(self.copter as u32)?;
@@ -620,7 +620,7 @@ impl CoinValues {
     }
 }
 
-impl<R: Read> ReadFrom<R> for CoinValues {
+impl<R: Read + ?Sized> ReadFrom<R> for CoinValues {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -637,7 +637,7 @@ impl<R: Read> ReadFrom<R> for CoinValues {
     }
 }
 
-impl<W: Write> WriteTo<W> for CoinValues {
+impl<W: Write + ?Sized> WriteTo<W> for CoinValues {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<LE>(self.coin_g)?;
@@ -1080,7 +1080,7 @@ impl Default for Metadata {
     }
 }
 
-impl<R: Read + Seek> ReadFrom<R> for Metadata {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for Metadata {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         assert_eq!(reader.seek(SeekFrom::Current(0))?, 0);
@@ -1155,14 +1155,17 @@ impl<R: Read + Seek> ReadFrom<R> for Metadata {
     }
 }
 
-fn write_u32_slice<E: ByteOrder, W: Write>(writer: &mut W, nums: &[u32]) -> io::Result<()> {
+fn write_u32_slice<E: ByteOrder, W: Write + ?Sized>(
+    writer: &mut W,
+    nums: &[u32],
+) -> io::Result<()> {
     for &num in nums {
         writer.write_u32::<E>(num)?;
     }
     Ok(())
 }
 
-impl<W: Write + Seek> WriteTo<W> for Metadata {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for Metadata {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         assert_eq!(self.items.len(), NUM_ITEMS);

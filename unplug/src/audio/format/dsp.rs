@@ -23,7 +23,7 @@ impl Default for DspFormat {
     }
 }
 
-impl<R: Read> ReadFrom<R> for DspFormat {
+impl<R: Read + ?Sized> ReadFrom<R> for DspFormat {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let id = reader.read_u16::<BE>()?;
@@ -34,7 +34,7 @@ impl<R: Read> ReadFrom<R> for DspFormat {
     }
 }
 
-impl<W: Write> WriteTo<W> for DspFormat {
+impl<W: Write + ?Sized> WriteTo<W> for DspFormat {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u16::<BE>((*self).into())?;
@@ -68,7 +68,7 @@ pub struct AudioAddress {
     pub current_address: u32,
 }
 
-impl<R: Read> ReadFrom<R> for AudioAddress {
+impl<R: Read + ?Sized> ReadFrom<R> for AudioAddress {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -81,7 +81,7 @@ impl<R: Read> ReadFrom<R> for AudioAddress {
     }
 }
 
-impl<W: Write> WriteTo<W> for AudioAddress {
+impl<W: Write + ?Sized> WriteTo<W> for AudioAddress {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u16::<BE>(self.looping.into())?;

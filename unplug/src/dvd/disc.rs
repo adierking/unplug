@@ -80,7 +80,7 @@ impl DiscHeader {
     }
 }
 
-impl<R: Read> ReadFrom<R> for DiscHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for DiscHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut header = Self::new();
@@ -95,7 +95,7 @@ impl<R: Read> ReadFrom<R> for DiscHeader {
         if header.magic != DVD_MAGIC {
             return Err(Error::InvalidMagic);
         }
-        header.game_name = read_fixed_string(reader.by_ref(), 0x3e0)?;
+        header.game_name = read_fixed_string(&mut *reader, 0x3e0)?;
         header.debug_monitor_offset = reader.read_u32::<BE>()?;
         header.debug_monitor_addr = reader.read_u32::<BE>()?;
         reader.read_exact(&mut header.unused_408)?;
@@ -111,7 +111,7 @@ impl<R: Read> ReadFrom<R> for DiscHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for DiscHeader {
+impl<W: Write + ?Sized> WriteTo<W> for DiscHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&self.game_code)?;
@@ -122,7 +122,7 @@ impl<W: Write> WriteTo<W> for DiscHeader {
         writer.write_u8(self.stream_buffer_size)?;
         writer.write_all(&self.unused_00a)?;
         writer.write_u32::<BE>(self.magic)?;
-        write_fixed_string(writer.by_ref(), &self.game_name, 0x3e0)?;
+        write_fixed_string(&mut *writer, &self.game_name, 0x3e0)?;
         writer.write_u32::<BE>(self.debug_monitor_offset)?;
         writer.write_u32::<BE>(self.debug_monitor_addr)?;
         writer.write_all(&self.unused_408)?;

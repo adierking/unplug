@@ -164,7 +164,7 @@ impl DolHeader {
     }
 }
 
-impl<R: Read> ReadFrom<R> for DolHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for DolHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut header = Self::new();
@@ -181,12 +181,16 @@ impl<R: Read> ReadFrom<R> for DolHeader {
     }
 }
 
-fn write_u32_slice(writer: &mut impl Write, slice: &[u32], storage: &mut [u8]) -> Result<()> {
+fn write_u32_slice(
+    writer: &mut (impl Write + ?Sized),
+    slice: &[u32],
+    storage: &mut [u8],
+) -> Result<()> {
     BE::write_u32_into(slice, storage);
     Ok(writer.write_all(storage)?)
 }
 
-impl<W: Write> WriteTo<W> for DolHeader {
+impl<W: Write + ?Sized> WriteTo<W> for DolHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         let mut text_bytes = [0u8; NUM_TEXT_SECTIONS * 4];

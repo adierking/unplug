@@ -30,7 +30,7 @@ struct Header {
     unk_30_offset: Option<NonZeroU32>,
 }
 
-impl<R: Read> ReadFrom<R> for Header {
+impl<R: Read + ?Sized> ReadFrom<R> for Header {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let settings_offset = reader.read_u32::<LE>()?;
@@ -57,7 +57,7 @@ impl<R: Read> ReadFrom<R> for Header {
     }
 }
 
-impl<W: Write> WriteTo<W> for Header {
+impl<W: Write + ?Sized> WriteTo<W> for Header {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<LE>(self.settings_offset)?;
@@ -94,7 +94,7 @@ pub struct Settings {
     pub unk_12: i16,
 }
 
-impl<R: Read> ReadFrom<R> for Settings {
+impl<R: Read + ?Sized> ReadFrom<R> for Settings {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -113,7 +113,7 @@ impl<R: Read> ReadFrom<R> for Settings {
     }
 }
 
-impl<W: Write> WriteTo<W> for Settings {
+impl<W: Write + ?Sized> WriteTo<W> for Settings {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.unk_00)?;
@@ -137,14 +137,14 @@ struct EventTable {
 }
 
 impl EventTable {
-    fn read_from<R: Read>(reader: &mut R, count: usize) -> Result<Self> {
+    fn read_from<R: Read + ?Sized>(reader: &mut R, count: usize) -> Result<Self> {
         let mut entry_points = vec![0u32; count];
         reader.read_u32_into::<LE>(&mut entry_points)?;
         Ok(Self { entry_points })
     }
 }
 
-impl<W: Write> WriteTo<W> for EventTable {
+impl<W: Write + ?Sized> WriteTo<W> for EventTable {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         let mut bytes = vec![0u8; self.entry_points.len() * 4];
@@ -173,7 +173,7 @@ pub struct Unk28 {
     unk_30: i32,
 }
 
-impl<R: Read> ReadOptionFrom<R> for Unk28 {
+impl<R: Read + ?Sized> ReadOptionFrom<R> for Unk28 {
     type Error = Error;
     fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
         let unk_00 = reader.read_i32::<BE>()?;
@@ -199,7 +199,7 @@ impl<R: Read> ReadOptionFrom<R> for Unk28 {
     }
 }
 
-impl<W: Write> WriteTo<W> for Unk28 {
+impl<W: Write + ?Sized> WriteTo<W> for Unk28 {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.unk_00)?;
@@ -220,7 +220,7 @@ impl<W: Write> WriteTo<W> for Unk28 {
     }
 }
 
-impl<W: Write> WriteOptionTo<W> for Unk28 {
+impl<W: Write + ?Sized> WriteOptionTo<W> for Unk28 {
     type Error = Error;
     fn write_option_to(opt: Option<&Self>, writer: &mut W) -> Result<()> {
         match opt {
@@ -242,7 +242,7 @@ pub struct Unk2C {
     unk_1c: i32,
 }
 
-impl<R: Read> ReadOptionFrom<R> for Unk2C {
+impl<R: Read + ?Sized> ReadOptionFrom<R> for Unk2C {
     type Error = Error;
     fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
         let unk_00 = reader.read_i32::<BE>()?;
@@ -262,7 +262,7 @@ impl<R: Read> ReadOptionFrom<R> for Unk2C {
     }
 }
 
-impl<W: Write> WriteTo<W> for Unk2C {
+impl<W: Write + ?Sized> WriteTo<W> for Unk2C {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.unk_00)?;
@@ -277,7 +277,7 @@ impl<W: Write> WriteTo<W> for Unk2C {
     }
 }
 
-impl<W: Write> WriteOptionTo<W> for Unk2C {
+impl<W: Write + ?Sized> WriteOptionTo<W> for Unk2C {
     type Error = Error;
     fn write_option_to(opt: Option<&Self>, writer: &mut W) -> Result<()> {
         match opt {
@@ -317,7 +317,7 @@ pub struct Stage {
 }
 
 impl Stage {
-    pub fn read_from<R: Read + Seek>(reader: &mut R, libs: &Libs) -> Result<Self> {
+    pub fn read_from<R: Read + Seek + ?Sized>(mut reader: &mut R, libs: &Libs) -> Result<Self> {
         let header = Header::read_from(reader)?;
 
         reader.seek(SeekFrom::Start(header.settings_offset as u64))?;
@@ -354,7 +354,7 @@ impl Stage {
             None => vec![],
         };
 
-        let mut script = ScriptReader::with_libs(reader, &libs.script, &libs.entry_points);
+        let mut script = ScriptReader::with_libs(&mut reader, &libs.script, &libs.entry_points);
         let on_prologue = header.on_prologue.map(|o| script.read_event(o.get())).transpose()?;
         let on_startup = header.on_startup.map(|o| script.read_event(o.get())).transpose()?;
         let on_dead = header.on_dead.map(|o| script.read_event(o.get())).transpose()?;
@@ -384,9 +384,9 @@ impl Stage {
     }
 }
 
-impl<W: Write + Seek> WriteTo<W> for Stage {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for Stage {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
+    fn write_to(&self, mut writer: &mut W) -> Result<()> {
         assert_eq!(writer.seek(SeekFrom::Current(0))?, 0);
 
         let mut header = Header::default();
@@ -420,7 +420,7 @@ impl<W: Write + Seek> WriteTo<W> for Stage {
             NonNoneList((&self.unk_30).into()).write_to(writer)?;
         }
 
-        let mut script_writer = ScriptWriter::new(&self.script, writer);
+        let mut script_writer = ScriptWriter::new(&self.script, &mut writer);
         if let Some(prologue) = self.on_prologue {
             header.on_prologue = NonZeroU32::new(script_writer.write_subroutine(prologue)?);
         }

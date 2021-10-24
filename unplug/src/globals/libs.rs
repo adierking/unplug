@@ -13,7 +13,7 @@ struct LibTable {
     entry_points: Box<[u32]>,
 }
 
-impl<R: Read> ReadFrom<R> for LibTable {
+impl<R: Read + ?Sized> ReadFrom<R> for LibTable {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut entry_points = vec![0u32; NUM_LIBS];
@@ -22,7 +22,7 @@ impl<R: Read> ReadFrom<R> for LibTable {
     }
 }
 
-impl<W: Write> WriteTo<W> for LibTable {
+impl<W: Write + ?Sized> WriteTo<W> for LibTable {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         let mut bytes = vec![0u8; self.entry_points.len() * 4];
@@ -39,12 +39,12 @@ pub struct Libs {
     pub entry_points: Box<[BlockId]>,
 }
 
-impl<R: Read + Seek> ReadFrom<R> for Libs {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for Libs {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
+    fn read_from(mut reader: &mut R) -> Result<Self> {
         let table = LibTable::read_from(reader)?;
         let mut entry_points = Vec::with_capacity(NUM_LIBS);
-        let mut script_reader = ScriptReader::new(reader);
+        let mut script_reader = ScriptReader::new(&mut reader);
         for &entry_point in table.entry_points.iter() {
             let id = script_reader.read_event(entry_point)?;
             entry_points.push(id);
@@ -54,9 +54,9 @@ impl<R: Read + Seek> ReadFrom<R> for Libs {
     }
 }
 
-impl<W: Write + Seek> WriteTo<W> for Libs {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for Libs {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
+    fn write_to(&self, mut writer: &mut W) -> Result<()> {
         assert_eq!(self.entry_points.len(), NUM_LIBS);
 
         // Write an empty entry point table because it has to come first
@@ -65,7 +65,7 @@ impl<W: Write + Seek> WriteTo<W> for Libs {
         table.write_to(writer)?;
 
         // Write out the script data
-        let mut script_writer = ScriptWriter::new(&self.script, writer);
+        let mut script_writer = ScriptWriter::new(&self.script, &mut writer);
         for (&id, offset) in self.entry_points.iter().zip(table.entry_points.iter_mut()) {
             *offset = script_writer.write_subroutine(id)?;
         }

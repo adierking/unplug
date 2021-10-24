@@ -9,7 +9,7 @@ pub const BUFFER_SIZE: usize = 0x8000;
 /// Writes a byte followed by a writable object.
 pub fn write_u8_and<W, T>(writer: &mut W, op: u8, obj: &T) -> Result<(), T::Error>
 where
-    W: Write,
+    W: Write + ?Sized,
     T: WriteTo<W>,
     T::Error: From<io::Error>,
 {
@@ -68,8 +68,8 @@ pub fn pad(mut writer: (impl Write + Seek), align: u64, fill: u8) -> io::Result<
 /// Implementation of `std::io::copy` which uses `buf` as the buffer. This can be much faster than
 /// the built-in implementation.
 pub fn copy_buffered(
-    reader: &mut impl Read,
-    writer: &mut impl Write,
+    reader: &mut (impl Read + ?Sized),
+    writer: &mut (impl Write + ?Sized),
     buf: &mut [u8],
 ) -> io::Result<u64> {
     let mut total = 0;

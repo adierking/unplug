@@ -17,7 +17,7 @@ struct Header {
     event_offsets: Vec<u32>,
 }
 
-impl<R: Read> ReadFrom<R> for Header {
+impl<R: Read + ?Sized> ReadFrom<R> for Header {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut header = Self {
@@ -87,7 +87,7 @@ pub struct Action {
     pub data: u16,
 }
 
-impl<R: Read> ReadFrom<R> for Action {
+impl<R: Read + ?Sized> ReadFrom<R> for Action {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // Each action is 32 bits and is interpreted based on the command in the high byte
@@ -143,7 +143,7 @@ pub struct Event {
     pub actions: Vec<Action>,
 }
 
-impl<R: Read> ReadFrom<R> for Event {
+impl<R: Read + ?Sized> ReadFrom<R> for Event {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // Keep reading until we hit an end command
@@ -168,7 +168,7 @@ pub struct EventBank {
     pub events: Vec<Event>,
 }
 
-impl<R: Read + Seek> ReadFrom<R> for EventBank {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for EventBank {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let header = Header::read_from(reader)?;

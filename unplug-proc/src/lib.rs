@@ -110,7 +110,7 @@ pub fn derive_read_from(input: TokenStream) -> TokenStream {
     let field_name: Vec<Ident> = fields.named.iter().cloned().map(|f| f.ident.unwrap()).collect();
     // TODO: Generics support?
     let tokens = quote! {
-        impl<R: #bounds> #unplug::common::ReadFrom<R> for #name {
+        impl<R: #bounds + ?Sized> #unplug::common::ReadFrom<R> for #name {
             type Error = #error;
             fn read_from(reader: &mut R) -> ::std::result::Result<Self, Self::Error> {
                 Ok(Self {
@@ -162,7 +162,7 @@ pub fn derive_write_to(input: TokenStream) -> TokenStream {
     let field_name: Vec<Ident> = fields.named.iter().cloned().map(|f| f.ident.unwrap()).collect();
     // TODO: Generics support?
     let tokens = quote! {
-        impl<W: #bounds> #unplug::common::WriteTo<W> for #name {
+        impl<W: #bounds + ?Sized> #unplug::common::WriteTo<W> for #name {
             type Error = #error;
             fn write_to(&self, writer: &mut W) -> ::std::result::Result<(), Self::Error> {
                 #(#unplug::common::WriteTo::write_to(&self.#field_name, writer)?;)*

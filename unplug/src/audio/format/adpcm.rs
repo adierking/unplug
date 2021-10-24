@@ -71,7 +71,7 @@ pub struct Info {
     pub context: FrameContext,
 }
 
-impl<R: Read> ReadFrom<R> for Info {
+impl<R: Read + ?Sized> ReadFrom<R> for Info {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut info = Info::default();
@@ -82,7 +82,7 @@ impl<R: Read> ReadFrom<R> for Info {
     }
 }
 
-impl<W: Write> WriteTo<W> for Info {
+impl<W: Write + ?Sized> WriteTo<W> for Info {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         let mut coefficient_bytes = [0u8; 32];
@@ -128,7 +128,7 @@ impl FrameContext {
     }
 }
 
-impl<R: Read> ReadFrom<R> for FrameContext {
+impl<R: Read + ?Sized> ReadFrom<R> for FrameContext {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let predictor_and_scale = reader.read_u16::<BE>()?;
@@ -138,7 +138,7 @@ impl<R: Read> ReadFrom<R> for FrameContext {
     }
 }
 
-impl<W: Write> WriteTo<W> for FrameContext {
+impl<W: Write + ?Sized> WriteTo<W> for FrameContext {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u16::<BE>(self.predictor_and_scale)?;

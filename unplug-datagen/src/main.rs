@@ -266,7 +266,7 @@ struct RawObjectDefinition {
     subclass: u16,
 }
 
-impl<R: Read> ReadFrom<R> for RawObjectDefinition {
+impl<R: Read + ?Sized> ReadFrom<R> for RawObjectDefinition {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -604,7 +604,7 @@ struct RawStageDefinition {
     flags: u32,
 }
 
-impl<R: Read> ReadFrom<R> for RawStageDefinition {
+impl<R: Read + ?Sized> ReadFrom<R> for RawStageDefinition {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -687,7 +687,7 @@ struct RawMusicDefinition {
     volume: u8,
 }
 
-impl<R: Read> ReadFrom<R> for RawMusicDefinition {
+impl<R: Read + ?Sized> ReadFrom<R> for RawMusicDefinition {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let result = Self { path_addr: reader.read_u32::<BE>()?, volume: reader.read_u8()? };

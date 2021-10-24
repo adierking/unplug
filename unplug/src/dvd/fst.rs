@@ -119,7 +119,7 @@ impl FileStringTable {
     }
 }
 
-impl<R: Read> ReadFrom<R> for FileStringTable {
+impl<R: Read + ?Sized> ReadFrom<R> for FileStringTable {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // Read the root entry first to figure out how many entries are in the FST
@@ -143,7 +143,7 @@ impl<R: Read> ReadFrom<R> for FileStringTable {
     }
 }
 
-impl<W: Write> WriteTo<W> for FileStringTable {
+impl<W: Write + ?Sized> WriteTo<W> for FileStringTable {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         for entry in &self.entries {
@@ -175,7 +175,7 @@ pub struct FstEntry {
     pub size_or_next: u32,
 }
 
-impl<R: Read> ReadFrom<R> for FstEntry {
+impl<R: Read + ?Sized> ReadFrom<R> for FstEntry {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let kind = reader.read_u8()?;
@@ -188,7 +188,7 @@ impl<R: Read> ReadFrom<R> for FstEntry {
     }
 }
 
-impl<W: Write> WriteTo<W> for FstEntry {
+impl<W: Write + ?Sized> WriteTo<W> for FstEntry {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u8(self.kind.into())?;

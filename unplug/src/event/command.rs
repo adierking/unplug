@@ -165,7 +165,7 @@ impl Command {
     }
 }
 
-impl<R: Read + Seek> ReadFrom<R> for Command {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for Command {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let cmd = reader.read_u8()?;
@@ -224,7 +224,7 @@ impl<R: Read + Seek> ReadFrom<R> for Command {
     }
 }
 
-impl<W: Write + Write + WriteIp + Seek> WriteTo<W> for Command {
+impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for Command {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         match self {
@@ -304,7 +304,7 @@ impl From<SetArgs> for Command {
     }
 }
 
-impl<R: Read> ReadFrom<R> for SetArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for SetArgs {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // set() has an optimization where in-place assignments (e.g. `a += b`) only store one
@@ -320,7 +320,7 @@ impl<R: Read> ReadFrom<R> for SetArgs {
     }
 }
 
-impl<W: Write + WriteIp> WriteTo<W> for SetArgs {
+impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SetArgs {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         self.value.write_to(writer)?;
@@ -353,7 +353,7 @@ pub struct AnimArgs {
     pub values: Vec<Expr>,
 }
 
-impl<R: Read> ReadFrom<R> for AnimArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for AnimArgs {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let obj = Expr::read_from(reader)?;
@@ -369,7 +369,7 @@ impl<R: Read> ReadFrom<R> for AnimArgs {
     }
 }
 
-impl<W: Write + WriteIp> WriteTo<W> for AnimArgs {
+impl<W: Write + WriteIp + ?Sized> WriteTo<W> for AnimArgs {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         self.obj.write_to(writer)?;
@@ -411,7 +411,7 @@ pub struct CallArgs {
     pub args: Vec<Expr>,
 }
 
-impl<R: Read + Seek> ReadFrom<R> for CallArgs {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for CallArgs {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let start_offset = reader.seek(SeekFrom::Current(0))?;
@@ -426,7 +426,7 @@ impl<R: Read + Seek> ReadFrom<R> for CallArgs {
     }
 }
 
-impl<W: Write + WriteIp + Seek> WriteTo<W> for CallArgs {
+impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for CallArgs {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         // Write a command size of 0 for now
@@ -637,14 +637,14 @@ pub struct PosArgs {
 #[derive(Clone, PartialEq, Eq)]
 pub struct PrintFArgs(pub Text);
 
-impl<R: Read> ReadFrom<R> for PrintFArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for PrintFArgs {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self(CString::read_from(reader)?.into()))
     }
 }
 
-impl<W: Write> WriteTo<W> for PrintFArgs {
+impl<W: Write + ?Sized> WriteTo<W> for PrintFArgs {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_all(self.0.as_bytes())?;
@@ -683,7 +683,7 @@ pub struct PtclLeadArgs {
     args: Vec<Expr>,
 }
 
-impl<R: Read> ReadFrom<R> for PtclLeadArgs {
+impl<R: Read + ?Sized> ReadFrom<R> for PtclLeadArgs {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let obj = Expr::read_from(reader)?;
@@ -700,7 +700,7 @@ impl<R: Read> ReadFrom<R> for PtclLeadArgs {
     }
 }
 
-impl<W: Write + WriteIp> WriteTo<W> for PtclLeadArgs {
+impl<W: Write + WriteIp + ?Sized> WriteTo<W> for PtclLeadArgs {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         self.obj.write_to(writer)?;

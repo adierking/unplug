@@ -60,7 +60,7 @@ impl TaggedOffset {
     }
 }
 
-impl<R: Read> ReadFrom<R> for TaggedOffset {
+impl<R: Read + ?Sized> ReadFrom<R> for TaggedOffset {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let ty = reader.read_u8()?;
@@ -106,7 +106,7 @@ struct FileHeader {
     file_size: u32,
 }
 
-impl<R: Read> ReadFrom<R> for FileHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let magic = reader.read_u32::<BE>()?;
@@ -157,7 +157,7 @@ struct SectionHeader {
     size: u32,
 }
 
-impl<R: Read> ReadFrom<R> for SectionHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for SectionHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self { magic: reader.read_u32::<BE>()?, size: reader.read_u32::<BE>()? })
@@ -175,7 +175,7 @@ struct SymbHeader {
     mask_offset_4: u32,
 }
 
-impl<R: Read> ReadFrom<R> for SymbHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for SymbHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -195,7 +195,7 @@ struct SymbSection {
     names: Vec<String>,
 }
 
-impl<R: Read + Seek> ReadFrom<R> for SymbSection {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for SymbSection {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // Wrap the reader in a region which locks it to the section data. All seeks will now be
@@ -241,7 +241,7 @@ struct InfoHeader {
     sound_counts: TaggedOffset,
 }
 
-impl<R: Read> ReadFrom<R> for InfoHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for InfoHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -276,7 +276,7 @@ pub struct Sound {
     pub actor_player_index: u8,
 }
 
-impl<R: Read> ReadFrom<R> for Sound {
+impl<R: Read + ?Sized> ReadFrom<R> for Sound {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let sound = Sound {
@@ -315,7 +315,7 @@ pub struct CollectionHeader {
     pub group_links: TaggedOffset,
 }
 
-impl<R: Read> ReadFrom<R> for CollectionHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for CollectionHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -335,7 +335,7 @@ pub struct CollectionGroupLink {
     pub sub_index: u32,
 }
 
-impl<R: Read> ReadFrom<R> for CollectionGroupLink {
+impl<R: Read + ?Sized> ReadFrom<R> for CollectionGroupLink {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self { index: reader.read_u32::<BE>()?, sub_index: reader.read_u32::<BE>()? })
@@ -374,7 +374,7 @@ pub struct Group {
     pub unk_20: TaggedOffset,
 }
 
-impl<R: Read> ReadFrom<R> for Group {
+impl<R: Read + ?Sized> ReadFrom<R> for Group {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
@@ -399,7 +399,7 @@ struct InfoSection {
     groups: Vec<Group>,
 }
 
-impl<R: Read + Seek> ReadFrom<R> for InfoSection {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for InfoSection {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // Wrap the reader in a region which locks it to the section data. All seeks will now be
@@ -457,7 +457,7 @@ impl Brsar {
     }
 }
 
-impl<R: Read + Seek> ReadFrom<R> for Brsar {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for Brsar {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;

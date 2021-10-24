@@ -27,7 +27,7 @@ pub struct ObjectPlacement {
     pub script: Option<BlockId>,
 }
 
-impl<R: Read> ReadOptionFrom<R> for ObjectPlacement {
+impl<R: Read + ?Sized> ReadOptionFrom<R> for ObjectPlacement {
     type Error = Error;
     fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
         let id = reader.read_i32::<BE>()?;
@@ -54,7 +54,7 @@ impl<R: Read> ReadOptionFrom<R> for ObjectPlacement {
     }
 }
 
-impl<W: Write> WriteTo<W> for ObjectPlacement {
+impl<W: Write + ?Sized> WriteTo<W> for ObjectPlacement {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.id.into())?;
@@ -75,7 +75,7 @@ impl<W: Write> WriteTo<W> for ObjectPlacement {
     }
 }
 
-impl<W: Write> WriteOptionTo<W> for ObjectPlacement {
+impl<W: Write + ?Sized> WriteOptionTo<W> for ObjectPlacement {
     type Error = Error;
     fn write_option_to(opt: Option<&Self>, writer: &mut W) -> Result<()> {
         match opt {
@@ -134,7 +134,7 @@ pub struct Actor {
     pub id: i32,
 }
 
-impl<R: Read> ReadOptionFrom<R> for Actor {
+impl<R: Read + ?Sized> ReadOptionFrom<R> for Actor {
     type Error = Error;
     fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
         let obj = reader.read_i32::<BE>()?;
@@ -145,7 +145,7 @@ impl<R: Read> ReadOptionFrom<R> for Actor {
     }
 }
 
-impl<W: Write> WriteTo<W> for Actor {
+impl<W: Write + ?Sized> WriteTo<W> for Actor {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.obj)?;
@@ -154,7 +154,7 @@ impl<W: Write> WriteTo<W> for Actor {
     }
 }
 
-impl<W: Write> WriteOptionTo<W> for Actor {
+impl<W: Write + ?Sized> WriteOptionTo<W> for Actor {
     type Error = Error;
     fn write_option_to(opt: Option<&Self>, writer: &mut W) -> Result<()> {
         match opt {

@@ -54,7 +54,7 @@ pub struct Collider {
     pub scale_z: i32,
 }
 
-impl<R: Read> ReadOptionFrom<R> for Collider {
+impl<R: Read + ?Sized> ReadOptionFrom<R> for Collider {
     type Error = Error;
     fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
         let shape = reader.read_i16::<BE>()?;
@@ -76,7 +76,7 @@ impl<R: Read> ReadOptionFrom<R> for Collider {
     }
 }
 
-impl<W: Write> WriteTo<W> for Collider {
+impl<W: Write + ?Sized> WriteTo<W> for Collider {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i16::<BE>(self.shape.into())?;
@@ -92,7 +92,7 @@ impl<W: Write> WriteTo<W> for Collider {
     }
 }
 
-impl<W: Write> WriteOptionTo<W> for Collider {
+impl<W: Write + ?Sized> WriteOptionTo<W> for Collider {
     type Error = Error;
     fn write_option_to(opt: Option<&Self>, writer: &mut W) -> Result<()> {
         match opt {
@@ -121,7 +121,7 @@ impl IndexMut<Object> for ObjectColliders {
     }
 }
 
-impl<R: Read + Seek> ReadFrom<R> for ObjectColliders {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for ObjectColliders {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut offsets = Vec::with_capacity(NUM_OBJECTS);
@@ -142,7 +142,7 @@ impl<R: Read + Seek> ReadFrom<R> for ObjectColliders {
     }
 }
 
-impl<W: Write + Seek> WriteTo<W> for ObjectColliders {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for ObjectColliders {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         assert_eq!(self.objects.len(), NUM_OBJECTS);

@@ -224,7 +224,7 @@ macro_rules! expr_enum {
             )*
         }
 
-        impl<R: ::std::io::Read> $crate::common::ReadFrom<R> for $name {
+        impl<R: ::std::io::Read + ?Sized> $crate::common::ReadFrom<R> for $name {
             type Error = $error;
             fn read_from(reader: &mut R) -> ::std::result::Result<Self, Self::Error> {
                 let ty_expr = $crate::event::Expr::read_from(reader)?;
@@ -239,7 +239,7 @@ macro_rules! expr_enum {
             }
         }
 
-        impl<W: ::std::io::Write + $crate::event::block::WriteIp> $crate::common::WriteTo<W> for $name {
+        impl<W: ::std::io::Write + $crate::event::block::WriteIp + ?Sized> $crate::common::WriteTo<W> for $name {
             type Error = $error;
             fn write_to(&self, writer: &mut W) -> ::std::result::Result<(), Self::Error> {
                 match self {
@@ -261,7 +261,7 @@ macro_rules! expr_enum {
                 $(pub $arg: $crate::event::Expr,)*
             }
 
-            impl<R: ::std::io::Read> $crate::common::ReadFrom<R> for $args_type {
+            impl<R: ::std::io::Read + ?Sized> $crate::common::ReadFrom<R> for $args_type {
                 type Error = $crate::event::expr::Error;
                 fn read_from(reader: &mut R) -> $crate::event::expr::Result<Self> {
                     Ok(Self {
@@ -270,7 +270,7 @@ macro_rules! expr_enum {
                 }
             }
 
-            impl<W: ::std::io::Write + $crate::event::block::WriteIp> $crate::common::WriteTo<W> for $args_type {
+            impl<W: ::std::io::Write + $crate::event::block::WriteIp + ?Sized> $crate::common::WriteTo<W> for $args_type {
                 type Error = $crate::event::expr::Error;
                 fn write_to(&self, writer: &mut W) -> $crate::event::expr::Result<()> {
                     $($crate::common::WriteTo::write_to(&self.$arg, writer)?;)*

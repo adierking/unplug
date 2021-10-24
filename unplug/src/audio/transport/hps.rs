@@ -47,7 +47,7 @@ struct FileHeader {
     channels: [Channel; 2],
 }
 
-impl<R: Read> ReadFrom<R> for FileHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut header = Self::default();
@@ -65,7 +65,7 @@ impl<R: Read> ReadFrom<R> for FileHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for FileHeader {
+impl<W: Write + ?Sized> WriteTo<W> for FileHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&self.magic)?;
@@ -103,14 +103,14 @@ impl Default for Marker {
     }
 }
 
-impl<R: Read> ReadFrom<R> for Marker {
+impl<R: Read + ?Sized> ReadFrom<R> for Marker {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self { sample_index: reader.read_i32::<BE>()?, id: reader.read_u32::<BE>()? })
     }
 }
 
-impl<W: Write> WriteTo<W> for Marker {
+impl<W: Write + ?Sized> WriteTo<W> for Marker {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.sample_index)?;
@@ -137,7 +137,7 @@ struct BlockHeader {
     markers: Vec<Marker>,
 }
 
-impl<R: Read> ReadFrom<R> for BlockHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for BlockHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut header = Self {
@@ -170,7 +170,7 @@ impl<R: Read> ReadFrom<R> for BlockHeader {
     }
 }
 
-impl<W: Write> WriteTo<W> for BlockHeader {
+impl<W: Write + ?Sized> WriteTo<W> for BlockHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<BE>(self.size)?;
@@ -352,7 +352,7 @@ impl HpsStream {
     }
 }
 
-impl<R: Read + Seek> ReadFrom<R> for HpsStream {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for HpsStream {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;
@@ -396,7 +396,7 @@ impl<R: Read + Seek> ReadFrom<R> for HpsStream {
     }
 }
 
-impl<W: Write + Seek> WriteTo<W> for HpsStream {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for HpsStream {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         if !(1..=2).contains(&self.channels.len()) {
@@ -483,7 +483,7 @@ impl Block {
     }
 
     /// Reads block data from `reader` using information from `header` and `channels`.
-    fn read_from<R: Read + Seek>(
+    fn read_from<R: Read + Seek + ?Sized>(
         reader: &mut R,
         header: &BlockHeader,
         channels: &[Channel],
@@ -517,7 +517,11 @@ impl Block {
 
     /// Writes the block header and data to `writer`. If `next_offset` is not `None`, it will be
     /// used as the block's `next_offset` instead of the offset after this block.
-    fn write_to<W: Write + Seek>(&self, writer: &mut W, next_offset: Option<u32>) -> Result<()> {
+    fn write_to<W: Write + Seek + ?Sized>(
+        &self,
+        writer: &mut W,
+        next_offset: Option<u32>,
+    ) -> Result<()> {
         if !(1..=2).contains(&self.channels.len()) {
             return Err(Error::UnsupportedChannels);
         }

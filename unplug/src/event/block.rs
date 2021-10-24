@@ -113,14 +113,14 @@ impl fmt::Debug for Ip {
     }
 }
 
-impl<R: Read> ReadFrom<R> for Ip {
+impl<R: Read + ?Sized> ReadFrom<R> for Ip {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(reader.read_u32::<LE>()?.into())
     }
 }
 
-impl<W: Write + WriteIp> WriteTo<W> for Ip {
+impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Ip {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_ip(*self)

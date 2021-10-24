@@ -300,7 +300,7 @@ impl Expr {
     }
 }
 
-impl<R: Read> ReadFrom<R> for Expr {
+impl<R: Read + ?Sized> ReadFrom<R> for Expr {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let op = reader.read_u8()?;
@@ -366,7 +366,7 @@ impl<R: Read> ReadFrom<R> for Expr {
     }
 }
 
-impl<W: Write + WriteIp> WriteTo<W> for Expr {
+impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Expr {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         match self {
@@ -570,7 +570,7 @@ impl SetExpr {
     }
 }
 
-impl<R: Read> ReadFrom<R> for SetExpr {
+impl<R: Read + ?Sized> ReadFrom<R> for SetExpr {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let op = reader.read_u8()?;
@@ -597,7 +597,7 @@ impl<R: Read> ReadFrom<R> for SetExpr {
     }
 }
 
-impl<W: Write + WriteIp> WriteTo<W> for SetExpr {
+impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SetExpr {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         match self {
@@ -743,14 +743,14 @@ pub struct ObjPair {
     pub second: i16,
 }
 
-impl<R: Read> ReadFrom<R> for ObjPair {
+impl<R: Read + ?Sized> ReadFrom<R> for ObjPair {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(Self { first: reader.read_i16::<LE>()?, second: reader.read_i16::<LE>()? })
     }
 }
 
-impl<W: Write> WriteTo<W> for ObjPair {
+impl<W: Write + ?Sized> WriteTo<W> for ObjPair {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_i16::<LE>(self.first)?;
@@ -776,7 +776,7 @@ pub struct ObjBone {
     pub path: Vec<i16>,
 }
 
-impl<R: Read> ReadFrom<R> for ObjBone {
+impl<R: Read + ?Sized> ReadFrom<R> for ObjBone {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         let obj = reader.read_i16::<LE>()?;
@@ -792,7 +792,7 @@ impl<R: Read> ReadFrom<R> for ObjBone {
     }
 }
 
-impl<W: Write> WriteTo<W> for ObjBone {
+impl<W: Write + ?Sized> WriteTo<W> for ObjBone {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_i16::<LE>(self.obj)?;
