@@ -137,7 +137,7 @@ pub struct Channel {
 impl Channel {
     /// Creates a `SoundReader` over the raw sample data.
     pub fn reader(&self, tag: SourceTag) -> SoundReader<'_> {
-        SoundReader { channel: Some(self), tag }
+        SoundReader { channel: Some(self), format: self.address.format, tag }
     }
 
     /// Creates a decoder which decodes the channel into PCM16 format.
@@ -405,6 +405,7 @@ impl Debug for SoundBank {
 /// Reads sample data from a sound channel.
 pub struct SoundReader<'a> {
     channel: Option<&'a Channel>,
+    format: DspFormat,
     tag: SourceTag,
 }
 
@@ -418,8 +419,7 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
         };
         let data = &channel.data;
         let len = channel.address.end_address as usize + 1;
-        let format = channel.address.format;
-        match format {
+        match self.format {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> { channels: 1, len, data: data.into(), params: channel.adpcm }
                     .cast(),
@@ -433,6 +433,10 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
                 Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1).cast()))
             }
         }
+    }
+
+    fn format(&self) -> Format {
+        self.format.into()
     }
 
     fn tag(&self) -> &SourceTag {

@@ -1,5 +1,5 @@
-use crate::audio::format::PcmS16Le;
-use crate::audio::{ReadSamples, Result, Samples, SourceTag};
+use crate::audio::format::{PcmS16Le, StaticFormat};
+use crate::audio::{Format, ReadSamples, Result, Samples, SourceTag};
 use crate::common::ReadSeek;
 use lewton::inside_ogg::OggStreamReader;
 use log::debug;
@@ -54,6 +54,10 @@ impl ReadSamples<'static> for OggReader<'_> {
                 None => return Ok(None),
             }
         }
+    }
+
+    fn format(&self) -> Format {
+        Self::Format::format()
     }
 
     fn tag(&self) -> &SourceTag {

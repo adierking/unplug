@@ -458,6 +458,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         }
     }
 
+    fn format(&self) -> Format {
+        self.format
+    }
+
     fn tag(&self) -> &SourceTag {
         &self.tag
     }

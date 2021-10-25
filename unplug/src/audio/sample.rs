@@ -5,7 +5,7 @@ use std::any;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fmt::{self, Debug, Formatter};
-use std::iter::FusedIterator;
+use std::iter::{self, FusedIterator};
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::result::Result as StdResult;
@@ -27,12 +27,6 @@ pub struct Samples<'a, F: FormatTag> {
 }
 
 impl<'a, F: FormatTag> Samples<'a, F> {
-    /// Moves the samples into a reader which returns them. `tag` is a string or tag to identify
-    /// the reader for debugging purposes.
-    pub fn into_reader(self, tag: impl Into<SourceTag>) -> ReadSampleList<'a, F> {
-        ReadSampleList::new(vec![self], tag.into())
-    }
-
     /// Ensures that the sample data is owned, cloning it if necessary.
     pub fn into_owned(self) -> Samples<'static, F> {
         Samples {
@@ -48,6 +42,12 @@ impl<'a, F: DynamicFormat> Samples<'a, F> {
     /// Gets the format of the sample data.
     pub fn format(&self) -> Format {
         F::format_from_params(&self.params)
+    }
+
+    /// Moves the samples into a reader which returns them. `tag` is a string or tag to identify
+    /// the reader for debugging purposes.
+    pub fn into_reader(self, tag: impl Into<SourceTag>) -> ReadSampleList<'a, F> {
+        ReadSampleList::new(iter::once(self), tag.into())
     }
 
     /// Casts the samples into another compatible format. This will fail if the format is dynamic
@@ -222,11 +222,15 @@ impl Default for SourceChannel {
 
 /// Trait for an audio source.
 pub trait ReadSamples<'s> {
-    /// The format that samples are decoded as.
+    /// The format that samples are decoded as. If this is `AnyFormat`, the stream can be in any
+    /// format and the actual format can be retrieved with `format()`.
     type Format: FormatTag;
 
     /// Reads the next block of samples. If there are no more samples, returns `Ok(None)`.
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>>;
+
+    /// Returns the format that all samples will be decoded as.
+    fn format(&self) -> Format;
 
     /// Returns a tag which identifies the audio source for debugging purposes.
     fn tag(&self) -> &SourceTag;
@@ -312,6 +316,9 @@ where
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         (**self).read_samples()
     }
+    fn format(&self) -> Format {
+        (**self).format()
+    }
     fn tag(&self) -> &SourceTag {
         (**self).tag()
     }
@@ -326,30 +333,50 @@ where
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         (**self).read_samples()
     }
+    fn format(&self) -> Format {
+        (**self).format()
+    }
     fn tag(&self) -> &SourceTag {
         (**self).tag()
     }
 }
 
-/// `ReadSamples` implementation which yields `Samples` structs from a queue.
-pub struct ReadSampleList<'s, F: FormatTag> {
+/// `ReadSamples` implementation which yields `Samples` structs from a queue. All samples must have
+/// the same format and channel count.
+pub struct ReadSampleList<'s, F: DynamicFormat> {
     samples: VecDeque<Samples<'s, F>>,
+    format: Format,
     tag: SourceTag,
 }
 
-impl<'s, F: FormatTag> ReadSampleList<'s, F> {
+impl<'s, F: DynamicFormat> ReadSampleList<'s, F> {
     pub fn new(
         samples: impl IntoIterator<Item = Samples<'s, F>>,
         tag: impl Into<SourceTag>,
     ) -> Self {
-        Self { samples: samples.into_iter().collect(), tag: tag.into() }
+        Self::new_impl(samples.into_iter().collect(), tag.into())
+    }
+
+    fn new_impl(samples: VecDeque<Samples<'s, F>>, tag: SourceTag) -> Self {
+        assert!(!samples.is_empty(), "sample list is empty");
+        let front = samples.front().unwrap();
+        let format = front.format();
+        let channels = front.channels;
+        for s in samples.iter().skip(1) {
+            assert_eq!(s.format(), format);
+            assert_eq!(s.channels, channels);
+        }
+        Self { samples: samples.into_iter().collect(), format, tag }
     }
 }
 
-impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
+impl<'s, F: DynamicFormat> ReadSamples<'s> for ReadSampleList<'s, F> {
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         Ok(self.samples.pop_front())
+    }
+    fn format(&self) -> Format {
+        self.format
     }
     fn tag(&self) -> &SourceTag {
         &self.tag
@@ -373,6 +400,9 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'static> for OwnedSamples<'s, R> {
     type Format = R::Format;
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         self.inner.read_samples().map(|s| s.map(Samples::into_owned))
+    }
+    fn format(&self) -> Format {
+        self.inner.format()
     }
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
@@ -416,6 +446,10 @@ where
         }
     }
 
+    fn format(&self) -> Format {
+        self.inner.format()
+    }
+
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
     }
@@ -450,10 +484,11 @@ impl<'a, F: PcmFormat> Iterator for SampleIterator<'a, F> {
 impl<F: PcmFormat> FusedIterator for SampleIterator<'_, F> {}
 
 /// Joins two raw mono streams into a single stereo stream. The streams must return sample blocks
-/// whose sizes match.
+/// whose sizes match and have the same format.
 pub struct JoinChannels<'r, 's, F: PcmFormat> {
     left: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     right: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+    format: Format,
     tag: SourceTag,
     _marker: PhantomData<F>,
 }
@@ -463,8 +498,10 @@ impl<'r, 's, F: PcmFormat> JoinChannels<'r, 's, F> {
         left: impl ReadSamples<'s, Format = F> + 'r,
         right: impl ReadSamples<'s, Format = F> + 'r,
     ) -> Self {
+        assert_eq!(left.format(), right.format());
+        let format = left.format();
         let tag = left.tag().join(right.tag());
-        Self { left: Box::from(left), right: Box::from(right), tag, _marker: PhantomData }
+        Self { left: Box::from(left), right: Box::from(right), format, tag, _marker: PhantomData }
     }
 }
 
@@ -489,6 +526,10 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
             merged.push(r);
         }
         Ok(Some(Samples::from_pcm(merged, 2)))
+    }
+
+    fn format(&self) -> Format {
+        self.format
     }
 
     fn tag(&self) -> &SourceTag {
@@ -565,6 +606,7 @@ where
     F: PcmFormat + 'static,
 {
     state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
+    format: Format,
     tag: SourceTag,
 }
 
@@ -575,8 +617,11 @@ where
     /// Creates a new `SplitChannelsReader` which shares `state` and reads `channel`.
     fn new(state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>, channel: SourceChannel) -> Self {
         debug_assert!(matches!(channel, SourceChannel::Left | SourceChannel::Right));
-        let tag = state.lock().unwrap().reader.tag().clone().for_channel(channel);
-        Self { state, tag }
+        let lock = state.lock().unwrap();
+        let format = lock.reader.format();
+        let tag = lock.reader.tag().clone().for_channel(channel);
+        drop(lock);
+        Self { state, format, tag }
     }
 }
 
@@ -613,6 +658,10 @@ where
             channel_data.push(if is_right { right_sample } else { left_sample });
         }
         Ok(Some(Samples::from_pcm(channel_data, 1)))
+    }
+
+    fn format(&self) -> Format {
+        self.format
     }
 
     fn tag(&self) -> &SourceTag {

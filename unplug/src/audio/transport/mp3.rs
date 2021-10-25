@@ -1,5 +1,5 @@
-use crate::audio::format::PcmS16Le;
-use crate::audio::{Error, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::format::{PcmS16Le, StaticFormat};
+use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{ReadSeek, Region};
 use byteorder::{ReadBytesExt, BE};
 use log::{debug, error, trace, warn};
@@ -132,6 +132,10 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
         }
 
         Ok(Some(Samples::<PcmS16Le>::from_pcm(data, frame.channels)))
+    }
+
+    fn format(&self) -> Format {
+        Self::Format::format()
     }
 
     fn tag(&self) -> &SourceTag {

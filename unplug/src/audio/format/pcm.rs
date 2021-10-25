@@ -325,6 +325,10 @@ where
         }
     }
 
+    fn format(&self) -> Format {
+        To::format()
+    }
+
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
     }

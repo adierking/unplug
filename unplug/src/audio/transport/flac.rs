@@ -50,11 +50,6 @@ impl<'r> FlacReader<'r> {
         Ok(Self { flac, tag, buffer: vec![0; buffer_size], format, channels, sample_rate })
     }
 
-    /// Gets the format of the sample data that will be read. This will always be a PCM format.
-    pub fn format(&self) -> Format {
-        self.format
-    }
-
     /// Gets the number of channels in the stream.
     pub fn channels(&self) -> usize {
         self.channels
@@ -104,6 +99,10 @@ impl ReadSamples<'static> for FlacReader<'_> {
         };
         self.buffer = block.into_buffer();
         Ok(Some(samples))
+    }
+
+    fn format(&self) -> Format {
+        self.format
     }
 
     fn tag(&self) -> &SourceTag {

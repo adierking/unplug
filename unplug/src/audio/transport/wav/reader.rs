@@ -1,6 +1,6 @@
 use super::*;
-use crate::audio::format::{PcmS16Le, ReadWriteBytes};
-use crate::audio::{Error, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::format::{PcmS16Le, ReadWriteBytes, StaticFormat};
+use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use log::{error, trace};
 use std::collections::HashMap;
@@ -207,6 +207,10 @@ impl ReadSamples<'static> for WavReader<'_> {
         } else {
             Ok(Some(Samples::from_pcm(samples, self.channels)))
         }
+    }
+
+    fn format(&self) -> Format {
+        Self::Format::format()
     }
 
     fn tag(&self) -> &SourceTag {
