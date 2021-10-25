@@ -4,7 +4,7 @@ pub mod sample;
 pub mod transport;
 
 pub use format::{Format, FormatTag};
-pub use sample::{ReadSamples, Samples};
+pub use sample::{ReadSamples, Samples, SourceChannel, SourceTag};
 
 use lewton::VorbisError;
 use std::io;

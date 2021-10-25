@@ -1,6 +1,6 @@
 use super::{GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::PcmS16Le;
-use crate::audio::{ReadSamples, Result, Samples};
+use crate::audio::{ReadSamples, Result, Samples, SourceTag};
 use crate::common::clamp_i16;
 use log::trace;
 
@@ -30,7 +30,8 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
         let info = encoded.params;
         let mut context = info.context;
         trace!(
-            "Decoding ADPCM block: len={:#x} ps={:#x} s0={:#x} s1={:#x}",
+            "Decoding ADPCM block from {:?}: len={:#x} ps={:#x} s0={:#x} s1={:#x}",
+            self.tag(),
             encoded.data.len(),
             context.predictor_and_scale,
             context.last_samples[0],
@@ -77,6 +78,10 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
         }
         debug_assert!(estimated >= decoded.len());
         Ok(Some(Samples::from_pcm(decoded, 1)))
+    }
+
+    fn tag(&self) -> &SourceTag {
+        self.source.tag()
     }
 }
 
@@ -136,7 +141,7 @@ mod tests {
             },
         };
 
-        let mut decoder = Decoder::new(encoded.into_reader());
+        let mut decoder = Decoder::new(encoded.into_reader("test"));
         let decoded = decoder.read_samples()?.unwrap();
 
         let expected = PcmS16Le::read_bytes(SINE_DECODED)?;

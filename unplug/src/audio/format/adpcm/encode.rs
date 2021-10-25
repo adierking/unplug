@@ -1,7 +1,7 @@
 use super::vgaudio::{calculate_coefficients, encode};
 use super::{GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::PcmS16Le;
-use crate::audio::{Error, ReadSamples, Result, Samples};
+use crate::audio::{Error, ReadSamples, Result, Samples, SourceTag};
 use log::{debug, trace};
 
 /// Encodes raw PCM data into GameCube ADPCM format.
@@ -53,7 +53,11 @@ impl<'r, 's> Encoder<'r, 's> {
             return Ok(());
         }
 
-        debug!("Calculating ADPCM coefficients over {} samples", self.pcm.len());
+        debug!(
+            "Calculating ADPCM coefficients over {} samples from {:?}",
+            self.pcm.len(),
+            self.tag()
+        );
         self.state.coefficients = calculate_coefficients(&self.pcm);
         debug!(
             "Encoder context initialized (block size = {:#x}, coefficients = {:?})",
@@ -65,6 +69,7 @@ impl<'r, 's> Encoder<'r, 's> {
 
 impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
     type Format = GcAdpcm;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         if self.pcm.is_empty() {
             self.start_encoding()?;
@@ -93,6 +98,10 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
             params: initial_state,
         }))
     }
+
+    fn tag(&self) -> &SourceTag {
+        self.reader.tag()
+    }
 }
 
 #[cfg(test)]
@@ -107,7 +116,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let splitter = samples.into_reader().split_channels();
+        let splitter = samples.into_reader("test").split_channels();
         let mut left_encoder = Encoder::new(splitter.left());
         let mut right_encoder = Encoder::new(splitter.right());
 
@@ -140,7 +149,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let splitter = samples.into_reader().split_channels();
+        let splitter = samples.into_reader("test").split_channels();
         let block_size = 0x8000;
         let mut encoder = Encoder::with_block_size(splitter.left(), block_size);
         let mut blocks = vec![];

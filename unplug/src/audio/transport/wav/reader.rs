@@ -1,6 +1,6 @@
 use super::*;
 use crate::audio::format::{PcmS16Le, ReadWriteBytes};
-use crate::audio::{Error, ReadSamples, Result, Samples};
+use crate::audio::{Error, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use log::{error, trace};
 use std::collections::HashMap;
@@ -96,6 +96,8 @@ pub struct WavReader<'a> {
     chunk_offsets: HashMap<u32, u64>,
     /// true if the data chunk has not been read yet.
     data_available: bool,
+    /// The audio source tag for debugging purposes.
+    tag: SourceTag,
     /// The number of channels in the audio data.
     pub channels: usize,
     /// The audio's sample rate.
@@ -103,12 +105,13 @@ pub struct WavReader<'a> {
 }
 
 impl<'a> WavReader<'a> {
-    /// Opens the WAV data provided by `reader` and reads its header.
-    pub fn open(reader: impl ReadSeek + 'a) -> Result<Self> {
-        Self::open_impl(Box::from(reader))
+    /// Opens the WAV data provided by `reader` and reads its header. `tag` is a string or tag to
+    /// identify the stream for debugging purposes.
+    pub fn open(reader: impl ReadSeek + 'a, tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::open_impl(Box::from(reader), tag.into())
     }
 
-    fn open_impl(reader: Box<dyn ReadSeek + 'a>) -> Result<Self> {
+    fn open_impl(reader: Box<dyn ReadSeek + 'a>, tag: SourceTag) -> Result<Self> {
         let riff = RiffReader::open_form(reader)?;
         if riff.form != ID_WAVE {
             return Err(Error::InvalidWav);
@@ -117,6 +120,7 @@ impl<'a> WavReader<'a> {
             riff,
             chunk_offsets: HashMap::new(),
             data_available: true,
+            tag,
             channels: 0,
             sample_rate: 0,
         };
@@ -188,6 +192,7 @@ impl<'a> WavReader<'a> {
 
 impl ReadSamples<'static> for WavReader<'_> {
     type Format = PcmS16Le;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         if !self.data_available {
             return Ok(None);
@@ -203,6 +208,10 @@ impl ReadSamples<'static> for WavReader<'_> {
             Ok(Some(Samples::from_pcm(samples, self.channels)))
         }
     }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
+    }
 }
 
 #[cfg(test)]
@@ -215,7 +224,7 @@ mod tests {
     fn test_read_wav() -> Result<()> {
         let expected = open_test_wav();
 
-        let mut wav = WavReader::open(Cursor::new(TEST_WAV))?;
+        let mut wav = WavReader::open(Cursor::new(TEST_WAV), "TEST_WAV")?;
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
 

@@ -12,7 +12,6 @@ use std::time::Instant;
 use unicase::UniCase;
 use unplug::audio::transport::{HpsStream, SoundBank, WavBuilder};
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
-use unplug::common::ReadFrom;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
@@ -310,8 +309,9 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
     let mut iso = open_iso_optional(opt.iso.as_ref())?;
-    let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), opt.path)?);
-    let hps = HpsStream::read_from(&mut reader)?;
+    let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), &opt.path)?);
+    let name = opt.path.file_name().unwrap().to_string_lossy();
+    let hps = HpsStream::open(&mut reader, name)?;
 
     info!("Writing {}", opt.output.display());
     let out = BufWriter::new(File::create(&opt.output)?);
@@ -349,7 +349,7 @@ fn export_bank_sounds(bank: &SoundBank, dir: &Path, subdir: Option<&str>) -> Res
         WavBuilder::new()
             .channels(sound.channels.len())
             .sample_rate(sound.sample_rate)
-            .samples(sound.decoder())
+            .samples(bank.decoder(i))
             .write_to(out)?;
     }
     Ok(())
@@ -362,7 +362,8 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
     if let Some(bank_path) = opt.path {
         // Export single bank
         let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), &bank_path)?);
-        let bank = SoundBank::read_from(&mut reader)?;
+        let name = bank_path.file_name().unwrap().to_string_lossy();
+        let bank = SoundBank::open(&mut reader, name)?;
         export_bank_sounds(&bank, &opt.output, None)?;
     } else {
         // Export everything
@@ -371,7 +372,7 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
             let bank_name = bank_def.path.rsplit(|c| c == '.' || c == '/').nth(1).unwrap();
             info!("Reading {}.ssm", bank_name);
             let mut reader = BufReader::new(iso.open_file_at(bank_def.path)?);
-            let bank = SoundBank::read_from(&mut reader)?;
+            let bank = SoundBank::open(&mut reader, format!("{}.ssm", bank_name))?;
             let dir = opt.output.join(bank_name);
             export_bank_sounds(&bank, &dir, Some(bank_name))?;
         }

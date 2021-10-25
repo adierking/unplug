@@ -4,7 +4,6 @@ use log::info;
 use std::io::BufReader;
 use unplug::audio::format::{PcmS16Le, ReadWriteBytes};
 use unplug::audio::transport::SoundBank;
-use unplug::common::ReadFrom;
 use unplug::dvd::OpenFile;
 use unplug_test as common;
 
@@ -16,10 +15,10 @@ fn test_read_all_sounds() -> Result<()> {
     for &(path, expected) in BANK_CHECKSUMS {
         info!("Reading {}", path);
         let mut reader = BufReader::new(iso.open_file_at(path)?);
-        let ssm = SoundBank::read_from(&mut reader)?;
+        let ssm = SoundBank::open(&mut reader, path)?;
         let mut hasher = Hasher::new();
-        for sound in &ssm.sounds {
-            let mut decoder = sound.decoder();
+        for i in 0..ssm.sounds.len() {
+            let mut decoder = ssm.decoder(i);
             while let Some(samples) = decoder.read_samples()? {
                 let mut bytes = vec![];
                 PcmS16Le::write_bytes(&mut bytes, &samples.data)?;

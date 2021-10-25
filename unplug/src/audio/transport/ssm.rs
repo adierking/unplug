@@ -1,9 +1,9 @@
 use crate::audio::format::adpcm::{Decoder, Encoder, FrameContext, GcAdpcm, Info};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
-use crate::audio::{Error, ReadSamples, Result, Samples};
+use crate::audio::{Error, ReadSamples, Result, Samples, SourceChannel, SourceTag};
 use crate::common::io::pad;
-use crate::common::{align, ReadFrom, WriteTo};
+use crate::common::{align, ReadFrom, ReadSeek, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use log::{debug, error};
@@ -136,13 +136,13 @@ pub struct Channel {
 
 impl Channel {
     /// Creates a `SoundReader` over the raw sample data.
-    pub fn reader(&self) -> SoundReader<'_> {
-        SoundReader { channel: Some(self) }
+    pub fn reader(&self, tag: SourceTag) -> SoundReader<'_> {
+        SoundReader { channel: Some(self), tag }
     }
 
     /// Creates a decoder which decodes the channel into PCM16 format.
-    pub fn decoder(&self) -> SsmDecoder<'_, '_> {
-        let reader = self.reader();
+    pub fn decoder(&self, tag: SourceTag) -> SsmDecoder<'_, '_> {
+        let reader = self.reader(tag);
         match self.address.format {
             DspFormat::Adpcm => Box::new(Decoder::new(reader.cast())),
             DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(reader.convert()),
@@ -223,12 +223,12 @@ pub struct Sound {
 
 impl Sound {
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
-    pub fn decoder(&self) -> SsmDecoder<'_, '_> {
+    pub fn decoder(&self, tag: SourceTag) -> SsmDecoder<'_, '_> {
         if self.channels.len() == 1 {
-            self.channels[0].decoder()
+            self.channels[0].decoder(tag)
         } else {
-            let left = self.channels[0].decoder();
-            let right = self.channels[1].decoder();
+            let left = self.channels[0].decoder(tag.clone().for_channel(SourceChannel::Left));
+            let right = self.channels[1].decoder(tag.for_channel(SourceChannel::Right));
             Box::new(left.with_right_channel(right))
         }
     }
@@ -239,13 +239,15 @@ impl Sound {
         sample_rate: u32,
     ) -> Result<Self> {
         let samples = reader.read_all_samples()?;
-        if samples.channels == 2 {
-            let splitter = samples.into_reader().split_channels();
+        let channels = samples.channels;
+        let samples = samples.into_reader(reader.tag().clone());
+        if channels == 2 {
+            let splitter = samples.split_channels();
             let mut left = Encoder::new(splitter.left());
             let mut right = Encoder::new(splitter.right());
             Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
-        } else if samples.channels == 1 {
-            let mut encoder = Encoder::new(samples.into_reader());
+        } else if channels == 1 {
+            let mut encoder = Encoder::new(samples);
             Self::from_adpcm_mono(&mut encoder, sample_rate)
         } else {
             Err(Error::UnsupportedChannels)
@@ -289,11 +291,18 @@ pub struct SoundBank {
     pub base_index: u32,
     /// The sounds in the bank.
     pub sounds: Vec<Sound>,
+    /// The audio source tag for debugging purposes.
+    tag: SourceTag,
 }
 
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for SoundBank {
-    type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
+impl SoundBank {
+    /// Opens an SSM sound bank read from `reader`. `tag` is a string or tag to identify sound
+    /// streams for debugging purposes.
+    pub fn open(reader: &mut dyn ReadSeek, tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::open_impl(reader, tag.into())
+    }
+
+    fn open_impl(reader: &mut dyn ReadSeek, tag: SourceTag) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;
 
         // Sound headers follow the main header
@@ -316,8 +325,23 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for SoundBank {
         let sounds: Vec<_> =
             sound_headers.into_iter().map(|sound| Sound::from_bank(&sound, &data)).collect();
 
-        debug!("Loaded sound bank with {} sounds", sounds.len());
-        Ok(Self { base_index: header.base_index, sounds })
+        debug!("Loaded sound bank {:?} with {} sounds", tag, sounds.len());
+        Ok(Self { base_index: header.base_index, sounds, tag })
+    }
+
+    /// Returns a reader over the raw sample data for a channel in a sound.
+    pub fn reader(&self, index: usize, channel: usize) -> SoundReader<'_> {
+        self.sounds[index].channels[channel].reader(self.sound_tag(index))
+    }
+
+    /// Returns a decoder which decodes a sound into PCM16 format.
+    pub fn decoder(&self, index: usize) -> SsmDecoder<'_, '_> {
+        self.sounds[index].decoder(self.sound_tag(index))
+    }
+
+    /// Creates a `SourceTag` for a sound in the bank.
+    fn sound_tag(&self, index: usize) -> SourceTag {
+        SourceTag::new(format!("{}[{}]", self.tag.name, index))
     }
 }
 
@@ -381,10 +405,12 @@ impl Debug for SoundBank {
 /// Reads sample data from a sound channel.
 pub struct SoundReader<'a> {
     channel: Option<&'a Channel>,
+    tag: SourceTag,
 }
 
 impl<'a> ReadSamples<'a> for SoundReader<'a> {
     type Format = AnyFormat;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         let channel = match self.channel.take() {
             Some(c) => c,
@@ -407,6 +433,10 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
                 Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1).cast()))
             }
         }
+    }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
     }
 }
 
@@ -502,25 +532,25 @@ mod tests {
 
     #[test]
     fn test_read_sound_bank() -> Result<()> {
-        let ssm = SoundBank::read_from(&mut Cursor::new(SSM_BYTES))?;
+        let ssm = SoundBank::open(&mut Cursor::new(SSM_BYTES), "SSM_BYTES")?;
         assert_eq!(ssm.base_index, 0x123);
         assert_eq!(ssm.sounds.len(), 2);
 
-        let samples0_0 = ssm.sounds[0].channels[0].reader().read_samples()?.unwrap();
+        let samples0_0 = ssm.reader(0, 0).read_samples()?.unwrap();
         let samples0_0: Samples<'_, GcAdpcm> = samples0_0.cast();
         assert_eq!(samples0_0.format(), Format::GcAdpcm);
         assert_eq!(samples0_0.len, 32);
         assert_eq!(samples0_0.channels, 1);
         assert_eq!(samples0_0.data, &SSM_BYTES[0xe0..0xf0]);
 
-        let samples1_0 = ssm.sounds[1].channels[0].reader().read_samples()?.unwrap();
+        let samples1_0 = ssm.reader(1, 0).read_samples()?.unwrap();
         let samples1_0: Samples<'_, GcAdpcm> = samples1_0.cast();
         assert_eq!(samples1_0.format(), Format::GcAdpcm);
         assert_eq!(samples1_0.len, 32);
         assert_eq!(samples1_0.channels, 1);
         assert_eq!(samples1_0.data, &SSM_BYTES[0xf0..0x100]);
 
-        let samples1_1 = ssm.sounds[1].channels[1].reader().read_samples()?.unwrap();
+        let samples1_1 = ssm.reader(1, 1).read_samples()?.unwrap();
         let samples1_1: Samples<'_, GcAdpcm> = samples1_1.cast();
         assert_eq!(samples1_1.format(), Format::GcAdpcm);
         assert_eq!(samples1_1.len, 32);
@@ -531,7 +561,7 @@ mod tests {
 
     #[test]
     fn test_read_and_write_sound_bank() -> Result<()> {
-        let ssm = SoundBank::read_from(&mut Cursor::new(SSM_BYTES))?;
+        let ssm = SoundBank::open(&mut Cursor::new(SSM_BYTES), "SSM_BYTES")?;
         let mut writer = Cursor::new(vec![]);
         ssm.write_to(&mut writer)?;
         assert_eq!(writer.into_inner(), SSM_BYTES);
@@ -597,7 +627,7 @@ mod tests {
                 context: FrameContext::default(),
             },
         };
-        let sound = Sound::from_adpcm_mono(&mut samples.into_reader(), 44100)?;
+        let sound = Sound::from_adpcm_mono(&mut samples.into_reader("test"), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 1);
         assert_left_channel(&sound.channels[0]);
@@ -627,8 +657,8 @@ mod tests {
             },
         };
         let sound = Sound::from_adpcm_stereo(
-            &mut lsamples.into_reader(),
-            &mut rsamples.into_reader(),
+            &mut lsamples.into_reader("test"),
+            &mut rsamples.into_reader("test"),
             44100,
         )?;
         assert_eq!(sound.sample_rate, 44100);
@@ -642,7 +672,7 @@ mod tests {
     fn test_sound_from_pcm() -> Result<()> {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
-        let sound = Sound::from_pcm(&mut samples.into_reader(), 44100)?;
+        let sound = Sound::from_pcm(&mut samples.into_reader("test"), 44100)?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 2);
         assert_left_channel(&sound.channels[0]);

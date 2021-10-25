@@ -1,5 +1,5 @@
 use crate::audio::format::{AnyFormat, Cast, PcmFormat, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
-use crate::audio::{Error, Format, ReadSamples, Result, Samples};
+use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
 use claxon::{self};
 use log::debug;
 use std::convert::TryFrom;
@@ -10,6 +10,8 @@ use std::mem;
 pub struct FlacReader<'r> {
     /// The inner FLAC stream.
     flac: claxon::FlacReader<Box<dyn Read + 'r>>,
+    /// The audio source tag for debugging purposes.
+    tag: SourceTag,
     /// The buffer to store decoded samples in.
     buffer: Vec<i32>,
     /// The corresponding PCM format.
@@ -21,12 +23,13 @@ pub struct FlacReader<'r> {
 }
 
 impl<'r> FlacReader<'r> {
-    /// Creates a new `FlacReader` which reads FLAC data from `reader`.
-    pub fn new(reader: impl Read + 'r) -> Result<Self> {
-        Self::new_impl(Box::from(reader))
+    /// Creates a new `FlacReader` which reads FLAC data from `reader`. `tag` is a string or tag
+    /// to identify the stream for debugging purposes.
+    pub fn new(reader: impl Read + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::new_impl(Box::from(reader), tag.into())
     }
 
-    fn new_impl(reader: Box<dyn Read + 'r>) -> Result<Self> {
+    fn new_impl(reader: Box<dyn Read + 'r>, tag: SourceTag) -> Result<Self> {
         let flac = claxon::FlacReader::new(reader)?;
         let info = flac.streaminfo();
         let channels = info.channels as usize;
@@ -39,12 +42,12 @@ impl<'r> FlacReader<'r> {
             32 => Format::PcmS32Le,
             other => return Err(Error::UnsupportedBitDepth(other)),
         };
-        let buffer_size = info.max_block_size as usize * channels;
         debug!(
-            "Opened FLAC stream: {} Hz, {}-bit, {} channel(s)",
-            sample_rate, info.bits_per_sample, channels
+            "Opened FLAC stream {:?}: {} Hz, {}-bit, {} channel(s)",
+            tag, sample_rate, info.bits_per_sample, channels
         );
-        Ok(Self { flac, buffer: vec![0; buffer_size], format, channels, sample_rate })
+        let buffer_size = info.max_block_size as usize * channels;
+        Ok(Self { flac, tag, buffer: vec![0; buffer_size], format, channels, sample_rate })
     }
 
     /// Gets the format of the sample data that will be read. This will always be a PCM format.
@@ -102,6 +105,10 @@ impl ReadSamples<'static> for FlacReader<'_> {
         self.buffer = block.into_buffer();
         Ok(Some(samples))
     }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
+    }
 }
 
 #[cfg(test)]
@@ -111,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_read_flac() -> Result<()> {
-        let flac = FlacReader::new(TEST_FLAC)?;
+        let flac = FlacReader::new(TEST_FLAC, "TEST_FLAC")?;
         assert_eq!(flac.format(), Format::PcmS16Le);
         assert_eq!(flac.channels(), 2);
         assert_eq!(flac.sample_rate(), 44100);

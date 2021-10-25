@@ -3,8 +3,8 @@
 
 use crate::audio::format::adpcm::{self, GcAdpcm};
 use crate::audio::format::{AnyFormat, Format, PcmS16Le};
-use crate::audio::{Error, ReadSamples, Result, Samples};
-use crate::common::{ReadFrom, Region};
+use crate::audio::{Error, ReadSamples, Result, Samples, SourceChannel, SourceTag};
+use crate::common::{ReadFrom, ReadSeek, Region};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
 use log::error;
@@ -358,17 +358,49 @@ pub struct Rwav {
     pub end_address: u32,
     /// The data for each channel in the sound.
     pub channels: ArrayVec<[Channel; 2]>,
+    /// The audio source tag for debugging purposes.
+    tag: SourceTag,
 }
 
 impl Rwav {
+    pub fn open(reader: &mut dyn ReadSeek, tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::open_impl(reader, tag.into())
+    }
+
+    fn open_impl(reader: &mut dyn ReadSeek, tag: SourceTag) -> Result<Self> {
+        let header = FileHeader::read_from(reader)?;
+
+        reader.seek(SeekFrom::Start(header.info_offset as u64))?;
+        let info = InfoSection::read_from(reader)?;
+
+        reader.seek(SeekFrom::Start(header.data_offset as u64))?;
+        let data = DataSection::read_from(reader, &info)?;
+
+        Ok(Self {
+            format: info.header.codec.into(),
+            looping: info.header.looping,
+            sample_rate: info.header.sample_rate as u32,
+            start_address: data.start_address,
+            end_address: data.end_address,
+            channels: data.channels,
+            tag,
+        })
+    }
+
     /// Creates a `ChannelReader` over a channel in the stream.
     /// ***Panics*** if the channel index is out-of-bounds.
     pub fn reader(&self, channel: usize) -> ChannelReader<'_> {
         assert!(channel < self.channels.len(), "invalid channel index");
+        let tag = match (self.channels.len(), channel) {
+            (2, 0) => self.tag.clone().for_channel(SourceChannel::Left),
+            (2, 1) => self.tag.clone().for_channel(SourceChannel::Right),
+            _ => self.tag.clone(),
+        };
         ChannelReader {
             channel: Some(&self.channels[channel]),
             format: self.format,
             end_address: self.end_address,
+            tag,
         }
     }
 
@@ -391,37 +423,17 @@ impl Rwav {
     }
 }
 
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for Rwav {
-    type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let header = FileHeader::read_from(reader)?;
-
-        reader.seek(SeekFrom::Start(header.info_offset as u64))?;
-        let info = InfoSection::read_from(reader)?;
-
-        reader.seek(SeekFrom::Start(header.data_offset as u64))?;
-        let data = DataSection::read_from(reader, &info)?;
-
-        Ok(Self {
-            format: info.header.codec.into(),
-            looping: info.header.looping,
-            sample_rate: info.header.sample_rate as u32,
-            start_address: data.start_address,
-            end_address: data.end_address,
-            channels: data.channels,
-        })
-    }
-}
-
 /// Reads sample data from a single RWAV channel.
 pub struct ChannelReader<'a> {
     channel: Option<&'a Channel>,
     format: Format,
     end_address: u32,
+    tag: SourceTag,
 }
 
 impl<'a> ReadSamples<'a> for ChannelReader<'a> {
     type Format = AnyFormat;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         let channel = match self.channel.take() {
             Some(c) => c,
@@ -444,6 +456,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                 Err(Error::UnsupportedFormat(format))
             }
         }
+    }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
     }
 }
 
@@ -543,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_read_rwav() -> Result<()> {
-        let rwav = Rwav::read_from(&mut Cursor::new(RWAV_BYTES))?;
+        let rwav = Rwav::open(&mut Cursor::new(RWAV_BYTES), "RWAV_BYTES")?;
         assert_eq!(rwav.format, Format::GcAdpcm);
         assert!(!rwav.looping);
         assert_eq!(rwav.sample_rate, 44100);

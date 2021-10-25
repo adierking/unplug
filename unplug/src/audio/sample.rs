@@ -4,6 +4,7 @@ use super::{Error, Result};
 use std::any;
 use std::borrow::Cow;
 use std::collections::VecDeque;
+use std::fmt::{self, Debug, Formatter};
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -26,9 +27,10 @@ pub struct Samples<'a, F: FormatTag> {
 }
 
 impl<'a, F: FormatTag> Samples<'a, F> {
-    /// Moves the samples into a reader which returns them.
-    pub fn into_reader(self) -> ReadSampleList<'a, F> {
-        ReadSampleList::new(vec![self])
+    /// Moves the samples into a reader which returns them. `tag` is a string or tag to identify
+    /// the reader for debugging purposes.
+    pub fn into_reader(self, tag: impl Into<SourceTag>) -> ReadSampleList<'a, F> {
+        ReadSampleList::new(vec![self], tag.into())
     }
 
     /// Ensures that the sample data is owned, cloning it if necessary.
@@ -132,6 +134,92 @@ impl<'a, F: PcmFormat> Samples<'a, F> {
     }
 }
 
+/// A tag which identifies the origin of an audio source.
+#[derive(Default, Clone, PartialEq, Eq)]
+pub struct SourceTag {
+    /// The name of the audio source to use for debugging purposes. Do not make assumptions about
+    /// the format of this.
+    pub name: String,
+    /// The channel(s) that are read by the associated reader.
+    pub channel: SourceChannel,
+}
+
+impl SourceTag {
+    /// Creates a new `SourceTag` for `name` which processes all channels.
+    pub fn new(name: String) -> Self {
+        Self::with_channel(name, SourceChannel::All)
+    }
+
+    /// Creates a new `SourceTag` for `name` and `channel`.
+    pub fn with_channel(name: String, channel: SourceChannel) -> Self {
+        Self { name, channel }
+    }
+
+    /// Updates the tag with a new channel and returns the new tag.
+    pub fn for_channel(self, channel: SourceChannel) -> Self {
+        Self { name: self.name, channel }
+    }
+
+    /// Joins this tag with `other` to produce a new tag with `SourceChannel::All`. If the names do
+    /// not match, they will be concatenated.
+    pub fn join(&self, other: &SourceTag) -> Self {
+        if self.name == other.name {
+            Self::new(self.name.clone())
+        } else {
+            Self::new(format!("{}+{}", self.name, other.name))
+        }
+    }
+}
+
+impl Debug for SourceTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let name = if !self.name.is_empty() { &self.name } else { "<unnamed>" };
+        match self.channel {
+            SourceChannel::All => write!(f, "{}", name),
+            SourceChannel::Left => write!(f, "{}[L]", name),
+            SourceChannel::Right => write!(f, "{}[R]", name),
+        }
+    }
+}
+
+impl From<String> for SourceTag {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<&str> for SourceTag {
+    fn from(s: &str) -> Self {
+        Self::new(s.to_owned())
+    }
+}
+
+impl From<Cow<'_, str>> for SourceTag {
+    fn from(s: Cow<'_, str>) -> Self {
+        match s {
+            Cow::Borrowed(s) => Self::new(s.to_owned()),
+            Cow::Owned(s) => Self::new(s),
+        }
+    }
+}
+
+/// Indicates the audio channel(s) that will be read by an audio source.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum SourceChannel {
+    /// All channels are read.
+    All,
+    /// Only the left channel is read.
+    Left,
+    /// Only the right channel is read.
+    Right,
+}
+
+impl Default for SourceChannel {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
 /// Trait for an audio source.
 pub trait ReadSamples<'s> {
     /// The format that samples are decoded as.
@@ -139,6 +227,9 @@ pub trait ReadSamples<'s> {
 
     /// Reads the next block of samples. If there are no more samples, returns `Ok(None)`.
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>>;
+
+    /// Returns a tag which identifies the audio source for debugging purposes.
+    fn tag(&self) -> &SourceTag;
 
     /// Reads all available samples and concatenates them into a single `Samples` object. The
     /// samples must have a static format and follow the rules for `Samples::append()`. If no
@@ -221,6 +312,9 @@ where
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         (**self).read_samples()
     }
+    fn tag(&self) -> &SourceTag {
+        (**self).tag()
+    }
 }
 
 impl<'a, F, R> ReadSamples<'a> for Box<R>
@@ -232,16 +326,23 @@ where
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         (**self).read_samples()
     }
+    fn tag(&self) -> &SourceTag {
+        (**self).tag()
+    }
 }
 
 /// `ReadSamples` implementation which yields `Samples` structs from a queue.
 pub struct ReadSampleList<'s, F: FormatTag> {
     samples: VecDeque<Samples<'s, F>>,
+    tag: SourceTag,
 }
 
 impl<'s, F: FormatTag> ReadSampleList<'s, F> {
-    pub fn new(samples: impl IntoIterator<Item = Samples<'s, F>>) -> Self {
-        Self { samples: samples.into_iter().collect() }
+    pub fn new(
+        samples: impl IntoIterator<Item = Samples<'s, F>>,
+        tag: impl Into<SourceTag>,
+    ) -> Self {
+        Self { samples: samples.into_iter().collect(), tag: tag.into() }
     }
 }
 
@@ -249,6 +350,9 @@ impl<'s, F: FormatTag> ReadSamples<'s> for ReadSampleList<'s, F> {
     type Format = F;
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         Ok(self.samples.pop_front())
+    }
+    fn tag(&self) -> &SourceTag {
+        &self.tag
     }
 }
 
@@ -269,6 +373,9 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'static> for OwnedSamples<'s, R> {
     type Format = R::Format;
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         self.inner.read_samples().map(|s| s.map(Samples::into_owned))
+    }
+    fn tag(&self) -> &SourceTag {
+        self.inner.tag()
     }
 }
 
@@ -297,6 +404,7 @@ where
     R::Format: DynamicFormat + Cast<F>,
 {
     type Format = F;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         match self.inner.read_samples() {
             Ok(Some(samples)) => match samples.try_cast() {
@@ -306,6 +414,10 @@ where
             Ok(None) => Ok(None),
             Err(error) => Err(error),
         }
+    }
+
+    fn tag(&self) -> &SourceTag {
+        self.inner.tag()
     }
 }
 
@@ -342,6 +454,7 @@ impl<F: PcmFormat> FusedIterator for SampleIterator<'_, F> {}
 pub struct JoinChannels<'r, 's, F: PcmFormat> {
     left: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     right: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+    tag: SourceTag,
     _marker: PhantomData<F>,
 }
 
@@ -350,12 +463,14 @@ impl<'r, 's, F: PcmFormat> JoinChannels<'r, 's, F> {
         left: impl ReadSamples<'s, Format = F> + 'r,
         right: impl ReadSamples<'s, Format = F> + 'r,
     ) -> Self {
-        Self { left: Box::from(left), right: Box::from(right), _marker: PhantomData }
+        let tag = left.tag().join(right.tag());
+        Self { left: Box::from(left), right: Box::from(right), tag, _marker: PhantomData }
     }
 }
 
 impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
     type Format = F;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         let left = self.left.read_samples()?;
         let right = self.right.read_samples()?;
@@ -374,6 +489,10 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
             merged.push(r);
         }
         Ok(Some(Samples::from_pcm(merged, 2)))
+    }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
     }
 }
 
@@ -396,12 +515,12 @@ where
 
     /// Returns a thread-safe reader over the samples in the left channel.
     pub fn left(&self) -> SplitChannelsReader<'r, 's, F> {
-        SplitChannelsReader { state: Arc::clone(&self.state), is_right: false }
+        SplitChannelsReader::new(Arc::clone(&self.state), SourceChannel::Left)
     }
 
     /// Returns a thread-safe reader over the samples in the right channel.
     pub fn right(&self) -> SplitChannelsReader<'r, 's, F> {
-        SplitChannelsReader { state: Arc::clone(&self.state), is_right: true }
+        SplitChannelsReader::new(Arc::clone(&self.state), SourceChannel::Right)
     }
 }
 
@@ -446,7 +565,19 @@ where
     F: PcmFormat + 'static,
 {
     state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
-    is_right: bool,
+    tag: SourceTag,
+}
+
+impl<'r, 's, F> SplitChannelsReader<'r, 's, F>
+where
+    F: PcmFormat + 'static,
+{
+    /// Creates a new `SplitChannelsReader` which shares `state` and reads `channel`.
+    fn new(state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>, channel: SourceChannel) -> Self {
+        debug_assert!(matches!(channel, SourceChannel::Left | SourceChannel::Right));
+        let tag = state.lock().unwrap().reader.tag().clone().for_channel(channel);
+        Self { state, tag }
+    }
 }
 
 impl<'s, F> ReadSamples<'s> for SplitChannelsReader<'_, 's, F>
@@ -454,6 +585,7 @@ where
     F: PcmFormat + 'static,
 {
     type Format = F;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         // We assume here that the channels can be read from in any order and that we are only
         // expected to read as much as we need. Each channel must hold onto samples it hasn't
@@ -462,8 +594,9 @@ where
         // refcounted sample data. When we try to read from an empty queue, we read more samples and
         // push them onto both queues.
         let mut state = self.state.lock().unwrap();
+        let is_right = self.tag.channel == SourceChannel::Right;
         let samples = loop {
-            let queue = if self.is_right { &mut state.right } else { &mut state.left };
+            let queue = if is_right { &mut state.right } else { &mut state.left };
             if let Some(s) = queue.pop_front() {
                 break s;
             } else if !state.read_next()? {
@@ -477,9 +610,13 @@ where
         let mut channel_data = Vec::with_capacity(samples.data.len() / 2);
         for sample in samples.iter() {
             let (left_sample, right_sample) = (sample[0], sample[1]);
-            channel_data.push(if self.is_right { right_sample } else { left_sample });
+            channel_data.push(if is_right { right_sample } else { left_sample });
         }
         Ok(Some(Samples::from_pcm(channel_data, 1)))
+    }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
     }
 }
 
@@ -515,7 +652,7 @@ mod tests {
     #[test]
     fn test_owned() {
         let samples: Vec<i16> = (0..16).collect();
-        let borrowed = Samples::<PcmS16Le>::from_pcm(&samples, 1).into_reader();
+        let borrowed = Samples::<PcmS16Le>::from_pcm(&samples, 1).into_reader("test");
         let owned = OwnedSamples::new(borrowed).read_all_samples().unwrap();
         assert!(owned.channels == 1);
         assert!(owned.len == 16);
@@ -598,7 +735,7 @@ mod tests {
         let samples: Vec<i16> = (0..16).collect();
         let original = Samples::<PcmS16Le>::from_pcm(&samples, 1);
 
-        let mut caster = CastSamples::new(original.into_reader());
+        let mut caster = CastSamples::new(original.into_reader("test"));
         let casted: Samples<'_, AnyFormat> = caster.read_samples()?.unwrap();
         assert_eq!(casted.format(), Format::PcmS16Le);
         assert!(matches!(casted.data, Cow::Borrowed(_)));
@@ -610,7 +747,7 @@ mod tests {
         let samples: Vec<i16> = (0..16).collect();
         let original = Samples::<PcmS16Le>::from_pcm(&samples, 1);
 
-        let any = original.clone().cast::<AnyFormat>().into_reader();
+        let any = original.clone().cast::<AnyFormat>().into_reader("test");
         let mut caster = CastSamples::new(any);
         let casted: Samples<'_, PcmS16Le> = caster.read_samples()?.unwrap();
         assert_eq!(casted.format(), Format::PcmS16Le);
@@ -620,7 +757,7 @@ mod tests {
         assert!(matches!(casted.data, Cow::Borrowed(_)));
 
         // Casting to PcmS32Le should fail with UnsupportedFormat
-        let any = original.clone().cast::<AnyFormat>().into_reader();
+        let any = original.clone().cast::<AnyFormat>().into_reader("test");
         let mut caster = CastSamples::new(any);
         let result: Result<Option<Samples<'_, PcmS32Le>>> = caster.read_samples();
         assert!(matches!(result, Err(Error::UnsupportedFormat(Format::PcmS16Le))));
@@ -747,7 +884,7 @@ mod tests {
         let right =
             Samples::<PcmS16Le> { channels: 1, len: 7, data: Cow::Borrowed(&rdata), params: () };
 
-        let mut joiner = JoinChannels::new(left.into_reader(), right.into_reader());
+        let mut joiner = JoinChannels::new(left.into_reader("left"), right.into_reader("right"));
         let joined = joiner.read_samples()?.unwrap();
         assert_eq!(joined.len, 14);
         assert_eq!(joined.channels, 2);
@@ -764,7 +901,7 @@ mod tests {
         let samples: Vec<i16> = (0..16).collect();
         let stereo = Samples::<PcmS16Le> { channels: 2, len: 14, data: samples.into(), params: () };
 
-        let splitter = SplitChannels::new(stereo.into_reader());
+        let splitter = SplitChannels::new(stereo.into_reader("test"));
         let mut left_split = splitter.left();
         let mut right_split = splitter.right();
         let left = left_split.read_samples()?.unwrap();
@@ -788,7 +925,7 @@ mod tests {
         let samples1 = Samples::<PcmS16Le>::from_pcm((0..16).collect::<Vec<_>>(), 1);
         let samples2 = Samples::<PcmS16Le>::from_pcm((16..32).collect::<Vec<_>>(), 1);
         let samples3 = Samples::<PcmS16Le>::from_pcm((32..48).collect::<Vec<_>>(), 1);
-        let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3]);
+        let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3], "test");
         let all = reader.read_all_samples().unwrap();
         assert_eq!(all.len, 48);
         assert_eq!(all.channels, 1);

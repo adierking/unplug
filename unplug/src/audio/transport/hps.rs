@@ -3,9 +3,9 @@ use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{
     AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat,
 };
-use crate::audio::{Error, ReadSamples, Result, Samples};
+use crate::audio::{Error, ReadSamples, Result, Samples, SourceChannel, SourceTag};
 use crate::common::io::pad;
-use crate::common::{align, ReadFrom, Region, WriteTo};
+use crate::common::{align, ReadFrom, ReadSeek, Region, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use log::{debug, trace};
@@ -206,18 +206,74 @@ pub struct HpsStream {
     pub loop_start: Option<usize>,
     /// The blocks making up the stream data.
     pub blocks: Vec<Block>,
+    /// The audio source tag for debugging purposes.
+    tag: SourceTag,
 }
 
 impl HpsStream {
+    /// Opens an HPS stream read from `reader`. `tag` is a string or tag to identify the stream for
+    /// debugging purposes.
+    pub fn open(reader: &mut dyn ReadSeek, tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::open_impl(reader, tag.into())
+    }
+
+    fn open_impl(reader: &mut dyn ReadSeek, tag: SourceTag) -> Result<Self> {
+        let header = FileHeader::read_from(reader)?;
+        let channels: ArrayVec<[Channel; 2]> =
+            header.channels.iter().take(header.num_channels as usize).copied().collect();
+
+        let mut blocks = vec![];
+        let mut blocks_by_offset = HashMap::new();
+        let mut loop_start = None;
+        let mut current_offset = FIRST_BLOCK_OFFSET;
+        loop {
+            reader.seek(SeekFrom::Start(current_offset as u64))?;
+            let block_header = BlockHeader::read_from(reader)?;
+            let block = Block::read_from(reader, &block_header, &channels)?;
+            blocks_by_offset.insert(current_offset, blocks.len());
+            trace!("Block {:#x}: {:?}", current_offset, block);
+            blocks.push(block);
+
+            // Advance to the offset in the block header, unless it's the end or we've already
+            // visited the next block.
+            let next_offset = block_header.next_offset;
+            if next_offset == END_BLOCK_OFFSET {
+                break;
+            }
+            let next_index = blocks_by_offset.get(&next_offset).copied();
+            if let Some(index) = next_index {
+                // Looping back to a previous block
+                loop_start = Some(index);
+                break;
+            }
+            current_offset = next_offset;
+        }
+
+        debug!(
+            "Loaded HPS stream {:?}: {} Hz, {}, {} blocks",
+            tag,
+            header.sample_rate,
+            if channels.len() == 2 { "stereo" } else { "mono" },
+            blocks.len(),
+        );
+        Ok(Self { sample_rate: header.sample_rate, channels, loop_start, blocks, tag })
+    }
+
     /// Creates a `ChannelReader` over a channel in the stream.
     /// ***Panics*** if the channel index is out-of-bounds.
     pub fn reader(&self, channel: usize) -> ChannelReader<'_> {
         assert!(channel < self.channels.len(), "invalid channel index");
+        let tag = match (self.channels.len(), channel) {
+            (2, 0) => self.tag.clone().for_channel(SourceChannel::Left),
+            (2, 1) => self.tag.clone().for_channel(SourceChannel::Right),
+            _ => self.tag.clone(),
+        };
         ChannelReader {
             blocks: &self.blocks,
             channel,
             format: self.channels[channel].address.format,
             adpcm: &self.channels[channel].adpcm,
+            tag,
         }
     }
 
@@ -248,14 +304,15 @@ impl HpsStream {
         sample_rate: u32,
     ) -> Result<Self> {
         let samples = reader.read_all_samples()?;
-        if samples.channels == 2 {
-            let splitter = samples.into_reader().split_channels();
+        let channels = samples.channels;
+        let samples = samples.into_reader(reader.tag().clone());
+        if channels == 2 {
+            let splitter = samples.split_channels();
             let mut left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
             let mut right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
             Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
-        } else if samples.channels == 1 {
-            let mut encoder =
-                adpcm::Encoder::with_block_size(samples.into_reader(), MONO_BLOCK_SIZE);
+        } else if channels == 1 {
+            let mut encoder = adpcm::Encoder::with_block_size(samples, MONO_BLOCK_SIZE);
             Self::from_adpcm_mono(&mut encoder, sample_rate)
         } else {
             Err(Error::UnsupportedChannels)
@@ -296,7 +353,8 @@ impl HpsStream {
 
         let mut channels = ArrayVec::new();
         channels.push(channel);
-        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks })
+        let tag = reader.tag().clone();
+        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks, tag })
     }
 
     /// Creates a new `HpsStream` from stereo ADPCM sample data.
@@ -348,51 +406,8 @@ impl HpsStream {
         let mut channels = ArrayVec::new();
         channels.push(left_channel);
         channels.push(right_channel);
-        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks })
-    }
-}
-
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for HpsStream {
-    type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let header = FileHeader::read_from(reader)?;
-        let channels: ArrayVec<[Channel; 2]> =
-            header.channels.iter().take(header.num_channels as usize).copied().collect();
-
-        let mut blocks = vec![];
-        let mut blocks_by_offset = HashMap::new();
-        let mut loop_start = None;
-        let mut current_offset = FIRST_BLOCK_OFFSET;
-        loop {
-            reader.seek(SeekFrom::Start(current_offset as u64))?;
-            let block_header = BlockHeader::read_from(reader)?;
-            let block = Block::read_from(reader, &block_header, &channels)?;
-            blocks_by_offset.insert(current_offset, blocks.len());
-            trace!("Block {:#x}: {:?}", current_offset, block);
-            blocks.push(block);
-
-            // Advance to the offset in the block header, unless it's the end or we've already
-            // visited the next block.
-            let next_offset = block_header.next_offset;
-            if next_offset == END_BLOCK_OFFSET {
-                break;
-            }
-            let next_index = blocks_by_offset.get(&next_offset).copied();
-            if let Some(index) = next_index {
-                // Looping back to a previous block
-                loop_start = Some(index);
-                break;
-            }
-            current_offset = next_offset;
-        }
-
-        debug!(
-            "Loaded HPS stream: {} Hz, {}, {} blocks",
-            header.sample_rate,
-            if channels.len() == 2 { "stereo" } else { "mono" },
-            blocks.len(),
-        );
-        Ok(Self { sample_rate: header.sample_rate, channels, loop_start, blocks })
+        let tag = left_reader.tag().join(right_reader.tag());
+        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks, tag })
     }
 }
 
@@ -596,10 +611,12 @@ pub struct ChannelReader<'a> {
     channel: usize,
     format: DspFormat,
     adpcm: &'a adpcm::Info,
+    tag: SourceTag,
 }
 
 impl<'a> ReadSamples<'a> for ChannelReader<'a> {
     type Format = AnyFormat;
+
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         if self.blocks.is_empty() {
             return Ok(None);
@@ -635,6 +652,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
                 Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1).cast()))
             }
         }
+    }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
     }
 }
 
@@ -934,7 +955,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let splitter = samples.into_reader().split_channels();
+        let splitter = samples.into_reader("test").split_channels();
         let hps = HpsStream::from_pcm(&mut splitter.left(), 44100)?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 1);
@@ -970,7 +991,7 @@ mod tests {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
 
-        let hps = HpsStream::from_pcm(&mut samples.into_reader(), 44100)?;
+        let hps = HpsStream::from_pcm(&mut samples.into_reader("test"), 44100)?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 2);
         assert_eq!(hps.loop_start, Some(0));

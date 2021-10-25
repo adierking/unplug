@@ -1,5 +1,5 @@
 use crate::audio::format::PcmS16Le;
-use crate::audio::{Error, ReadSamples, Result, Samples};
+use crate::audio::{Error, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{ReadSeek, Region};
 use byteorder::{ReadBytesExt, BE};
 use log::{debug, error, trace, warn};
@@ -14,16 +14,18 @@ pub struct Mp3Reader<'r> {
     sample_rate: u32,
     first_frame: Option<Frame>,
     frame_index: u64,
+    tag: SourceTag,
 }
 
 impl<'r> Mp3Reader<'r> {
     /// Creates a new `Mp3Reader` which reads MP3 data from `reader`. The first frame will be
-    /// decoded to get stream metadata.
-    pub fn new(reader: impl Read + Seek + 'r) -> Result<Self> {
-        Self::new_impl(Box::from(reader))
+    /// decoded to get stream metadata. `tag` is a string or tag to identify the stream for
+    /// debugging purposes.
+    pub fn new(reader: impl Read + Seek + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::new_impl(Box::from(reader), tag.into())
     }
 
-    fn new_impl(mut reader: Box<dyn ReadSeek + 'r>) -> Result<Self> {
+    fn new_impl(mut reader: Box<dyn ReadSeek + 'r>, tag: SourceTag) -> Result<Self> {
         let start_offset = reader.seek(SeekFrom::Current(0))?;
         let mut info = Info::default();
         if let Err(e) = analyze_mp3(&mut reader, &mut info) {
@@ -48,11 +50,14 @@ impl<'r> Mp3Reader<'r> {
         let layer = frame.layer;
         let channels = frame.channels;
         let sample_rate = frame.sample_rate as u32;
-        debug!("Opened MPEG Layer {} stream: {} Hz, {} channel(s)", layer, sample_rate, channels);
+        debug!(
+            "Opened MPEG Layer {} stream {:?}: {} Hz, {} channel(s)",
+            layer, tag, sample_rate, channels
+        );
 
         // *Discard* the first frame if it's the Xing frame
         let first_frame = if info.has_xing_frame { None } else { Some(frame) };
-        Ok(Self { decoder, info, channels, sample_rate, first_frame, frame_index: 0 })
+        Ok(Self { decoder, info, channels, sample_rate, first_frame, frame_index: 0, tag })
     }
 
     /// Gets the number of channels in the stream.
@@ -127,6 +132,10 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
         }
 
         Ok(Some(Samples::<PcmS16Le>::from_pcm(data, frame.channels)))
+    }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
     }
 }
 
@@ -322,11 +331,12 @@ mod tests {
 
     #[test]
     fn test_read_mp3() -> Result<()> {
-        let mut mp3 = Mp3Reader::new(Cursor::new(TEST_MP3))?;
+        let mut mp3 = Mp3Reader::new(Cursor::new(TEST_MP3), "TEST_MP3")?;
         assert_eq!(mp3.sample_rate(), 44100);
         assert_eq!(mp3.channels(), 2);
         let samples = mp3.read_all_samples()?;
-        let reference = WavReader::open(Cursor::new(TEST_MP3_WAV))?.read_all_samples()?;
+        let reference =
+            WavReader::open(Cursor::new(TEST_MP3_WAV), "TEST_MP3_WAV")?.read_all_samples()?;
         // Compare with a tolerance of +/- 1 (minimp3 vs ffmpeg)
         assert_samples_close(&samples, &reference, 1);
         Ok(())

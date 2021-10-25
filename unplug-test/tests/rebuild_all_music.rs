@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::io::Cursor;
 use unplug::audio::transport::HpsStream;
-use unplug::common::{ReadFrom, WriteTo};
+use unplug::common::WriteTo;
 use unplug::data::music::MUSIC;
 use unplug::dvd::OpenFile;
 use unplug_test as common;
@@ -18,7 +18,7 @@ fn test_rebuild_all_music() -> Result<()> {
         let mut original_bytes = vec![];
         reader.read_to_end(&mut original_bytes)?;
 
-        let hps = HpsStream::read_from(&mut Cursor::new(&original_bytes))?;
+        let hps = HpsStream::open(&mut Cursor::new(&original_bytes), music.path)?;
         info!("Rebuilding HPS stream");
         let mut cursor = Cursor::new(vec![]);
         hps.write_to(&mut cursor)?;

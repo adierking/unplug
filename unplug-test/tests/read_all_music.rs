@@ -4,7 +4,6 @@ use log::info;
 use std::io::BufReader;
 use unplug::audio::format::{DspFormat, PcmS16Le, ReadWriteBytes};
 use unplug::audio::transport::hps::{Block, HpsStream};
-use unplug::common::ReadFrom;
 use unplug::data::music::{Music, MusicDefinition};
 use unplug::dvd::OpenFile;
 use unplug_test as common;
@@ -43,7 +42,7 @@ fn test_read_all_music() -> Result<()> {
         let path = MusicDefinition::get(id).path;
         info!("Reading {}", path);
         let mut reader = BufReader::new(iso.open_file_at(path)?);
-        let hps = HpsStream::read_from(&mut reader)?;
+        let hps = HpsStream::open(&mut reader, path)?;
         assert!(!hps.blocks.is_empty());
         for block in &hps.blocks {
             validate_channel(&hps, block, 0);

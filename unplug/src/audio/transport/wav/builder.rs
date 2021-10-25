@@ -176,25 +176,27 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
     /// Writes the `data` chunk.
     fn write_data(&mut self, riff: &mut RiffWriter<impl Write + Seek>) -> Result<()> {
         riff.open_chunk(ID_DATA)?;
-        let mut num_samples = 0;
         if let Some(mut reader) = self.samples.take() {
+            let mut num_samples = 0;
             while let Some(samples) = reader.read_samples()? {
                 PcmS16Le::write_bytes(&mut *riff, &samples.data[..samples.len])?;
                 num_samples += PcmS16Le::index_to_sample(samples.len, self.channels);
             }
+
+            if log_enabled!(Level::Debug) {
+                let tag = reader.tag();
+                let duration = (num_samples as f64) / (self.sample_rate as f64);
+                let hour = (duration as usize) / 60 / 60;
+                let min = (duration as usize) / 60 % 60;
+                let sec = (duration as usize) % 60;
+                let msec = (duration.fract() * 1000.0).round() as usize;
+                debug!(
+                    "Wrote {} samples from {:?} to WAV ({:>02}:{:>02}:{:>02}.{:>03})",
+                    num_samples, tag, hour, min, sec, msec
+                );
+            }
         }
         riff.close_chunk(ID_DATA)?;
-        if log_enabled!(Level::Debug) {
-            let duration = (num_samples as f64) / (self.sample_rate as f64);
-            let hour = (duration as usize) / 60 / 60;
-            let min = (duration as usize) / 60 % 60;
-            let sec = (duration as usize) % 60;
-            let msec = (duration.fract() * 1000.0).round() as usize;
-            debug!(
-                "Wrote {} samples to WAV ({:>02}:{:>02}:{:>02}.{:>03})",
-                num_samples, hour, min, sec, msec
-            );
-        }
         Ok(())
     }
 }
@@ -242,7 +244,7 @@ mod tests {
             .channels(2)
             .sample_rate(44100)
             .software_name("test")
-            .samples(Box::new(samples.into_reader()))
+            .samples(Box::new(samples.into_reader("test")))
             .write_to(&mut cursor)?;
         let bytes = cursor.into_inner();
         assert_eq!(bytes, EXPECTED_WAV);

@@ -1,5 +1,5 @@
 use crate::audio::format::PcmS16Le;
-use crate::audio::{ReadSamples, Result, Samples};
+use crate::audio::{ReadSamples, Result, Samples, SourceTag};
 use crate::common::ReadSeek;
 use lewton::inside_ogg::OggStreamReader;
 use log::debug;
@@ -8,12 +8,25 @@ use std::io::{Read, Seek};
 /// Reads audio samples from Ogg Vorbis data.
 pub struct OggReader<'r> {
     reader: OggStreamReader<Box<dyn ReadSeek + 'r>>,
+    tag: SourceTag,
 }
 
 impl<'r> OggReader<'r> {
-    /// Creates a new `OggReader` which reads Ogg Vorbis data from `reader`.
-    pub fn new(reader: (impl Read + Seek + 'r)) -> Result<Self> {
-        Self::new_impl(Box::from(reader))
+    /// Creates a new `OggReader` which reads Ogg Vorbis data from `reader`. `tag` is a string or
+    /// tag to identify the stream for debugging purposes.
+    pub fn new(reader: (impl Read + Seek + 'r), tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::new_impl(Box::from(reader), tag.into())
+    }
+
+    fn new_impl(reader: Box<dyn ReadSeek + 'r>, tag: SourceTag) -> Result<Self> {
+        let reader = Self { reader: OggStreamReader::new(reader)?, tag };
+        debug!(
+            "Opened Ogg Vorbis stream {:?}: {} Hz, {} channels",
+            reader.tag(),
+            reader.sample_rate(),
+            reader.channels()
+        );
+        Ok(reader)
     }
 
     /// Gets the number of channels in the stream.
@@ -24,16 +37,6 @@ impl<'r> OggReader<'r> {
     /// Gets the audio sample rate.
     pub fn sample_rate(&self) -> u32 {
         self.reader.ident_hdr.audio_sample_rate
-    }
-
-    fn new_impl(reader: Box<dyn ReadSeek + 'r>) -> Result<Self> {
-        let reader = Self { reader: OggStreamReader::new(reader)? };
-        debug!(
-            "Opened Ogg Vorbis stream: {} Hz, {} channels",
-            reader.sample_rate(),
-            reader.channels()
-        );
-        Ok(reader)
     }
 }
 
@@ -52,6 +55,10 @@ impl ReadSamples<'static> for OggReader<'_> {
             }
         }
     }
+
+    fn tag(&self) -> &SourceTag {
+        &self.tag
+    }
 }
 
 #[cfg(test)]
@@ -63,11 +70,12 @@ mod tests {
 
     #[test]
     fn test_read_ogg() -> Result<()> {
-        let mut ogg = OggReader::new(Cursor::new(TEST_OGG))?;
+        let mut ogg = OggReader::new(Cursor::new(TEST_OGG), "TEST_OGG")?;
         assert_eq!(ogg.sample_rate(), 44100);
         assert_eq!(ogg.channels(), 2);
         let samples = ogg.read_all_samples()?;
-        let reference = WavReader::open(Cursor::new(TEST_OGG_WAV))?.read_all_samples()?;
+        let reference =
+            WavReader::open(Cursor::new(TEST_OGG_WAV), "TEST_OGG_WAV")?.read_all_samples()?;
         // Compare with a tolerance of +/- 10 (lewton vs Audacity)
         assert_samples_close(&samples, &reference, 10);
         Ok(())
