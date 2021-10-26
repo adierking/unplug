@@ -100,7 +100,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
     }
 
     fn format(&self) -> Format {
-        Self::Format::format()
+        Self::Format::FORMAT
     }
 
     fn tag(&self) -> &SourceTag {

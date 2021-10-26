@@ -57,7 +57,7 @@ impl ReadSamples<'static> for OggReader<'_> {
     }
 
     fn format(&self) -> Format {
-        Self::Format::format()
+        Self::Format::FORMAT
     }
 
     fn tag(&self) -> &SourceTag {

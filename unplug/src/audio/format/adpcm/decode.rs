@@ -81,7 +81,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
     }
 
     fn format(&self) -> Format {
-        Self::Format::format()
+        Self::Format::FORMAT
     }
 
     fn tag(&self) -> &SourceTag {

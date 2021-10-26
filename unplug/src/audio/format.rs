@@ -116,49 +116,49 @@ pub trait DynamicFormat: FormatTag {
 
 /// A type tag for an audio sample format which has a static `Format` mapping.
 pub trait StaticFormat: FormatTag {
-    /// Returns the static `Format`.
-    fn format() -> Format;
+    /// The static `Format` value.
+    const FORMAT: Format;
 
     /// Gets the width of the format's smallest addressable unit in bits. See
     /// `Format::bits_per_sample()`.
     fn bits(&self) -> usize {
-        Self::format().bits()
+        Self::FORMAT.bits()
     }
 
     /// Converts an address to a byte offset. See `Format::address_to_byte()`.
     fn address_to_byte(address: usize) -> usize {
-        Self::format().address_to_byte(address)
+        Self::FORMAT.address_to_byte(address)
     }
 
     /// Converts an address to a byte offset, rounding up. See `Format::address_to_byte()`.
     fn address_to_byte_up(address: usize) -> usize {
-        Self::format().address_to_byte_up(address)
+        Self::FORMAT.address_to_byte_up(address)
     }
 
     /// Converts a byte offset to an address. See `Format::byte_to_address()`.
     fn byte_to_address(byte: usize) -> usize {
-        Self::format().byte_to_address(byte)
+        Self::FORMAT.byte_to_address(byte)
     }
 
     /// Converts an address to a value index. See `Format::address_to_index()`.
     fn address_to_index(address: usize) -> usize {
-        Self::format().address_to_index(address)
+        Self::FORMAT.address_to_index(address)
     }
 
     /// Converts a value index to an address. See `Format::index_to_address()`.
     fn index_to_address(index: usize) -> usize {
-        Self::format().index_to_address(index)
+        Self::FORMAT.index_to_address(index)
     }
 
     /// Aligns `address` down to the beginning of a frame.
     fn frame_address(address: usize) -> usize {
-        Self::format().frame_address(address)
+        Self::FORMAT.frame_address(address)
     }
 }
 
 impl<T: StaticFormat> DynamicFormat for T {
     fn format_from_params(_params: &Self::Params) -> Format {
-        Self::format()
+        Self::FORMAT
     }
 }
 
@@ -277,7 +277,7 @@ where
     F::Data: ToByteSlice + ToMutByteSlice,
 {
     fn cast_params(params: Self::Params) -> StdResult<AnyParams, Self::Params> {
-        Ok(AnyParams { format: F::format(), inner: Box::from(params) })
+        Ok(AnyParams { format: F::FORMAT, inner: Box::from(params) })
     }
 
     fn cast_data(data: DataCow<'_, Self>) -> DataCow<'_, AnyFormat> {
@@ -320,7 +320,7 @@ where
     F::Data: FromByteSlice,
 {
     fn cast_params(mut params: Self::Params) -> StdResult<F::Params, Self::Params> {
-        if !F::format().compatible_with(params.format) {
+        if !F::FORMAT.compatible_with(params.format) {
             return Err(params);
         }
         match params.inner.downcast() {

@@ -38,9 +38,7 @@ macro_rules! pcm_format {
             type Params = ();
         }
         impl StaticFormat for $name {
-            fn format() -> Format {
-                Format::$name
-            }
+            const FORMAT: Format = Format::$name;
         }
         impl PcmFormat for $name {
             type Endian = $endian;
@@ -326,7 +324,7 @@ where
     }
 
     fn format(&self) -> Format {
-        To::format()
+        To::FORMAT
     }
 
     fn tag(&self) -> &SourceTag {

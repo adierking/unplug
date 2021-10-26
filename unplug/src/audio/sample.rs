@@ -682,9 +682,7 @@ mod tests {
         type Params = i32;
     }
     impl StaticFormat for PcmS16LeParams {
-        fn format() -> Format {
-            Format::PcmS16Le
-        }
+        const FORMAT: Format = Format::PcmS16Le;
     }
     impl ExtendSamples for PcmS16LeParams {
         fn extend_samples(

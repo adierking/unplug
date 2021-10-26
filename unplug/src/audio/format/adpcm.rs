@@ -24,9 +24,7 @@ impl FormatTag for GcAdpcm {
 }
 
 impl StaticFormat for GcAdpcm {
-    fn format() -> Format {
-        Format::GcAdpcm
-    }
+    const FORMAT: Format = Format::GcAdpcm;
 }
 
 impl ExtendSamples for GcAdpcm {

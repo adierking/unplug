@@ -135,7 +135,7 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
     }
 
     fn format(&self) -> Format {
-        Self::Format::format()
+        Self::Format::FORMAT
     }
 
     fn tag(&self) -> &SourceTag {
