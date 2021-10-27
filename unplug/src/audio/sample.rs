@@ -276,7 +276,7 @@ pub trait ReadSamples<'s> {
     where
         Self: Sized + 'r,
         Self::Format: AnyPcm,
-        To: PcmFormat + Cast<AnyFormat>,
+        To: PcmFormat,
         To::Data: Scalable,
         AnyFormat: Cast<To>,
     {

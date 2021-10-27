@@ -264,7 +264,7 @@ impl AnyPcm for AnyFormat {}
 /// samples are already in the target format, they will be passed through.
 pub struct ConvertPcm<'r, 's: 'r, To>
 where
-    To: PcmFormat + Cast<AnyFormat>,
+    To: PcmFormat,
     To::Data: Scalable,
     AnyFormat: Cast<To>,
 {
@@ -274,7 +274,7 @@ where
 
 impl<'r, 's: 'r, To> ConvertPcm<'r, 's, To>
 where
-    To: PcmFormat + Cast<AnyFormat>,
+    To: PcmFormat,
     To::Data: Scalable,
     AnyFormat: Cast<To>,
 {
@@ -298,7 +298,7 @@ where
 
 impl<'r, 's: 'r, To> ReadSamples<'s> for ConvertPcm<'r, 's, To>
 where
-    To: PcmFormat + Cast<AnyFormat>,
+    To: PcmFormat,
     To::Data: Scalable,
     AnyFormat: Cast<To>,
 {
