@@ -145,7 +145,7 @@ impl Channel {
         let reader = self.reader(tag);
         match self.address.format {
             DspFormat::Adpcm => Box::new(Decoder::new(reader.cast())),
-            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(reader.convert()),
+            DspFormat::Pcm8 | DspFormat::Pcm16 => reader.convert(),
         }
     }
 

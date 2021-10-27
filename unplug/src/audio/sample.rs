@@ -1,4 +1,3 @@
-use super::format::pcm::{AnyPcm, ConvertPcm, Scalable};
 use super::format::*;
 use super::{Error, Result};
 use std::any;
@@ -271,16 +270,15 @@ pub trait ReadSamples<'s> {
         CastSamples::new(self)
     }
 
-    /// Creates an adapter which converts PCM audio samples to another PCM format.
-    fn convert<'r, To>(self) -> ConvertPcm<'r, 's, To>
+    /// Creates an adapter which converts audio samples to another format.
+    fn convert<'r, To>(self) -> Box<dyn ReadSamples<'s, Format = To> + 'r>
     where
+        's: 'r,
+        To: StaticFormat,
         Self: Sized + 'r,
-        Self::Format: AnyPcm,
-        To: PcmFormat,
-        To::Data: Scalable,
-        AnyFormat: Cast<To>,
+        Self::Format: DynamicFormat + Convert<To>,
     {
-        ConvertPcm::new(self)
+        Self::Format::convert(Box::from(self))
     }
 
     /// Creates an adaptor which joins this mono stream with another mono stream to form a single

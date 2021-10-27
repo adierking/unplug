@@ -1,8 +1,10 @@
 pub mod adpcm;
+pub mod convert;
 pub mod dsp;
 pub mod pcm;
 
 pub use adpcm::GcAdpcm;
+pub use convert::Convert;
 pub use dsp::DspFormat;
 pub use pcm::{PcmF32Le, PcmS16Be, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
 

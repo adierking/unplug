@@ -294,7 +294,7 @@ impl HpsStream {
         let reader = self.reader(channel);
         match self.channels[channel].address.format {
             DspFormat::Adpcm => Box::new(adpcm::Decoder::new(reader.cast())),
-            DspFormat::Pcm8 | DspFormat::Pcm16 => Box::new(reader.convert()),
+            DspFormat::Pcm8 | DspFormat::Pcm16 => reader.convert(),
         }
     }
 
