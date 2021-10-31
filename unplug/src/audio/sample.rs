@@ -536,17 +536,11 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
 }
 
 /// An adapter which splits a stereo stream into two mono streams.
-pub struct SplitChannels<'r, 's, F>
-where
-    F: PcmFormat + 'static,
-{
+pub struct SplitChannels<'r, 's, F: PcmFormat> {
     state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
 }
 
-impl<'r, 's, F> SplitChannels<'r, 's, F>
-where
-    F: PcmFormat + 'static,
-{
+impl<'r, 's, F: PcmFormat> SplitChannels<'r, 's, F> {
     /// Creates a new `SplitChannels` which reads samples from `reader`.
     pub fn new(reader: impl ReadSamples<'s, Format = F> + 'r) -> Self {
         Self { state: SplitChannelsState::new(Box::from(reader)) }
@@ -564,10 +558,7 @@ where
 }
 
 /// State for `SplitChannels` which is shared across readers.
-struct SplitChannelsState<'r, 's, F>
-where
-    F: PcmFormat + 'static,
-{
+struct SplitChannelsState<'r, 's, F: PcmFormat> {
     /// The inner reader to read new samples from.
     reader: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     /// Samples which have not yet been processed by the left reader.
@@ -576,10 +567,7 @@ where
     right: VecDeque<Rc<Samples<'s, F>>>,
 }
 
-impl<'r, 's, F> SplitChannelsState<'r, 's, F>
-where
-    F: PcmFormat + 'static,
-{
+impl<'r, 's, F: PcmFormat> SplitChannelsState<'r, 's, F> {
     /// Creates a new `SplitChannelsState` wrapping `reader`.
     fn new(reader: Box<dyn ReadSamples<'s, Format = F> + 'r>) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self { reader, left: VecDeque::new(), right: VecDeque::new() }))
@@ -599,19 +587,13 @@ where
 }
 
 /// `ReadSamples` implementation for a single channel returned by a `SplitChannels`.
-pub struct SplitChannelsReader<'r, 's, F>
-where
-    F: PcmFormat + 'static,
-{
+pub struct SplitChannelsReader<'r, 's, F: PcmFormat> {
     state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
     format: Format,
     tag: SourceTag,
 }
 
-impl<'r, 's, F> SplitChannelsReader<'r, 's, F>
-where
-    F: PcmFormat + 'static,
-{
+impl<'r, 's, F: PcmFormat> SplitChannelsReader<'r, 's, F> {
     /// Creates a new `SplitChannelsReader` which shares `state` and reads `channel`.
     fn new(state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>, channel: SourceChannel) -> Self {
         debug_assert!(matches!(channel, SourceChannel::Left | SourceChannel::Right));
@@ -623,10 +605,7 @@ where
     }
 }
 
-impl<'s, F> ReadSamples<'s> for SplitChannelsReader<'_, 's, F>
-where
-    F: PcmFormat + 'static,
-{
+impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
     type Format = F;
 
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {

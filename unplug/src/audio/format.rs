@@ -103,12 +103,12 @@ impl Default for Format {
 }
 
 /// A type tag for an audio sample format.
-pub trait FormatTag {
+pub trait FormatTag: 'static {
     /// The type of the data that this format stores.
-    type Data: Clone + Copy + PartialEq + 'static;
+    type Data: Clone + Copy + PartialEq;
 
     /// The type of format-dependent parameters that can be associated with samples.
-    type Params: 'static;
+    type Params;
 }
 
 pub trait DynamicFormat: FormatTag {

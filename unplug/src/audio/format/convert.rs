@@ -31,8 +31,8 @@ pub trait Convert<To: StaticFormat>: DynamicFormat + Sealed {
 // PCM -> PCM
 impl<From, To> Convert<To> for From
 where
-    From: PcmFormat + Cast<AnyFormat> + Sealed + 'static,
-    To: PcmFormat + 'static,
+    From: PcmFormat + Cast<AnyFormat> + Sealed,
+    To: PcmFormat,
     To::Data: Scalable,
     AnyFormat: Cast<To>,
 {
@@ -44,7 +44,7 @@ where
 // PCM -> ADPCM
 impl<From> Convert<GcAdpcm> for From
 where
-    From: PcmFormat + Cast<AnyFormat> + Sealed + 'static,
+    From: PcmFormat + Cast<AnyFormat> + Sealed,
 {
     fn convert<'r, 's: 'r>(reader: DynReader<'r, 's, Self>) -> DynReader<'r, 's, GcAdpcm> {
         Box::from(adpcm::Encoder::new(ConvertPcm::new(reader)))
@@ -54,7 +54,7 @@ where
 // ADPCM -> PCM
 impl<To> Convert<To> for GcAdpcm
 where
-    To: PcmFormat + 'static,
+    To: PcmFormat,
     To::Data: Scalable,
     AnyFormat: Cast<To>,
 {
