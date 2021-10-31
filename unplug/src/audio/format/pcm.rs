@@ -4,6 +4,7 @@ use crate::common::I24;
 use byteorder::{NativeEndian as NE, BE, LE};
 use float_cmp::approx_eq;
 use std::marker::PhantomData;
+use std::mem;
 
 mod private {
     pub struct TypeInfo {
@@ -148,7 +149,7 @@ macro_rules! scalable {
                 is_float: false,
                 min: <$int>::MIN as u64,
                 max: <$int>::MAX as u64,
-                bits: <$int>::BITS,
+                bits: mem::size_of::<$int>() as u32 * 8,
             };
 
             fn to_u64(self) -> u64 {
