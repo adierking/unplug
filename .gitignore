@@ -17,3 +17,9 @@ heaptrack.*.gz
 .vs/
 .vscode/
 *.code-workspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
