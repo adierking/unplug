@@ -270,6 +270,15 @@ pub trait ReadSamples<'s> {
         CastSamples::new(self)
     }
 
+    /// Creates an adapter with a `peek_samples()` method that allows peeking at the next packets of
+    /// samples without consuming them.
+    fn peekable(self) -> PeekSamples<'s, Self>
+    where
+        Self: Sized,
+    {
+        PeekSamples::new(self)
+    }
+
     /// Creates an adapter which converts audio samples to another format.
     fn convert<'r, To>(self) -> Box<dyn ReadSamples<'s, Format = To> + 'r>
     where
@@ -441,6 +450,49 @@ where
             },
             Ok(None) => Ok(None),
             Err(error) => Err(error),
+        }
+    }
+
+    fn format(&self) -> Format {
+        self.inner.format()
+    }
+
+    fn tag(&self) -> &SourceTag {
+        self.inner.tag()
+    }
+}
+
+/// An adapter with a `peek_samples()` method that allows peeking at the next packets of samples
+/// without consuming them.
+pub struct PeekSamples<'s, R: ReadSamples<'s>> {
+    inner: R,
+    next: Option<Samples<'s, R::Format>>,
+}
+
+impl<'s, R: ReadSamples<'s>> PeekSamples<'s, R> {
+    /// Creates a new `PeekSamples` which wraps `inner`.
+    pub fn new(inner: R) -> Self {
+        Self { inner, next: None }
+    }
+
+    /// Returns a reference to the next-available packet of samples without consuming it. This may
+    /// read from the underlying stream if no samples are cached. If there are no more samples,
+    /// returns `Ok(None)`.
+    pub fn peek_samples(&mut self) -> Result<Option<&Samples<'s, R::Format>>> {
+        if self.next.is_none() {
+            self.next = self.inner.read_samples()?;
+        }
+        Ok(self.next.as_ref())
+    }
+}
+
+impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for PeekSamples<'s, R> {
+    type Format = R::Format;
+
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+        match self.next.take() {
+            Some(next) => Ok(Some(next)),
+            None => self.inner.read_samples(),
         }
     }
 
@@ -955,5 +1007,27 @@ mod tests {
         assert_eq!(all.channels, 1);
         assert_eq!(all.data, (0..48).collect::<Vec<_>>());
         assert!(matches!(reader.read_all_samples(), Err(Error::EmptyStream)));
+    }
+
+    #[test]
+    fn test_peek_samples() -> Result<()> {
+        let samples1 = Samples::<PcmS16Le>::from_pcm((0..1).collect::<Vec<_>>(), 1);
+        let samples2 = Samples::<PcmS16Le>::from_pcm((1..2).collect::<Vec<_>>(), 1);
+        let samples3 = Samples::<PcmS16Le>::from_pcm((2..3).collect::<Vec<_>>(), 1);
+        let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3], "test").peekable();
+
+        assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
+        assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
+        assert_eq!(reader.read_samples()?.unwrap().data[0], 0);
+
+        assert_eq!(reader.read_samples()?.unwrap().data[0], 1);
+
+        assert_eq!(reader.peek_samples()?.unwrap().data[0], 2);
+        assert_eq!(reader.read_samples()?.unwrap().data[0], 2);
+
+        assert!(reader.peek_samples()?.is_none());
+        assert!(reader.read_samples()?.is_none());
+        assert!(reader.peek_samples()?.is_none());
+        Ok(())
     }
 }
