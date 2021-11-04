@@ -131,7 +131,7 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
             }
         }
 
-        Ok(Some(Samples::<PcmS16Le>::from_pcm(data, frame.channels)))
+        Ok(Some(Samples::<PcmS16Le>::from_pcm(data, frame.channels, frame.sample_rate as u32)))
     }
 
     fn format(&self) -> Format {

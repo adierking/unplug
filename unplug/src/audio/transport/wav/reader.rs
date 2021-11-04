@@ -205,7 +205,7 @@ impl ReadSamples<'static> for WavReader<'_> {
         if samples.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(Samples::from_pcm(samples, self.channels)))
+            Ok(Some(Samples::from_pcm(samples, self.channels, self.sample_rate)))
         }
     }
 
@@ -233,8 +233,9 @@ mod tests {
         assert_eq!(wav.channels, 2);
 
         let samples = wav.read_all_samples()?;
-        assert_eq!(samples.len, expected.len());
         assert_eq!(samples.channels, 2);
+        assert_eq!(samples.rate, 44100);
+        assert_eq!(samples.len, expected.len());
         assert!(samples.data[..samples.len] == expected);
         Ok(())
     }

@@ -48,7 +48,11 @@ impl ReadSamples<'static> for OggReader<'_> {
             match self.reader.read_dec_packet_itl()? {
                 Some(packet) => {
                     if !packet.is_empty() {
-                        return Ok(Some(Samples::from_pcm(packet, self.channels())));
+                        return Ok(Some(Samples::from_pcm(
+                            packet,
+                            self.channels(),
+                            self.sample_rate(),
+                        )));
                     }
                 }
                 None => return Ok(None),

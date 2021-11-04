@@ -77,7 +77,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
             context.push_sample(pcm);
         }
         debug_assert!(estimated >= decoded.len());
-        Ok(Some(Samples::from_pcm(decoded, 1)))
+        Ok(Some(Samples::from_pcm(decoded, 1, encoded.rate)))
     }
 
     fn format(&self) -> Format {
@@ -136,6 +136,7 @@ mod tests {
     fn test_decode_sine() -> Result<()> {
         let encoded = Samples::<'_, GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 0x94,
             data: SINE_ENCODED.into(),
             params: Info {

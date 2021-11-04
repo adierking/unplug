@@ -315,11 +315,7 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
 
     info!("Writing {}", opt.output.display());
     let out = BufWriter::new(File::create(&opt.output)?);
-    WavBuilder::new()
-        .channels(hps.channels.len())
-        .sample_rate(hps.sample_rate)
-        .samples(hps.decoder())
-        .write_to(out)?;
+    WavBuilder::new(hps.decoder()).write_to(out)?;
 
     info!("Export finished in {:?}", start_time.elapsed());
     Ok(())
@@ -329,7 +325,7 @@ fn export_bank_sounds(bank: &SoundBank, dir: &Path, subdir: Option<&str>) -> Res
     // Omit names for unusable banks (sfx_hori.ssm)
     let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index);
     fs::create_dir_all(dir)?;
-    for (i, sound) in bank.sounds.iter().enumerate() {
+    for (i, _) in bank.sounds.iter().enumerate() {
         let id = bank.base_index + i as u32;
         let filename = if have_names {
             match Sound::try_from(id) {
@@ -346,11 +342,7 @@ fn export_bank_sounds(bank: &SoundBank, dir: &Path, subdir: Option<&str>) -> Res
         }
         let out_path = dir.join(filename);
         let out = BufWriter::new(File::create(&out_path)?);
-        WavBuilder::new()
-            .channels(sound.channels.len())
-            .sample_rate(sound.sample_rate)
-            .samples(bank.decoder(i))
-            .write_to(out)?;
+        WavBuilder::new(bank.decoder(i)).write_to(out)?;
     }
     Ok(())
 }

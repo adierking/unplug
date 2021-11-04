@@ -1,14 +1,13 @@
 use super::*;
 use crate::audio::format::{PcmFormat, PcmS16Le, ReadWriteBytes};
-use crate::audio::{ReadSamples, Result};
+use crate::audio::sample::{PeekSamples, ReadSamples};
+use crate::audio::{Error, Result};
 use crate::common::WriteTo;
 use byteorder::{WriteBytesExt, LE};
 use log::{debug, log_enabled, Level};
 use std::borrow::Cow;
 use std::io::{self, Seek, SeekFrom, Write};
 
-const DEFAULT_CHANNELS: usize = 1;
-const DEFAULT_SAMPLE_RATE: u32 = 44100;
 const DEFAULT_SOFTWARE_NAME: &str = concat!("unplug v", env!("CARGO_PKG_VERSION"));
 
 /// Wraps a writer and provides methods for writing RIFF chunks.
@@ -88,42 +87,25 @@ impl<W: Write + Seek> Write for RiffWriter<W> {
 
 /// Builds up a WAV file from sample data.
 pub struct WavBuilder<'a, 'b: 'a> {
+    software_name: Cow<'static, str>,
+    samples: PeekSamples<'b, Box<dyn ReadSamples<'b, Format = PcmS16Le> + 'a>>,
     channels: usize,
     sample_rate: u32,
-    software_name: Cow<'static, str>,
-    samples: Option<Box<dyn ReadSamples<'b, Format = PcmS16Le> + 'a>>,
 }
 
 impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
-    /// Creates a new `WavBuilder` with default parameters.
-    pub fn new() -> Self {
+    /// Creates a new `WavBuilder` which reads samples from `reader`.
+    pub fn new(reader: impl ReadSamples<'b, Format = PcmS16Le> + 'a) -> Self {
+        Self::new_impl(Box::from(reader))
+    }
+
+    fn new_impl(reader: Box<dyn ReadSamples<'b, Format = PcmS16Le> + 'a>) -> Self {
         Self {
-            channels: DEFAULT_CHANNELS,
-            sample_rate: DEFAULT_SAMPLE_RATE,
             software_name: DEFAULT_SOFTWARE_NAME.into(),
-            samples: None,
+            samples: reader.peekable(),
+            channels: 0,
+            sample_rate: 0,
         }
-    }
-
-    /// Sets the number of channels in the WAV file.
-    pub fn channels(&mut self, channels: usize) -> &mut Self {
-        self.channels = channels;
-        self
-    }
-
-    /// Sets the sample rate of the WAV file.
-    pub fn sample_rate(&mut self, sample_rate: u32) -> &mut Self {
-        self.sample_rate = sample_rate;
-        self
-    }
-
-    /// Sets the sample data for the WAV file.
-    pub fn samples(
-        &mut self,
-        samples: Box<dyn ReadSamples<'b, Format = PcmS16Le> + 'a>,
-    ) -> &mut Self {
-        self.samples = Some(Box::new(samples));
-        self
     }
 
     /// Sets the software name to write to the `INFO` chunk.
@@ -134,6 +116,7 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
 
     /// Finishes building and writes WAV data to `writer`.
     pub fn write_to(&mut self, writer: (impl Write + Seek)) -> Result<()> {
+        self.peek_audio_info()?;
         let mut riff = RiffWriter::new(writer);
         riff.open_form(ID_WAVE)?;
         self.write_format(&mut riff)?;
@@ -176,34 +159,43 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
     /// Writes the `data` chunk.
     fn write_data(&mut self, riff: &mut RiffWriter<impl Write + Seek>) -> Result<()> {
         riff.open_chunk(ID_DATA)?;
-        if let Some(mut reader) = self.samples.take() {
-            let mut num_samples = 0;
-            while let Some(samples) = reader.read_samples()? {
-                PcmS16Le::write_bytes(&mut *riff, &samples.data[..samples.len])?;
-                num_samples += PcmS16Le::index_to_sample(samples.len, self.channels);
+        let mut num_samples = 0;
+        while let Some(samples) = self.samples.read_samples()? {
+            if samples.channels != self.channels {
+                return Err(Error::InconsistentChannels);
             }
+            if samples.rate != self.sample_rate {
+                return Err(Error::InconsistentSampleRate);
+            }
+            PcmS16Le::write_bytes(&mut *riff, &samples.data[..samples.len])?;
+            num_samples += PcmS16Le::index_to_sample(samples.len, self.channels);
+        }
 
-            if log_enabled!(Level::Debug) {
-                let tag = reader.tag();
-                let duration = (num_samples as f64) / (self.sample_rate as f64);
-                let hour = (duration as usize) / 60 / 60;
-                let min = (duration as usize) / 60 % 60;
-                let sec = (duration as usize) % 60;
-                let msec = (duration.fract() * 1000.0).round() as usize;
-                debug!(
-                    "Wrote {} samples from {:?} to WAV ({:>02}:{:>02}:{:>02}.{:>03})",
-                    num_samples, tag, hour, min, sec, msec
-                );
-            }
+        if log_enabled!(Level::Debug) {
+            let tag = self.samples.tag();
+            let duration = (num_samples as f64) / (self.sample_rate as f64);
+            let hour = (duration as usize) / 60 / 60;
+            let min = (duration as usize) / 60 % 60;
+            let sec = (duration as usize) % 60;
+            let msec = (duration.fract() * 1000.0).round() as usize;
+            debug!(
+                "Wrote {} samples from {:?} to WAV ({:>02}:{:>02}:{:>02}.{:>03})",
+                num_samples, tag, hour, min, sec, msec
+            );
         }
         riff.close_chunk(ID_DATA)?;
         Ok(())
     }
-}
 
-impl Default for WavBuilder<'_, '_> {
-    fn default() -> Self {
-        Self::new()
+    fn peek_audio_info(&mut self) -> Result<()> {
+        match self.samples.peek_samples()? {
+            Some(s) => {
+                self.channels = s.channels;
+                self.sample_rate = s.rate;
+                Ok(())
+            }
+            None => Err(Error::EmptyStream),
+        }
     }
 }
 
@@ -238,14 +230,9 @@ mod tests {
 
     #[test]
     fn test_write_wav() -> Result<()> {
-        let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2);
+        let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2, 44100);
         let mut cursor = Cursor::new(Vec::<u8>::new());
-        WavBuilder::new()
-            .channels(2)
-            .sample_rate(44100)
-            .software_name("test")
-            .samples(Box::new(samples.into_reader("test")))
-            .write_to(&mut cursor)?;
+        WavBuilder::new(samples.into_reader("test")).software_name("test").write_to(&mut cursor)?;
         let bytes = cursor.into_inner();
         assert_eq!(bytes, EXPECTED_WAV);
         Ok(())

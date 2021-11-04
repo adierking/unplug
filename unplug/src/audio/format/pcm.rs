@@ -293,7 +293,7 @@ where
         for &sample in &samples.data[..samples.len] {
             converted.push(sample.scale());
         }
-        Samples::from_pcm(converted, samples.channels)
+        Samples::from_pcm(converted, samples.channels, samples.rate)
     }
 }
 
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn test_nop_conversion() -> Result<()> {
         let data = open_test_wav();
-        let samples_s16 = Samples::<PcmS16Le>::from_pcm(&data, 2);
+        let samples_s16 = Samples::<PcmS16Le>::from_pcm(&data, 2, 44100);
         let mut converter = ConvertPcm::<PcmS16Le>::new(samples_s16.into_reader("test"));
         let converted = converter.read_all_samples()?;
         assert!(matches!(converted.data, Cow::Borrowed(_)));
@@ -438,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_pcms16le_to_pcms32le() -> Result<()> {
-        let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2);
+        let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2, 44100);
         let mut converter = ConvertPcm::<PcmS32Le>::new(samples_s16.into_reader("test"));
         let samples_s32 = converter.read_all_samples()?;
         let expected = PcmS32Le::read_bytes(&TEST_WAV_S32[TEST_WAV_S32_DATA_OFFSET..])?;
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn test_pcms32le_to_pcms16le() -> Result<()> {
         let data = PcmS32Le::read_bytes(&TEST_WAV_S32[TEST_WAV_S32_DATA_OFFSET..])?;
-        let samples_s32 = Samples::<PcmS32Le>::from_pcm(data, 2);
+        let samples_s32 = Samples::<PcmS32Le>::from_pcm(data, 2, 44100);
         let mut converter = ConvertPcm::<PcmS16Le>::new(samples_s32.into_reader("test"));
         let samples_s16 = converter.read_all_samples()?;
         assert!(samples_s16.data == open_test_wav());
@@ -458,7 +458,7 @@ mod tests {
 
     #[test]
     fn test_pcms16le_to_pcmf32le() -> Result<()> {
-        let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2);
+        let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2, 44100);
         let mut converter = ConvertPcm::<PcmF32Le>::new(samples_s16.into_reader("test"));
         let samples_f32 = converter.read_all_samples()?;
         let expected = PcmF32Le::read_bytes(&TEST_WAV_F32[TEST_WAV_F32_DATA_OFFSET..])?;
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn test_pcmf32le_to_pcms16le() -> Result<()> {
         let data = PcmF32Le::read_bytes(&TEST_WAV_F32[TEST_WAV_F32_DATA_OFFSET..])?;
-        let samples_f32 = Samples::<PcmF32Le>::from_pcm(data, 2);
+        let samples_f32 = Samples::<PcmF32Le>::from_pcm(data, 2, 44100);
         let mut converter = ConvertPcm::<PcmS16Le>::new(samples_f32.into_reader("test"));
         let samples_s16 = converter.read_all_samples()?;
         assert!(samples_s16.data == open_test_wav());
@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn test_pcms16le_to_pcms16be() -> Result<()> {
         let data = open_test_wav();
-        let samples_le = Samples::<PcmS16Le>::from_pcm(&data, 2);
+        let samples_le = Samples::<PcmS16Le>::from_pcm(&data, 2, 44100);
         let mut converter = ConvertPcm::<PcmS16Be>::new(samples_le.into_reader("test"));
         let converted = converter.read_all_samples()?;
         // The conversion should have been zero-cost

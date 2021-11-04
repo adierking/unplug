@@ -399,6 +399,7 @@ impl Rwav {
         ChannelReader {
             channel: Some(&self.channels[channel]),
             format: self.format,
+            sample_rate: self.sample_rate,
             end_address: self.end_address,
             tag,
         }
@@ -427,6 +428,7 @@ impl Rwav {
 pub struct ChannelReader<'a> {
     channel: Option<&'a Channel>,
     format: Format,
+    sample_rate: u32,
     end_address: u32,
     tag: SourceTag,
 }
@@ -444,6 +446,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
             Format::GcAdpcm => Ok(Some(
                 Samples::<'a, GcAdpcm> {
                     channels: 1,
+                    rate: self.sample_rate,
                     len: self.end_address as usize + 1,
                     data: Cow::Borrowed(&channel.data),
                     params: channel.adpcm,

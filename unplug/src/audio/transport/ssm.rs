@@ -136,13 +136,13 @@ pub struct Channel {
 
 impl Channel {
     /// Creates a `SoundReader` over the raw sample data.
-    pub fn reader(&self, tag: SourceTag) -> SoundReader<'_> {
-        SoundReader { channel: Some(self), format: self.address.format, tag }
+    pub fn reader(&self, sample_rate: u32, tag: SourceTag) -> SoundReader<'_> {
+        SoundReader { channel: Some(self), format: self.address.format, sample_rate, tag }
     }
 
     /// Creates a decoder which decodes the channel into PCM16 format.
-    pub fn decoder(&self, tag: SourceTag) -> SsmDecoder<'_, '_> {
-        let reader = self.reader(tag);
+    pub fn decoder(&self, sample_rate: u32, tag: SourceTag) -> SsmDecoder<'_, '_> {
+        let reader = self.reader(sample_rate, tag);
         match self.address.format {
             DspFormat::Adpcm => Box::new(Decoder::new(reader.cast())),
             DspFormat::Pcm8 | DspFormat::Pcm16 => reader.convert(),
@@ -224,20 +224,18 @@ pub struct Sound {
 impl Sound {
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
     pub fn decoder(&self, tag: SourceTag) -> SsmDecoder<'_, '_> {
+        let rate = self.sample_rate;
         if self.channels.len() == 1 {
-            self.channels[0].decoder(tag)
+            self.channels[0].decoder(rate, tag)
         } else {
-            let left = self.channels[0].decoder(tag.clone().for_channel(SourceChannel::Left));
-            let right = self.channels[1].decoder(tag.for_channel(SourceChannel::Right));
+            let left = self.channels[0].decoder(rate, tag.clone().for_channel(SourceChannel::Left));
+            let right = self.channels[1].decoder(rate, tag.for_channel(SourceChannel::Right));
             Box::new(left.with_right_channel(right))
         }
     }
 
     /// Creates a new `Sound` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
-    pub fn from_pcm(
-        reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>,
-        sample_rate: u32,
-    ) -> Result<Self> {
+    pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
         let samples = reader.read_all_samples()?;
         let channels = samples.channels;
         let samples = samples.into_reader(reader.tag().clone());
@@ -245,22 +243,26 @@ impl Sound {
             let splitter = samples.split_channels();
             let mut left = Encoder::new(splitter.left());
             let mut right = Encoder::new(splitter.right());
-            Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
+            Self::from_adpcm_stereo(&mut left, &mut right)
         } else if channels == 1 {
             let mut encoder = Encoder::new(samples);
-            Self::from_adpcm_mono(&mut encoder, sample_rate)
+            Self::from_adpcm_mono(&mut encoder)
         } else {
             Err(Error::UnsupportedChannels)
         }
     }
 
     /// Creates a new `Sound` from mono ADPCM sample data.
-    pub fn from_adpcm_mono(
-        reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
-        sample_rate: u32,
-    ) -> Result<Self> {
+    pub fn from_adpcm_mono(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
+        // Pull the sample rate from the first samples in the stream
+        let mut reader = reader.peekable();
+        let sample_rate = match reader.peek_samples()? {
+            Some(s) => s.rate,
+            None => return Err(Error::EmptyStream),
+        };
+
         let mut channels = ArrayVec::new();
-        channels.push(Channel::from_adpcm(reader)?);
+        channels.push(Channel::from_adpcm(&mut reader)?);
         Ok(Self { sample_rate, channels })
     }
 
@@ -268,12 +270,23 @@ impl Sound {
     pub fn from_adpcm_stereo(
         left: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
         right: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
-        sample_rate: u32,
     ) -> Result<Self> {
+        // Pull the sample rate from the first samples in the streams and make sure the left and
+        // right streams match
+        let mut left = left.peekable();
+        let mut right = right.peekable();
+        let (lrate, rrate) = match (left.peek_samples()?, right.peek_samples()?) {
+            (Some(l), Some(r)) => (l.rate, r.rate),
+            _ => return Err(Error::EmptyStream),
+        };
+        if lrate != rrate {
+            return Err(Error::InconsistentSampleRate);
+        }
+
         let mut channels = ArrayVec::new();
-        channels.push(Channel::from_adpcm(left)?);
-        channels.push(Channel::from_adpcm(right)?);
-        Ok(Self { sample_rate, channels })
+        channels.push(Channel::from_adpcm(&mut left)?);
+        channels.push(Channel::from_adpcm(&mut right)?);
+        Ok(Self { sample_rate: lrate, channels })
     }
 
     fn from_bank(header: &SoundHeader, bank_data: &[u8]) -> Self {
@@ -331,7 +344,8 @@ impl SoundBank {
 
     /// Returns a reader over the raw sample data for a channel in a sound.
     pub fn reader(&self, index: usize, channel: usize) -> SoundReader<'_> {
-        self.sounds[index].channels[channel].reader(self.sound_tag(index))
+        let sound = &self.sounds[index];
+        sound.channels[channel].reader(sound.sample_rate, self.sound_tag(index))
     }
 
     /// Returns a decoder which decodes a sound into PCM16 format.
@@ -406,6 +420,7 @@ impl Debug for SoundBank {
 pub struct SoundReader<'a> {
     channel: Option<&'a Channel>,
     format: DspFormat,
+    sample_rate: u32,
     tag: SourceTag,
 }
 
@@ -421,16 +436,22 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
         let len = channel.address.end_address as usize + 1;
         match self.format {
             DspFormat::Adpcm => Ok(Some(
-                Samples::<GcAdpcm> { channels: 1, len, data: data.into(), params: channel.adpcm }
-                    .cast(),
+                Samples::<GcAdpcm> {
+                    channels: 1,
+                    rate: self.sample_rate,
+                    len,
+                    data: data.into(),
+                    params: channel.adpcm,
+                }
+                .cast(),
             )),
             DspFormat::Pcm16 => {
                 let samples = PcmS16Be::read_bytes(&data[..(len * 2)])?;
-                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1).cast()))
+                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1, self.sample_rate).cast()))
             }
             DspFormat::Pcm8 => {
                 let samples = PcmS8::read_bytes(&data[..len])?;
-                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1).cast()))
+                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1, self.sample_rate).cast()))
             }
         }
     }
@@ -623,6 +644,7 @@ mod tests {
     fn test_sound_from_mono() -> Result<()> {
         let samples = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: test::TEST_WAV_DSP_END_ADDRESS + 1,
             data: test::TEST_WAV_LEFT_DSP.into(),
             params: Info {
@@ -631,7 +653,7 @@ mod tests {
                 context: FrameContext::default(),
             },
         };
-        let sound = Sound::from_adpcm_mono(&mut samples.into_reader("test"), 44100)?;
+        let sound = Sound::from_adpcm_mono(&mut samples.into_reader("test"))?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 1);
         assert_left_channel(&sound.channels[0]);
@@ -642,6 +664,7 @@ mod tests {
     fn test_sound_from_stereo() -> Result<()> {
         let lsamples = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: test::TEST_WAV_DSP_END_ADDRESS + 1,
             data: test::TEST_WAV_LEFT_DSP.into(),
             params: Info {
@@ -652,6 +675,7 @@ mod tests {
         };
         let rsamples = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: test::TEST_WAV_DSP_END_ADDRESS + 1,
             data: test::TEST_WAV_RIGHT_DSP.into(),
             params: Info {
@@ -663,7 +687,6 @@ mod tests {
         let sound = Sound::from_adpcm_stereo(
             &mut lsamples.into_reader("test"),
             &mut rsamples.into_reader("test"),
-            44100,
         )?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 2);
@@ -675,8 +698,8 @@ mod tests {
     #[test]
     fn test_sound_from_pcm() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
-        let sound = Sound::from_pcm(&mut samples.into_reader("test"), 44100)?;
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
+        let sound = Sound::from_pcm(&mut samples.into_reader("test"))?;
         assert_eq!(sound.sample_rate, 44100);
         assert_eq!(sound.channels.len(), 2);
         assert_left_channel(&sound.channels[0]);

@@ -10,6 +10,8 @@ pub struct Encoder<'r, 's> {
     reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
     /// The raw PCM samples to encode.
     pcm: Vec<i16>,
+    /// The sample rate.
+    sample_rate: u32,
     /// The index of the next sample to start encoding from.
     pos: usize,
     /// The size of each block in bytes.
@@ -39,13 +41,25 @@ impl<'r, 's> Encoder<'r, 's> {
     ) -> Self {
         let block_size_aligned = block_size & !(BYTES_PER_FRAME - 1);
         assert!(block_size_aligned > 0, "block size is too small");
-        Self { reader, pcm: vec![], pos: 0, block_size: block_size_aligned, state: Info::default() }
+        Self {
+            reader,
+            pcm: vec![],
+            sample_rate: 0,
+            pos: 0,
+            block_size: block_size_aligned,
+            state: Info::default(),
+        }
     }
 
     fn start_encoding(&mut self) -> Result<()> {
         while let Some(samples) = self.reader.read_samples()? {
             if samples.channels != 1 {
                 return Err(Error::StreamNotMono);
+            }
+            if self.pcm.is_empty() {
+                self.sample_rate = samples.rate;
+            } else if samples.rate != self.sample_rate {
+                return Err(Error::InconsistentSampleRate);
             }
             self.pcm.extend(&*samples.data);
         }
@@ -93,6 +107,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
 
         Ok(Some(Samples {
             channels: 1,
+            rate: self.sample_rate,
             len: bytes.len() * 2 - num_samples % 2,
             data: bytes.into(),
             params: initial_state,
@@ -118,7 +133,7 @@ mod tests {
     #[test]
     fn test_encode() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
 
         let splitter = samples.into_reader("test").split_channels();
         let mut left_encoder = Encoder::new(splitter.left());
@@ -135,6 +150,7 @@ mod tests {
         );
         assert_eq!(left.len, 0x30af9);
         assert_eq!(left.channels, 1);
+        assert_eq!(left.rate, 44100);
         assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
         assert_eq!(
@@ -143,6 +159,7 @@ mod tests {
         );
         assert_eq!(right.len, 0x30af9);
         assert_eq!(right.channels, 1);
+        assert_eq!(right.rate, 44100);
         assert!(right.data == test::TEST_WAV_RIGHT_DSP);
 
         Ok(())
@@ -151,7 +168,7 @@ mod tests {
     #[test]
     fn test_encode_in_blocks() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
 
         let splitter = samples.into_reader("test").split_channels();
         let block_size = 0x8000;

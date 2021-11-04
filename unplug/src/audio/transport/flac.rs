@@ -61,7 +61,11 @@ impl<'r> FlacReader<'r> {
     }
 
     /// Converts and interleaves the samples across audio channels.
-    fn build_samples<F>(num_samples: usize, channels: Vec<&[i32]>) -> Samples<'static, AnyFormat>
+    fn build_samples<F>(
+        &self,
+        num_samples: usize,
+        channels: Vec<&[i32]>,
+    ) -> Samples<'static, AnyFormat>
     where
         F: PcmFormat + Cast<AnyFormat>,
         F::Data: TryFrom<i32>,
@@ -72,7 +76,7 @@ impl<'r> FlacReader<'r> {
                 samples.push(F::Data::try_from(channel[i]).ok().expect("bad sample size"));
             }
         }
-        Samples::<F>::from_pcm(samples, channels.len()).cast()
+        Samples::<F>::from_pcm(samples, channels.len(), self.sample_rate).cast()
     }
 }
 
@@ -91,10 +95,10 @@ impl ReadSamples<'static> for FlacReader<'_> {
         let num_samples = block.len() as usize;
         let channels = (0..self.channels).map(|c| block.channel(c as u32)).collect::<Vec<_>>();
         let samples = match self.format {
-            Format::PcmS8 => Self::build_samples::<PcmS8>(num_samples, channels),
-            Format::PcmS16Le => Self::build_samples::<PcmS16Le>(num_samples, channels),
-            Format::PcmS24Le => Self::build_samples::<PcmS24Le>(num_samples, channels),
-            Format::PcmS32Le => Self::build_samples::<PcmS32Le>(num_samples, channels),
+            Format::PcmS8 => self.build_samples::<PcmS8>(num_samples, channels),
+            Format::PcmS16Le => self.build_samples::<PcmS16Le>(num_samples, channels),
+            Format::PcmS24Le => self.build_samples::<PcmS24Le>(num_samples, channels),
+            Format::PcmS32Le => self.build_samples::<PcmS32Le>(num_samples, channels),
             other => panic!("unhandled format: {:?}", other),
         };
         self.buffer = block.into_buffer();

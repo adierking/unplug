@@ -272,6 +272,7 @@ impl HpsStream {
             blocks: &self.blocks,
             channel,
             format: self.channels[channel].address.format,
+            sample_rate: self.sample_rate,
             adpcm: &self.channels[channel].adpcm,
             tag,
         }
@@ -299,10 +300,7 @@ impl HpsStream {
     }
 
     /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
-    pub fn from_pcm(
-        reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>,
-        sample_rate: u32,
-    ) -> Result<Self> {
+    pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
         let samples = reader.read_all_samples()?;
         let channels = samples.channels;
         let samples = samples.into_reader(reader.tag().clone());
@@ -310,28 +308,30 @@ impl HpsStream {
             let splitter = samples.split_channels();
             let mut left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
             let mut right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
-            Self::from_adpcm_stereo(&mut left, &mut right, sample_rate)
+            Self::from_adpcm_stereo(&mut left, &mut right)
         } else if channels == 1 {
             let mut encoder = adpcm::Encoder::with_block_size(samples, MONO_BLOCK_SIZE);
-            Self::from_adpcm_mono(&mut encoder, sample_rate)
+            Self::from_adpcm_mono(&mut encoder)
         } else {
             Err(Error::UnsupportedChannels)
         }
     }
 
     /// Creates a new `HpsStream` from mono ADPCM sample data.
-    pub fn from_adpcm_mono(
-        reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
-        sample_rate: u32,
-    ) -> Result<Self> {
+    pub fn from_adpcm_mono(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
         let mut channel = Channel::default();
         let mut blocks = vec![];
-        let mut first = true;
+        let mut sample_rate = 0;
         while let Some(samples) = reader.read_samples()? {
+            if blocks.is_empty() {
+                sample_rate = samples.rate;
+            } else if samples.rate != sample_rate {
+                return Err(Error::InconsistentSampleRate);
+            }
+
             let adpcm = samples.params;
             let block = Block::from_mono(samples)?;
-            if first {
-                first = false;
+            if blocks.is_empty() {
                 channel = Channel {
                     address: AudioAddress {
                         looping: true, // TODO
@@ -361,12 +361,11 @@ impl HpsStream {
     pub fn from_adpcm_stereo(
         left_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
         right_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
-        sample_rate: u32,
     ) -> Result<Self> {
         let mut left_channel = Channel::default();
         let mut right_channel = Channel::default();
         let mut blocks = vec![];
-        let mut first = true;
+        let mut sample_rate = 0;
         loop {
             let left = left_reader.read_samples()?;
             let right = right_reader.read_samples()?;
@@ -376,11 +375,17 @@ impl HpsStream {
                 _ => return Err(Error::DifferentChannelSizes),
             };
 
+            if blocks.is_empty() {
+                sample_rate = left.rate;
+            }
+            if left.rate != sample_rate || right.rate != sample_rate {
+                return Err(Error::InconsistentSampleRate);
+            }
+
             let left_adpcm = left.params;
             let right_adpcm = right.params;
             let block = Block::from_stereo(left, right)?;
-            if first {
-                first = false;
+            if blocks.is_empty() {
                 let address = AudioAddress {
                     looping: true, // TODO
                     format: DspFormat::Adpcm,
@@ -482,6 +487,9 @@ impl Block {
     fn from_stereo(left: Samples<'_, GcAdpcm>, right: Samples<'_, GcAdpcm>) -> Result<Self> {
         if left.channels != 1 || right.channels != 1 {
             return Err(Error::StreamNotMono);
+        }
+        if left.rate != right.rate {
+            return Err(Error::InconsistentSampleRate);
         }
         if left.len != right.len {
             return Err(Error::DifferentChannelSizes);
@@ -610,6 +618,7 @@ pub struct ChannelReader<'a> {
     blocks: &'a [Block],
     channel: usize,
     format: DspFormat,
+    sample_rate: u32,
     adpcm: &'a adpcm::Info,
     tag: SourceTag,
 }
@@ -629,6 +638,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
                     channels: 1,
+                    rate: self.sample_rate,
                     len,
                     data: data.into(),
                     params: adpcm::Info {
@@ -645,11 +655,11 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
             // other formats...
             DspFormat::Pcm16 => {
                 let samples = PcmS16Be::read_bytes(&data[..(len * 2)])?;
-                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1).cast()))
+                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1, self.sample_rate).cast()))
             }
             DspFormat::Pcm8 => {
                 let samples = PcmS8::read_bytes(&data[..len])?;
-                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1).cast()))
+                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1, self.sample_rate).cast()))
             }
         }
     }
@@ -957,10 +967,10 @@ mod tests {
     #[test]
     fn test_hps_from_pcm_mono() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
 
         let splitter = samples.into_reader("test").split_channels();
-        let hps = HpsStream::from_pcm(&mut splitter.left(), 44100)?;
+        let hps = HpsStream::from_pcm(&mut splitter.left())?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 1);
         assert_eq!(hps.loop_start, Some(0));
@@ -993,9 +1003,9 @@ mod tests {
     #[test]
     fn test_hps_from_pcm_stereo() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2);
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
 
-        let hps = HpsStream::from_pcm(&mut samples.into_reader("test"), 44100)?;
+        let hps = HpsStream::from_pcm(&mut samples.into_reader("test"))?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 2);
         assert_eq!(hps.loop_start, Some(0));

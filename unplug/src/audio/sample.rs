@@ -15,6 +15,8 @@ use std::sync::{Arc, Mutex};
 pub struct Samples<'a, F: FormatTag> {
     /// The number of channels in the data.
     pub channels: usize,
+    /// The number of samples per second.
+    pub rate: u32,
     /// The number of values to decode. This is in format-specific address units; use
     /// `Format::address_to_index()` and related methods to convert to and from data indexes.
     pub len: usize,
@@ -30,6 +32,7 @@ impl<'a, F: FormatTag> Samples<'a, F> {
     pub fn into_owned(self) -> Samples<'static, F> {
         Samples {
             channels: self.channels,
+            rate: self.rate,
             len: self.len,
             data: Cow::Owned(self.data.into_owned()),
             params: self.params,
@@ -59,6 +62,7 @@ impl<'a, F: DynamicFormat> Samples<'a, F> {
             Ok(params) => Ok(Samples::<To> {
                 channels: self.channels,
                 len: self.len,
+                rate: self.rate,
                 data: F::cast_data(self.data),
                 params,
             }),
@@ -106,6 +110,9 @@ impl<F: ExtendSamples> Samples<'_, F> {
         if self.channels != other.channels {
             return Err(Error::InconsistentChannels);
         }
+        if self.rate != other.rate {
+            return Err(Error::InconsistentSampleRate);
+        }
 
         // Make sure the end of our data is frame-aligned
         if format.frame_address(self.len) != self.len {
@@ -127,9 +134,9 @@ impl<F: ExtendSamples> Samples<'_, F> {
 
 impl<'a, F: PcmFormat> Samples<'a, F> {
     /// Creates a sample block from PCM data.
-    pub fn from_pcm(data: impl Into<Cow<'a, [F::Data]>>, channels: usize) -> Self {
+    pub fn from_pcm(data: impl Into<Cow<'a, [F::Data]>>, channels: usize, rate: u32) -> Self {
         let data = data.into();
-        Self { channels, len: data.len(), data, params: () }
+        Self { channels, rate, len: data.len(), data, params: () }
     }
 }
 
@@ -568,6 +575,9 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
         if left.channels != 1 || right.channels != 1 {
             return Err(Error::StreamNotMono);
         }
+        if left.rate != right.rate {
+            return Err(Error::InconsistentSampleRate);
+        }
 
         // TODO: Optimize?
         let mut merged = Vec::with_capacity(left.data.len() + right.data.len());
@@ -575,7 +585,7 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
             merged.push(l);
             merged.push(r);
         }
-        Ok(Some(Samples::from_pcm(merged, 2)))
+        Ok(Some(Samples::from_pcm(merged, 2, left.rate)))
     }
 
     fn format(&self) -> Format {
@@ -686,7 +696,7 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
             let (left_sample, right_sample) = (sample[0], sample[1]);
             channel_data.push(if is_right { right_sample } else { left_sample });
         }
-        Ok(Some(Samples::from_pcm(channel_data, 1)))
+        Ok(Some(Samples::from_pcm(channel_data, 1, samples.rate)))
     }
 
     fn format(&self) -> Format {
@@ -728,7 +738,7 @@ mod tests {
     #[test]
     fn test_owned() {
         let samples: Vec<i16> = (0..16).collect();
-        let borrowed = Samples::<PcmS16Le>::from_pcm(&samples, 1).into_reader("test");
+        let borrowed = Samples::<PcmS16Le>::from_pcm(&samples, 1, 44100).into_reader("test");
         let owned = OwnedSamples::new(borrowed).read_all_samples().unwrap();
         assert!(owned.channels == 1);
         assert!(owned.len == 16);
@@ -739,7 +749,7 @@ mod tests {
     #[test]
     fn test_any_without_context() {
         let samples: Vec<i16> = (0..16).collect();
-        let original = Samples::<PcmS16Le>::from_pcm(samples, 1);
+        let original = Samples::<PcmS16Le>::from_pcm(samples, 1, 44100);
 
         let any = original.clone().cast::<AnyFormat>();
         assert_eq!(any.format(), Format::PcmS16Le);
@@ -764,6 +774,7 @@ mod tests {
         let samples: Vec<i16> = (0..16).collect();
         let original = Samples::<PcmS16LeParams> {
             channels: 1,
+            rate: 44100,
             len: 16,
             data: Cow::Borrowed(&samples),
             params: 123,
@@ -791,7 +802,7 @@ mod tests {
     #[test]
     fn test_any_into_any() {
         let samples: Vec<i16> = (0..16).collect();
-        let original = Samples::<PcmS16Le>::from_pcm(samples, 1);
+        let original = Samples::<PcmS16Le>::from_pcm(samples, 1, 44100);
 
         let any = original.clone().cast::<AnyFormat>().cast::<AnyFormat>();
         assert_eq!(any.format(), Format::PcmS16Le);
@@ -809,7 +820,7 @@ mod tests {
     #[test]
     fn test_any_samples() -> Result<()> {
         let samples: Vec<i16> = (0..16).collect();
-        let original = Samples::<PcmS16Le>::from_pcm(&samples, 1);
+        let original = Samples::<PcmS16Le>::from_pcm(&samples, 1, 44100);
 
         let mut caster = CastSamples::new(original.into_reader("test"));
         let casted: Samples<'_, AnyFormat> = caster.read_samples()?.unwrap();
@@ -821,7 +832,7 @@ mod tests {
     #[test]
     fn test_cast_samples() -> Result<()> {
         let samples: Vec<i16> = (0..16).collect();
-        let original = Samples::<PcmS16Le>::from_pcm(&samples, 1);
+        let original = Samples::<PcmS16Le>::from_pcm(&samples, 1, 44100);
 
         let any = original.clone().cast::<AnyFormat>().into_reader("test");
         let mut caster = CastSamples::new(any);
@@ -845,12 +856,14 @@ mod tests {
     fn test_extend_samples() {
         let mut samples1 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 32,
             data: Cow::from((0..16).collect::<Vec<_>>()),
             params: Default::default(),
         };
         let samples2 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 32,
             data: Cow::from((16..32).collect::<Vec<_>>()),
             params: Default::default(),
@@ -864,12 +877,14 @@ mod tests {
     fn test_extend_samples_partial() {
         let mut samples1 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 32,
             data: Cow::from((0..16).collect::<Vec<_>>()),
             params: Default::default(),
         };
         let samples2 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 32,
             data: Cow::from((16..48).collect::<Vec<_>>()),
             params: Default::default(),
@@ -883,12 +898,14 @@ mod tests {
     fn test_extend_samples_channel_mismatch() {
         let mut samples1 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 32,
             data: Cow::from((0..16).collect::<Vec<_>>()),
             params: Default::default(),
         };
         let mut samples2 = Samples::<GcAdpcm> {
             channels: 2,
+            rate: 44100,
             len: 32,
             data: Cow::from((16..32).collect::<Vec<_>>()),
             params: Default::default(),
@@ -898,15 +915,37 @@ mod tests {
     }
 
     #[test]
+    fn test_extend_samples_rate_mismatch() {
+        let mut samples1 = Samples::<GcAdpcm> {
+            channels: 1,
+            rate: 44100,
+            len: 32,
+            data: Cow::from((0..16).collect::<Vec<_>>()),
+            params: Default::default(),
+        };
+        let mut samples2 = Samples::<GcAdpcm> {
+            channels: 1,
+            rate: 48000,
+            len: 32,
+            data: Cow::from((16..32).collect::<Vec<_>>()),
+            params: Default::default(),
+        };
+        assert!(matches!(samples1.extend(&samples2), Err(Error::InconsistentSampleRate)));
+        assert!(matches!(samples2.extend(&samples1), Err(Error::InconsistentSampleRate)));
+    }
+
+    #[test]
     fn test_extend_samples_unaligned() {
         let mut samples1 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 31,
             data: Cow::from((0..16).collect::<Vec<_>>()),
             params: Default::default(),
         };
         let samples2 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 32,
             data: Cow::from((16..32).collect::<Vec<_>>()),
             params: Default::default(),
@@ -918,12 +957,14 @@ mod tests {
     fn test_extend_samples_before_end() {
         let mut samples1 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 33,
             data: Cow::from((0..17).collect::<Vec<_>>()),
             params: Default::default(),
         };
         let samples2 = Samples::<GcAdpcm> {
             channels: 1,
+            rate: 44100,
             len: 32,
             data: Cow::from((16..32).collect::<Vec<_>>()),
             params: Default::default(),
@@ -934,8 +975,7 @@ mod tests {
     #[test]
     fn test_sample_iterator_mono() {
         let data: Vec<i16> = (0..8).collect();
-        let samples =
-            Samples::<PcmS16Le> { channels: 1, len: 7, data: Cow::Borrowed(&data), params: () };
+        let samples = Samples::<PcmS16Le>::from_pcm(&data[..7], 1, 44100);
         let iterated: Vec<_> =
             samples.iter().map(|s| <[i16; 1]>::try_from(s).ok().unwrap()).collect();
         assert_eq!(iterated, &[[0x0], [0x1], [0x2], [0x3], [0x4], [0x5], [0x6]]);
@@ -944,8 +984,7 @@ mod tests {
     #[test]
     fn test_sample_iterator_stereo() {
         let data: Vec<i16> = (0..8).collect();
-        let samples =
-            Samples::<PcmS16Le> { channels: 2, len: 6, data: Cow::Borrowed(&data), params: () };
+        let samples = Samples::<PcmS16Le>::from_pcm(&data[..6], 2, 44100);
         let iterated: Vec<_> =
             samples.iter().map(|s| <[i16; 2]>::try_from(s).ok().unwrap()).collect();
         assert_eq!(iterated, &[[0x0, 0x1], [0x2, 0x3], [0x4, 0x5]]);
@@ -955,10 +994,8 @@ mod tests {
     fn test_join_channels() -> Result<()> {
         let ldata: Vec<i16> = (0..16).step_by(2).collect();
         let rdata: Vec<i16> = (0..16).skip(1).step_by(2).collect();
-        let left =
-            Samples::<PcmS16Le> { channels: 1, len: 7, data: Cow::Borrowed(&ldata), params: () };
-        let right =
-            Samples::<PcmS16Le> { channels: 1, len: 7, data: Cow::Borrowed(&rdata), params: () };
+        let left = Samples::<PcmS16Le>::from_pcm(&ldata[..7], 1, 44100);
+        let right = Samples::<PcmS16Le>::from_pcm(&rdata[..7], 1, 44100);
 
         let mut joiner = JoinChannels::new(left.into_reader("left"), right.into_reader("right"));
         let joined = joiner.read_samples()?.unwrap();
@@ -975,7 +1012,7 @@ mod tests {
     #[test]
     fn test_split_channels() -> Result<()> {
         let samples: Vec<i16> = (0..16).collect();
-        let stereo = Samples::<PcmS16Le> { channels: 2, len: 14, data: samples.into(), params: () };
+        let stereo = Samples::<PcmS16Le>::from_pcm(&samples[..14], 2, 44100);
 
         let splitter = SplitChannels::new(stereo.into_reader("test"));
         let mut left_split = splitter.left();
@@ -998,9 +1035,9 @@ mod tests {
 
     #[test]
     fn test_read_all_samples() {
-        let samples1 = Samples::<PcmS16Le>::from_pcm((0..16).collect::<Vec<_>>(), 1);
-        let samples2 = Samples::<PcmS16Le>::from_pcm((16..32).collect::<Vec<_>>(), 1);
-        let samples3 = Samples::<PcmS16Le>::from_pcm((32..48).collect::<Vec<_>>(), 1);
+        let samples1 = Samples::<PcmS16Le>::from_pcm((0..16).collect::<Vec<_>>(), 1, 44100);
+        let samples2 = Samples::<PcmS16Le>::from_pcm((16..32).collect::<Vec<_>>(), 1, 44100);
+        let samples3 = Samples::<PcmS16Le>::from_pcm((32..48).collect::<Vec<_>>(), 1, 44100);
         let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3], "test");
         let all = reader.read_all_samples().unwrap();
         assert_eq!(all.len, 48);
@@ -1011,9 +1048,9 @@ mod tests {
 
     #[test]
     fn test_peek_samples() -> Result<()> {
-        let samples1 = Samples::<PcmS16Le>::from_pcm((0..1).collect::<Vec<_>>(), 1);
-        let samples2 = Samples::<PcmS16Le>::from_pcm((1..2).collect::<Vec<_>>(), 1);
-        let samples3 = Samples::<PcmS16Le>::from_pcm((2..3).collect::<Vec<_>>(), 1);
+        let samples1 = Samples::<PcmS16Le>::from_pcm((0..1).collect::<Vec<_>>(), 1, 44100);
+        let samples2 = Samples::<PcmS16Le>::from_pcm((1..2).collect::<Vec<_>>(), 1, 44100);
+        let samples3 = Samples::<PcmS16Le>::from_pcm((2..3).collect::<Vec<_>>(), 1, 44100);
         let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3], "test").peekable();
 
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);

@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_convert_pcm_to_pcm() -> Result<()> {
-        let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2);
+        let samples_s16 = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2, 44100);
         let mut converter = wrap::<_, _, PcmS32Le>(samples_s16.into_reader("test"));
         let samples_s32 = converter.read_all_samples()?;
         let expected = PcmS32Le::read_bytes(&TEST_WAV_S32[TEST_WAV_S32_DATA_OFFSET..])?;
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_convert_pcm_to_adpcm() -> Result<()> {
-        let samples = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2);
+        let samples = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2, 44100);
         let split = samples.into_reader("test").split_channels();
         let mut left_encoder = wrap::<_, _, GcAdpcm>(split.left());
         let mut right_encoder = wrap::<_, _, GcAdpcm>(split.right());
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_convert_any_to_adpcm() -> Result<()> {
-        let samples = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2);
+        let samples = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2, 44100);
         let split = samples.into_reader("test").split_channels();
         let mut left_encoder = wrap::<_, AnyFormat, GcAdpcm>(split.left().cast());
         let mut right_encoder = wrap::<_, AnyFormat, GcAdpcm>(split.right().cast());
