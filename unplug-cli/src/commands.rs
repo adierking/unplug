@@ -2,16 +2,21 @@ use crate::common::*;
 use crate::id::IdString;
 use crate::io::OutputRedirect;
 use crate::opt::*;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use log::{debug, info};
 use std::convert::TryFrom;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Read, Seek, Write};
+use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::Instant;
 use unicase::UniCase;
-use unplug::audio::transport::{HpsStream, SoundBank, WavBuilder};
+use unplug::audio::format::PcmS16Le;
+use unplug::audio::transport::{
+    FlacReader, HpsStream, Mp3Reader, OggReader, SoundBank, WavBuilder, WavReader,
+};
+use unplug::audio::ReadSamples;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
+use unplug::common::WriteTo;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
@@ -344,6 +349,37 @@ fn export_bank_sounds(bank: &SoundBank, dir: &Path, subdir: Option<&str>) -> Res
         let out = BufWriter::new(File::create(&out_path)?);
         WavBuilder::new(bank.decoder(i)).write_to(out)?;
     }
+    Ok(())
+}
+
+pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
+    let start_time = Instant::now();
+
+    let mut iso = edit_iso_optional(Some(opt.iso))?.unwrap();
+    let entry = iso.files.at(opt.hps.to_str().unwrap())?;
+
+    info!("Opening audio file");
+    let file = File::open(&opt.path)?;
+    let name = opt.path.file_name().map(|p| p.to_str().unwrap()).unwrap_or_default();
+    let ext = opt.path.extension().map(|p| p.to_str().unwrap().to_lowercase()).unwrap_or_default();
+    let mut audio: Box<dyn ReadSamples<'_, Format = PcmS16Le>> = match ext.as_str() {
+        "flac" => FlacReader::new(file, name)?.convert(),
+        "mp3" => Box::from(Mp3Reader::new(file, name)?),
+        "ogg" => Box::from(OggReader::new(file, name)?),
+        "wav" => Box::from(WavReader::open(file, name)?),
+        other => bail!("unsupported file extension: \"{}\"", other),
+    };
+
+    info!("Encoding audio to GameCube format");
+    let hps = HpsStream::from_pcm(&mut audio)?;
+    let mut writer = Cursor::new(vec![]);
+    hps.write_to(&mut writer)?;
+    writer.seek(SeekFrom::Start(0))?;
+
+    info!("Updating ISO");
+    iso.replace_file(entry, writer)?;
+
+    info!("Import finished in {:?}", start_time.elapsed());
     Ok(())
 }
 

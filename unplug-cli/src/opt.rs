@@ -74,6 +74,9 @@ pub enum Subcommand {
     /// Exports a HPS music file to a WAV file
     ExportMusic(ExportMusicOpt),
 
+    /// Imports an audio file, replacing an existing HPS music file
+    ImportMusic(ImportMusicOpt),
+
     /// Exports sound effects to WAV files
     ExportSounds(ExportSoundsOpt),
 }
@@ -382,6 +385,21 @@ pub struct ExportMusicOpt {
     /// Path to the output WAV file
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: PathBuf,
+}
+
+#[derive(StructOpt)]
+pub struct ImportMusicOpt {
+    /// Path to the Chibi-Robo! ISO
+    #[structopt(long, value_name("PATH"), parse(from_os_str))]
+    pub iso: PathBuf,
+
+    /// Path to the HPS file to replace
+    #[structopt(value_name("PATH"), parse(from_os_str))]
+    pub hps: PathBuf,
+
+    /// Path to the audio file (WAV, FLAC, MP3, OGG)
+    #[structopt(parse(from_os_str))]
+    pub path: PathBuf,
 }
 
 #[derive(StructOpt)]
