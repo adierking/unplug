@@ -1,4 +1,6 @@
+use super::format::pcm::AnyPcm;
 use super::format::*;
+use super::resample::Resample;
 use super::{Error, Result};
 use std::any;
 use std::borrow::Cow;
@@ -332,6 +334,16 @@ pub trait ReadSamples<'s> {
         Self::Format: PcmFormat,
     {
         SplitChannels::new(self)
+    }
+
+    /// Creates an adapter which resamples the stream at a different rate. The stream must contain
+    /// PCM samples.
+    fn resample<'r>(self, rate: u32) -> Resample<'r, 's, Self::Format>
+    where
+        Self: Sized + 'r,
+        Self::Format: AnyPcm,
+    {
+        Resample::new(self, rate)
     }
 }
 
