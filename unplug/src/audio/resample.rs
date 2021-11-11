@@ -1,9 +1,11 @@
 use super::format::pcm::{AnyPcm, ConvertPcm, PcmF32Le};
+use super::format::Convert;
 use super::{Error, ReadSamples, Result, Samples};
 use libsamplerate_sys::*;
 use log::trace;
 use std::convert::TryInto;
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::{c_double, c_int, c_long};
 use std::ptr;
@@ -24,7 +26,7 @@ fn make_error(code: c_int) -> Error {
 }
 
 /// Wraps a stream of PCM samples and resamples them at a different sample rate.
-pub struct Resample<'r, 's> {
+pub struct Resample<'r, 's, F: AnyPcm> {
     /// The inner stream to read samples from.
     inner: ConvertPcm<'r, 's, PcmF32Le>,
     /// The number of channels to resample.
@@ -39,15 +41,12 @@ pub struct Resample<'r, 's> {
     eof: bool,
     /// The libsamplerate state. Null if conversion is either uninitialized or finished.
     state: *mut SRC_STATE,
+    _marker: PhantomData<F>,
 }
 
-impl<'r, 's: 'r> Resample<'r, 's> {
+impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
     /// Creates a new `Resample` which reads samples from `inner` and resamples them to `rate`.
-    pub fn new<F, R>(inner: R, rate: u32) -> Self
-    where
-        F: AnyPcm,
-        R: ReadSamples<'s, Format = F> + 'r,
-    {
+    pub fn new(inner: impl ReadSamples<'s, Format = F> + 'r, rate: u32) -> Self {
         Self::new_impl(ConvertPcm::new(inner), rate)
     }
 
@@ -60,6 +59,7 @@ impl<'r, 's: 'r> Resample<'r, 's> {
             buffer: vec![],
             eof: false,
             state: ptr::null_mut(),
+            _marker: PhantomData,
         }
     }
 
@@ -158,18 +158,8 @@ impl<'r, 's: 'r> Resample<'r, 's> {
         unsafe { data_out.set_len(samples_produced) };
         Ok(Samples::from_pcm(data_out, self.channels, self.rate_out))
     }
-}
 
-impl Drop for Resample<'_, '_> {
-    fn drop(&mut self) {
-        self.destroy_state();
-    }
-}
-
-impl<'r, 's: 'r> ReadSamples<'s> for Resample<'r, 's> {
-    type Format = PcmF32Le;
-
-    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+    fn read_samples_f32(&mut self) -> Result<Option<Samples<'s, PcmF32Le>>> {
         if self.rate_out == 0 {
             return Err(Error::InvalidSampleRate(self.rate_out));
         }
@@ -185,6 +175,26 @@ impl<'r, 's: 'r> ReadSamples<'s> for Resample<'r, 's> {
             }
         }
         Ok(if resampled.len > 0 { Some(resampled) } else { None })
+    }
+}
+
+impl<'r, 's, F: AnyPcm> Drop for Resample<'r, 's, F> {
+    fn drop(&mut self) {
+        self.destroy_state();
+    }
+}
+
+impl<'r, 's, F: AnyPcm> ReadSamples<'s> for Resample<'r, 's, F>
+where
+    PcmF32Le: Convert<F>,
+{
+    type Format = F;
+
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+        match self.read_samples_f32()? {
+            Some(s) => Ok(Some(s.convert()?)),
+            None => Ok(None),
+        }
     }
 
     fn format(&self) -> super::Format {
@@ -208,10 +218,10 @@ mod tests {
     fn test_resample_flac_matches_wav() -> Result<()> {
         let flac = FlacReader::new(Cursor::new(TEST_FLAC), "test")?;
         let wav = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2, 44100).into_reader("test");
-        let mut flac_resampler = Resample::new(flac, 48000);
-        let mut wav_resampler = Resample::new(wav, 48000);
-        let flac_resampled = flac_resampler.read_all_samples()?;
-        let wav_resampled = wav_resampler.read_all_samples()?;
+        let flac_resampler = Resample::new(flac, 48000);
+        let wav_resampler = Resample::new(wav, 48000);
+        let flac_resampled = flac_resampler.convert::<PcmF32Le>().read_all_samples()?;
+        let wav_resampled = wav_resampler.convert::<PcmF32Le>().read_all_samples()?;
         assert_eq!(flac_resampled.rate, 48000);
         assert_eq!(wav_resampled.rate, 48000);
         assert_samples_close(&flac_resampled, &wav_resampled, 0.001);
@@ -222,8 +232,8 @@ mod tests {
     fn test_upsample_and_downsample() -> Result<()> {
         let initial = Samples::<PcmS16Le>::from_pcm(open_test_wav(), 2, 44100);
         let upsampler = Resample::new(initial.clone().into_reader("test"), 48000);
-        let downsampler = Resample::new(upsampler, 44100);
-        let mut resampled = downsampler.convert::<PcmS16Le>().read_all_samples()?;
+        let mut downsampler = Resample::new(upsampler, 44100);
+        let mut resampled = downsampler.read_all_samples()?;
         // HACK: libsamplerate may output an extra frame as intended behavior. Discard it.
         if resampled.len >= initial.len && resampled.len <= initial.len + 2 {
             resampled.len = initial.len;
