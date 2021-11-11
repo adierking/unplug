@@ -3,6 +3,7 @@ use crate::audio::Samples;
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::block::{Ip, WriteIp};
 use byteorder::{ByteOrder, WriteBytesExt, LE};
+use ctor::ctor;
 use std::fmt::{Debug, Display};
 use std::io::{self, Cursor, Seek, SeekFrom};
 use std::ops::Sub;
@@ -54,6 +55,12 @@ macro_rules! assert_write_and_read {
         let val = $val;
         assert_eq!($crate::test::write_and_read(&val), val);
     };
+}
+
+// Initialize env_logger before each unit test. This sucks.
+#[ctor]
+unsafe fn init_logging() {
+    env_logger::init();
 }
 
 /// Writes a value to a byte array and reads it back.

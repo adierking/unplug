@@ -22,4 +22,6 @@ unplug-data = { path = "../unplug-data" }
 unplug-proc = { path = "../unplug-proc" }
 
 [dev-dependencies]
+ctor = "0.1.21"
+env_logger = "0.9"
 lazy_static = "1.4.0"
