@@ -1,5 +1,6 @@
 pub mod format;
 pub mod metadata;
+pub mod resample;
 pub mod sample;
 pub mod transport;
 
@@ -50,11 +51,17 @@ pub enum Error {
     #[error("invalid RWAV data")]
     InvalidRwav,
 
+    #[error("invalid sample rate: {0}")]
+    InvalidSampleRate(u32),
+
     #[error("invalid WAV data")]
     InvalidWav,
 
     #[error("samples are not aligned on a frame boundary")]
     NotFrameAligned,
+
+    #[error("libsamplerate error {0}: {1}")]
+    ResampleInternal(i32, String),
 
     #[error("audio stream is not mono")]
     StreamNotMono,
@@ -76,6 +83,9 @@ pub enum Error {
 
     #[error("unsupported stream format: {0:?}")]
     UnsupportedFormat(Format),
+
+    #[error("unsupported sample rate conversion: {0} -> {1}")]
+    UnsupportedRateConversion(u32, u32),
 
     #[error(transparent)]
     Flac(Box<claxon::Error>),

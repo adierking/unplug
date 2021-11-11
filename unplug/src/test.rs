@@ -130,6 +130,7 @@ pub(crate) fn assert_samples_close<F: FormatTag>(
     F::Data: PartialOrd + Sub<Output = F::Data> + Display,
 {
     assert_eq!(actual.channels, expected.channels);
+    assert_eq!(actual.rate, expected.rate);
     assert_eq!(actual.len, expected.len);
     for (&a, &e) in actual.data.iter().take(actual.len).zip(&expected.data[..expected.len]) {
         let delta = if a >= e { a - e } else { e - a };

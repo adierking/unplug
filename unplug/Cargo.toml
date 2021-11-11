@@ -13,6 +13,7 @@ claxon = "0.4.3"
 encoding_rs = "0.8.26"
 float-cmp = { version = "0.9.0", default_features = false, features = ["std"] }
 lewton = "0.10.2"
+libsamplerate-sys = "0.1.10"
 log = { version = "0.4", features = ["release_max_level_debug"] }
 minimp3 = "0.5"
 num_enum = "0.5.1"
