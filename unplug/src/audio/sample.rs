@@ -90,6 +90,20 @@ impl<'a, F: DynamicFormat> Samples<'a, F> {
             }
         }
     }
+
+    /// Converts the samples to another format.
+    pub fn convert<To: DynamicFormat>(self) -> Result<Samples<'a, To>>
+    where
+        F: Convert<To>,
+    {
+        let mut reader = self.into_reader("convert").convert();
+        let converted = reader.read_samples()?.expect("sample conversion returned None");
+        // We can't handle converters that return more than one packet of samples because otherwise
+        // we would need to require ExtendSamples in order to merge the packets. This would break
+        // support for AnyFormat.
+        assert!(reader.read_samples()?.is_none());
+        Ok(converted)
+    }
 }
 
 impl<F: PcmFormat> Samples<'_, F> {
@@ -290,7 +304,7 @@ pub trait ReadSamples<'s> {
     fn convert<'r, To>(self) -> Box<dyn ReadSamples<'s, Format = To> + 'r>
     where
         's: 'r,
-        To: StaticFormat,
+        To: DynamicFormat,
         Self: Sized + 'r,
         Self::Format: DynamicFormat + Convert<To>,
     {

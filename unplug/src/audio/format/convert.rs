@@ -23,7 +23,7 @@ use private::*;
 type DynReader<'r, 's, F> = Box<dyn ReadSamples<'s, Format = F> + 'r>;
 
 /// Trait for a format that can be converted to another format.
-pub trait Convert<To: StaticFormat>: DynamicFormat + Sealed {
+pub trait Convert<To: DynamicFormat>: DynamicFormat + Sealed {
     /// Returns a reader which reads and converts samples from `reader`.
     fn convert<'r, 's: 'r>(reader: DynReader<'r, 's, Self>) -> DynReader<'r, 's, To>;
 }
@@ -70,7 +70,7 @@ impl Convert<GcAdpcm> for GcAdpcm {
     }
 }
 
-// Any -> Any
+// Any -> StaticFormat
 impl<To> Convert<To> for AnyFormat
 where
     To: StaticFormat,
@@ -92,6 +92,16 @@ where
             Format::PcmF32Le => PcmF32Le::convert(Box::from(reader.cast())),
             Format::GcAdpcm => GcAdpcm::convert(Box::from(reader.cast())),
         }
+    }
+}
+
+// DynamicFormat -> Any
+impl<From> Convert<AnyFormat> for From
+where
+    From: DynamicFormat + Sealed + Cast<AnyFormat>,
+{
+    fn convert<'r, 's: 'r>(reader: DynReader<'r, 's, Self>) -> DynReader<'r, 's, AnyFormat> {
+        Box::from(reader.cast())
     }
 }
 
