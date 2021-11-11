@@ -3,7 +3,7 @@ use crate::id::IdString;
 use crate::io::OutputRedirect;
 use crate::opt::*;
 use anyhow::{bail, Result};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
@@ -29,6 +29,10 @@ use unplug::globals::Libs;
 use unplug::stage::Stage;
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
+
+/// The highest sample rate that imported music can have. Music sampled higher than this will be
+/// downsampled.
+const MAX_MUSIC_SAMPLE_RATE: u32 = 44100;
 
 fn list_files(tree: &FileTree, opt: ListOpt) -> Result<()> {
     let mut files: Vec<(String, &FileEntry)> =
@@ -369,6 +373,19 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
         "wav" => Box::from(WavReader::open(file, name)?),
         other => bail!("unsupported file extension: \"{}\"", other),
     };
+
+    let mut peek = audio.peekable();
+    let first = match peek.peek_samples()? {
+        Some(s) => s,
+        None => bail!("audio file is empty"),
+    };
+    if first.rate > MAX_MUSIC_SAMPLE_RATE {
+        warn!("The input audio file has a high sample rate ({} Hz)!", first.rate);
+        warn!("It will be automatically resampled to {} Hz.", MAX_MUSIC_SAMPLE_RATE);
+        audio = Box::from(peek.resample(MAX_MUSIC_SAMPLE_RATE));
+    } else {
+        audio = Box::from(peek);
+    }
 
     info!("Encoding audio to GameCube format");
     let hps = HpsStream::from_pcm(&mut audio)?;
