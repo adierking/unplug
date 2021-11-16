@@ -1,5 +1,5 @@
 use super::block::WriteIp;
-use super::expr::{self, Expr, SetExpr};
+use super::expr::{self, Expr, SetExpr, SfxExpr};
 use super::msg::{self, MsgArgs};
 use super::opcodes::*;
 use super::Ip;
@@ -497,7 +497,7 @@ expr_enum! {
         Dir(CheckDirArgs { obj }) => TYPE_DIR,
         Move(CheckMoveArgs { obj }) => TYPE_MOVE,
         Color(CheckColorArgs { obj }) => TYPE_COLOR,
-        Sfx(CheckSfxArgs { val }) => TYPE_SFX,
+        Sfx(CheckSfxArgs) => TYPE_SFX,
         Real(CheckRealArgs { val }) => TYPE_REAL,
         Cam => TYPE_CAM,
         Read(CheckReadArgs { obj }) => TYPE_READ,
@@ -509,6 +509,13 @@ expr_enum! {
         Marker => TYPE_MARKER,
         Unk246(CheckUnk246Args { val }) => TYPE_UNK_246,
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
+#[read_from(error = Error)]
+#[write_to(stream = Write + WriteIp, error = Error)]
+pub struct CheckSfxArgs {
+    sfx: SfxExpr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
@@ -794,7 +801,7 @@ expr_enum! {
 #[read_from(error = Error)]
 #[write_to(stream = Write + WriteIp, error = Error)]
 pub struct SfxArgs {
-    pub val: Expr,
+    pub sfx: SfxExpr,
     pub ty: SfxType,
 }
 
@@ -856,6 +863,7 @@ mod tests {
     use super::*;
     use crate::assert_write_and_read;
     use crate::common::Text;
+    use crate::data::Music;
     use crate::event::expr::BinaryOp;
     use crate::event::msg::MsgCommand;
 
@@ -1027,7 +1035,10 @@ mod tests {
             MsgCommand::Newline,
             MsgCommand::Text(text("radar")),
         ]))));
-        assert_write_and_read!(Command::Sfx(Box::new(SfxArgs { val: expr(), ty: SfxType::Stop })));
+        assert_write_and_read!(Command::Sfx(Box::new(SfxArgs {
+            sfx: SfxExpr::Music(Music::BgmNight),
+            ty: SfxType::Stop
+        })));
         assert_write_and_read!(Command::Timer(Box::new(TimerArgs {
             duration: expr(),
             event: expr(),
