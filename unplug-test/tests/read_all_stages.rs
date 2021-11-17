@@ -81,9 +81,9 @@ fn test_read_all_stages() -> Result<()> {
     assert_eq!(libs.script.blocks().len(), GLOBALS_BLOCKS);
 
     for info in STAGE_INFO {
-        let stage_path = StageDefinition::get(info.id).path;
+        let stage_path = StageDefinition::get(info.id).path();
         info!("Reading {}", stage_path);
-        let mut file = BufReader::new(qp.open_file_at(stage_path)?);
+        let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
         let stage = Stage::read_from(&mut file, &libs)?;
         assert_eq!(stage.objects.len(), info.objects);
         assert_eq!(stage.script.len(), info.blocks);

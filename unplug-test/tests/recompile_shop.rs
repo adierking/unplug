@@ -23,9 +23,9 @@ fn test_recompile_shop() -> Result<()> {
         globals.read_libs()?
     };
 
-    let stage_path = StageDefinition::get(StageId::ChibiHouse).path;
+    let stage_path = StageDefinition::get(StageId::ChibiHouse).path();
     info!("Reading {}", stage_path);
-    let mut file = BufReader::new(qp.open_file_at(stage_path)?);
+    let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
     let mut original_stage = Stage::read_from(&mut file, &libs)?;
     let original_shop = Shop::parse(&original_stage.script)?;
 

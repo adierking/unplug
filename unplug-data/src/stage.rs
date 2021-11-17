@@ -22,8 +22,8 @@ const STAGE_EXT: &str = ".bin";
 pub struct StageDefinition {
     /// The stage's ID.
     pub id: Stage,
-    /// The stage's path within qp.bin.
-    pub path: &'static str,
+    /// The the name of the stage file without the filename or extension.
+    pub name: &'static str,
 }
 
 impl StageDefinition {
@@ -37,16 +37,14 @@ impl StageDefinition {
         }
     }
 
-    /// Tries to find the stage definition whose name matches `name`.
-    pub fn find(name: &str) -> Option<&'static StageDefinition> {
-        STAGES.iter().find(|s| s.name() == name)
+    /// Gets the path to the stage file within the ISO.
+    pub fn path(&self) -> String {
+        format!("{}/{}{}", STAGE_DIR, self.name, STAGE_EXT)
     }
 
-    /// Gets the stage's name without a directory path or extension.
-    pub fn name(&self) -> &'static str {
-        let start = STAGE_DIR.len() + /* trailing slash */ 1;
-        let end = self.path.len() - STAGE_EXT.len();
-        &self.path[start..end]
+    /// Tries to find the stage definition whose name matches `name`.
+    pub fn find(name: &str) -> Option<&'static StageDefinition> {
+        STAGES.iter().find(|s| s.name == name)
     }
 
     /// Returns `true` if this is a dev stage (shun, hori, ahk, etc.).
@@ -57,7 +55,7 @@ impl StageDefinition {
 
 macro_rules! declare_stages {
     {
-        $($val:literal => $id:ident { $path:literal }),*
+        $($val:literal => $id:ident { $name:literal }),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -71,7 +69,7 @@ macro_rules! declare_stages {
             $(
                 StageDefinition {
                     id: Stage::$id,
-                    path: $path,
+                    name: $name,
                 }
             ),*
         ];
@@ -89,8 +87,8 @@ mod tests {
     fn test_get_stage_main() {
         let stage = StageDefinition::get(Stage::LivingRoom);
         assert_eq!(stage.id, Stage::LivingRoom);
-        assert_eq!(stage.path, "bin/e/stage07.bin");
-        assert_eq!(stage.name(), "stage07");
+        assert_eq!(stage.name, "stage07");
+        assert_eq!(stage.path(), "bin/e/stage07.bin");
         assert!(!stage.is_dev());
     }
 
@@ -98,8 +96,8 @@ mod tests {
     fn test_get_stage_dev() {
         let stage = StageDefinition::get(Stage::Ahk);
         assert_eq!(stage.id, Stage::Ahk);
-        assert_eq!(stage.path, "bin/e/ahk.bin");
-        assert_eq!(stage.name(), "ahk");
+        assert_eq!(stage.name, "ahk");
+        assert_eq!(stage.path(), "bin/e/ahk.bin");
         assert!(stage.is_dev());
     }
 

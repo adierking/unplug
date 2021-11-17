@@ -2,6 +2,9 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub const NUM_SOUND_BANKS: usize = 25;
 
+const BANK_DIR: &str = "qp";
+const BANK_EXT: &str = ".ssm";
+
 /// Metadata describing a sound bank.
 #[derive(Debug)]
 pub struct SoundBankDefinition {
@@ -11,8 +14,8 @@ pub struct SoundBankDefinition {
     pub sound_base: u32,
     /// The base index for sound events in the bank.
     pub event_base: u32,
-    /// The path to the bank within the ISO.
-    pub path: &'static str,
+    /// The name of the sound bank without the directory or file extension.
+    pub name: &'static str,
 }
 
 impl SoundBankDefinition {
@@ -20,12 +23,17 @@ impl SoundBankDefinition {
     pub fn get(id: SoundBank) -> &'static SoundBankDefinition {
         &SOUND_BANKS[u16::from(id) as usize]
     }
+
+    /// Gets the path to the bank file within the ISO.
+    pub fn path(&self) -> String {
+        format!("{}/{}{}", BANK_DIR, self.name, BANK_EXT)
+    }
 }
 
 /// Macro used in the generated sound bank list.
 macro_rules! declare_sound_banks {
     {
-        $($index:literal => $id:ident { $sbase:literal, $ebase:literal, $path:literal }),*
+        $($index:literal => $id:ident { $sbase:literal, $ebase:literal, $name:literal }),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -41,7 +49,7 @@ macro_rules! declare_sound_banks {
                     id: SoundBank::$id,
                     sound_base: $sbase,
                     event_base: $ebase,
-                    path: $path,
+                    name: $name,
                 }
             ),*
         ];
@@ -61,6 +69,7 @@ mod tests {
         assert_eq!(bank.id, SoundBank::Ufo);
         assert_eq!(bank.sound_base, 0x2f9);
         assert_eq!(bank.event_base, 0x2fe);
-        assert_eq!(bank.path, "qp/sfx_ufo.ssm");
+        assert_eq!(bank.name, "sfx_ufo");
+        assert_eq!(bank.path(), "qp/sfx_ufo.ssm");
     }
 }

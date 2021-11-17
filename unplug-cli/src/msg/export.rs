@@ -386,8 +386,8 @@ pub fn export_messages(opt: ExportMessagesOpt) -> Result<()> {
     writer.write_script(MessageSource::Globals, &libs.script)?;
 
     for def in STAGES {
-        info!("Reading {}.bin", def.name());
-        let stage = read_stage_qp(&mut qp, def.name(), &libs)?;
+        info!("Reading {}.bin", def.name);
+        let stage = read_stage_qp(&mut qp, def.name, &libs)?;
         writer.write_script(MessageSource::Stage(def.id), &stage.script)?;
     }
 

@@ -23,9 +23,9 @@ fn test_rebuild_all_stages() -> Result<()> {
     };
 
     for stage_def in STAGES {
-        let stage_path = stage_def.path;
+        let stage_path = stage_def.path();
         info!("Reading {}", stage_path);
-        let mut file = BufReader::new(qp.open_file_at(stage_path)?);
+        let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
         let original = Stage::read_from(&mut file, &libs)?;
 
         info!("Rebuilding the stage");

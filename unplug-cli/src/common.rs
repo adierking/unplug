@@ -132,7 +132,7 @@ pub fn read_stage_qp(
         Some(def) => def,
         None => bail!("Unknown stage \"{}\"", name),
     };
-    Ok(Stage::read_from(&mut read_entry(qp, def.path)?, libs)?)
+    Ok(Stage::read_from(&mut read_entry(qp, &def.path())?, libs)?)
 }
 
 /// Reads a stage by name from either an archive or the local filesystem.

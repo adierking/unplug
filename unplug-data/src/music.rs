@@ -1,5 +1,8 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+const MUSIC_DIR: &str = "qp/streaming";
+const MUSIC_EXT: &str = ".hps";
+
 /// Metadata describing a music file.
 #[derive(Debug)]
 pub struct MusicDefinition {
@@ -7,8 +10,8 @@ pub struct MusicDefinition {
     pub id: Music,
     /// The music's volume (0-255).
     pub volume: u8,
-    /// The path to the music file within the ISO.
-    pub path: &'static str,
+    /// The name of the music file without the directory or file extension.
+    pub name: &'static str,
 }
 
 impl MusicDefinition {
@@ -16,12 +19,17 @@ impl MusicDefinition {
     pub fn get(id: Music) -> &'static MusicDefinition {
         &MUSIC[u8::from(id) as usize - 1]
     }
+
+    /// Gets the path to the music file within the ISO.
+    pub fn path(&self) -> String {
+        format!("{}/{}{}", MUSIC_DIR, self.name, MUSIC_EXT)
+    }
 }
 
 /// Macro used in the generated music list.
 macro_rules! declare_music {
     {
-        $($index:literal => $id:ident { $volume:literal, $path:literal }),*
+        $($index:literal => $id:ident { $volume:literal, $name:literal }),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -36,7 +44,7 @@ macro_rules! declare_music {
                 MusicDefinition {
                     id: Music::$id,
                     volume: $volume,
-                    path: $path,
+                    name: $name,
                 }
             ),*
         ];
@@ -55,6 +63,7 @@ mod tests {
         let music = MusicDefinition::get(Music::BgmNight);
         assert_eq!(music.id, Music::BgmNight);
         assert_eq!(music.volume, 180);
-        assert_eq!(music.path, "qp/streaming/bgm_night.hps");
+        assert_eq!(music.name, "bgm_night");
+        assert_eq!(music.path(), "qp/streaming/bgm_night.hps");
     }
 }

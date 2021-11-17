@@ -13,12 +13,13 @@ fn test_rebuild_all_music() -> Result<()> {
 
     let mut iso = common::open_iso()?;
     for music in MUSIC {
-        info!("Reading {}", music.path);
-        let mut reader = iso.open_file_at(music.path)?;
+        let path = music.path();
+        info!("Reading {}", path);
+        let mut reader = iso.open_file_at(&path)?;
         let mut original_bytes = vec![];
         reader.read_to_end(&mut original_bytes)?;
 
-        let hps = HpsStream::open(&mut Cursor::new(&original_bytes), music.path)?;
+        let hps = HpsStream::open(&mut Cursor::new(&original_bytes), path)?;
         info!("Rebuilding HPS stream");
         let mut cursor = Cursor::new(vec![]);
         hps.write_to(&mut cursor)?;

@@ -204,8 +204,8 @@ pub fn export_shop(opt: ExportShopOpt) -> Result<()> {
     let libs = globals.read_libs()?;
 
     let chibi_house = StageDefinition::get(Stage::ChibiHouse);
-    info!("Reading {}.bin", chibi_house.name());
-    let stage = read_stage_qp(&mut qp, chibi_house.name(), &libs)?;
+    info!("Reading {}.bin", chibi_house.name);
+    let stage = read_stage_qp(&mut qp, chibi_house.name, &libs)?;
 
     info!("Parsing shop code");
     let shop = Shop::parse(&stage.script)?;
@@ -266,7 +266,7 @@ pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
 
     info!("Reading stage file");
     let chibi_house = StageDefinition::get(Stage::ChibiHouse);
-    let mut stage = read_stage_qp(&mut qp, chibi_house.name(), &libs)?;
+    let mut stage = read_stage_qp(&mut qp, chibi_house.name, &libs)?;
 
     info!("Compiling new shop code");
     for (slot, model) in slots.iter().zip(&models) {
@@ -283,7 +283,7 @@ pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
     GlobalsBuilder::new().base(&mut globals).metadata(&metadata).write_to(&mut globals_data)?;
     globals_data.seek(SeekFrom::Start(0))?;
 
-    info!("Rebuilding {}.bin", chibi_house.name());
+    info!("Rebuilding {}.bin", chibi_house.name);
     let mut stage_data = Cursor::new(vec![]);
     stage.write_to(&mut stage_data)?;
     stage_data.seek(SeekFrom::Start(0))?;
@@ -296,7 +296,7 @@ pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
     debug!("Writing new qp.bin to {}", qp_temp.path().to_string_lossy());
     ArchiveBuilder::with_archive(&mut { qp })
         .replace_at(GLOBALS_PATH, || globals_data)?
-        .replace_at(chibi_house.path, || stage_data)?
+        .replace_at(&chibi_house.path(), || stage_data)?
         .write_to(&mut qp_temp)?;
 
     if let Some(mut iso) = iso {

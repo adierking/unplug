@@ -28,18 +28,19 @@ fn test_rebuild_all_sounds() -> Result<()> {
 
     let mut iso = common::open_iso()?;
     for bank in SOUND_BANKS {
-        info!("Reading {}", bank.path);
-        let mut reader = iso.open_file_at(bank.path)?;
+        let path = bank.path();
+        info!("Reading {}", path);
+        let mut reader = iso.open_file_at(&path)?;
         let mut original_bytes = vec![];
         reader.read_to_end(&mut original_bytes)?;
 
-        let ssm = SoundBank::open(&mut Cursor::new(&original_bytes), bank.path)?;
+        let ssm = SoundBank::open(&mut Cursor::new(&original_bytes), path.as_ref())?;
         info!("Rebuilding sound bank");
         let mut cursor = Cursor::new(vec![]);
         ssm.write_to(&mut cursor)?;
 
         if NON_IDENTICAL_BANKS.contains(&bank.id) {
-            warn!("{} is known-broken; skipping comparison", bank.path);
+            warn!("{} is known-broken; skipping comparison", path);
         } else {
             let rebuilt_bytes = cursor.into_inner();
             assert!(original_bytes == rebuilt_bytes);

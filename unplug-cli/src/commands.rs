@@ -280,9 +280,9 @@ pub fn dump_all_stages(opt: DumpAllStagesOpt) -> Result<()> {
     do_dump_libs(&libs, BufWriter::new(libs_out))?;
 
     for stage_def in STAGES {
-        info!("Reading {}.bin", stage_def.name());
-        let stage = read_stage_qp(&mut qp, stage_def.name(), &libs)?;
-        let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", stage_def.name())))?;
+        info!("Reading {}.bin", stage_def.name);
+        let stage = read_stage_qp(&mut qp, stage_def.name, &libs)?;
+        let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", stage_def.name)))?;
         do_dump_stage(&stage, &opt.flags, BufWriter::new(stage_out))?;
     }
 
@@ -414,12 +414,11 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
         // Export everything
         let mut iso = iso.expect("no iso path or bank path");
         for bank_def in SOUND_BANKS {
-            let bank_name = bank_def.path.rsplit(|c| c == '.' || c == '/').nth(1).unwrap();
-            info!("Reading {}.ssm", bank_name);
-            let mut reader = BufReader::new(iso.open_file_at(bank_def.path)?);
-            let bank = SoundBank::open(&mut reader, format!("{}.ssm", bank_name))?;
-            let dir = opt.output.join(bank_name);
-            export_bank_sounds(&bank, &dir, Some(bank_name))?;
+            info!("Reading {}.ssm", bank_def.name);
+            let mut reader = BufReader::new(iso.open_file_at(&bank_def.path())?);
+            let bank = SoundBank::open(&mut reader, format!("{}.ssm", bank_def.name))?;
+            let dir = opt.output.join(bank_def.name);
+            export_bank_sounds(&bank, &dir, Some(bank_def.name))?;
         }
     }
 

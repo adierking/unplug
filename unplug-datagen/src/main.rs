@@ -56,12 +56,9 @@ const STRIP_SUIT_LABEL: &str = "Suit";
 
 const STAGE_LIST_ADDR: u32 = 0x802244e4;
 const FIRST_DEV_STAGE: i32 = 100;
-const STAGE_DIR: &str = "bin/e";
-const STAGE_EXT: &str = ".bin";
 
 const MUSIC_LIST_ADDR: u32 = 0x802108a8;
 const NUM_MUSIC: usize = 109;
-const MUSIC_PATH_PREFIX: &str = "qp/";
 const MUSIC_EXT: &str = ".hps";
 
 const QP_PATH: &str = "qp.bin";
@@ -72,35 +69,36 @@ const UNKNOWN_PREFIX: &str = "Unk";
 const NUM_ITEMS: usize = 159;
 const STRIP_ITEM_LABEL: &str = "Item";
 
-/// Paths to sound banks within the ISO. This does not include `sfx_hori.ssm` because it has a bad
-/// base index and cannot be loaded.
+/// Names of sound banks within the ISO and their corresponding BRSAR groups. This does not include
+/// `sfx_hori` because it has a bad base index and cannot be loaded.
 const SOUND_BANKS: &[(&str, &str)] = &[
-    ("qp/sfx_army.ssm", "GROUP_ARMY"),
-    ("qp/sfx_bb.ssm", "GROUP_BB"),
-    ("qp/sfx_concert.ssm", "GROUP_CONCERT"),
-    ("qp/sfx_ending.ssm", "GROUP_ENDING"),
-    ("qp/sfx_gicco.ssm", "GROUP_GICCO"),
-    ("qp/sfx_hock.ssm", "GROUP_HOCK"),
-    ("qp/sfx_jennyroom.ssm", "GROUP_JENNYROOM"),
-    ("qp/sfx_kaeru.ssm", "GROUP_KAERU"),
-    ("qp/sfx_kitchen.ssm", "GROUP_KITCHEN"),
-    ("qp/sfx_manual.ssm", "GROUP_MANUAL"),
-    ("qp/sfx_martial.ssm", "GROUP_MARTIAL"),
-    ("qp/sfx_papamama.ssm", "GROUP_PAPAMAMA"),
-    ("qp/sfx_pipe.ssm", "GROUP_PIPE"),
-    ("qp/sfx_sample.ssm", "GROUP_DEF"),
-    ("qp/sfx_sanpoo.ssm", "GROUP_SANPOO"),
-    ("qp/sfx_souko.ssm", "GROUP_SOUKO"),
-    ("qp/sfx_stage02.ssm", "GROUP_STAGE02"),
-    ("qp/sfx_stage05.ssm", "GROUP_STAGE05"),
-    ("qp/sfx_stage07.ssm", "GROUP_STAGE07"),
-    ("qp/sfx_trex.ssm", "GROUP_TREX"),
-    ("qp/sfx_ufo.ssm", "GROUP_UFO"),
-    ("qp/sfx_uraniwa.ssm", "GROUP_URANIWA"),
-    ("qp/sfx_uraniwa_ambient1.ssm", "GROUP_URANIWA_AMBIENT1"),
-    ("qp/sfx_uraniwa_ambient2.ssm", "GROUP_URANIWA_AMBIENT2"),
-    ("qp/sfx_uraniwa_ambient3.ssm", "GROUP_URANIWA_AMBIENT3"),
+    ("sfx_army", "GROUP_ARMY"),
+    ("sfx_bb", "GROUP_BB"),
+    ("sfx_concert", "GROUP_CONCERT"),
+    ("sfx_ending", "GROUP_ENDING"),
+    ("sfx_gicco", "GROUP_GICCO"),
+    ("sfx_hock", "GROUP_HOCK"),
+    ("sfx_jennyroom", "GROUP_JENNYROOM"),
+    ("sfx_kaeru", "GROUP_KAERU"),
+    ("sfx_kitchen", "GROUP_KITCHEN"),
+    ("sfx_manual", "GROUP_MANUAL"),
+    ("sfx_martial", "GROUP_MARTIAL"),
+    ("sfx_papamama", "GROUP_PAPAMAMA"),
+    ("sfx_pipe", "GROUP_PIPE"),
+    ("sfx_sample", "GROUP_DEF"),
+    ("sfx_sanpoo", "GROUP_SANPOO"),
+    ("sfx_souko", "GROUP_SOUKO"),
+    ("sfx_stage02", "GROUP_STAGE02"),
+    ("sfx_stage05", "GROUP_STAGE05"),
+    ("sfx_stage07", "GROUP_STAGE07"),
+    ("sfx_trex", "GROUP_TREX"),
+    ("sfx_ufo", "GROUP_UFO"),
+    ("sfx_uraniwa", "GROUP_URANIWA"),
+    ("sfx_uraniwa_ambient1", "GROUP_URANIWA_AMBIENT1"),
+    ("sfx_uraniwa_ambient2", "GROUP_URANIWA_AMBIENT2"),
+    ("sfx_uraniwa_ambient3", "GROUP_URANIWA_AMBIENT3"),
 ];
+const SOUND_BANK_DIR: &str = "qp";
 const SOUND_BANK_PREFIX: &str = "sfx_";
 const SOUND_BANK_EXT: &str = ".ssm";
 const SOUND_EVENTS_PATH: &str = "qp/sfx_sample.sem";
@@ -628,7 +626,7 @@ impl<R: Read> ReadOptionFrom<R> for RawStageDefinition {
 struct StageDefinition {
     id: i32,
     label: Label,
-    path: String,
+    name: String,
 }
 
 /// Reads the stage list from the executable.
@@ -671,11 +669,7 @@ fn read_stages(
             Label::from_string_lossy(&name)
         };
 
-        definitions.push(StageDefinition {
-            id: stage.index,
-            label,
-            path: format!("{}/{}{}", STAGE_DIR, name, STAGE_EXT),
-        });
+        definitions.push(StageDefinition { id: stage.index, label, name });
     }
     Ok(definitions)
 }
@@ -700,7 +694,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for RawMusicDefinition {
 struct MusicDefinition {
     id: u8,
     label: Label,
-    path: String,
+    name: String,
     volume: u8,
 }
 
@@ -714,11 +708,9 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
     let mut definitions: Vec<MusicDefinition> = vec![];
     // Music IDs start at 1
     for (id, music) in raw_music.iter().enumerate().skip(1) {
-        // The file path doesn't include the "qp/" directory, so we have to add it
         let path_offset = dol.address_to_offset(music.path_addr)? as u64;
         reader.seek(SeekFrom::Start(path_offset))?;
         let mut path = CString::read_from(reader)?.into_string()?;
-        path.insert_str(0, MUSIC_PATH_PREFIX);
 
         // Fix up the path if necessary
         for (find, replace) in MUSIC_PATH_FIXUPS.iter() {
@@ -730,10 +722,9 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
 
         // Make the label based on the filename
         let filename = path.rsplit('/').next().unwrap();
-        let name = filename.strip_suffix(MUSIC_EXT).unwrap();
-        let label = Label::from_string_lossy(name);
-
-        definitions.push(MusicDefinition { id: id as u8, label, path, volume: music.volume });
+        let name = filename.strip_suffix(MUSIC_EXT).unwrap().to_owned();
+        let label = Label::from_string_lossy(&name);
+        definitions.push(MusicDefinition { id: id as u8, label, name, volume: music.volume });
     }
     Ok(definitions)
 }
@@ -744,7 +735,7 @@ struct SoundBankDefinition {
     label: Label,
     sound_base: u32,
     event_base: u32,
-    path: String,
+    name: String,
 }
 
 /// Reads sound bank information from the ISO.
@@ -753,28 +744,26 @@ fn read_sound_banks(
     events: &EventBank,
 ) -> Result<Vec<SoundBankDefinition>> {
     let mut bank_bases: Vec<(&'static str, u32)> = vec![];
-    for &(path, _) in SOUND_BANKS {
-        let mut reader = disc.open_file_at(path)?;
+    for &(name, _) in SOUND_BANKS {
+        let path = format!("{}/{}{}", SOUND_BANK_DIR, name, SOUND_BANK_EXT);
+        let mut reader = disc.open_file_at(&path)?;
         reader.seek(SeekFrom::Start(0xc))?;
         let base_index = reader.read_u32::<BE>()?;
-        bank_bases.push((path, base_index));
+        bank_bases.push((name, base_index));
     }
     bank_bases.sort_unstable_by_key(|(_, b)| *b);
 
     let mut banks = vec![];
-    for (id, ((path, sound_base), &event_base)) in
+    for (id, ((name, sound_base), &event_base)) in
         bank_bases.into_iter().zip(&events.group_bases).enumerate()
     {
-        let mut name = path.rsplit('/').next().unwrap();
-        name = name.strip_prefix(SOUND_BANK_PREFIX).unwrap();
-        name = name.strip_suffix(SOUND_BANK_EXT).unwrap();
-        let label = Label::from_string_lossy(name);
+        let label = Label::from_string_lossy(name.strip_prefix(SOUND_BANK_PREFIX).unwrap());
         banks.push(SoundBankDefinition {
             id: id as i16,
             label,
             sound_base,
             event_base,
-            path: path.to_owned(),
+            name: name.to_owned(),
         })
     }
     Ok(banks)
@@ -816,9 +805,9 @@ fn build_sound_events(
             let group_index = collection.groups[0].index;
             let group = &brsar.groups[group_index as usize];
             let group_name = brsar.symbol(group.name_index);
-            let bank_path = SOUND_BANKS.iter().find(|&&(_, g)| g == group_name);
-            if let Some(&(path, _)) = bank_path {
-                let bank_def = banks.iter().find(|b| b.path == path).unwrap();
+            let bank_name = SOUND_BANKS.iter().find(|&&(_, g)| g == group_name);
+            if let Some(&(name, _)) = bank_name {
+                let bank_def = banks.iter().find(|b| b.name == name).unwrap();
                 let bank_index = bank_def.id as usize;
                 collection_to_bank.insert(i as u32, bank_index);
             } else {
@@ -943,7 +932,7 @@ fn write_suits(mut writer: impl Write, suits: &[SuitDefinition]) -> Result<()> {
 fn write_stages(mut writer: impl Write, stages: &[StageDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, STAGES_HEADER)?;
     for stage in stages {
-        writeln!(writer, "    {} => {} {{ \"{}\" }},", stage.id, stage.label.0, stage.path)?;
+        writeln!(writer, "    {} => {} {{ \"{}\" }},", stage.id, stage.label.0, stage.name)?;
     }
     write!(writer, "{}", STAGES_FOOTER)?;
     writer.flush()?;
@@ -954,7 +943,7 @@ fn write_stages(mut writer: impl Write, stages: &[StageDefinition]) -> Result<()
 fn write_music(mut writer: impl Write, music: &[MusicDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, MUSIC_HEADER)?;
     for m in music {
-        writeln!(writer, "    {} => {} {{ {}, \"{}\" }},", m.id, m.label.0, m.volume, m.path)?;
+        writeln!(writer, "    {} => {} {{ {}, \"{}\" }},", m.id, m.label.0, m.volume, m.name)?;
     }
     write!(writer, "{}", MUSIC_FOOTER)?;
     writer.flush()?;
@@ -968,7 +957,7 @@ fn write_sound_banks(mut writer: impl Write, banks: &[SoundBankDefinition]) -> R
         writeln!(
             writer,
             "    {} => {} {{ 0x{:>04x}, 0x{:>04x}, \"{}\" }},",
-            bank.id, bank.label.0, bank.sound_base, bank.event_base, bank.path
+            bank.id, bank.label.0, bank.sound_base, bank.event_base, bank.name
         )?;
     }
     write!(writer, "{}", SOUND_BANKS_FOOTER)?;

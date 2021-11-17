@@ -93,7 +93,7 @@ impl MessageSource {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Globals => "globals",
-            Self::Stage(stage) => StageDefinition::get(*stage).name(),
+            Self::Stage(stage) => StageDefinition::get(*stage).name,
         }
     }
 
@@ -104,7 +104,7 @@ impl MessageSource {
         } else {
             let stage = STAGES
                 .iter()
-                .find(|stage| stage.name() == s)
+                .find(|stage| stage.name == s)
                 .ok_or_else(|| anyhow!("Invalid message source: {}", s))?;
             Ok(Self::Stage(stage.id))
         }

@@ -68,13 +68,13 @@ fn test_reimport_messages() -> Result<()> {
     compare_messages(MessageSource::Globals, &original_libs.script, &rebuilt_libs.script);
 
     for stage_def in STAGES {
-        let name = stage_def.name();
-        let path = stage_def.path;
+        let name = stage_def.name;
+        let path = stage_def.path();
         info!("Reading original {}", name);
-        let mut original_reader = original_qp.open_file_at(path)?;
+        let mut original_reader = original_qp.open_file_at(&path)?;
         let original_stage = Stage::read_from(&mut original_reader, &original_libs)?;
         info!("Reading rebuilt {}", name);
-        let mut rebuilt_reader = rebuilt_qp.open_file_at(path)?;
+        let mut rebuilt_reader = rebuilt_qp.open_file_at(&path)?;
         let rebuilt_stage = Stage::read_from(&mut rebuilt_reader, &rebuilt_libs)?;
         info!("Comparing {} messages", name);
         compare_messages(

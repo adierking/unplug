@@ -39,9 +39,9 @@ fn test_read_all_music() -> Result<()> {
 
     let mut iso = common::open_iso()?;
     for &(id, expected) in CHECKSUMS {
-        let path = MusicDefinition::get(id).path;
+        let path = MusicDefinition::get(id).path();
         info!("Reading {}", path);
-        let mut reader = BufReader::new(iso.open_file_at(path)?);
+        let mut reader = BufReader::new(iso.open_file_at(&path)?);
         let hps = HpsStream::open(&mut reader, path)?;
         assert!(!hps.blocks.is_empty());
         for block in &hps.blocks {
