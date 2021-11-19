@@ -1,5 +1,6 @@
 use super::sound_bank::SOUND_BANKS;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::fmt::{self, Debug};
 
 /// Metadata describing a sound event.
 #[derive(Debug)]
@@ -23,7 +24,7 @@ macro_rules! declare_sound_events {
         $($index:literal => $id:ident { $name:literal }),*
         $(,)*
     } => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(u32)]
         pub enum SoundEvent {
@@ -50,6 +51,12 @@ impl SoundEvent {
     }
 }
 
+impl Debug for SoundEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{}>", SoundEventDefinition::get(*self).name)
+    }
+}
+
 // Generated using unplug-datagen
 include!("gen/sound_events.inc.rs");
 
@@ -59,12 +66,9 @@ mod tests {
 
     #[test]
     fn test_get_sound_event() {
-        let event = SoundEventDefinition::get(SoundEvent::VoiceHelpMe);
-        assert_eq!(event.id, SoundEvent::VoiceHelpMe);
-        assert_eq!(event.name, "voice_help_me");
-
-        let event = SoundEventDefinition::get(SoundEvent::NpcSanpooLaugh);
-        assert_eq!(event.id, SoundEvent::NpcSanpooLaugh);
-        assert_eq!(event.name, "npc_sanpoo_laugh");
+        for event in SOUND_EVENTS {
+            let actual = SoundEventDefinition::get(event.id);
+            assert_eq!(actual.id, event.id);
+        }
     }
 }

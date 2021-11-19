@@ -1,4 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::fmt::{self, Debug};
 
 /// The total number of non-internal objects.
 pub const NUM_OBJECTS: usize = 1162;
@@ -60,7 +61,7 @@ macro_rules! declare_objects {
         $($index:literal => $id:ident { $class:ident, $subclass:literal, $path:literal }),*
         $(,)*
     } => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i32)]
         pub enum Object {
@@ -77,6 +78,12 @@ macro_rules! declare_objects {
                 }
             ),*
         ];
+    }
+}
+
+impl Debug for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{}>", ObjectDefinition::get(*self).path)
     }
 }
 

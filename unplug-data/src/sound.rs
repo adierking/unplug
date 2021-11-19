@@ -1,4 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::fmt::{self, Debug};
 
 /// Metadata describing a sound.
 #[derive(Debug)]
@@ -22,7 +23,7 @@ macro_rules! declare_sounds {
         $($index:literal => $id:ident { $name:literal }),*
         $(,)*
     } => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(u32)]
         pub enum Sound {
@@ -37,6 +38,12 @@ macro_rules! declare_sounds {
                 }
             ),*
         ];
+    }
+}
+
+impl Debug for Sound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{}>", SoundDefinition::get(*self).name)
     }
 }
 

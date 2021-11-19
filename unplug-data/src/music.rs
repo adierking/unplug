@@ -1,4 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::fmt::{self, Debug};
 
 const MUSIC_DIR: &str = "qp/streaming";
 const MUSIC_EXT: &str = ".hps";
@@ -32,7 +33,7 @@ macro_rules! declare_music {
         $($index:literal => $id:ident { $volume:literal, $name:literal }),*
         $(,)*
     } => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(u8)]
         pub enum Music {
@@ -48,6 +49,12 @@ macro_rules! declare_music {
                 }
             ),*
         ];
+    }
+}
+
+impl Debug for Music {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{}>", MusicDefinition::get(*self).name)
     }
 }
 
