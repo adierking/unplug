@@ -196,6 +196,13 @@ lazy_static! {
         (Regex::new("/nwing.hps$").unwrap(), "/Nwing.hps"),
     ];
 
+    /// Music files whose names match these will have their labels overridden.
+    static ref MUSIC_LABEL_OVERRIDES: HashMap<String, &'static str> = vec![
+        ("Nwing".into(), "NWing"),
+        ("toyrex".into(), "ToyRex"),
+        ("UFOBGM".into(), "UfoBgm"),
+    ].into_iter().collect();
+
     /// Regexes matching sound names to discard because they are duplicates.
     static ref DUPLICATE_SOUND_DISCARDS: RegexSet = RegexSet::new(&[
         r"^none$",
@@ -723,7 +730,10 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
         // Make the label based on the filename
         let filename = path.rsplit('/').next().unwrap();
         let name = filename.strip_suffix(MUSIC_EXT).unwrap().to_owned();
-        let label = Label::from_string_lossy(&name);
+        let label = match MUSIC_LABEL_OVERRIDES.get(&name) {
+            Some(&label) => Label(label.to_owned()),
+            None => Label::from_string_lossy(&name),
+        };
         definitions.push(MusicDefinition { id: id as u8, label, name, volume: music.volume });
     }
     Ok(definitions)
