@@ -16,7 +16,7 @@ use unplug::audio::transport::{
 };
 use unplug::audio::ReadSamples;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
-use unplug::common::WriteTo;
+use unplug::common::{ReadSeek, WriteTo};
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
@@ -33,6 +33,9 @@ const UNKNOWN_ID_PREFIX: &str = "unk";
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
 const MAX_MUSIC_SAMPLE_RATE: u32 = 44100;
+
+const SFX_HORI_NAME: &str = "sfx_hori.ssm";
+const SFX_HORI_PATH: &str = "qp/sfx_hori.ssm";
 
 fn list_files(tree: &FileTree, opt: ListOpt) -> Result<()> {
     let mut files: Vec<(String, &FileEntry)> =
@@ -330,32 +333,6 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     Ok(())
 }
 
-fn export_bank_sounds(bank: &SoundBank, dir: &Path, subdir: Option<&str>) -> Result<()> {
-    // Omit names for unusable banks (sfx_hori.ssm)
-    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index);
-    fs::create_dir_all(dir)?;
-    for (i, _) in bank.sounds.iter().enumerate() {
-        let id = bank.base_index + i as u32;
-        let filename = if have_names {
-            match Sound::try_from(id) {
-                Ok(s) => format!("{}.wav", SoundDefinition::get(s).name),
-                Err(_) => format!("{:>04}.wav", id),
-            }
-        } else {
-            format!("{:>04}.wav", id)
-        };
-        if let Some(subdir) = subdir {
-            info!("Writing {}/{}", subdir, filename);
-        } else {
-            info!("Writing {}", filename);
-        }
-        let out_path = dir.join(filename);
-        let out = BufWriter::new(File::create(&out_path)?);
-        WavBuilder::new(bank.decoder(i)).write_to(out)?;
-    }
-    Ok(())
-}
-
 pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
@@ -400,26 +377,72 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
     Ok(())
 }
 
+fn make_sound_filename(bank: &SoundBank, index: usize, have_names: bool) -> String {
+    let id = bank.base_index + (index as u32);
+    if have_names {
+        if let Ok(sound) = Sound::try_from(id) {
+            return format!("{}.wav", SoundDefinition::get(sound).name);
+        }
+    }
+    format!("{:>04}.wav", id)
+}
+
+/// Reads a sound bank from `reader` named `name` and exports WAV files to `dir`.
+fn export_bank<'r>(reader: Box<dyn ReadSeek + 'r>, name: &str, dir: &Path) -> Result<()> {
+    export_bank_impl(reader, name, dir, "")
+}
+
+/// Reads a sound bank from `reader` named `name` and exports WAV files to a subdirectory of `dir`
+/// named after the bank.
+fn export_bank_subdir<'r>(reader: Box<dyn ReadSeek + 'r>, name: &str, dir: &Path) -> Result<()> {
+    let name_prefix = name.split('.').next().unwrap_or(name); // Strip extension
+    let dir = dir.join(name_prefix);
+    let display_prefix = format!("{}/", name_prefix);
+    export_bank_impl(reader, name, &dir, &display_prefix)
+}
+
+fn export_bank_impl<'r>(
+    reader: Box<dyn ReadSeek + 'r>,
+    name: &str,
+    dir: &Path,
+    display_prefix: &str,
+) -> Result<()> {
+    info!("Reading {}", name);
+    let mut reader = BufReader::new(reader);
+    let bank = SoundBank::open(&mut reader, name)?;
+    // Omit names for unusable banks (sfx_hori.ssm)
+    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index);
+    fs::create_dir_all(&dir)?;
+    for (i, _) in bank.sounds.iter().enumerate() {
+        let filename = make_sound_filename(&bank, i, have_names);
+        info!("Writing {}{}", display_prefix, filename);
+        let out_path = dir.join(filename);
+        let out = BufWriter::new(File::create(&out_path)?);
+        WavBuilder::new(bank.decoder(i)).write_to(out)?;
+    }
+    Ok(())
+}
+
 pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
     let start_time = Instant::now();
 
     let mut iso = open_iso_optional(opt.iso.as_ref())?;
     if let Some(bank_path) = opt.path {
         // Export single bank
-        let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), &bank_path)?);
+        let reader = open_iso_entry_or_file(iso.as_mut(), &bank_path)?;
         let name = bank_path.file_name().unwrap().to_string_lossy();
-        let bank = SoundBank::open(&mut reader, name)?;
-        export_bank_sounds(&bank, &opt.output, None)?;
+        export_bank(reader, &name, &opt.output)?;
     } else {
-        // Export everything
+        // Export registered banks
         let mut iso = iso.expect("no iso path or bank path");
         for bank_def in SOUND_BANKS {
-            info!("Reading {}.ssm", bank_def.name);
-            let mut reader = BufReader::new(iso.open_file_at(&bank_def.path())?);
-            let bank = SoundBank::open(&mut reader, format!("{}.ssm", bank_def.name))?;
-            let dir = opt.output.join(bank_def.name);
-            export_bank_sounds(&bank, &dir, Some(bank_def.name))?;
+            let reader = iso.open_file_at(&bank_def.path())?;
+            let name = format!("{}.ssm", bank_def.name);
+            export_bank_subdir(reader, &name, &opt.output)?;
         }
+        // Export sfx_hori, which is not a registered bank because it has bogus sound IDs
+        let reader = iso.open_file_at(SFX_HORI_PATH)?;
+        export_bank_subdir(reader, SFX_HORI_NAME, &opt.output)?;
     }
 
     info!("Export finished in {:?}", start_time.elapsed());
