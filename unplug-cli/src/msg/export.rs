@@ -172,7 +172,7 @@ impl<W: Write> MessageWriter<W> {
 
             MsgCommand::Sfx(id, ty) => {
                 let mut tag = BytesStart::owned_name(ELEM_SFX);
-                tag.push_attribute((ATTR_ID, format!("{:#010x}", *id as u32).as_ref()));
+                tag.push_attribute((ATTR_NAME, id.name()));
                 match ty {
                     MsgSfxType::Wait => tag.push_attribute((ATTR_CMD, SFX_WAIT)),
                     MsgSfxType::Stop => tag.push_attribute((ATTR_CMD, SFX_STOP)),
@@ -400,6 +400,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use std::str;
+    use unplug::data::Music;
     use unplug::event::msg::{
         Color, DefaultArgs, Icon, MsgAnimArgs, MsgSfxFadeArgs, NumInputArgs, QuestionArgs,
         ShakeArgs, Voice,
@@ -463,29 +464,30 @@ mod tests {
 
     #[test]
     fn test_export_sfx() -> Result<()> {
+        let sfx = Music::Bgm.into();
         assert_eq!(
-            xml(MsgCommand::Sfx(1, MsgSfxType::Wait))?,
-            "<sound id=\"0x00000001\" cmd=\"wait\"/>"
+            xml(MsgCommand::Sfx(sfx, MsgSfxType::Wait))?,
+            "<sound name=\"bgm\" cmd=\"wait\"/>"
         );
         assert_eq!(
-            xml(MsgCommand::Sfx(1, MsgSfxType::Stop))?,
-            "<sound id=\"0x00000001\" cmd=\"stop\"/>"
+            xml(MsgCommand::Sfx(sfx, MsgSfxType::Stop))?,
+            "<sound name=\"bgm\" cmd=\"stop\"/>"
         );
         assert_eq!(
-            xml(MsgCommand::Sfx(1, MsgSfxType::Play))?,
-            "<sound id=\"0x00000001\" cmd=\"play\"/>"
+            xml(MsgCommand::Sfx(sfx, MsgSfxType::Play))?,
+            "<sound name=\"bgm\" cmd=\"play\"/>"
         );
         assert_eq!(
-            xml(MsgCommand::Sfx(1, MsgSfxType::FadeOut(2)))?,
-            "<sound id=\"0x00000001\" cmd=\"fade-out\" duration=\"2\"/>"
+            xml(MsgCommand::Sfx(sfx, MsgSfxType::FadeOut(2)))?,
+            "<sound name=\"bgm\" cmd=\"fade-out\" duration=\"2\"/>"
         );
         assert_eq!(
-            xml(MsgCommand::Sfx(1, MsgSfxType::FadeIn(2)))?,
-            "<sound id=\"0x00000001\" cmd=\"fade-in\" duration=\"2\"/>"
+            xml(MsgCommand::Sfx(sfx, MsgSfxType::FadeIn(2)))?,
+            "<sound name=\"bgm\" cmd=\"fade-in\" duration=\"2\"/>"
         );
         assert_eq!(
-            xml(MsgCommand::Sfx(1, MsgSfxType::Fade(MsgSfxFadeArgs { duration: 2, volume: 3 })))?,
-            "<sound id=\"0x00000001\" cmd=\"fade\" duration=\"2\" volume=\"3\"/>"
+            xml(MsgCommand::Sfx(sfx, MsgSfxType::Fade(MsgSfxFadeArgs { duration: 2, volume: 3 })))?,
+            "<sound name=\"bgm\" cmd=\"fade\" duration=\"2\" volume=\"3\"/>"
         );
         Ok(())
     }

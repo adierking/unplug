@@ -1,4 +1,5 @@
-use crate::data::{Music, SoundEvent};
+use crate::data::music::{Music, MusicDefinition};
+use crate::data::sound_event::{SoundEvent, SoundEventDefinition};
 use std::convert::TryFrom;
 
 /// The special bank value (hiword) corresponding to a music ID.
@@ -11,6 +12,16 @@ const MUSIC_BANK: u32 = 0xffff;
 pub enum SoundId {
     Sound(SoundEvent),
     Music(Music),
+}
+
+impl SoundId {
+    /// Gets the name of the corresponding audio file without the extension.
+    pub fn name(&self) -> &'static str {
+        match *self {
+            Self::Sound(sound) => SoundEventDefinition::get(sound).name,
+            Self::Music(music) => MusicDefinition::get(music).name,
+        }
+    }
 }
 
 impl From<SoundEvent> for SoundId {
@@ -67,9 +78,11 @@ mod tests {
     fn test_try_from_u32() {
         let id = SoundId::try_from(0x00040015).unwrap();
         assert_eq!(id, SoundId::Sound(SoundEvent::KitchenOil));
+        assert_eq!(id.name(), "kitchen_oil");
 
         let id = SoundId::try_from(0xffff0010).unwrap();
         assert_eq!(id, SoundId::Music(Music::BgmNight));
+        assert_eq!(id.name(), "bgm_night");
 
         assert!(SoundId::try_from(0x00040028).is_err());
         assert!(SoundId::try_from(0xfffe0000).is_err());

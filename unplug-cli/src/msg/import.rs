@@ -8,13 +8,16 @@ use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Cursor, Seek, SeekFrom};
 use std::mem;
 use std::path::Path;
 use std::str;
 use tempfile::NamedTempFile;
-use unplug::common::{Text, WriteTo};
+use unplug::common::{SoundId, Text, WriteTo};
+use unplug::data::music::MUSIC;
+use unplug::data::sound_event::SOUND_EVENTS;
 use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
 use unplug::dvd::ArchiveBuilder;
 use unplug::event::msg::*;
@@ -52,6 +55,21 @@ fn parse_yes_no(string: &str) -> Result<bool> {
         QUESTION_NO => Ok(false),
         _ => bail!("Invalid question value: {}", string),
     }
+}
+
+/// Parses a sound or music name into a `SoundId`.
+fn parse_sound(name: &str) -> Result<SoundId> {
+    for music in MUSIC {
+        if unicase::eq(music.name, name) {
+            return Ok(music.id.into());
+        }
+    }
+    for sound in SOUND_EVENTS {
+        if unicase::eq(sound.name, name) {
+            return Ok(sound.id.into());
+        }
+    }
+    bail!("Invalid sound name: \"{}\"", name);
 }
 
 /// Reads messages from an XML file.
@@ -347,24 +365,33 @@ impl<R: BufRead> MessageReader<R> {
     }
 
     fn read_sfx(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
-        let (mut id, mut cmd, mut duration, mut volume) = (None, None, None, None);
+        let (mut id, mut name, mut cmd, mut duration, mut volume) = (None, None, None, None, None);
         for attr in elem.attributes() {
             let (key, value) = self.decode_attribute(attr?)?;
             match key {
-                ATTR_ID => id = Some(parse_int(value)? as u32),
+                ATTR_ID => id = Some(parse_int(value)? as u32), // Deprecated
+                ATTR_NAME => name = Some(value.to_owned()),
                 ATTR_CMD => cmd = Some(value.to_owned()),
                 ATTR_DURATION => duration = Some(parse_int(value)? as u16),
                 ATTR_VOLUME => volume = Some(parse_int(value)? as u8),
                 _ => bail!("Unexpected attribute: {}", key),
             }
         }
-        let id = id.ok_or_else(|| anyhow!("Missing {} attribute", ATTR_ID))?;
+
+        let sound = if let Some(name) = &name {
+            parse_sound(name)?
+        } else if let Some(id) = id {
+            id.try_into().map_err(|id| anyhow!("Invalid sound ID: {:#x}", id))?
+        } else {
+            bail!("Missing {} attribute", ATTR_NAME);
+        };
+
         let cmd = cmd.ok_or_else(|| anyhow!("Missing {} attribute", ATTR_CMD))?;
         // duration and volume are optional so the errors here are only checked if necessary
         let duration = duration.ok_or_else(|| anyhow!("Missing {} attribute", ATTR_DURATION));
         let volume = volume.ok_or_else(|| anyhow!("Missing {} attribute", ATTR_VOLUME));
         Ok(MsgCommand::Sfx(
-            id as i32,
+            sound,
             match &*cmd {
                 SFX_FADE_IN => MsgSfxType::FadeIn(duration?),
                 SFX_FADE_OUT => MsgSfxType::FadeOut(duration?),
@@ -627,6 +654,7 @@ mod tests {
     use super::*;
 
     use std::io::Cursor;
+    use unplug::data::{Music, SoundEvent};
 
     fn cmd(xml: &[u8]) -> Result<MsgCommand> {
         let mut reader = MessageReader::new(Cursor::new(xml));
@@ -664,6 +692,16 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_sound() -> Result<()> {
+        assert_eq!(parse_sound("elec")?, SoundId::Sound(SoundEvent::Elec));
+        assert_eq!(parse_sound("ElEc")?, SoundId::Sound(SoundEvent::Elec));
+        assert_eq!(parse_sound("bgm_night")?, SoundId::Music(Music::BgmNight));
+        assert_eq!(parse_sound("BgM_NiGhT")?, SoundId::Music(Music::BgmNight));
+        assert!(parse_sound("foo").is_err());
+        Ok(())
+    }
+
+    #[test]
     fn test_import_speed() -> Result<()> {
         assert_eq!(cmd(b"<font speed=\"2\"/>")?, MsgCommand::Speed(2));
         Ok(())
@@ -693,23 +731,39 @@ mod tests {
 
     #[test]
     fn test_import_sfx() -> Result<()> {
-        assert_eq!(cmd(b"<sound id=\"1\" cmd=\"wait\"/>")?, MsgCommand::Sfx(1, MsgSfxType::Wait));
-        assert_eq!(cmd(b"<sound id=\"1\" cmd=\"stop\"/>")?, MsgCommand::Sfx(1, MsgSfxType::Stop));
-        assert_eq!(cmd(b"<sound id=\"1\" cmd=\"play\"/>")?, MsgCommand::Sfx(1, MsgSfxType::Play));
+        let sfx = Music::Bgm.into();
         assert_eq!(
-            cmd(b"<sound id=\"1\" cmd=\"fade-out\" duration=\"2\"/>")?,
-            MsgCommand::Sfx(1, MsgSfxType::FadeOut(2))
+            cmd(b"<sound name=\"bgm\" cmd=\"wait\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::Wait)
         );
         assert_eq!(
-            cmd(b"<sound id=\"1\" cmd=\"fade-in\" duration=\"2\"/>")?,
-            MsgCommand::Sfx(1, MsgSfxType::FadeIn(2))
+            cmd(b"<sound name=\"bgm\" cmd=\"stop\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::Stop)
         );
         assert_eq!(
-            cmd(b"<sound id=\"1\" cmd=\"fade\" duration=\"2\" volume=\"3\"/>")?,
-            MsgCommand::Sfx(1, MsgSfxType::Fade(MsgSfxFadeArgs { duration: 2, volume: 3 }))
+            cmd(b"<sound name=\"bgm\" cmd=\"play\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::Play)
         );
-        assert_eq!(cmd(b"<sound id=\"1\" cmd=\"unk5\"/>")?, MsgCommand::Sfx(1, MsgSfxType::Unk5));
-        assert_eq!(cmd(b"<sound id=\"1\" cmd=\"unk6\"/>")?, MsgCommand::Sfx(1, MsgSfxType::Unk6));
+        assert_eq!(
+            cmd(b"<sound name=\"bgm\" cmd=\"fade-out\" duration=\"2\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::FadeOut(2))
+        );
+        assert_eq!(
+            cmd(b"<sound name=\"bgm\" cmd=\"fade-in\" duration=\"2\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::FadeIn(2))
+        );
+        assert_eq!(
+            cmd(b"<sound name=\"bgm\" cmd=\"fade\" duration=\"2\" volume=\"3\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::Fade(MsgSfxFadeArgs { duration: 2, volume: 3 }))
+        );
+        assert_eq!(
+            cmd(b"<sound name=\"bgm\" cmd=\"unk5\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::Unk5)
+        );
+        assert_eq!(
+            cmd(b"<sound name=\"bgm\" cmd=\"unk6\"/>")?,
+            MsgCommand::Sfx(sfx, MsgSfxType::Unk6)
+        );
         Ok(())
     }
 

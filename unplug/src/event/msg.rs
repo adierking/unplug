@@ -1,6 +1,6 @@
 use super::opcodes::*;
 use crate::common::text::{self, Text};
-use crate::common::{ReadFrom, WriteTo};
+use crate::common::{ReadFrom, SoundId, WriteTo};
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use log::error;
@@ -43,6 +43,9 @@ pub enum Error {
     #[error("unrecognized message SFX command: {0}")]
     UnrecognizedSfx(i8),
 
+    #[error("unrecognized sound ID in message: {0}")]
+    UnrecognizedSound(u32),
+
     #[error("unrecognized message icon: {0}")]
     UnrecognizedIcon(u8),
 
@@ -72,7 +75,7 @@ pub enum MsgCommand {
     /// Plays an animation.
     Anim(MsgAnimArgs),
     /// Plays a sound effect.
-    Sfx(i32, MsgSfxType),
+    Sfx(SoundId, MsgSfxType),
     /// Sets the voice to play.
     Voice(Voice),
     /// Sets the index of the default option in a `Select` command.
@@ -181,7 +184,11 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
                 MSG_WAIT => Some(MsgCommand::Wait(MsgWaitType::read_from(reader)?)),
                 MSG_ANIM => Some(MsgCommand::Anim(MsgAnimArgs::read_from(reader)?)),
                 MSG_SFX => {
-                    Some(MsgCommand::Sfx(reader.read_i32::<LE>()?, MsgSfxType::read_from(reader)?))
+                    let sound = match SoundId::try_from(reader.read_u32::<LE>()?) {
+                        Ok(sound) => sound,
+                        Err(id) => return Err(Error::UnrecognizedSound(id)),
+                    };
+                    Some(MsgCommand::Sfx(sound, MsgSfxType::read_from(reader)?))
                 }
                 MSG_VOICE => {
                     let voice = reader.read_u8()?;
@@ -293,7 +300,7 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for MsgArgs {
                 }
                 MsgCommand::Sfx(id, ty) => {
                     writer.write_u8(MSG_SFX)?;
-                    writer.write_i32::<LE>(*id)?;
+                    writer.write_u32::<LE>(u32::from(*id))?;
                     ty.write_to(writer)?;
                 }
                 MsgCommand::Voice(voice) => {
@@ -812,7 +819,9 @@ bitflags! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::assert_write_and_read;
+    use crate::data::Music;
 
     fn msg(command: MsgCommand) -> MsgArgs {
         vec![command].into()
@@ -824,6 +833,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_msg() {
+        let sfx = SoundId::Music(Music::Bgm);
         assert_write_and_read!(msg(MsgCommand::Speed(1)));
         assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::Time(1))));
         assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::AtcMenu)));
@@ -831,17 +841,17 @@ mod tests {
         assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::LeftPlug)));
         assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::RightPlug)));
         assert_write_and_read!(msg(MsgCommand::Anim(MsgAnimArgs { flags: 1, obj: 2, anim: 3 })));
-        assert_write_and_read!(msg(MsgCommand::Sfx(1, MsgSfxType::Wait)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(1, MsgSfxType::Stop)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(1, MsgSfxType::Play)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(1, MsgSfxType::FadeOut(2))));
-        assert_write_and_read!(msg(MsgCommand::Sfx(1, MsgSfxType::FadeIn(2))));
+        assert_write_and_read!(msg(MsgCommand::Sfx(sfx, MsgSfxType::Wait)));
+        assert_write_and_read!(msg(MsgCommand::Sfx(sfx, MsgSfxType::Stop)));
+        assert_write_and_read!(msg(MsgCommand::Sfx(sfx, MsgSfxType::Play)));
+        assert_write_and_read!(msg(MsgCommand::Sfx(sfx, MsgSfxType::FadeOut(2))));
+        assert_write_and_read!(msg(MsgCommand::Sfx(sfx, MsgSfxType::FadeIn(2))));
         assert_write_and_read!(msg(MsgCommand::Sfx(
-            1,
+            sfx,
             MsgSfxType::Fade(MsgSfxFadeArgs { duration: 1, volume: 2 })
         )));
-        assert_write_and_read!(msg(MsgCommand::Sfx(1, MsgSfxType::Unk5)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(1, MsgSfxType::Unk6)));
+        assert_write_and_read!(msg(MsgCommand::Sfx(sfx, MsgSfxType::Unk5)));
+        assert_write_and_read!(msg(MsgCommand::Sfx(sfx, MsgSfxType::Unk6)));
         assert_write_and_read!(msg(MsgCommand::Voice(Voice::Gebah)));
         assert_write_and_read!(msg(MsgCommand::Default(DefaultArgs {
             flags: DefaultFlags::VARIABLE,

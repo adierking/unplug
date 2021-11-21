@@ -40,6 +40,7 @@ pub const ATTR_FLAGS: &str = "flags";
 pub const ATTR_ID: &str = "id";
 pub const ATTR_LEFT: &str = "left";
 pub const ATTR_MONO: &str = "mono";
+pub const ATTR_NAME: &str = "name";
 pub const ATTR_OBJ: &str = "obj";
 pub const ATTR_RIGHT: &str = "right";
 pub const ATTR_ROTATION: &str = "rotation";
