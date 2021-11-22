@@ -1,6 +1,7 @@
 use anyhow::Result;
-use crc32fast::Hasher;
 use log::info;
+use seahash::SeaHasher;
+use std::hash::Hasher;
 use std::io::BufReader;
 use unplug::audio::format::{DspFormat, PcmS16Le, ReadWriteBytes};
 use unplug::audio::transport::hps::{Block, HpsStream};
@@ -22,23 +23,28 @@ fn validate_channel(hps: &HpsStream, block: &Block, channel: usize) {
     assert_eq!(data[0] as u16, expected);
 }
 
-fn decode_and_crc32(hps: &HpsStream) -> Result<u32> {
-    let mut hasher = Hasher::new();
+fn decode_and_hash(hps: &HpsStream) -> Result<u64> {
+    let mut hasher = SeaHasher::new();
     let mut decoder = hps.decoder();
     while let Some(samples) = decoder.read_samples()? {
         let mut bytes = vec![];
         PcmS16Le::write_bytes(&mut bytes, &samples.data)?;
-        hasher.update(&bytes);
+        hasher.write(&bytes);
     }
-    Ok(hasher.finalize())
+    Ok(hasher.finish())
 }
 
 #[test]
 fn test_read_all_music() -> Result<()> {
-    common::init_logging();
+    let rehash = common::check_rehash();
+    if rehash {
+        println!("const CHECKSUMS: &[(Music, &str, u64)] = &[");
+    } else {
+        common::init_logging();
+    }
 
     let mut iso = common::open_iso()?;
-    for &(id, expected) in CHECKSUMS {
+    for &(id, name, expected) in CHECKSUMS {
         let path = MusicDefinition::get(id).path();
         info!("Reading {}", path);
         let mut reader = BufReader::new(iso.open_file_at(&path)?);
@@ -48,121 +54,134 @@ fn test_read_all_music() -> Result<()> {
             validate_channel(&hps, block, 0);
             validate_channel(&hps, block, 1);
         }
-        let actual = decode_and_crc32(&hps)?;
-        assert_eq!(actual, expected, "{:?} checksum mismatch", id);
+        let actual = decode_and_hash(&hps)?;
+        if rehash {
+            println!("    (Music::{}, {:?}, 0x{:>016x}),", name, name, actual);
+        } else {
+            assert_eq!(actual, expected, "{} checksum mismatch", name);
+        }
     }
 
+    if rehash {
+        println!("];")
+    }
     Ok(())
 }
 
-/// Decoded audio CRC32s for finding regressions.
-const CHECKSUMS: &[(Music, u32)] = &[
-    (Music::Abare, 0x621690e5),
-    (Music::American, 0xdee99213),
-    (Music::Angry, 0x6b831e0b),
-    (Music::Appearance, 0x42e0202d),
-    (Music::Arise, 0x18ca8d3),
-    (Music::ArmyEscapeJ1, 0xc19c0214),
-    (Music::ArmyEscapeJ2, 0x8d41ba4f),
-    (Music::ArmyTheme, 0x8f0338ab),
-    (Music::ArmyTraining, 0x29f3f6d8),
-    (Music::Battle1, 0xe9e9eecc),
-    (Music::Battle2, 0x2f01a956),
-    (Music::Bb, 0x8efcb1ed),
-    (Music::Bgm, 0x3e0253e7),
-    (Music::BgmNight, 0xaf37fe98),
-    (Music::Blue, 0xe8804386),
-    (Music::Blues, 0x3a1c272b),
-    (Music::Capsule, 0x911ffe73),
-    (Music::Car, 0x9bbeb128),
-    (Music::Change, 0x14ff9779),
-    (Music::Chicken, 0xc7361b69),
-    (Music::Chip, 0xb866de53),
-    (Music::Conquest, 0xbefc811b),
-    (Music::Cooking, 0x8c4d8f3a),
-    (Music::Death, 0xae6f2017),
-    (Music::Departure, 0x6e13367),
-    (Music::Dexy, 0x8a203320),
-    (Music::Dokodaka, 0x2bdafc3b),
-    (Music::Ds, 0x2486e8bb),
-    (Music::Dupe, 0xed527700),
-    (Music::Ecstasy, 0xeb96ccb0),
-    (Music::Ennui, 0xf09aca52),
-    (Music::Entrance, 0xa62d84e4),
-    (Music::Faceoff, 0x3818bb8f),
-    (Music::Fake, 0xab18e6ad),
-    (Music::Fear, 0x31636066),
-    (Music::Ff, 0xc53ba7ec),
-    (Music::Funk, 0x62800a40),
-    (Music::GiccoUs, 0x389087),
-    (Music::Grief, 0x63ac763d),
-    (Music::Heaven, 0xded5c708),
-    (Music::Hiru, 0x67454189),
-    (Music::HiruWipe, 0x9e64e406),
-    (Music::Hock, 0x9727d315),
-    (Music::Kaimono, 0x7130140d),
-    (Music::Kako, 0x53bc457a),
-    (Music::Kofunk1, 0xca249acf),
-    (Music::Kofunk2, 0xaee09280),
-    (Music::KSabi, 0x967c3953),
-    (Music::KTheme1, 0x16bbb277),
-    (Music::Living, 0x50996bf),
-    (Music::Love, 0xe5de6089),
-    (Music::MartialLaw, 0xbc5178a3),
-    (Music::Memory, 0xa106c3bb),
-    (Music::Menu, 0x1e2bdfd2),
-    (Music::MissionFailure, 0xd701ab33),
-    (Music::MissionSuccess, 0x7611f051),
-    (Music::MSpd1, 0xcfa3c5d2),
-    (Music::MSpd2, 0x95ad832c),
-    (Music::Mugen, 0xb586438d),
-    (Music::Nosehair, 0x745ef0f9),
-    (Music::NWing, 0xff0a085),
-    (Music::Papa1, 0x741f5791),
-    (Music::Papa2, 0xb5884437),
-    (Music::Papa3, 0x430808a7),
-    (Music::Party, 0x48387a9b),
-    (Music::Peach, 0x75e45a5),
-    (Music::Peach2, 0x1b3d3d9e),
-    (Music::Pipe, 0xe1c22a2b),
-    (Music::Prelude, 0xf156fd20),
-    (Music::Present, 0x63c4772e),
-    (Music::Rain, 0xf082181c),
-    (Music::RankupJ1, 0xaba94611),
-    (Music::RankupJ2, 0xd58395d),
-    (Music::Recollection, 0x252861ff),
-    (Music::RecollectionIntro, 0x717dd018),
-    (Music::Reminiscence, 0x6c3d7841),
-    (Music::Reunion, 0xd1832dbc),
-    (Music::Sample, 0xbaa129eb),
-    (Music::Sanpoo, 0xa3bec514),
-    (Music::Shadow, 0x526bb05d),
-    (Music::Ship, 0xa6ddf7f8),
-    (Music::SnareLoop, 0xb34ed123),
-    (Music::Souko, 0x675310f),
-    (Music::Spider, 0xc0ae0314),
-    (Music::Spider2, 0xc0ae0314),
-    (Music::Sunmida, 0x7770b3d4),
-    (Music::SuperRobo, 0x3db61ee3),
-    (Music::Tao, 0x2ae00d42),
-    (Music::TeaParty, 0x367718a7),
-    (Music::Teriyaki, 0xf8c9c486),
-    (Music::Theme, 0x4fc9a357),
-    (Music::Timeslip, 0xd43199f7),
-    (Music::ToyBgm1, 0x860d1c59),
-    (Music::ToyBgm2, 0x9697fa5c),
-    (Music::ToyBgm3, 0xb93c98f9),
-    (Music::ToyRex, 0x9e10099d),
-    (Music::Tpds, 0xf5f307dc),
-    (Music::Training, 0x29efcd2),
-    (Music::UfoBgm, 0x78ca6700),
-    (Music::Victory, 0x84dee699),
-    (Music::Violin, 0xff5bb9d4),
-    (Music::Wrench, 0xcae439ed),
-    (Music::Yodomi, 0x173b5ff8),
-    (Music::Yodomi2, 0x6bd83e0),
-    (Music::Yoru, 0x132bf236),
-    (Music::YoruWipe, 0xc7aa3b62),
-    (Music::Yusho, 0x9347a315),
-    (Music::Zobin, 0xc764ed5a),
+/// Decoded audio seahashes for finding regressions.
+///
+/// Run this test with `--nocapture` and the `UNPLUG_TEST_REHASH` environment variable set to
+/// regenerate this list. e.g. on Unix systems:
+///
+///     UNPLUG_TEST_REHASH=1 cargo test --test read_all_music -- --nocapture
+///
+const CHECKSUMS: &[(Music, &str, u64)] = &[
+    (Music::Abare, "Abare", 0x60be582511899469),
+    (Music::American, "American", 0x2ccb8a295831eb4f),
+    (Music::Angry, "Angry", 0xcbe1a6fbc6a51d02),
+    (Music::Appearance, "Appearance", 0xa1322ecbd39e3bc4),
+    (Music::Arise, "Arise", 0xbdd6cbd9b43680b4),
+    (Music::ArmyEscapeJ1, "ArmyEscapeJ1", 0x746839800fca81ca),
+    (Music::ArmyEscapeJ2, "ArmyEscapeJ2", 0x0a3775b04a14b622),
+    (Music::ArmyTheme, "ArmyTheme", 0xf647a59a61f786da),
+    (Music::ArmyTraining, "ArmyTraining", 0x19e4b769c05cd7b3),
+    (Music::Battle1, "Battle1", 0xd577ad7d21059be8),
+    (Music::Battle2, "Battle2", 0xb15c31d90e31e48e),
+    (Music::Bb, "Bb", 0x13db72bb424ff1b9),
+    (Music::Bgm, "Bgm", 0xcad20711104b8748),
+    (Music::BgmNight, "BgmNight", 0x67cca292c41fe0b5),
+    (Music::Blue, "Blue", 0xfe2257bb77de43ee),
+    (Music::Blues, "Blues", 0x6de677d9d12809f7),
+    (Music::Capsule, "Capsule", 0x92030d2e6f651ac6),
+    (Music::Car, "Car", 0xecc06d93dc5f913e),
+    (Music::Change, "Change", 0xe7dc1c289b36fa73),
+    (Music::Chicken, "Chicken", 0xcd6c09d393df754c),
+    (Music::Chip, "Chip", 0x924f95a1d5811c8f),
+    (Music::Conquest, "Conquest", 0x58710b0e302ffa84),
+    (Music::Cooking, "Cooking", 0xa88c40636032d881),
+    (Music::Death, "Death", 0x43ebf4752bad3d53),
+    (Music::Departure, "Departure", 0x108dc1ea67827990),
+    (Music::Dexy, "Dexy", 0x5e7ddc5170a7f089),
+    (Music::Dokodaka, "Dokodaka", 0x3dbee9354ae3693d),
+    (Music::Ds, "Ds", 0xd603e3f8ea5d4624),
+    (Music::Dupe, "Dupe", 0x84bbfd285e908cf2),
+    (Music::Ecstasy, "Ecstasy", 0xdd27ffc79eaaf0c9),
+    (Music::Ennui, "Ennui", 0x26963e09fb813a3f),
+    (Music::Entrance, "Entrance", 0x331a5dabfd001648),
+    (Music::Faceoff, "Faceoff", 0xc663cd4623b6ea18),
+    (Music::Fake, "Fake", 0x4ddfc0aeda835e8e),
+    (Music::Fear, "Fear", 0x884a3b7652e8d843),
+    (Music::Ff, "Ff", 0xef190e05dd021afd),
+    (Music::Funk, "Funk", 0xebe04c0d455c6b79),
+    (Music::GiccoUs, "GiccoUs", 0xfd229f3111bb7b2e),
+    (Music::Grief, "Grief", 0xb071f94c76e96d32),
+    (Music::Heaven, "Heaven", 0xccfed2b87ffcdf9e),
+    (Music::Hiru, "Hiru", 0x8bed8afef6ef89ad),
+    (Music::HiruWipe, "HiruWipe", 0xf0b5b4b21c6e2930),
+    (Music::Hock, "Hock", 0x88d49c39a6c358a8),
+    (Music::Kaimono, "Kaimono", 0xf950982417fab101),
+    (Music::Kako, "Kako", 0x9b42e1361624fae6),
+    (Music::Kofunk1, "Kofunk1", 0x962fabdd38fd3377),
+    (Music::Kofunk2, "Kofunk2", 0x63385d20163d84a1),
+    (Music::KSabi, "KSabi", 0x82c3bf03871d44a8),
+    (Music::KTheme1, "KTheme1", 0x8c2a1ba4a841d87b),
+    (Music::Living, "Living", 0x4ccdfa2361bb9576),
+    (Music::Love, "Love", 0x3dd148ceb4ebd523),
+    (Music::MartialLaw, "MartialLaw", 0x6b0952180761ccca),
+    (Music::Memory, "Memory", 0x74b97f9992ea0bfd),
+    (Music::Menu, "Menu", 0x95dc847e336eb1e9),
+    (Music::MissionFailure, "MissionFailure", 0xc79404941a886105),
+    (Music::MissionSuccess, "MissionSuccess", 0x2c4968baf3383360),
+    (Music::MSpd1, "MSpd1", 0xf68fe016c65a446f),
+    (Music::MSpd2, "MSpd2", 0x1380eb0ad3140b40),
+    (Music::Mugen, "Mugen", 0x6cf50394b248ceef),
+    (Music::Nosehair, "Nosehair", 0xe6e4f20dec288cb2),
+    (Music::NWing, "NWing", 0x32d02942b089376a),
+    (Music::Papa1, "Papa1", 0x6f0d1b42e5d9be84),
+    (Music::Papa2, "Papa2", 0xf3ec99f3dd8996d7),
+    (Music::Papa3, "Papa3", 0xecb0c18980624921),
+    (Music::Party, "Party", 0x72816887d1619948),
+    (Music::Peach, "Peach", 0xd379dea12842911c),
+    (Music::Peach2, "Peach2", 0x959edcab3ad5b4a7),
+    (Music::Pipe, "Pipe", 0x9044182993998347),
+    (Music::Prelude, "Prelude", 0x46f0cc0990593911),
+    (Music::Present, "Present", 0x0a1088a426f87e8a),
+    (Music::Rain, "Rain", 0x72d4fa8bc0e15835),
+    (Music::RankupJ1, "RankupJ1", 0x36330fdf59376acd),
+    (Music::RankupJ2, "RankupJ2", 0xf6ee36bc5fa28868),
+    (Music::Recollection, "Recollection", 0x12fc154438f85bae),
+    (Music::RecollectionIntro, "RecollectionIntro", 0x91ee04f2b23ba0b2),
+    (Music::Reminiscence, "Reminiscence", 0xa9fbb5bbf477be9f),
+    (Music::Reunion, "Reunion", 0x75c2ab5f7f5f52a2),
+    (Music::Sample, "Sample", 0x6ec1d86328937207),
+    (Music::Sanpoo, "Sanpoo", 0x8cb6dfe9fc549e44),
+    (Music::Shadow, "Shadow", 0xd3e7a61c98ceac11),
+    (Music::Ship, "Ship", 0xc636dd18de3f8ef5),
+    (Music::SnareLoop, "SnareLoop", 0x8851ad7a4bcf556f),
+    (Music::Souko, "Souko", 0x14c26445f22ebf3e),
+    (Music::Spider, "Spider", 0xfbd133a80dbdc5c5),
+    (Music::Spider2, "Spider2", 0xfbd133a80dbdc5c5),
+    (Music::Sunmida, "Sunmida", 0x185667fd0916fc9d),
+    (Music::SuperRobo, "SuperRobo", 0xd793999767439230),
+    (Music::Tao, "Tao", 0x63a322835545e3b8),
+    (Music::TeaParty, "TeaParty", 0xf30d23d3a13e470c),
+    (Music::Teriyaki, "Teriyaki", 0x9ad56f017f0932e7),
+    (Music::Theme, "Theme", 0x801ab089a401b432),
+    (Music::Timeslip, "Timeslip", 0xc00fbd0bb9a2070f),
+    (Music::ToyBgm1, "ToyBgm1", 0xeb9357e50fe95041),
+    (Music::ToyBgm2, "ToyBgm2", 0x90672a801911066d),
+    (Music::ToyBgm3, "ToyBgm3", 0xb38adef2d1ea74ec),
+    (Music::ToyRex, "ToyRex", 0xa25c877d77876393),
+    (Music::Tpds, "Tpds", 0xe27deccd5187dc01),
+    (Music::Training, "Training", 0xe8d84a69d44055af),
+    (Music::UfoBgm, "UfoBgm", 0x95613e9490b18bb9),
+    (Music::Victory, "Victory", 0x59d2f396049afde8),
+    (Music::Violin, "Violin", 0x60e829e80678bf32),
+    (Music::Wrench, "Wrench", 0xc0d8cffe08f49495),
+    (Music::Yodomi, "Yodomi", 0x9a9e3589ff9fe527),
+    (Music::Yodomi2, "Yodomi2", 0xd71ba365243e3a72),
+    (Music::Yoru, "Yoru", 0xd6e3ab4a76a88fa1),
+    (Music::YoruWipe, "YoruWipe", 0xc254c7cbd73e30e1),
+    (Music::Yusho, "Yusho", 0xf978a039b5e11b7b),
+    (Music::Zobin, "Zobin", 0x66bfff6c5ada1b40),
 ];

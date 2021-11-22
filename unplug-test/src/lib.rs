@@ -9,11 +9,12 @@ use tempfile::{NamedTempFile, TempPath};
 // rust-analyzer doesn't like this import but it should be fine, just disable the diagnostic
 use unplug::dvd::DiscStream;
 
-pub static GAME_ID: &str = "GGTE01";
+pub const GAME_ID: &str = "GGTE01";
 
-pub static QP_PATH: &str = "qp.bin";
+pub const QP_PATH: &str = "qp.bin";
+pub const QP_GLOBALS_PATH: &str = "bin/e/globals.bin";
 
-pub static QP_GLOBALS_PATH: &str = "bin/e/globals.bin";
+const ENV_REHASH: &str = "UNPLUG_TEST_REHASH";
 
 static INIT_LOGGING: Once = Once::new();
 
@@ -92,4 +93,9 @@ pub fn compare_streams(mut a: impl Read, mut b: impl Read) -> Result<bool> {
             return Ok(false);
         }
     }
+}
+
+/// Returns `true` if the UNPLUG_TEST_REHASH environment variable is set.
+pub fn check_rehash() -> bool {
+    !env::var(ENV_REHASH).unwrap_or_default().is_empty()
 }

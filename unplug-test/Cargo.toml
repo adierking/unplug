@@ -12,6 +12,6 @@ tempfile = "3"
 unplug = { path = "../unplug" }
 
 [dev-dependencies]
-crc32fast = "1.2.1"
+seahash = "4.1.0"
 lazy_static = "1.4.0"
 serial_test = "*"
