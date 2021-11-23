@@ -25,6 +25,9 @@ impl FormatTag for GcAdpcm {
 
 impl StaticFormat for GcAdpcm {
     const FORMAT: Format = Format::GcAdpcm;
+    fn allocate(len: usize) -> Vec<Self::Data> {
+        vec![0; (len + 1) / 2]
+    }
 }
 
 impl ExtendSamples for GcAdpcm {

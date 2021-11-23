@@ -598,6 +598,11 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
             (Some(l), Some(r)) => (l, r),
             _ => return Ok(None),
         };
+
+        let len = left.len;
+        if len != right.len || left.data.len() < len || right.data.len() < len {
+            return Err(Error::DifferentChannelSizes);
+        }
         if left.channels != 1 || right.channels != 1 {
             return Err(Error::StreamNotMono);
         }
@@ -605,11 +610,24 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
             return Err(Error::InconsistentSampleRate);
         }
 
-        // TODO: Optimize?
-        let mut merged = Vec::with_capacity(left.data.len() + right.data.len());
-        for (&l, &r) in left.data.iter().take(left.len).zip(&right.data[..right.len]) {
-            merged.push(l);
-            merged.push(r);
+        let mut merged = F::allocate(len * 2);
+        debug_assert!(merged.len() == len * 2);
+        // Safety:
+        // - We know `merged` is zero-initialized to a length of `len * 2`
+        // - We know that `left.data` and `right.data` are at least `len` in size
+        unsafe {
+            let mut left_ptr = left.data.as_ptr();
+            let mut right_ptr = right.data.as_ptr();
+            let mut merge_ptr = merged.as_mut_ptr();
+            let merge_end = merge_ptr.add(len * 2);
+            while merge_ptr != merge_end {
+                // Using pointers bypasses bounds checks
+                *merge_ptr = *left_ptr;
+                *merge_ptr.add(1) = *right_ptr;
+                left_ptr = left_ptr.add(1);
+                right_ptr = right_ptr.add(1);
+                merge_ptr = merge_ptr.add(2);
+            }
         }
         Ok(Some(Samples::from_pcm(merged, 2, left.rate)))
     }
@@ -748,6 +766,9 @@ mod tests {
     }
     impl StaticFormat for PcmS16LeParams {
         const FORMAT: Format = Format::PcmS16Le;
+        fn allocate(len: usize) -> Vec<Self::Data> {
+            PcmS16Le::allocate(len)
+        }
     }
     impl ExtendSamples for PcmS16LeParams {
         fn extend_samples(

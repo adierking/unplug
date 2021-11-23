@@ -121,6 +121,10 @@ pub trait StaticFormat: FormatTag {
     /// The static `Format` value.
     const FORMAT: Format;
 
+    /// Allocates a zero-initialized vector with at least `len` addressable units. This enables fast
+    /// allocation for most types.
+    fn allocate(len: usize) -> Vec<Self::Data>;
+
     /// Gets the width of the format's smallest addressable unit in bits. See
     /// `Format::bits_per_sample()`.
     fn bits(&self) -> usize {

@@ -31,7 +31,7 @@ use private::*;
 
 /// Declares a PCM format.
 macro_rules! pcm_format {
-    ($name:ident, $data:ty, $endian:ty) => {
+    ($name:ident, $data:ty, $endian:ty, $zero:expr) => {
         #[derive(Copy, Clone)]
         pub struct $name;
         impl FormatTag for $name {
@@ -40,6 +40,10 @@ macro_rules! pcm_format {
         }
         impl StaticFormat for $name {
             const FORMAT: Format = Format::$name;
+            fn allocate(len: usize) -> Vec<Self::Data> {
+                // `vec![0; len]` is a very fast way to allocate a vector!
+                vec![$zero; len]
+            }
         }
         impl PcmFormat for $name {
             type Endian = $endian;
@@ -47,12 +51,12 @@ macro_rules! pcm_format {
     };
 }
 
-pcm_format!(PcmS8, i8, NE);
-pcm_format!(PcmS16Le, i16, LE);
-pcm_format!(PcmS16Be, i16, BE);
-pcm_format!(PcmS24Le, I24, LE);
-pcm_format!(PcmS32Le, i32, LE);
-pcm_format!(PcmF32Le, f32, LE);
+pcm_format!(PcmS8, i8, NE, 0);
+pcm_format!(PcmS16Le, i16, LE, 0);
+pcm_format!(PcmS16Be, i16, BE, 0);
+pcm_format!(PcmS24Le, I24, LE, I24::new(0));
+pcm_format!(PcmS32Le, i32, LE, 0);
+pcm_format!(PcmF32Le, f32, LE, 0.0);
 
 /// Implements support for zero-cost casting between two PCM formats.
 macro_rules! pcm_cast {
