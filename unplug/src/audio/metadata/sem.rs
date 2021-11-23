@@ -9,8 +9,8 @@ use std::io::{Read, Seek, SeekFrom};
 /// The file header.
 #[derive(Debug, Clone, Default)]
 struct Header {
-    unk_00: u32, // zero
-    unk_04: u32, // zero
+    _unk_00: u32, // zero
+    _unk_04: u32, // zero
     /// The base index for each event group. Usually these just correspond to each sound bank.
     group_bases: Vec<u32>,
     /// The file offsets of the first action in each event.
@@ -21,8 +21,8 @@ impl<R: Read + ?Sized> ReadFrom<R> for Header {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let mut header = Self {
-            unk_00: reader.read_u32::<BE>()?,
-            unk_04: reader.read_u32::<BE>()?,
+            _unk_00: reader.read_u32::<BE>()?,
+            _unk_04: reader.read_u32::<BE>()?,
             ..Default::default()
         };
         let num_groups = reader.read_u32::<BE>()?;

@@ -263,10 +263,10 @@ fn usage() {
 #[derive(Debug, Copy, Clone, Default)]
 struct RawObjectDefinition {
     model_addr: u32,
-    unk_04: u32,
-    unk_08: u32,
-    unk_0c: u32,
-    unk_10: u32,
+    _unk_04: u32,
+    _unk_08: u32,
+    _unk_0c: u32,
+    _unk_10: u32,
     class: u16,
     subclass: u16,
 }
@@ -276,10 +276,10 @@ impl<R: Read + ?Sized> ReadFrom<R> for RawObjectDefinition {
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
             model_addr: reader.read_u32::<BE>()?,
-            unk_04: reader.read_u32::<BE>()?,
-            unk_08: reader.read_u32::<BE>()?,
-            unk_0c: reader.read_u32::<BE>()?,
-            unk_10: reader.read_u32::<BE>()?,
+            _unk_04: reader.read_u32::<BE>()?,
+            _unk_08: reader.read_u32::<BE>()?,
+            _unk_0c: reader.read_u32::<BE>()?,
+            _unk_10: reader.read_u32::<BE>()?,
             class: reader.read_u16::<BE>()?,
             subclass: reader.read_u16::<BE>()?,
         })
@@ -606,7 +606,7 @@ fn read_suits(
 struct RawStageDefinition {
     name_addr: u32,
     index: i32,
-    flags: u32,
+    _flags: u32,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for RawStageDefinition {
@@ -615,7 +615,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for RawStageDefinition {
         Ok(Self {
             name_addr: reader.read_u32::<BE>()?,
             index: reader.read_i32::<BE>()?,
-            flags: reader.read_u32::<BE>()?,
+            _flags: reader.read_u32::<BE>()?,
         })
     }
 }

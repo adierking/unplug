@@ -81,29 +81,29 @@ impl<R: Read + ?Sized> ReadFrom<R> for TaggedOffset {
 #[derive(Debug, Copy, Clone)]
 struct FileHeader {
     /// Magic number (`BRSAR_MAGIC`).
-    magic: u32,
+    _magic: u32,
     /// 0xfeff if big endian, 0xfffe if little endian
-    endian: u16,
+    _endian: u16,
     /// File version (we expect 0x104).
-    version: u16,
+    _version: u16,
     /// Total file size.
-    total_size: u32,
+    _total_size: u32,
     /// Size of this header.
-    header_size: u16,
+    _header_size: u16,
     /// Number of sections in the file.
-    num_sections: u16,
+    _num_sections: u16,
     /// Offset to the SYMB section.
     symb_offset: u32,
     /// Size of the SYMB section.
-    symb_size: u32,
+    _symb_size: u32,
     /// Offset to the INFO section.
     info_offset: u32,
     /// Size of the INFO section.
-    info_size: u32,
+    _info_size: u32,
     /// Offset to the FILE section.
-    file_offset: u32,
+    _file_offset: u32,
     /// Size of the FILE section.
-    file_size: u32,
+    _file_size: u32,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
@@ -132,18 +132,18 @@ impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
             return Err(Error::InvalidBrsar);
         }
         Ok(Self {
-            magic,
-            endian,
-            version,
-            total_size,
-            header_size,
-            num_sections,
+            _magic: magic,
+            _endian: endian,
+            _version: version,
+            _total_size: total_size,
+            _header_size: header_size,
+            _num_sections: num_sections,
             symb_offset: reader.read_u32::<BE>()?,
-            symb_size: reader.read_u32::<BE>()?,
+            _symb_size: reader.read_u32::<BE>()?,
             info_offset: reader.read_u32::<BE>()?,
-            info_size: reader.read_u32::<BE>()?,
-            file_offset: reader.read_u32::<BE>()?,
-            file_size: reader.read_u32::<BE>()?,
+            _info_size: reader.read_u32::<BE>()?,
+            _file_offset: reader.read_u32::<BE>()?,
+            _file_size: reader.read_u32::<BE>()?,
         })
     }
 }
@@ -152,7 +152,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
 #[derive(Debug, Copy, Clone)]
 struct SectionHeader {
     /// The section identifier.
-    magic: u32,
+    _magic: u32,
     /// The size of the section data, including this header.
     size: u32,
 }
@@ -160,7 +160,7 @@ struct SectionHeader {
 impl<R: Read + ?Sized> ReadFrom<R> for SectionHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
-        Ok(Self { magic: reader.read_u32::<BE>()?, size: reader.read_u32::<BE>()? })
+        Ok(Self { _magic: reader.read_u32::<BE>()?, size: reader.read_u32::<BE>()? })
     }
 }
 
@@ -169,10 +169,10 @@ impl<R: Read + ?Sized> ReadFrom<R> for SectionHeader {
 struct SymbHeader {
     /// The offset to the list of string offsets.
     names_offset: u32,
-    mask_offset_1: u32,
-    mask_offset_2: u32,
-    mask_offset_3: u32,
-    mask_offset_4: u32,
+    _mask_offset_1: u32,
+    _mask_offset_2: u32,
+    _mask_offset_3: u32,
+    _mask_offset_4: u32,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for SymbHeader {
@@ -180,10 +180,10 @@ impl<R: Read + ?Sized> ReadFrom<R> for SymbHeader {
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
             names_offset: reader.read_u32::<BE>()?,
-            mask_offset_1: reader.read_u32::<BE>()?,
-            mask_offset_2: reader.read_u32::<BE>()?,
-            mask_offset_3: reader.read_u32::<BE>()?,
-            mask_offset_4: reader.read_u32::<BE>()?,
+            _mask_offset_1: reader.read_u32::<BE>()?,
+            _mask_offset_2: reader.read_u32::<BE>()?,
+            _mask_offset_3: reader.read_u32::<BE>()?,
+            _mask_offset_4: reader.read_u32::<BE>()?,
         })
     }
 }
@@ -191,7 +191,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for SymbHeader {
 /// The SYMB section, containing strings referenced elsewhere in the file.
 #[derive(Debug, Clone)]
 struct SymbSection {
-    header: SymbHeader,
+    _header: SymbHeader,
     names: Vec<String>,
 }
 
@@ -220,7 +220,7 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for SymbSection {
             names.push(name);
         }
 
-        Ok(Self { header, names })
+        Ok(Self { _header: header, names })
     }
 }
 
@@ -230,15 +230,15 @@ struct InfoHeader {
     /// The offset to the sound list.
     sounds: TaggedOffset,
     /// The offset to the bank list.
-    banks: TaggedOffset,
+    _banks: TaggedOffset,
     /// The offset to the players list.
-    players: TaggedOffset,
+    _players: TaggedOffset,
     /// The offset to the collections list.
     collections: TaggedOffset,
     /// The offset to the groups list.
     groups: TaggedOffset,
     /// The offset to the sound counts list.
-    sound_counts: TaggedOffset,
+    _sound_counts: TaggedOffset,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for InfoHeader {
@@ -246,11 +246,11 @@ impl<R: Read + ?Sized> ReadFrom<R> for InfoHeader {
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
             sounds: TaggedOffset::read_from(reader)?,
-            banks: TaggedOffset::read_from(reader)?,
-            players: TaggedOffset::read_from(reader)?,
+            _banks: TaggedOffset::read_from(reader)?,
+            _players: TaggedOffset::read_from(reader)?,
             collections: TaggedOffset::read_from(reader)?,
             groups: TaggedOffset::read_from(reader)?,
-            sound_counts: TaggedOffset::read_from(reader)?,
+            _sound_counts: TaggedOffset::read_from(reader)?,
         })
     }
 }
