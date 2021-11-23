@@ -16,5 +16,6 @@ default-members = [
 
 [profile.release]
 codegen-units = 1
+debug = true
 lto = "thin"
 panic = "abort"

@@ -13,5 +13,10 @@ unplug = { path = "../unplug" }
 
 [dev-dependencies]
 seahash = "4.1.0"
+criterion = { version = "0.3", features = ["html_reports"] }
 lazy_static = "1.4.0"
 serial_test = "*"
+
+[[bench]]
+name = "decode_music"
+harness = false
