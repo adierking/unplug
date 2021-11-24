@@ -4,9 +4,10 @@ use crate::audio::sample::{PeekSamples, ReadSamples};
 use crate::audio::{Error, Result};
 use crate::common::WriteTo;
 use byteorder::{WriteBytesExt, LE};
-use log::{debug, log_enabled, Level};
 use std::borrow::Cow;
 use std::io::{self, Seek, SeekFrom, Write};
+use tracing::level_filters::STATIC_MAX_LEVEL;
+use tracing::{debug, Level};
 
 const DEFAULT_SOFTWARE_NAME: &str = concat!("unplug v", env!("CARGO_PKG_VERSION"));
 
@@ -171,7 +172,7 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
             num_samples += PcmS16Le::index_to_sample(samples.len, self.channels);
         }
 
-        if log_enabled!(Level::Debug) {
+        if STATIC_MAX_LEVEL >= Level::DEBUG {
             let tag = self.samples.tag();
             let duration = (num_samples as f64) / (self.sample_rate as f64);
             let hour = (duration as usize) / 60 / 60;

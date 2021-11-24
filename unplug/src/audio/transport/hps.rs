@@ -8,11 +8,11 @@ use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, Region, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
-use log::{debug, trace};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use tracing::{debug, trace};
 use unplug_proc::{ReadFrom, WriteTo};
 
 /// The magic string at the beginning of an HPS file.

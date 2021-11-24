@@ -6,8 +6,8 @@ use super::subroutine::{
 use super::value::{DefId, Definition, DefinitionMap, Label, Value, ValueKind};
 use crate::event::{Block, BlockId, Ip};
 use arrayvec::ArrayVec;
-use log::debug;
 use std::collections::{hash_map, HashSet, VecDeque};
+use tracing::debug;
 
 /// Helper function to enqueue a block onto a workqueue only if it is not present.
 fn enqueue_block(queue: &mut VecDeque<BlockId>, id: BlockId) {

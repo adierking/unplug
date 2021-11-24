@@ -6,8 +6,8 @@ use crate::event::expr::{ArrayElementExpr, BinaryOp, Expr, ObjExpr, SetExpr};
 use crate::event::msg::{MsgArgs, MsgCommand};
 use crate::event::{BlockId, Ip};
 use arrayvec::ArrayVec;
-use log::warn;
 use std::collections::{hash_map, HashMap, HashSet};
+use tracing::warn;
 
 /// A value which is live in the middle of a block.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -3,12 +3,12 @@ use crate::common::io::pad;
 use crate::common::{ReadSeek, WriteTo};
 use crate::dvd::fst::{self, EntryId, FileTree, FstEntryKind};
 use crate::dvd::OpenFile;
-use log::trace;
 use slotmap::SecondaryMap;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
+use tracing::trace;
 
 const ARCHIVE_ALIGN: u64 = 0x20;
 

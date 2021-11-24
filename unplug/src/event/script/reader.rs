@@ -5,11 +5,11 @@ use crate::event::block::{Block, BlockId, CodeBlock, DataBlock, Ip};
 use crate::event::command::{self, Command};
 use crate::event::expr::{self, ObjBone, ObjPair};
 use byteorder::{ReadBytesExt, LE};
-use log::{debug, error, trace};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::ffi::CString;
 use std::io::SeekFrom;
+use tracing::{debug, error, trace};
 
 /// The kind of data in a data block.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -2,7 +2,7 @@ use super::vgaudio::{calculate_coefficients, encode};
 use super::{GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
-use log::{debug, trace};
+use tracing::{debug, trace};
 
 /// Encodes raw PCM data into GameCube ADPCM format.
 pub struct Encoder<'r, 's> {

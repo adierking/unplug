@@ -4,13 +4,13 @@ use crate::common::io::{copy_within, fill, read_fixed_string, write_fixed_string
 use crate::common::{self, ReadFrom, ReadSeek, ReadWriteSeek, Region, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use encoding_rs::mem;
-use log::{debug, trace};
 use std::cmp;
 use std::convert::TryFrom;
 use std::ffi::CString;
 use std::fmt;
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
+use tracing::{debug, trace};
 
 const DVD_MAGIC: u32 = 0xc2339f3d;
 

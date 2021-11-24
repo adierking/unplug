@@ -2,9 +2,9 @@ use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{ReadSeek, Region};
 use byteorder::{ReadBytesExt, BE};
-use log::{debug, error, trace, warn};
 use minimp3::{Decoder, Error as Mp3Error, Frame};
 use std::io::{Read, Seek, SeekFrom};
+use tracing::{debug, error, trace, warn};
 
 /// Reads audio samples from MP3 data.
 pub struct Mp3Reader<'r> {

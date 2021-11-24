@@ -1,6 +1,6 @@
 use crate::event::{BlockId, Expr};
-use log::warn;
 use slotmap::{new_key_type, SlotMap};
+use tracing::warn;
 
 new_key_type! {
     /// A unique ID for a value definition.

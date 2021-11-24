@@ -7,9 +7,9 @@ use parser::ShopParser;
 use crate::data::{Atc, Item};
 use crate::event::analysis::Label;
 use crate::event::{BlockId, Command, Ip, Script, SetExpr};
-use log::debug;
 use std::collections::HashSet;
 use thiserror::Error;
+use tracing::debug;
 
 /// The result type for shop operations.
 pub type Result<T> = std::result::Result<T, Error>;

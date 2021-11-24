@@ -6,9 +6,9 @@ use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
-use log::{debug, error};
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use tracing::{debug, error};
 
 /// The size of the file header.
 const HEADER_SIZE: u64 = 0x10;

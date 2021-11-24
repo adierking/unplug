@@ -7,10 +7,10 @@ use crate::data::{Atc, Item};
 use crate::event::command::SetArgs;
 use crate::event::expr::BinaryOp;
 use crate::event::{BlockId, Command, Expr, Script, SetExpr};
-use log::warn;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::iter;
+use tracing::warn;
 
 /// Parses `condition` into a set of `Requirement`s.
 fn parse_requirements(condition: &Expr) -> HashSet<Requirement> {

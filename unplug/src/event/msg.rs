@@ -3,12 +3,12 @@ use crate::common::text::{self, Text};
 use crate::common::{ReadFrom, SoundId, WriteTo};
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
-use log::error;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::fmt;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
+use tracing::error;
 
 /// The maximum size of a serialized message command list in bytes.
 const MAX_SIZE: u64 = 2048;

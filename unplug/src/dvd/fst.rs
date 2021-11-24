@@ -3,7 +3,6 @@ use crate::common::{
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use encoding_rs::SHIFT_JIS;
-use log::{debug, trace};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use slotmap::{new_key_type, DenseSlotMap};
 use std::convert::TryFrom;
@@ -13,6 +12,7 @@ use std::iter::FusedIterator;
 use std::mem;
 use std::ops::{Index, IndexMut};
 use thiserror::Error;
+use tracing::{debug, trace};
 
 new_key_type! {
     /// A unique ID for a `FileTree` entry.

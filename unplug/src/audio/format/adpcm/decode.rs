@@ -2,7 +2,7 @@ use super::{GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Format, ReadSamples, Result, Samples, SourceTag};
 use crate::common::clamp_i16;
-use log::trace;
+use tracing::trace;
 
 /// Decodes GameCube ADPCM samples into PCM.
 pub struct Decoder<'r, 's> {

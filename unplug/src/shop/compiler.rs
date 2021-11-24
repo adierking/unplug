@@ -4,9 +4,9 @@ use crate::data::{Atc, Item};
 use crate::event::command::{IfArgs, SetArgs};
 use crate::event::{Block, BlockId, CodeBlock, Command, Expr, Ip, Script, SetExpr};
 use crate::expr;
-use log::Level::Trace;
-use log::{log_enabled, trace, warn};
 use std::convert::TryFrom;
+use tracing::level_filters::STATIC_MAX_LEVEL;
+use tracing::{trace, warn, Level};
 
 const TIMER_5_RATE: i16 = 200;
 const TIMER_10_RATE: i16 = 100;
@@ -225,7 +225,7 @@ impl<'s> ShopCompiler<'s> {
 
         let root = self.last_block.unwrap();
         let compiled = CompiledShop { script: self.script, root };
-        if log_enabled!(Trace) {
+        if STATIC_MAX_LEVEL >= Level::TRACE {
             compiled.log();
         }
         compiled

@@ -2,13 +2,13 @@ use super::format::pcm::{AnyPcm, ConvertPcm, PcmF32Le};
 use super::format::Convert;
 use super::{Error, ReadSamples, Result, Samples};
 use libsamplerate_sys::*;
-use log::trace;
 use std::convert::TryInto;
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::{c_double, c_int, c_long};
 use std::ptr;
+use tracing::trace;
 
 /// The maximum number of output frames to allocate.
 const OUT_BUFFER_FRAMES: usize = 0x1000;

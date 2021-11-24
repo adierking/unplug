@@ -4,10 +4,10 @@
 use crate::audio::{Error, Result};
 use crate::common::{ReadFrom, Region};
 use byteorder::{ReadBytesExt, BE};
-use log::{debug, error};
 use std::any;
 use std::ffi::CString;
 use std::io::{Read, Seek, SeekFrom};
+use tracing::{debug, error};
 
 const BRSAR_MAGIC: u32 = 0x52534152; // 'RSAR'
 const BRSAR_VERSION: u16 = 0x0104;

@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
-log = { version = "0.4", features = ["release_max_level_debug"] }
+log = { version = "0.4" }
 simplelog = "0.10"
 tempfile = "3"
 unplug = { path = "../unplug" }

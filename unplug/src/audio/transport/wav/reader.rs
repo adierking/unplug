@@ -2,9 +2,9 @@ use super::*;
 use crate::audio::format::{PcmS16Le, ReadWriteBytes, StaticFormat};
 use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
-use log::{error, trace};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
+use tracing::{error, trace};
 
 /// RIFF data reader which can recursively read chunks.
 struct RiffReader<'a> {

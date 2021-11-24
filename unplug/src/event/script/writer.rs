@@ -2,11 +2,11 @@ use super::{Error, Result, Script};
 use crate::common::{WriteSeek, WriteTo};
 use crate::event::block::{Block, BlockId, DataBlock, Ip, WriteIp};
 use byteorder::{WriteBytesExt, LE};
-use log::debug;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::io::{self, Seek, SeekFrom, Write};
 use std::num::NonZeroU32;
+use tracing::debug;
 
 /// Maps block IDs to their file offsets
 struct BlockOffsetMap {

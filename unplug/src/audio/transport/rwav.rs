@@ -7,12 +7,12 @@ use crate::audio::{Error, ReadSamples, Result, Samples, SourceChannel, SourceTag
 use crate::common::{ReadFrom, ReadSeek, Region};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
-use log::error;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom};
+use tracing::error;
 
 const RWAV_MAGIC: u32 = 0x52574156; // 'RWAV'
 const RWAV_VERSION: u16 = 0x0102;
