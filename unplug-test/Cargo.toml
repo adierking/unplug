@@ -18,5 +18,8 @@ lazy_static = "1.4.0"
 serial_test = "*"
 
 [[bench]]
-name = "decode_music"
+name = "decode_adpcm"
+harness = false
+[[bench]]
+name = "encode_adpcm"
 harness = false

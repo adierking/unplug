@@ -17,7 +17,7 @@ fn load_music() -> HpsStream {
     HpsStream::open(&mut reader, music.name).expect("failed to load HPS file")
 }
 
-fn decode_music(music: &HpsStream) -> Vec<Samples<'static, PcmS16Le>> {
+fn decode_adpcm(music: &HpsStream) -> Vec<Samples<'static, PcmS16Le>> {
     let mut decoder = music.decoder().owned();
     let mut samples = vec![];
     loop {
@@ -30,8 +30,8 @@ fn decode_music(music: &HpsStream) -> Vec<Samples<'static, PcmS16Le>> {
 }
 
 pub fn bench(c: &mut Criterion) {
-    c.bench_with_input(BenchmarkId::new("decode_music", 0), &load_music(), |b, music| {
-        b.iter_with_large_drop(|| decode_music(music))
+    c.bench_with_input(BenchmarkId::new("decode_adpcm", 0), &load_music(), |b, music| {
+        b.iter_with_large_drop(|| decode_adpcm(music))
     });
 }
 
