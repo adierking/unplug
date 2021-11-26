@@ -14,8 +14,10 @@ default-members = [
     "unplug-test",
 ]
 
+[profile.bench]
+debug = true
+
 [profile.release]
 codegen-units = 1
-debug = true
 lto = "thin"
 panic = "abort"

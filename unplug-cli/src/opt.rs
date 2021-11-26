@@ -14,6 +14,11 @@ pub struct Opt {
     #[structopt(short, long, parse(from_occurrences), global(true))]
     pub verbose: u64,
 
+    /// Capture inferno trace data to a file (for developers)
+    #[cfg(feature = "trace")]
+    #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
+    pub trace: Option<PathBuf>,
+
     #[structopt(subcommand)]
     pub command: Subcommand,
 }

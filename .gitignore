@@ -12,6 +12,7 @@
 /out/
 cargo-timing*.html
 heaptrack.*.gz
+*.folded
 
 # Visual Studio
 .vs/
