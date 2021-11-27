@@ -8,7 +8,7 @@ use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 
 /// The size of the file header.
 const HEADER_SIZE: u64 = 0x10;
@@ -235,6 +235,7 @@ impl Sound {
     }
 
     /// Creates a new `Sound` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
+    #[instrument(level = "trace", skip_all)]
     pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
         let samples = reader.read_all_samples()?;
         let channels = samples.channels;
@@ -253,6 +254,7 @@ impl Sound {
     }
 
     /// Creates a new `Sound` from mono ADPCM sample data.
+    #[instrument(level = "trace", skip_all)]
     pub fn from_adpcm_mono(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
         // Pull the sample rate from the first samples in the stream
         let mut reader = reader.peekable();
@@ -267,6 +269,7 @@ impl Sound {
     }
 
     /// Creates a new `Sound` from stereo ADPCM sample data.
+    #[instrument(level = "trace", skip_all)]
     pub fn from_adpcm_stereo(
         left: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
         right: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
@@ -315,6 +318,7 @@ impl SoundBank {
         Self::open_impl(reader, tag.into())
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn open_impl(reader: &mut dyn ReadSeek, tag: SourceTag) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;
 
@@ -361,6 +365,8 @@ impl SoundBank {
 
 impl<W: Write + Seek + ?Sized> WriteTo<W> for SoundBank {
     type Error = Error;
+
+    #[instrument(level = "trace", skip_all)]
     fn write_to(&self, writer: &mut W) -> Result<()> {
         assert_eq!(writer.seek(SeekFrom::Current(0))?, 0);
 
@@ -427,6 +433,7 @@ pub struct SoundReader<'a> {
 impl<'a> ReadSamples<'a> for SoundReader<'a> {
     type Format = AnyFormat;
 
+    #[instrument(level = "trace", name = "SoundReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         let channel = match self.channel.take() {
             Some(c) => c,

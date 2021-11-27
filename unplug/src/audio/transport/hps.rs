@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use tracing::{debug, trace};
+use tracing::{debug, instrument, trace};
 use unplug_proc::{ReadFrom, WriteTo};
 
 /// The magic string at the beginning of an HPS file.
@@ -217,6 +217,7 @@ impl HpsStream {
         Self::open_impl(reader, tag.into())
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn open_impl(reader: &mut dyn ReadSeek, tag: SourceTag) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;
         let channels: ArrayVec<[Channel; 2]> =
@@ -301,6 +302,7 @@ impl HpsStream {
     }
 
     /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
+    #[instrument(level = "trace", skip_all)]
     pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
         let samples = reader.read_all_samples()?;
         let channels = samples.channels;
@@ -319,6 +321,7 @@ impl HpsStream {
     }
 
     /// Creates a new `HpsStream` from mono ADPCM sample data.
+    #[instrument(level = "trace", skip_all)]
     pub fn from_adpcm_mono(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
         let mut channel = Channel::default();
         let mut blocks = vec![];
@@ -359,6 +362,7 @@ impl HpsStream {
     }
 
     /// Creates a new `HpsStream` from stereo ADPCM sample data.
+    #[instrument(level = "trace", skip_all)]
     pub fn from_adpcm_stereo(
         left_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
         right_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
@@ -419,6 +423,8 @@ impl HpsStream {
 
 impl<W: Write + Seek + ?Sized> WriteTo<W> for HpsStream {
     type Error = Error;
+
+    #[instrument(level = "trace", skip_all)]
     fn write_to(&self, writer: &mut W) -> Result<()> {
         if !(1..=2).contains(&self.channels.len()) {
             return Err(Error::UnsupportedChannels);
@@ -507,6 +513,7 @@ impl Block {
     }
 
     /// Reads block data from `reader` using information from `header` and `channels`.
+    #[instrument(level = "trace", skip_all)]
     fn read_from<R: Read + Seek + ?Sized>(
         reader: &mut R,
         header: &BlockHeader,
@@ -541,6 +548,7 @@ impl Block {
 
     /// Writes the block header and data to `writer`. If `next_offset` is not `None`, it will be
     /// used as the block's `next_offset` instead of the offset after this block.
+    #[instrument(level = "trace", skip_all)]
     fn write_to<W: Write + Seek + ?Sized>(
         &self,
         writer: &mut W,
@@ -628,6 +636,7 @@ pub struct ChannelReader<'a> {
 impl<'a> ReadSamples<'a> for ChannelReader<'a> {
     type Format = AnyFormat;
 
+    #[instrument(level = "trace", name = "ChannelReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
         if self.pos >= self.blocks.len() {
             return Ok(None);

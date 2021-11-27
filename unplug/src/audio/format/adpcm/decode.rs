@@ -2,7 +2,7 @@ use super::{GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::clamp_i16;
-use tracing::trace;
+use tracing::{instrument, trace};
 
 /// Decodes GameCube ADPCM samples into PCM.
 pub struct Decoder<'r, 's> {
@@ -20,6 +20,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
     type Format = PcmS16Le;
 
     #[allow(clippy::verbose_bit_mask)]
+    #[instrument(level = "trace", name = "Decoder", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         let encoded = match self.source.read_samples() {
             Ok(Some(s)) => s,

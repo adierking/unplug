@@ -5,6 +5,7 @@ use byteorder::{NativeEndian as NE, BE, LE};
 use float_cmp::approx_eq;
 use std::marker::PhantomData;
 use std::mem;
+use tracing::instrument;
 
 mod private {
     pub struct TypeInfo {
@@ -309,6 +310,7 @@ where
 {
     type Format = To;
 
+    #[instrument(level = "trace", name = "ConvertPcm", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         let samples = match self.inner.read_samples()? {
             Some(s) => s,

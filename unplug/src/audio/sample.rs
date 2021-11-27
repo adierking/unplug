@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::sync::{Arc, Mutex};
+use tracing::instrument;
 
 /// A packet of audio sample data read from an audio source.
 #[derive(Clone)]
@@ -630,6 +631,7 @@ impl<'r, 's, F: PcmFormat> JoinChannels<'r, 's, F> {
 impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
     type Format = F;
 
+    #[instrument(level = "trace", name = "JoinChannels", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         let left = self.left.read_samples()?;
         let right = self.right.read_samples()?;
@@ -763,6 +765,7 @@ impl<'r, 's, F: PcmFormat> SplitChannelsReader<'r, 's, F> {
 impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
     type Format = F;
 
+    #[instrument(level = "trace", name = "SplitChannels", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         // We assume here that the channels can be read from in any order and that we are only
         // expected to read as much as we need. Each channel must hold onto samples it hasn't

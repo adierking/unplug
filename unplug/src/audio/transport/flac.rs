@@ -4,7 +4,7 @@ use claxon::{self};
 use std::convert::TryFrom;
 use std::io::Read;
 use std::mem;
-use tracing::debug;
+use tracing::{debug, instrument, trace_span};
 
 /// Reads audio samples from FLAC data.
 pub struct FlacReader<'r> {
@@ -29,6 +29,7 @@ impl<'r> FlacReader<'r> {
         Self::new_impl(Box::from(reader), tag.into())
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn new_impl(reader: Box<dyn Read + 'r>, tag: SourceTag) -> Result<Self> {
         let flac = claxon::FlacReader::new(reader)?;
         let info = flac.streaminfo();
@@ -83,13 +84,16 @@ impl<'r> FlacReader<'r> {
 impl ReadSamples<'static> for FlacReader<'_> {
     type Format = AnyFormat;
 
+    #[instrument(level = "trace", name = "FlacReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         // Calling blocks() here will pick up where the last call left off
+        let _block_span = trace_span!("read_next_or_eof").entered();
         let mut reader = self.flac.blocks();
         let block = match reader.read_next_or_eof(mem::take(&mut self.buffer))? {
             Some(b) => b,
             None => return Ok(None),
         };
+        _block_span.exit();
 
         // The channels are all separate chunks of data which need to be interleaved
         let num_samples = block.len() as usize;

@@ -7,7 +7,7 @@ use byteorder::{WriteBytesExt, LE};
 use std::borrow::Cow;
 use std::io::{self, Seek, SeekFrom, Write};
 use tracing::level_filters::STATIC_MAX_LEVEL;
-use tracing::{debug, Level};
+use tracing::{debug, instrument, Level};
 
 const DEFAULT_SOFTWARE_NAME: &str = concat!("unplug v", env!("CARGO_PKG_VERSION"));
 
@@ -128,6 +128,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
     }
 
     /// Prepares the final WAV file and writes it to `writer`.
+    #[instrument(level = "trace", skip_all)]
     pub fn write_to(&mut self, writer: (impl Write + Seek)) -> Result<()> {
         self.update_progress();
         self.peek_audio_info()?;
@@ -171,6 +172,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
     }
 
     /// Writes the `data` chunk.
+    #[instrument(level = "trace", skip_all)]
     fn write_data(&mut self, riff: &mut RiffWriter<impl Write + Seek>) -> Result<()> {
         riff.open_chunk(ID_DATA)?;
         let mut num_samples = 0;

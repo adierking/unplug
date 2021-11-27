@@ -2,7 +2,7 @@ use super::vgaudio::{calculate_coefficients, encode};
 use super::{GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
-use tracing::{debug, trace};
+use tracing::{debug, instrument, trace, trace_span};
 
 /// Encodes raw PCM data into GameCube ADPCM format.
 pub struct Encoder<'r, 's> {
@@ -51,6 +51,7 @@ impl<'r, 's> Encoder<'r, 's> {
         }
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn start_encoding(&mut self) -> Result<()> {
         while let Some(samples) = self.reader.read_samples()? {
             if samples.channels != 1 {
@@ -72,7 +73,8 @@ impl<'r, 's> Encoder<'r, 's> {
             self.pcm.len(),
             self.tag()
         );
-        self.state.coefficients = calculate_coefficients(&self.pcm);
+        self.state.coefficients =
+            trace_span!("calculate_coefficients").in_scope(|| calculate_coefficients(&self.pcm));
         debug!(
             "Encoder context initialized (block size = {:#x}, coefficients = {:?})",
             self.block_size, self.state.coefficients
@@ -84,6 +86,7 @@ impl<'r, 's> Encoder<'r, 's> {
 impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
     type Format = GcAdpcm;
 
+    #[instrument(level = "trace", name = "Encoder", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         if self.pcm.is_empty() {
             self.start_encoding()?;
@@ -101,7 +104,8 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
 
         trace!("Encoding {} samples to ADPCM", num_samples);
         let mut initial_state = self.state;
-        let bytes = encode(&self.pcm[start..end], &mut self.state);
+        let bytes =
+            trace_span!("encode").in_scope(|| encode(&self.pcm[start..end], &mut self.state));
         initial_state.context.predictor_and_scale = bytes[0] as u16;
         self.pos = end;
 

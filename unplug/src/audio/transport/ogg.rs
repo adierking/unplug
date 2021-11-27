@@ -3,7 +3,7 @@ use crate::audio::{Format, ProgressHint, ReadSamples, Result, Samples, SourceTag
 use crate::common::ReadSeek;
 use lewton::inside_ogg::OggStreamReader;
 use std::io::{Read, Seek};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 /// Reads audio samples from Ogg Vorbis data.
 pub struct OggReader<'r> {
@@ -18,6 +18,7 @@ impl<'r> OggReader<'r> {
         Self::new_impl(Box::from(reader), tag.into())
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn new_impl(reader: Box<dyn ReadSeek + 'r>, tag: SourceTag) -> Result<Self> {
         let reader = Self { reader: OggStreamReader::new(reader)?, tag };
         debug!(
@@ -43,6 +44,7 @@ impl<'r> OggReader<'r> {
 impl ReadSamples<'static> for OggReader<'_> {
     type Format = PcmS16Le;
 
+    #[instrument(level = "trace", name = "OggReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         loop {
             match self.reader.read_dec_packet_itl()? {

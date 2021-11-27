@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::{c_double, c_int, c_long};
 use std::ptr;
-use tracing::trace;
+use tracing::{instrument, trace, trace_span};
 
 /// The maximum number of output frames to allocate.
 const OUT_BUFFER_FRAMES: usize = 0x1000;
@@ -86,6 +86,7 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
 
     /// Resamples `samples` to the target rate if it is not `None`, otherwise completes resampling
     /// and returns any additional samples.
+    #[instrument(level = "trace", skip_all)]
     fn resample(
         &mut self,
         samples: Option<Samples<'s, PcmF32Le>>,
@@ -132,7 +133,8 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
             src_ratio: ratio,
             ..Default::default()
         };
-        let error = unsafe { src_process(self.state, &mut data) };
+        let error =
+            trace_span!("src_process").in_scope(|| unsafe { src_process(self.state, &mut data) });
         if error != 0 {
             return Err(make_error(error));
         }

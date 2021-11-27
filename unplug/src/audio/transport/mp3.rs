@@ -4,7 +4,7 @@ use crate::common::{ReadSeek, Region};
 use byteorder::{ReadBytesExt, BE};
 use minimp3::{Decoder, Error as Mp3Error, Frame};
 use std::io::{Read, Seek, SeekFrom};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 
 /// Reads audio samples from MP3 data.
 pub struct Mp3Reader<'r> {
@@ -25,6 +25,7 @@ impl<'r> Mp3Reader<'r> {
         Self::new_impl(Box::from(reader), tag.into())
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn new_impl(mut reader: Box<dyn ReadSeek + 'r>, tag: SourceTag) -> Result<Self> {
         let start_offset = reader.seek(SeekFrom::Current(0))?;
         let mut info = Info::default();
@@ -79,6 +80,7 @@ impl<'r> Mp3Reader<'r> {
     }
 
     /// Reads a frame from `decoder`, or returns `Ok(None)` on EOF.
+    #[instrument(level = "trace", skip_all)]
     fn read_frame(decoder: &mut Decoder<Box<dyn ReadSeek + 'r>>) -> Result<Option<Frame>> {
         match decoder.next_frame() {
             Ok(frame) => Ok(Some(frame)),
@@ -91,6 +93,7 @@ impl<'r> Mp3Reader<'r> {
 impl ReadSamples<'static> for Mp3Reader<'_> {
     type Format = PcmS16Le;
 
+    #[instrument(level = "trace", name = "Mp3Reader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         let frame = match self.next_frame()? {
             Some(frame) => frame,
@@ -226,6 +229,7 @@ fn detect_footer(reader: &mut (impl Read + Seek)) -> Result<Option<u64>> {
 }
 
 /// Locates the offset of the first MPEG frame in `reader`.
+#[instrument(level = "trace", skip(reader))]
 fn find_first_frame(reader: &mut impl Read, base_offset: u64) -> Result<Option<u64>> {
     // Search only the next 4 KB in case this isn't a valid MP3 file. This is kinda hacky, but the
     // worst case scenario here is that we just don't get to remove the audio padding. Oh well.
@@ -243,6 +247,7 @@ fn find_first_frame(reader: &mut impl Read, base_offset: u64) -> Result<Option<u
 }
 
 /// Analyzes an MP3 file to determine its structure and encoding parameters.
+#[instrument(level = "trace", skip_all)]
 fn analyze_mp3(reader: &mut (impl Read + Seek), info: &mut Info) -> Result<()> {
     // The ID3 header can be arbitrarily large, so we have to skip past it first
     info.audio_offset = reader.seek(SeekFrom::Current(0))?;

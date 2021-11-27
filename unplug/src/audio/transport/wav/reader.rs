@@ -4,7 +4,7 @@ use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, So
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
-use tracing::{error, trace};
+use tracing::{error, instrument, trace};
 
 /// RIFF data reader which can recursively read chunks.
 struct RiffReader<'a> {
@@ -111,6 +111,7 @@ impl<'a> WavReader<'a> {
         Self::new_impl(Box::from(reader), tag.into())
     }
 
+    #[instrument(level = "trace", skip_all)]
     fn new_impl(reader: Box<dyn ReadSeek + 'a>, tag: SourceTag) -> Result<Self> {
         let riff = RiffReader::open_form(reader)?;
         if riff.form != ID_WAVE {
@@ -193,6 +194,7 @@ impl<'a> WavReader<'a> {
 impl ReadSamples<'static> for WavReader<'_> {
     type Format = PcmS16Le;
 
+    #[instrument(level = "trace", name = "WavReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         if !self.data_available {
             return Ok(None);
