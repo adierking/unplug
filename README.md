@@ -55,6 +55,13 @@ cargo build
 cargo run -- arg...
 ```
 
+To create a distribution build (i.e. an optimized build to release to others), build with only the
+`distribution` feature activated. This will strip debugging features from the program:
+
+```sh
+cargo build --release --no-default-features --features distribution
+```
+
 To build and run the unit tests:
 
 ```sh

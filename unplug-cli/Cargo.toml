@@ -13,7 +13,7 @@ path = "src/main.rs"
 anyhow = "1.0"
 byteorder = "1"
 lazy_static = "1.4.0"
-log = { version = "0.4", features = ["release_max_level_debug"] }
+log = { version = "0.4" }
 quick-xml = "0.22"
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }
@@ -33,4 +33,5 @@ unplug-test = { path = "../unplug-test" }
 
 [features]
 default = ["trace"]
+distribution = ["log/release_max_level_debug", "tracing/release_max_level_debug"]
 trace = ["tracing", "tracing-appender", "tracing-flame", "tracing-subscriber"]

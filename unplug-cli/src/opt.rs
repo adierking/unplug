@@ -10,7 +10,7 @@ use structopt::StructOpt;
 pub struct Opt {
     /// Enables debug logging
     ///
-    /// Use -vv in debug builds to enable trace logging
+    /// Use -vv in non-distribution builds to enable trace logging
     #[structopt(short, long, parse(from_occurrences), global(true))]
     pub verbose: u64,
 
