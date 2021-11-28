@@ -12,7 +12,7 @@ use std::time::Instant;
 use unicase::UniCase;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::transport::{
-    FlacReader, HpsStream, Mp3Reader, OggReader, SoundBank, WavBuilder, WavReader,
+    FlacReader, HpsStream, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter,
 };
 use unplug::audio::ReadSamples;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
@@ -327,7 +327,7 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
 
     info!("Writing {}", opt.output.display());
     let out = BufWriter::new(File::create(&opt.output)?);
-    WavBuilder::new(hps.decoder()).write_to(out)?;
+    WavWriter::new(hps.decoder()).write_to(out)?;
 
     info!("Export finished in {:?}", start_time.elapsed());
     Ok(())
@@ -347,7 +347,7 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
         "flac" => FlacReader::new(file, name)?.convert(),
         "mp3" => Box::from(Mp3Reader::new(file, name)?),
         "ogg" => Box::from(OggReader::new(file, name)?),
-        "wav" => Box::from(WavReader::open(file, name)?),
+        "wav" => Box::from(WavReader::new(file, name)?),
         other => bail!("unsupported file extension: \"{}\"", other),
     };
 
@@ -418,7 +418,7 @@ fn export_bank_impl<'r>(
         info!("Writing {}{}", display_prefix, filename);
         let out_path = dir.join(filename);
         let out = BufWriter::new(File::create(&out_path)?);
-        WavBuilder::new(bank.decoder(i)).write_to(out)?;
+        WavWriter::new(bank.decoder(i)).write_to(out)?;
     }
     Ok(())
 }

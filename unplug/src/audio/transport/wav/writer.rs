@@ -86,16 +86,16 @@ impl<W: Write + Seek> Write for RiffWriter<W> {
     }
 }
 
-/// Builds up a WAV file from sample data.
-pub struct WavBuilder<'a, 'b: 'a> {
+/// Writes out a WAV file from sample data and other parameters.
+pub struct WavWriter<'a, 'b: 'a> {
     software_name: Cow<'static, str>,
     samples: PeekSamples<'b, Box<dyn ReadSamples<'b, Format = PcmS16Le> + 'a>>,
     channels: usize,
     sample_rate: u32,
 }
 
-impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
-    /// Creates a new `WavBuilder` which reads samples from `reader`.
+impl<'a, 'b: 'a> WavWriter<'a, 'b> {
+    /// Creates a new `WavWriter` which reads samples from `reader`.
     pub fn new(reader: impl ReadSamples<'b, Format = PcmS16Le> + 'a) -> Self {
         Self::new_impl(Box::from(reader))
     }
@@ -115,7 +115,7 @@ impl<'a, 'b: 'a> WavBuilder<'a, 'b> {
         self
     }
 
-    /// Finishes building and writes WAV data to `writer`.
+    /// Prepares the final WAV file and writes it to `writer`.
     pub fn write_to(&mut self, writer: (impl Write + Seek)) -> Result<()> {
         self.peek_audio_info()?;
         let mut riff = RiffWriter::new(writer);
@@ -233,7 +233,7 @@ mod tests {
     fn test_write_wav() -> Result<()> {
         let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2, 44100);
         let mut cursor = Cursor::new(Vec::<u8>::new());
-        WavBuilder::new(samples.into_reader("test")).software_name("test").write_to(&mut cursor)?;
+        WavWriter::new(samples.into_reader("test")).software_name("test").write_to(&mut cursor)?;
         let bytes = cursor.into_inner();
         assert_eq!(bytes, EXPECTED_WAV);
         Ok(())

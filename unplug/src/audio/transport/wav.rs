@@ -1,8 +1,8 @@
-mod builder;
 mod reader;
+mod writer;
 
-pub use builder::WavBuilder;
 pub use reader::WavReader;
+pub use writer::WavWriter;
 
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};

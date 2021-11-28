@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(mp3.channels(), 2);
         let samples = mp3.read_all_samples()?;
         let reference =
-            WavReader::open(Cursor::new(TEST_MP3_WAV), "TEST_MP3_WAV")?.read_all_samples()?;
+            WavReader::new(Cursor::new(TEST_MP3_WAV), "TEST_MP3_WAV")?.read_all_samples()?;
         // Compare with a tolerance of +/- 1 (minimp3 vs ffmpeg)
         assert_samples_close(&samples, &reference, 1);
         Ok(())

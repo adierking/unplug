@@ -9,7 +9,7 @@ use unplug::audio::{ReadSamples, Samples};
 const TEST_WAV: &[u8] = include_bytes!("../../unplug/src/test/ionpack.wav");
 
 fn load_music() -> Samples<'static, PcmS16Le> {
-    let mut wav = WavReader::open(Cursor::new(TEST_WAV), "").expect("failed to open test WAV");
+    let mut wav = WavReader::new(Cursor::new(TEST_WAV), "").expect("failed to open test WAV");
     wav.read_all_samples().expect("failed to read WAV file")
 }
 

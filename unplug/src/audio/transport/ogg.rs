@@ -83,7 +83,7 @@ mod tests {
         assert_eq!(ogg.channels(), 2);
         let samples = ogg.read_all_samples()?;
         let reference =
-            WavReader::open(Cursor::new(TEST_OGG_WAV), "TEST_OGG_WAV")?.read_all_samples()?;
+            WavReader::new(Cursor::new(TEST_OGG_WAV), "TEST_OGG_WAV")?.read_all_samples()?;
         // Compare with a tolerance of +/- 10 (lewton vs Audacity)
         assert_samples_close(&samples, &reference, 10);
         Ok(())

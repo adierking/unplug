@@ -107,11 +107,11 @@ pub struct WavReader<'a> {
 impl<'a> WavReader<'a> {
     /// Opens the WAV data provided by `reader` and reads its header. `tag` is a string or tag to
     /// identify the stream for debugging purposes.
-    pub fn open(reader: impl ReadSeek + 'a, tag: impl Into<SourceTag>) -> Result<Self> {
-        Self::open_impl(Box::from(reader), tag.into())
+    pub fn new(reader: impl ReadSeek + 'a, tag: impl Into<SourceTag>) -> Result<Self> {
+        Self::new_impl(Box::from(reader), tag.into())
     }
 
-    fn open_impl(reader: Box<dyn ReadSeek + 'a>, tag: SourceTag) -> Result<Self> {
+    fn new_impl(reader: Box<dyn ReadSeek + 'a>, tag: SourceTag) -> Result<Self> {
         let riff = RiffReader::open_form(reader)?;
         if riff.form != ID_WAVE {
             return Err(Error::InvalidWav);
@@ -228,7 +228,7 @@ mod tests {
     fn test_read_wav() -> Result<()> {
         let expected = open_test_wav();
 
-        let mut wav = WavReader::open(Cursor::new(TEST_WAV), "TEST_WAV")?;
+        let mut wav = WavReader::new(Cursor::new(TEST_WAV), "TEST_WAV")?;
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
 
