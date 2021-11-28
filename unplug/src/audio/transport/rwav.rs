@@ -468,6 +468,13 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
     fn tag(&self) -> &SourceTag {
         &self.tag
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        match &self.channel {
+            Some(_) => Some((0, 1)),
+            None => Some((1, 1)),
+        }
+    }
 }
 
 #[cfg(test)]

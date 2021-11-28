@@ -204,6 +204,12 @@ where
     fn tag(&self) -> &crate::audio::SourceTag {
         self.inner.tag()
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        // Ideally we could know how many blocks we plan to output, but variable sample rate streams
+        // make this difficult, so we have to fall back on the progress of the inner stream
+        self.inner.progress_hint()
+    }
 }
 
 #[cfg(test)]

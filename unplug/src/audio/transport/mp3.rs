@@ -141,6 +141,14 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
     fn tag(&self) -> &SourceTag {
         &self.tag
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        if self.info.num_frames > 0 {
+            Some((self.frame_index, self.info.num_frames as u64))
+        } else {
+            None
+        }
+    }
 }
 
 /// MP3 encoding and file structure info.

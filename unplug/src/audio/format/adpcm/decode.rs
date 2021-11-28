@@ -87,6 +87,10 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
     fn tag(&self) -> &SourceTag {
         self.source.tag()
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        self.source.progress_hint()
+    }
 }
 
 #[cfg(test)]

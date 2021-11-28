@@ -121,6 +121,18 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
     fn tag(&self) -> &SourceTag {
         self.reader.tag()
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        if self.pcm.is_empty() {
+            return None; // Not initialized yet, so we don't know
+        }
+        let current_frame = (self.pos + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
+        let total_frames = (self.pcm.len() + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
+        let frames_per_block = total_frames.min(self.block_size / BYTES_PER_FRAME);
+        let current = (current_frame + frames_per_block - 1) / frames_per_block;
+        let total = (total_frames + frames_per_block - 1) / frames_per_block;
+        Some((current as u64, total as u64))
+    }
 }
 
 #[cfg(test)]
@@ -144,6 +156,7 @@ mod tests {
         let right = right_encoder.read_samples()?.unwrap();
         assert_eq!(right.params.coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
 
+        assert_eq!(left_encoder.progress_hint(), Some((1, 1)));
         assert_eq!(
             left.params.context,
             FrameContext { predictor_and_scale: 0x75, last_samples: [0; 2] }
@@ -153,6 +166,7 @@ mod tests {
         assert_eq!(left.rate, 44100);
         assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
+        assert_eq!(right_encoder.progress_hint(), Some((1, 1)));
         assert_eq!(
             right.params.context,
             FrameContext { predictor_and_scale: 0x16, last_samples: [0; 2] }
@@ -167,22 +181,28 @@ mod tests {
 
     #[test]
     fn test_encode_in_blocks() -> Result<()> {
-        let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
-
-        let splitter = samples.into_reader("test").split_channels();
-        let block_size = 0x8000;
-        let mut encoder = Encoder::with_block_size(splitter.left(), block_size);
-        let mut blocks = vec![];
-        while let Some(block) = encoder.read_samples()? {
-            blocks.push(block);
-        }
-        assert_eq!(blocks.len(), 4);
-
+        const BLOCK_SIZE: usize = 0x8000;
+        const EXPECTED_NUM_BLOCKS: u64 = 4;
         const EXPECTED_BLOCK_LENGTHS: &[usize] = &[0x8000, 0x8000, 0x8000, 0x57d];
         const EXPECTED_END_ADDRESSES: &[usize] = &[0xffff, 0xffff, 0xffff, 0xaf8];
         const EXPECTED_LAST_SAMPLES: &[[i16; 2]] =
             &[[0, 0], [-5232, -5240], [1236, 1218], [33, 42]];
+
+        let data = test::open_test_wav();
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
+
+        let splitter = samples.into_reader("test").split_channels();
+        let mut encoder = Encoder::with_block_size(splitter.left(), BLOCK_SIZE);
+
+        let mut blocks = vec![];
+        let mut i = 0;
+        assert_eq!(encoder.progress_hint(), None);
+        while let Some(block) = encoder.read_samples()? {
+            i += 1;
+            assert_eq!(encoder.progress_hint(), Some((i, EXPECTED_NUM_BLOCKS)));
+            blocks.push(block);
+        }
+        assert_eq!(blocks.len(), 4);
 
         let mut offset = 0;
         for (i, block) in blocks.iter().enumerate() {

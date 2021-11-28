@@ -335,6 +335,10 @@ where
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        self.inner.progress_hint()
+    }
 }
 
 #[cfg(test)]

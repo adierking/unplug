@@ -67,6 +67,11 @@ impl ReadSamples<'static> for OggReader<'_> {
     fn tag(&self) -> &SourceTag {
         &self.tag
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        // There doesn't seem to be a way to get this
+        None
+    }
 }
 
 #[cfg(test)]

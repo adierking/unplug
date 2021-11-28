@@ -112,6 +112,11 @@ impl ReadSamples<'static> for FlacReader<'_> {
     fn tag(&self) -> &SourceTag {
         &self.tag
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        // There doesn't seem to be an easy way to get this
+        None
+    }
 }
 
 #[cfg(test)]

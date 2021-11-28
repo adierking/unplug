@@ -12,7 +12,7 @@ use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::sync::{Arc, Mutex};
 
-/// A block of audio sample data read from an audio source.
+/// A packet of audio sample data read from an audio source.
 #[derive(Clone)]
 pub struct Samples<'a, F: FormatTag> {
     /// The number of channels in the data.
@@ -248,7 +248,7 @@ pub trait ReadSamples<'s> {
     /// format and the actual format can be retrieved with `format()`.
     type Format: FormatTag;
 
-    /// Reads the next block of samples. If there are no more samples, returns `Ok(None)`.
+    /// Reads the next packet of samples. If there are no more samples, returns `Ok(None)`.
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>>;
 
     /// Returns the format that all samples will be decoded as.
@@ -256,6 +256,10 @@ pub trait ReadSamples<'s> {
 
     /// Returns a tag which identifies the audio source for debugging purposes.
     fn tag(&self) -> &SourceTag;
+
+    /// If it is available, returns a `(current, total)` pair which hints towards the stream's
+    /// progress. Units are arbitrary and this should only be used for UI displays.
+    fn progress_hint(&self) -> Option<(u64, u64)>;
 
     /// Reads all available samples and concatenates them into a single `Samples` object. The
     /// samples must have a static format and follow the rules for `Samples::append()`. If no
@@ -362,6 +366,9 @@ where
     fn tag(&self) -> &SourceTag {
         (**self).tag()
     }
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        (**self).progress_hint()
+    }
 }
 
 impl<'a, F, R> ReadSamples<'a> for Box<R>
@@ -379,12 +386,16 @@ where
     fn tag(&self) -> &SourceTag {
         (**self).tag()
     }
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        (**self).progress_hint()
+    }
 }
 
 /// `ReadSamples` implementation which yields `Samples` structs from a queue. All samples must have
 /// the same format and channel count.
 pub struct ReadSampleList<'s, F: DynamicFormat> {
     samples: VecDeque<Samples<'s, F>>,
+    original_len: u64,
     format: Format,
     tag: SourceTag,
 }
@@ -406,7 +417,8 @@ impl<'s, F: DynamicFormat> ReadSampleList<'s, F> {
             assert_eq!(s.format(), format);
             assert_eq!(s.channels, channels);
         }
-        Self { samples: samples.into_iter().collect(), format, tag }
+        let original_len = samples.len() as u64;
+        Self { samples, original_len, format, tag }
     }
 }
 
@@ -420,6 +432,10 @@ impl<'s, F: DynamicFormat> ReadSamples<'s> for ReadSampleList<'s, F> {
     }
     fn tag(&self) -> &SourceTag {
         &self.tag
+    }
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        let current = self.original_len - (self.samples.len() as u64);
+        Some((current, self.original_len))
     }
 }
 
@@ -446,6 +462,9 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'static> for OwnedSamples<'s, R> {
     }
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
+    }
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        self.inner.progress_hint()
     }
 }
 
@@ -493,13 +512,17 @@ where
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        self.inner.progress_hint()
+    }
 }
 
 /// An adapter with a `peek_samples()` method that allows peeking at the next packets of samples
 /// without consuming them.
 pub struct PeekSamples<'s, R: ReadSamples<'s>> {
     inner: R,
-    next: Option<Samples<'s, R::Format>>,
+    next: Option<Box<SavedSamples<'s, R::Format>>>,
 }
 
 impl<'s, R: ReadSamples<'s>> PeekSamples<'s, R> {
@@ -513,9 +536,13 @@ impl<'s, R: ReadSamples<'s>> PeekSamples<'s, R> {
     /// returns `Ok(None)`.
     pub fn peek_samples(&mut self) -> Result<Option<&Samples<'s, R::Format>>> {
         if self.next.is_none() {
-            self.next = self.inner.read_samples()?;
+            // Save the progress hint before reading so that peeking doesn't change the progress
+            let progress = self.inner.progress_hint();
+            if let Some(samples) = self.inner.read_samples()? {
+                self.next = Some(Box::from(SavedSamples { samples, progress }))
+            }
         }
-        Ok(self.next.as_ref())
+        Ok(self.next.as_ref().map(|s| &s.samples))
     }
 }
 
@@ -524,7 +551,7 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for PeekSamples<'s, R> {
 
     fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
         match self.next.take() {
-            Some(next) => Ok(Some(next)),
+            Some(next) => Ok(Some(next.samples)),
             None => self.inner.read_samples(),
         }
     }
@@ -536,6 +563,18 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for PeekSamples<'s, R> {
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
     }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        match &self.next {
+            Some(next) => next.progress,
+            None => self.inner.progress_hint(),
+        }
+    }
+}
+
+struct SavedSamples<'s, F: FormatTag> {
+    samples: Samples<'s, F>,
+    progress: Option<(u64, u64)>,
 }
 
 /// An iterator over PCM audio samples. Items are slices containing the samples from left to right.
@@ -596,7 +635,8 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
         let right = self.right.read_samples()?;
         let (left, right) = match (left, right) {
             (Some(l), Some(r)) => (l, r),
-            _ => return Ok(None),
+            (None, None) => return Ok(None),
+            _ => return Err(Error::DifferentChannelSizes),
         };
 
         let len = left.len;
@@ -638,6 +678,15 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
 
     fn tag(&self) -> &SourceTag {
         &self.tag
+    }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        let left = self.left.progress_hint();
+        if left == self.right.progress_hint() {
+            left
+        } else {
+            None
+        }
     }
 }
 
@@ -749,6 +798,11 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
 
     fn tag(&self) -> &SourceTag {
         &self.tag
+    }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        let state = self.state.lock().unwrap();
+        state.reader.progress_hint()
     }
 }
 
@@ -1102,12 +1156,19 @@ mod tests {
 
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
+        assert_eq!(reader.progress_hint(), Some((0, 3)));
+
         assert_eq!(reader.read_samples()?.unwrap().data[0], 0);
+        assert_eq!(reader.progress_hint(), Some((1, 3)));
 
         assert_eq!(reader.read_samples()?.unwrap().data[0], 1);
+        assert_eq!(reader.progress_hint(), Some((2, 3)));
 
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 2);
+        assert_eq!(reader.progress_hint(), Some((2, 3)));
+
         assert_eq!(reader.read_samples()?.unwrap().data[0], 2);
+        assert_eq!(reader.progress_hint(), Some((3, 3)));
 
         assert!(reader.peek_samples()?.is_none());
         assert!(reader.read_samples()?.is_none());

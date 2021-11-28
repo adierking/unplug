@@ -270,6 +270,7 @@ impl HpsStream {
         };
         ChannelReader {
             blocks: &self.blocks,
+            pos: 0,
             channel,
             format: self.channels[channel].address.format,
             sample_rate: self.sample_rate,
@@ -616,6 +617,7 @@ impl BlockChannel {
 /// Reads sample data from a single HPS channel.
 pub struct ChannelReader<'a> {
     blocks: &'a [Block],
+    pos: usize,
     channel: usize,
     format: DspFormat,
     sample_rate: u32,
@@ -627,11 +629,12 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
     type Format = AnyFormat;
 
     fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
-        if self.blocks.is_empty() {
+        if self.pos >= self.blocks.len() {
             return Ok(None);
         }
-        let block = &self.blocks[0];
-        self.blocks = &self.blocks[1..];
+        let block = &self.blocks[self.pos];
+        self.pos += 1;
+
         let len = block.end_address as usize + 1;
         let data = &block.channels[self.channel].data;
         match self.format {
@@ -670,6 +673,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
 
     fn tag(&self) -> &SourceTag {
         &self.tag
+    }
+
+    fn progress_hint(&self) -> Option<(u64, u64)> {
+        Some((self.pos as u64, self.blocks.len() as u64))
     }
 }
 
