@@ -334,7 +334,7 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
 
     let out = BufWriter::new(File::create(&opt.output)?);
     WavWriter::new(hps.decoder())
-        .progress_callback(|p| update_audio_progress(&progress, p))
+        .on_progress(|p| update_audio_progress(&progress, p))
         .write_to(out)?;
 
     progress.finish_using_style();

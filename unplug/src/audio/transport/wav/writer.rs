@@ -92,7 +92,7 @@ pub struct WavWriter<'r, 's: 'r> {
     channels: usize,
     sample_rate: u32,
     software_name: Cow<'static, str>,
-    progress_callback: Option<Box<dyn FnMut(Option<ProgressHint>) + 'r>>,
+    on_progress: Option<Box<dyn FnMut(Option<ProgressHint>) + 'r>>,
 }
 
 impl<'r, 's: 'r> WavWriter<'r, 's> {
@@ -107,7 +107,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
             channels: 0,
             sample_rate: 0,
             software_name: DEFAULT_SOFTWARE_NAME.into(),
-            progress_callback: None,
+            on_progress: None,
         }
     }
 
@@ -119,11 +119,8 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
 
     /// Sets a callback to run for progress updates. If the total amount of work is unknown, the
     /// callback will still be invoked with a `None` hint.
-    pub fn progress_callback(
-        &mut self,
-        callback: impl FnMut(Option<ProgressHint>) + 'r,
-    ) -> &mut Self {
-        self.progress_callback = Some(Box::from(callback));
+    pub fn on_progress(&mut self, callback: impl FnMut(Option<ProgressHint>) + 'r) -> &mut Self {
+        self.on_progress = Some(Box::from(callback));
         self
     }
 
@@ -216,7 +213,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
     }
 
     fn update_progress(&mut self) {
-        if let Some(callback) = &mut self.progress_callback {
+        if let Some(callback) = &mut self.on_progress {
             callback(self.samples.progress_hint())
         }
     }
@@ -262,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn test_write_wav_with_progress_callback() -> Result<()> {
+    fn test_write_wav_with_progress() -> Result<()> {
         let samples1 = Samples::<PcmS16Le>::from_pcm((0..2).collect::<Vec<_>>(), 2, 44100);
         let samples2 = Samples::<PcmS16Le>::from_pcm((2..4).collect::<Vec<_>>(), 2, 44100);
         let samples3 = Samples::<PcmS16Le>::from_pcm((4..6).collect::<Vec<_>>(), 2, 44100);
@@ -273,7 +270,7 @@ mod tests {
         let mut cursor = Cursor::new(vec![]);
         WavWriter::new(samples)
             .software_name("test")
-            .progress_callback(|p| progress_updates.push(p))
+            .on_progress(|p| progress_updates.push(p))
             .write_to(&mut cursor)?;
 
         let bytes = cursor.into_inner();
