@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0"
 byteorder = "1"
+indicatif = "0.16.2"
 lazy_static = "1.4.0"
 log = { version = "0.4" }
 quick-xml = "0.22"

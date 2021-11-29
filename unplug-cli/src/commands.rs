@@ -326,9 +326,18 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     let hps = HpsStream::open(&mut reader, name)?;
 
     info!("Writing {}", opt.output.display());
-    let out = BufWriter::new(File::create(&opt.output)?);
-    WavWriter::new(hps.decoder()).write_to(out)?;
+    let progress = progress_bar(1);
+    if !progress.is_hidden() {
+        let out_name = opt.output.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        progress.set_message(out_name);
+    }
 
+    let out = BufWriter::new(File::create(&opt.output)?);
+    WavWriter::new(hps.decoder())
+        .progress_callback(|p| update_audio_progress(&progress, p))
+        .write_to(out)?;
+
+    progress.finish_using_style();
     info!("Export finished in {:?}", start_time.elapsed());
     Ok(())
 }
@@ -407,19 +416,26 @@ fn export_bank_impl<'r>(
     dir: &Path,
     display_prefix: &str,
 ) -> Result<()> {
-    info!("Reading {}", name);
+    info!("Exporting from {}", name);
     let mut reader = BufReader::new(reader);
     let bank = SoundBank::open(&mut reader, name)?;
     // Omit names for unusable banks (sfx_hori.ssm)
     let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index);
     fs::create_dir_all(&dir)?;
+    let progress = progress_bar(bank.sounds.len() as u64);
     for (i, _) in bank.sounds.iter().enumerate() {
         let filename = make_sound_filename(&bank, i, have_names);
-        info!("Writing {}{}", display_prefix, filename);
+        if progress.is_hidden() {
+            info!("Writing {}{}", display_prefix, filename);
+        } else {
+            progress.set_message(format!("{}{}", display_prefix, filename));
+        }
         let out_path = dir.join(filename);
         let out = BufWriter::new(File::create(&out_path)?);
         WavWriter::new(bank.decoder(i)).write_to(out)?;
+        progress.inc(1);
     }
+    progress.finish_using_style();
     Ok(())
 }
 
