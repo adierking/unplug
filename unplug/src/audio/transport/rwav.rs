@@ -3,7 +3,7 @@
 
 use crate::audio::format::adpcm::{self, GcAdpcm};
 use crate::audio::format::{AnyFormat, Format, PcmS16Le};
-use crate::audio::{Error, ReadSamples, Result, Samples, SourceChannel, SourceTag};
+use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
 use crate::common::{ReadFrom, ReadSeek, Region};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
@@ -469,10 +469,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         match &self.channel {
-            Some(_) => Some((0, 1)),
-            None => Some((1, 1)),
+            Some(_) => ProgressHint::new(0, 1),
+            None => ProgressHint::new(1, 1),
         }
     }
 }

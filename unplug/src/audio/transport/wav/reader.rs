@@ -1,6 +1,6 @@
 use super::*;
 use crate::audio::format::{PcmS16Le, ReadWriteBytes, StaticFormat};
-use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -217,12 +217,12 @@ impl ReadSamples<'static> for WavReader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         // We just read everything at once, so...
         if self.data_available {
-            Some((0, 1))
+            ProgressHint::new(0, 1)
         } else {
-            Some((1, 1))
+            ProgressHint::new(1, 1)
         }
     }
 }
@@ -240,10 +240,10 @@ mod tests {
         let mut wav = WavReader::new(Cursor::new(TEST_WAV), "TEST_WAV")?;
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
-        assert_eq!(wav.progress_hint(), Some((0, 1)));
+        assert_eq!(wav.progress_hint(), ProgressHint::new(0, 1));
 
         let samples = wav.read_all_samples()?;
-        assert_eq!(wav.progress_hint(), Some((1, 1)));
+        assert_eq!(wav.progress_hint(), ProgressHint::new(1, 1));
         assert_eq!(samples.channels, 2);
         assert_eq!(samples.rate, 44100);
         assert_eq!(samples.len, expected.len());

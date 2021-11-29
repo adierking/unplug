@@ -1,6 +1,6 @@
 use super::format::pcm::{AnyPcm, ConvertPcm, PcmF32Le};
 use super::format::Convert;
-use super::{Error, ReadSamples, Result, Samples};
+use super::{Error, ProgressHint, ReadSamples, Result, Samples};
 use libsamplerate_sys::*;
 use std::convert::TryInto;
 use std::ffi::CStr;
@@ -205,7 +205,7 @@ where
         self.inner.tag()
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         // Ideally we could know how many blocks we plan to output, but variable sample rate streams
         // make this difficult, so we have to fall back on the progress of the inner stream
         self.inner.progress_hint()

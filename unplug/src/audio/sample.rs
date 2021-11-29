@@ -1,7 +1,7 @@
 use super::format::pcm::AnyPcm;
 use super::format::*;
 use super::resample::Resample;
-use super::{Error, Result};
+use super::{Error, ProgressHint, Result};
 use std::any;
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -257,9 +257,9 @@ pub trait ReadSamples<'s> {
     /// Returns a tag which identifies the audio source for debugging purposes.
     fn tag(&self) -> &SourceTag;
 
-    /// If it is available, returns a `(current, total)` pair which hints towards the stream's
-    /// progress. Units are arbitrary and this should only be used for UI displays.
-    fn progress_hint(&self) -> Option<(u64, u64)>;
+    /// Returns a `ProgressHint` which hints towards the stream's progress (if available). Units are
+    /// arbitrary and this should only be used for reporting progress back to the user.
+    fn progress_hint(&self) -> Option<ProgressHint>;
 
     /// Reads all available samples and concatenates them into a single `Samples` object. The
     /// samples must have a static format and follow the rules for `Samples::append()`. If no
@@ -366,7 +366,7 @@ where
     fn tag(&self) -> &SourceTag {
         (**self).tag()
     }
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         (**self).progress_hint()
     }
 }
@@ -386,7 +386,7 @@ where
     fn tag(&self) -> &SourceTag {
         (**self).tag()
     }
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         (**self).progress_hint()
     }
 }
@@ -433,9 +433,9 @@ impl<'s, F: DynamicFormat> ReadSamples<'s> for ReadSampleList<'s, F> {
     fn tag(&self) -> &SourceTag {
         &self.tag
     }
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         let current = self.original_len - (self.samples.len() as u64);
-        Some((current, self.original_len))
+        ProgressHint::new(current, self.original_len)
     }
 }
 
@@ -463,7 +463,7 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'static> for OwnedSamples<'s, R> {
     fn tag(&self) -> &SourceTag {
         self.inner.tag()
     }
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         self.inner.progress_hint()
     }
 }
@@ -513,7 +513,7 @@ where
         self.inner.tag()
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         self.inner.progress_hint()
     }
 }
@@ -564,7 +564,7 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for PeekSamples<'s, R> {
         self.inner.tag()
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         match &self.next {
             Some(next) => next.progress,
             None => self.inner.progress_hint(),
@@ -574,7 +574,7 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for PeekSamples<'s, R> {
 
 struct SavedSamples<'s, F: FormatTag> {
     samples: Samples<'s, F>,
-    progress: Option<(u64, u64)>,
+    progress: Option<ProgressHint>,
 }
 
 /// An iterator over PCM audio samples. Items are slices containing the samples from left to right.
@@ -680,7 +680,7 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         let left = self.left.progress_hint();
         if left == self.right.progress_hint() {
             left
@@ -800,7 +800,7 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         let state = self.state.lock().unwrap();
         state.reader.progress_hint()
     }
@@ -1156,19 +1156,19 @@ mod tests {
 
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
-        assert_eq!(reader.progress_hint(), Some((0, 3)));
+        assert_eq!(reader.progress_hint(), ProgressHint::new(0, 3));
 
         assert_eq!(reader.read_samples()?.unwrap().data[0], 0);
-        assert_eq!(reader.progress_hint(), Some((1, 3)));
+        assert_eq!(reader.progress_hint(), ProgressHint::new(1, 3));
 
         assert_eq!(reader.read_samples()?.unwrap().data[0], 1);
-        assert_eq!(reader.progress_hint(), Some((2, 3)));
+        assert_eq!(reader.progress_hint(), ProgressHint::new(2, 3));
 
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 2);
-        assert_eq!(reader.progress_hint(), Some((2, 3)));
+        assert_eq!(reader.progress_hint(), ProgressHint::new(2, 3));
 
         assert_eq!(reader.read_samples()?.unwrap().data[0], 2);
-        assert_eq!(reader.progress_hint(), Some((3, 3)));
+        assert_eq!(reader.progress_hint(), ProgressHint::new(3, 3));
 
         assert!(reader.peek_samples()?.is_none());
         assert!(reader.read_samples()?.is_none());

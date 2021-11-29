@@ -1,7 +1,7 @@
 use super::vgaudio::{calculate_coefficients, encode};
 use super::{GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
-use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use tracing::{debug, trace};
 
 /// Encodes raw PCM data into GameCube ADPCM format.
@@ -122,7 +122,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
         self.reader.tag()
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         if self.pcm.is_empty() {
             return None; // Not initialized yet, so we don't know
         }
@@ -131,7 +131,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
         let frames_per_block = total_frames.min(self.block_size / BYTES_PER_FRAME);
         let current = (current_frame + frames_per_block - 1) / frames_per_block;
         let total = (total_frames + frames_per_block - 1) / frames_per_block;
-        Some((current as u64, total as u64))
+        ProgressHint::new(current as u64, total as u64)
     }
 }
 
@@ -156,7 +156,7 @@ mod tests {
         let right = right_encoder.read_samples()?.unwrap();
         assert_eq!(right.params.coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
 
-        assert_eq!(left_encoder.progress_hint(), Some((1, 1)));
+        assert_eq!(left_encoder.progress_hint(), ProgressHint::new(1, 1));
         assert_eq!(
             left.params.context,
             FrameContext { predictor_and_scale: 0x75, last_samples: [0; 2] }
@@ -166,7 +166,7 @@ mod tests {
         assert_eq!(left.rate, 44100);
         assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
-        assert_eq!(right_encoder.progress_hint(), Some((1, 1)));
+        assert_eq!(right_encoder.progress_hint(), ProgressHint::new(1, 1));
         assert_eq!(
             right.params.context,
             FrameContext { predictor_and_scale: 0x16, last_samples: [0; 2] }
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(encoder.progress_hint(), None);
         while let Some(block) = encoder.read_samples()? {
             i += 1;
-            assert_eq!(encoder.progress_hint(), Some((i, EXPECTED_NUM_BLOCKS)));
+            assert_eq!(encoder.progress_hint(), ProgressHint::new(i, EXPECTED_NUM_BLOCKS));
             blocks.push(block);
         }
         assert_eq!(blocks.len(), 4);

@@ -3,7 +3,7 @@ use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{
     AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat,
 };
-use crate::audio::{Error, ReadSamples, Result, Samples, SourceChannel, SourceTag};
+use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, Region, WriteTo};
 use arrayvec::ArrayVec;
@@ -675,8 +675,8 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
-        Some((self.pos as u64, self.blocks.len() as u64))
+    fn progress_hint(&self) -> Option<ProgressHint> {
+        ProgressHint::new(self.pos as u64, self.blocks.len() as u64)
     }
 }
 

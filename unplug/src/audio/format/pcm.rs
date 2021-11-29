@@ -1,5 +1,5 @@
 use super::{AnyFormat, Cast, DataCow, DynamicFormat, Format, FormatTag, PcmFormat, StaticFormat};
-use crate::audio::{Error, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::I24;
 use byteorder::{NativeEndian as NE, BE, LE};
 use float_cmp::approx_eq;
@@ -336,7 +336,7 @@ where
         self.inner.tag()
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         self.inner.progress_hint()
     }
 }

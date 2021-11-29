@@ -9,7 +9,26 @@ pub use sample::{ReadSamples, Samples, SourceChannel, SourceTag};
 
 use lewton::VorbisError;
 use std::io;
+use std::num::NonZeroU64;
 use thiserror::Error;
+
+/// Represents the current progress of an audio processing operation. Units are arbitrary and this
+/// should only be used for reporting progress back to the user.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ProgressHint {
+    /// The amount of work completed so far.
+    pub current: u64,
+    /// The total amount of work to complete.
+    pub total: NonZeroU64,
+}
+
+impl ProgressHint {
+    /// Creates an `Option<ProgressHint>` from `current` and `total`. If `total` is 0, this will
+    /// return `None` to prevent potential divide-by-zero errors.
+    pub fn new(current: u64, total: u64) -> Option<ProgressHint> {
+        NonZeroU64::new(total).map(|total| ProgressHint { current, total })
+    }
+}
 
 /// The result type for audio operations.
 pub type Result<T> = std::result::Result<T, Error>;

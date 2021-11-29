@@ -1,5 +1,5 @@
 use crate::audio::format::{AnyFormat, Cast, PcmFormat, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
-use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use claxon::{self};
 use std::convert::TryFrom;
 use std::io::Read;
@@ -113,7 +113,7 @@ impl ReadSamples<'static> for FlacReader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         // There doesn't seem to be an easy way to get this
         None
     }

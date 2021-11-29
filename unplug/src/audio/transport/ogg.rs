@@ -1,5 +1,5 @@
 use crate::audio::format::{PcmS16Le, StaticFormat};
-use crate::audio::{Format, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::ReadSeek;
 use lewton::inside_ogg::OggStreamReader;
 use std::io::{Read, Seek};
@@ -68,7 +68,7 @@ impl ReadSamples<'static> for OggReader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
+    fn progress_hint(&self) -> Option<ProgressHint> {
         // There doesn't seem to be a way to get this
         None
     }

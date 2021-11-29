@@ -1,5 +1,5 @@
 use crate::audio::format::{PcmS16Le, StaticFormat};
-use crate::audio::{Error, Format, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{ReadSeek, Region};
 use byteorder::{ReadBytesExt, BE};
 use minimp3::{Decoder, Error as Mp3Error, Frame};
@@ -142,12 +142,8 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<(u64, u64)> {
-        if self.info.num_frames > 0 {
-            Some((self.frame_index, self.info.num_frames as u64))
-        } else {
-            None
-        }
+    fn progress_hint(&self) -> Option<ProgressHint> {
+        ProgressHint::new(self.frame_index, self.info.num_frames as u64)
     }
 }
 
