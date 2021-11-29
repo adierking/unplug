@@ -1,7 +1,7 @@
 use super::*;
 use crate::audio::format::{PcmFormat, PcmS16Le, ReadWriteBytes};
 use crate::audio::sample::{PeekSamples, ReadSamples};
-use crate::audio::{Error, Result};
+use crate::audio::{Error, ProgressHint, Result};
 use crate::common::WriteTo;
 use byteorder::{WriteBytesExt, LE};
 use std::borrow::Cow;
@@ -87,25 +87,27 @@ impl<W: Write + Seek> Write for RiffWriter<W> {
 }
 
 /// Writes out a WAV file from sample data and other parameters.
-pub struct WavWriter<'a, 'b: 'a> {
-    software_name: Cow<'static, str>,
-    samples: PeekSamples<'b, Box<dyn ReadSamples<'b, Format = PcmS16Le> + 'a>>,
+pub struct WavWriter<'r, 's: 'r> {
+    samples: PeekSamples<'s, Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>>,
     channels: usize,
     sample_rate: u32,
+    software_name: Cow<'static, str>,
+    progress_callback: Option<Box<dyn FnMut(Option<ProgressHint>) + 'r>>,
 }
 
-impl<'a, 'b: 'a> WavWriter<'a, 'b> {
+impl<'r, 's: 'r> WavWriter<'r, 's> {
     /// Creates a new `WavWriter` which reads samples from `reader`.
-    pub fn new(reader: impl ReadSamples<'b, Format = PcmS16Le> + 'a) -> Self {
+    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Self {
         Self::new_impl(Box::from(reader))
     }
 
-    fn new_impl(reader: Box<dyn ReadSamples<'b, Format = PcmS16Le> + 'a>) -> Self {
+    fn new_impl(reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>) -> Self {
         Self {
-            software_name: DEFAULT_SOFTWARE_NAME.into(),
             samples: reader.peekable(),
             channels: 0,
             sample_rate: 0,
+            software_name: DEFAULT_SOFTWARE_NAME.into(),
+            progress_callback: None,
         }
     }
 
@@ -115,8 +117,19 @@ impl<'a, 'b: 'a> WavWriter<'a, 'b> {
         self
     }
 
+    /// Sets a callback to run for progress updates. If the total amount of work is unknown, the
+    /// callback will still be invoked with a `None` hint.
+    pub fn progress_callback(
+        &mut self,
+        callback: impl FnMut(Option<ProgressHint>) + 'r,
+    ) -> &mut Self {
+        self.progress_callback = Some(Box::from(callback));
+        self
+    }
+
     /// Prepares the final WAV file and writes it to `writer`.
     pub fn write_to(&mut self, writer: (impl Write + Seek)) -> Result<()> {
+        self.update_progress();
         self.peek_audio_info()?;
         let mut riff = RiffWriter::new(writer);
         riff.open_form(ID_WAVE)?;
@@ -170,6 +183,7 @@ impl<'a, 'b: 'a> WavWriter<'a, 'b> {
             }
             PcmS16Le::write_bytes(&mut *riff, &samples.data[..samples.len])?;
             num_samples += PcmS16Le::index_to_sample(samples.len, self.channels);
+            self.update_progress();
         }
 
         if STATIC_MAX_LEVEL >= Level::DEBUG {
@@ -198,12 +212,18 @@ impl<'a, 'b: 'a> WavWriter<'a, 'b> {
             None => Err(Error::EmptyStream),
         }
     }
+
+    fn update_progress(&mut self) {
+        if let Some(callback) = &mut self.progress_callback {
+            callback(self.samples.progress_hint())
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::Samples;
+    use crate::audio::{sample::ReadSampleList, Samples};
     use std::io::Cursor;
 
     #[rustfmt::skip]
@@ -232,10 +252,37 @@ mod tests {
     #[test]
     fn test_write_wav() -> Result<()> {
         let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2, 44100);
-        let mut cursor = Cursor::new(Vec::<u8>::new());
+        let mut cursor = Cursor::new(vec![]);
         WavWriter::new(samples.into_reader("test")).software_name("test").write_to(&mut cursor)?;
         let bytes = cursor.into_inner();
         assert_eq!(bytes, EXPECTED_WAV);
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_wav_with_progress_callback() -> Result<()> {
+        let samples1 = Samples::<PcmS16Le>::from_pcm((0..2).collect::<Vec<_>>(), 2, 44100);
+        let samples2 = Samples::<PcmS16Le>::from_pcm((2..4).collect::<Vec<_>>(), 2, 44100);
+        let samples3 = Samples::<PcmS16Le>::from_pcm((4..6).collect::<Vec<_>>(), 2, 44100);
+        let samples4 = Samples::<PcmS16Le>::from_pcm((6..8).collect::<Vec<_>>(), 2, 44100);
+        let samples = ReadSampleList::new(vec![samples1, samples2, samples3, samples4], "test");
+
+        let mut progress_updates = vec![];
+        let mut cursor = Cursor::new(vec![]);
+        WavWriter::new(samples)
+            .software_name("test")
+            .progress_callback(|p| progress_updates.push(p))
+            .write_to(&mut cursor)?;
+
+        let bytes = cursor.into_inner();
+        assert_eq!(bytes, EXPECTED_WAV);
+
+        assert_eq!(progress_updates.len(), 5);
+        for (i, progress) in progress_updates.into_iter().enumerate() {
+            let progress = progress.expect("unknown progress");
+            assert_eq!(progress.current, i as u64);
+            assert_eq!(progress.total.get(), 4);
+        }
         Ok(())
     }
 }

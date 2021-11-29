@@ -1,8 +1,8 @@
 mod reader;
 mod writer;
 
-pub use reader::WavReader;
-pub use writer::WavWriter;
+pub use reader::*;
+pub use writer::*;
 
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
