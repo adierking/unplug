@@ -2,54 +2,43 @@
 
 use crate::audio::format::adpcm::{Coefficients, SAMPLES_PER_FRAME};
 
-type Matrix3 = [[f64; 3]; 3];
-type Vec3 = [f64; 3];
+pub(crate) type Matrix3 = [[f64; 3]; 3];
+pub(crate) type Vec3 = [f64; 3];
 
-type PcmHistory = [i16; SAMPLES_PER_FRAME * 2];
+pub(crate) type PcmHistory = [i16; SAMPLES_PER_FRAME * 2];
 
-pub(crate) fn calculate_coefficients(samples: &[i16]) -> Coefficients {
-    let frame_count: usize = (samples.len() + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
-
+pub(crate) fn process_frame(pcm_hist: &mut PcmHistory, records: &mut Vec<Vec3>) {
     let mut vec1 = Vec3::default();
     let mut buffer = Vec3::default();
     let mut mtx = Matrix3::default();
     let mut vec_idxs = [0; 3];
-    let mut records = vec![Vec3::default(); frame_count * 2];
-    let mut record_count = 0;
-    let mut pcm_hist = PcmHistory::default();
-
-    for i in (0..samples.len()).step_by(SAMPLES_PER_FRAME) {
-        let remaining = samples.len() - i;
-        let frame_len = SAMPLES_PER_FRAME.min(remaining);
-        let end = SAMPLES_PER_FRAME + frame_len;
-        pcm_hist[SAMPLES_PER_FRAME..end].copy_from_slice(&samples[i..(i + frame_len)]);
-        pcm_hist[end..].fill(0);
-
-        inner_product_merge(&mut vec1, &pcm_hist);
-        if vec1[0].abs() > 10.0 {
-            outer_product_merge(&mut mtx, &pcm_hist);
-            if !analyze_ranges(&mut mtx, &mut vec_idxs, &mut buffer) {
-                bidirectional_filter(&mtx, &vec_idxs, &mut vec1);
-                if !quadratic_merge(&mut vec1) {
-                    finish_record(&vec1, &mut records[record_count]);
-                    record_count += 1;
-                }
+    inner_product_merge(&mut vec1, pcm_hist);
+    if vec1[0].abs() > 10.0 {
+        outer_product_merge(&mut mtx, pcm_hist);
+        if !analyze_ranges(&mut mtx, &mut vec_idxs, &mut buffer) {
+            bidirectional_filter(&mtx, &vec_idxs, &mut vec1);
+            if !quadratic_merge(&mut vec1) {
+                let mut record = Vec3::default();
+                finish_record(&vec1, &mut record);
+                records.push(record);
             }
         }
-
-        pcm_hist.copy_within(SAMPLES_PER_FRAME.., 0);
     }
+    pcm_hist.copy_within(SAMPLES_PER_FRAME.., 0);
+}
 
+pub(crate) fn finish(records: &[Vec3]) -> Coefficients {
+    let mut mtx = Matrix3::default();
     let mut vec1 = [1.0, 0.0, 0.0];
     let mut vec_best = [Vec3::default(); 8];
-    for z in 0..record_count {
-        matrix_filter(&records, z, &mut vec_best[0], &mut mtx);
+    for record in records {
+        matrix_filter(record, &mut vec_best[0], &mut mtx);
         for y in 1..=2 {
             vec1[y] += vec_best[0][y];
         }
     }
     for y in 1..=2 {
-        vec1[y] /= record_count as f64;
+        vec1[y] /= records.len() as f64;
     }
 
     merge_finish_record(&vec1, &mut vec_best[0]);
@@ -63,7 +52,7 @@ pub(crate) fn calculate_coefficients(samples: &[i16]) -> Coefficients {
             }
         }
         exp = 1 << (w + 1);
-        filter_records(&mut vec_best, exp, &records, record_count);
+        filter_records(&mut vec_best, exp, records);
     }
 
     let mut coefs = Coefficients::default();
@@ -220,10 +209,10 @@ fn finish_record(in_record: &Vec3, out_record: &mut Vec3) {
     *out_record = [1.0, (in_record[2] * in_record[1]) + in_record[1], in_record[2]];
 }
 
-fn matrix_filter(src: &[Vec3], row: usize, dst: &mut Vec3, mtx: &mut Matrix3) {
+fn matrix_filter(src: &Vec3, dst: &mut Vec3, mtx: &mut Matrix3) {
     mtx[2][0] = 1.0;
     for i in 1..=2 {
-        mtx[2][i] = -src[row][i];
+        mtx[2][i] = -src[i];
     }
 
     for i in (1..=2).rev() {
@@ -274,7 +263,7 @@ fn contrast_vectors(a: &Vec3, b: &Vec3) -> f64 {
     val1 + (2.0 * val * val2) + (2.0 * (-b[1] * val + -b[2]) * val3)
 }
 
-fn filter_records(vec_best: &mut [Vec3], exp: usize, records: &[Vec3], record_count: usize) {
+fn filter_records(vec_best: &mut [Vec3], exp: usize, records: &[Vec3]) {
     let mut buffer1 = [0i32; 8];
     let mut buffer2 = [0.0f64; 3];
     let mut buffer_list = [Vec3::default(); 8];
@@ -287,18 +276,18 @@ fn filter_records(vec_best: &mut [Vec3], exp: usize, records: &[Vec3], record_co
                 buffer_list[y][i] = 0.0;
             }
         }
-        for z in 0..record_count {
+        for record in records {
             let mut index = 0;
             let mut value = 1.0e30;
             for i in 0..exp {
-                let temp = contrast_vectors(&vec_best[i], &records[z]);
+                let temp = contrast_vectors(&vec_best[i], record);
                 if temp < value {
                     value = temp;
                     index = i;
                 }
             }
             buffer1[index] += 1;
-            matrix_filter(records, z, &mut buffer2, &mut mtx);
+            matrix_filter(record, &mut buffer2, &mut mtx);
             for i in 0..=2 {
                 buffer_list[index][i] += buffer2[i];
             }
@@ -315,29 +304,5 @@ fn filter_records(vec_best: &mut [Vec3], exp: usize, records: &[Vec3], record_co
         for i in 0..exp {
             merge_finish_record(&buffer_list[i], &mut vec_best[i]);
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::audio::Result;
-    use crate::test;
-
-    #[test]
-    fn test_calculate_coefficients() -> Result<()> {
-        let data = test::open_test_wav();
-        let num_samples = data.len() / 2;
-        let mut left_samples = Vec::with_capacity(num_samples);
-        let mut right_samples = Vec::with_capacity(num_samples);
-        for samples in data.chunks(2) {
-            left_samples.push(samples[0]);
-            right_samples.push(samples[1]);
-        }
-        let left_coefficients = calculate_coefficients(&left_samples);
-        let right_coefficients = calculate_coefficients(&right_samples);
-        assert_eq!(left_coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
-        assert_eq!(right_coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
-        Ok(())
     }
 }

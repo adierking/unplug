@@ -1,5 +1,2 @@
-mod coefficients;
-mod encode;
-
-pub(crate) use coefficients::*;
-pub(crate) use encode::*;
+pub(crate) mod coefficients;
+pub(crate) mod encode;

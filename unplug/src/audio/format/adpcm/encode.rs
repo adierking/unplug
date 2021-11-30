@@ -1,8 +1,60 @@
-use super::vgaudio::{calculate_coefficients, encode};
-use super::{GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
+use super::vgaudio::coefficients::{self, PcmHistory, Vec3};
+use super::vgaudio::encode;
+use super::{Coefficients, GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use tracing::{debug, instrument, trace, trace_span};
+
+/// Calculates ADPCM coefficients for sample data.
+#[derive(Default, Clone)]
+pub struct CoefficientCalculator {
+    records: Vec<Vec3>,
+    pcm_hist: PcmHistory,
+    frame_len: usize,
+}
+
+impl CoefficientCalculator {
+    /// Creates a new `CoefficientCalculator`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Updates the calculator by processing the sample data in `samples`.
+    #[instrument(level = "trace", name = "CoefficientCalculator::process", skip_all)]
+    pub fn process(&mut self, samples: &[i16]) {
+        let mut i = 0;
+        while i < samples.len() {
+            let remaining = samples.len() - i;
+            let start = SAMPLES_PER_FRAME + self.frame_len;
+            let len = (SAMPLES_PER_FRAME - self.frame_len).min(remaining);
+            let end = start + len;
+            self.pcm_hist[start..end].copy_from_slice(&samples[i..(i + len)]);
+            self.frame_len += len;
+            if self.frame_len == SAMPLES_PER_FRAME {
+                coefficients::process_frame(&mut self.pcm_hist, &mut self.records);
+                self.frame_len = 0;
+            }
+            i += len;
+        }
+    }
+
+    /// Finishes calculating and returns the calculated coefficients.
+    #[instrument(level = "trace", name = "CoefficientCalculator::finish", skip_all)]
+    pub fn finish(mut self) -> Coefficients {
+        if self.frame_len > 0 {
+            self.pcm_hist[(SAMPLES_PER_FRAME + self.frame_len)..].fill(0);
+            coefficients::process_frame(&mut self.pcm_hist, &mut self.records);
+        }
+        coefficients::finish(&self.records)
+    }
+
+    /// Helper function for calculating coefficients over one set of samples.
+    pub fn calculate(samples: &[i16]) -> Coefficients {
+        let mut calculator = Self::new();
+        calculator.process(samples);
+        calculator.finish()
+    }
+}
 
 /// Encodes raw PCM data into GameCube ADPCM format.
 pub struct Encoder<'r, 's> {
@@ -73,8 +125,7 @@ impl<'r, 's> Encoder<'r, 's> {
             self.pcm.len(),
             self.tag()
         );
-        self.state.coefficients =
-            trace_span!("calculate_coefficients").in_scope(|| calculate_coefficients(&self.pcm));
+        self.state.coefficients = CoefficientCalculator::calculate(&self.pcm);
         debug!(
             "Encoder context initialized (block size = {:#x}, coefficients = {:?})",
             self.block_size, self.state.coefficients
@@ -104,8 +155,8 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
 
         trace!("Encoding {} samples to ADPCM", num_samples);
         let mut initial_state = self.state;
-        let bytes =
-            trace_span!("encode").in_scope(|| encode(&self.pcm[start..end], &mut self.state));
+        let bytes = trace_span!("encode")
+            .in_scope(|| encode::encode(&self.pcm[start..end], &mut self.state));
         initial_state.context.predictor_and_scale = bytes[0] as u16;
         self.pos = end;
 
@@ -145,6 +196,53 @@ mod tests {
     use crate::audio::format::adpcm::FrameContext;
     use crate::audio::Result;
     use crate::test;
+
+    #[test]
+    fn test_calculate_coefficients() -> Result<()> {
+        let data = test::open_test_wav();
+        let num_samples = data.len() / 2;
+        let mut left_samples = Vec::with_capacity(num_samples);
+        let mut right_samples = Vec::with_capacity(num_samples);
+        for samples in data.chunks(2) {
+            left_samples.push(samples[0]);
+            right_samples.push(samples[1]);
+        }
+        let left_coefficients = CoefficientCalculator::calculate(&left_samples);
+        let right_coefficients = CoefficientCalculator::calculate(&right_samples);
+        assert_eq!(left_coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
+        assert_eq!(right_coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_coefficients_chunked() -> Result<()> {
+        const CHUNK_SIZE: usize = 1000;
+
+        let data = test::open_test_wav();
+        let num_samples = data.len() / 2;
+        let mut left_samples = Vec::with_capacity(num_samples);
+        let mut right_samples = Vec::with_capacity(num_samples);
+        for samples in data.chunks(2) {
+            left_samples.push(samples[0]);
+            right_samples.push(samples[1]);
+        }
+
+        let mut left_calc = CoefficientCalculator::new();
+        for samples in left_samples.chunks(CHUNK_SIZE) {
+            left_calc.process(samples);
+        }
+        let left_coefficients = left_calc.finish();
+
+        let mut right_calc = CoefficientCalculator::new();
+        for samples in right_samples.chunks(CHUNK_SIZE) {
+            right_calc.process(samples);
+        }
+        let right_coefficients = right_calc.finish();
+
+        assert_eq!(left_coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
+        assert_eq!(right_coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
+        Ok(())
+    }
 
     #[test]
     fn test_encode() -> Result<()> {
