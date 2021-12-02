@@ -89,8 +89,8 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
         self.source.tag()
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
-        self.source.progress_hint()
+    fn progress(&self) -> Option<ProgressHint> {
+        self.source.progress()
     }
 }
 

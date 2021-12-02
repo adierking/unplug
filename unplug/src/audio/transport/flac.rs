@@ -117,7 +117,7 @@ impl ReadSamples<'static> for FlacReader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         // There doesn't seem to be an easy way to get this
         None
     }

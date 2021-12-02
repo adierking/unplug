@@ -219,7 +219,7 @@ impl ReadSamples<'static> for WavReader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         // We just read everything at once, so...
         if self.data_available {
             ProgressHint::new(0, 1)
@@ -242,10 +242,10 @@ mod tests {
         let mut wav = WavReader::new(Cursor::new(TEST_WAV), "TEST_WAV")?;
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
-        assert_eq!(wav.progress_hint(), ProgressHint::new(0, 1));
+        assert_eq!(wav.progress(), ProgressHint::new(0, 1));
 
         let samples = wav.read_all_samples()?;
-        assert_eq!(wav.progress_hint(), ProgressHint::new(1, 1));
+        assert_eq!(wav.progress(), ProgressHint::new(1, 1));
         assert_eq!(samples.channels, 2);
         assert_eq!(samples.rate, 44100);
         assert_eq!(samples.len, expected.len());

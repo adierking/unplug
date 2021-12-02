@@ -338,8 +338,8 @@ where
         self.inner.tag()
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
-        self.inner.progress_hint()
+    fn progress(&self) -> Option<ProgressHint> {
+        self.inner.progress()
     }
 }
 

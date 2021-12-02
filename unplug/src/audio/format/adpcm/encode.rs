@@ -177,7 +177,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
         self.reader.tag()
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         if self.pcm.is_empty() {
             return None; // Not initialized yet, so we don't know
         }
@@ -258,7 +258,7 @@ mod tests {
         let right = right_encoder.read_samples()?.unwrap();
         assert_eq!(right.params.coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
 
-        assert_eq!(left_encoder.progress_hint(), ProgressHint::new(1, 1));
+        assert_eq!(left_encoder.progress(), ProgressHint::new(1, 1));
         assert_eq!(
             left.params.context,
             FrameContext { predictor_and_scale: 0x75, last_samples: [0; 2] }
@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(left.rate, 44100);
         assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
-        assert_eq!(right_encoder.progress_hint(), ProgressHint::new(1, 1));
+        assert_eq!(right_encoder.progress(), ProgressHint::new(1, 1));
         assert_eq!(
             right.params.context,
             FrameContext { predictor_and_scale: 0x16, last_samples: [0; 2] }
@@ -298,10 +298,10 @@ mod tests {
 
         let mut blocks = vec![];
         let mut i = 0;
-        assert_eq!(encoder.progress_hint(), None);
+        assert_eq!(encoder.progress(), None);
         while let Some(block) = encoder.read_samples()? {
             i += 1;
-            assert_eq!(encoder.progress_hint(), ProgressHint::new(i, EXPECTED_NUM_BLOCKS));
+            assert_eq!(encoder.progress(), ProgressHint::new(i, EXPECTED_NUM_BLOCKS));
             blocks.push(block);
         }
         assert_eq!(blocks.len(), 4);

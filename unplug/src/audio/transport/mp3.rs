@@ -145,7 +145,7 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         ProgressHint::new(self.frame_index, self.info.num_frames as u64)
     }
 }

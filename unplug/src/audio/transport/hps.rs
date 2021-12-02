@@ -684,7 +684,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         ProgressHint::new(self.pos as u64, self.blocks.len() as u64)
     }
 }

@@ -70,7 +70,7 @@ impl ReadSamples<'static> for OggReader<'_> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         // There doesn't seem to be a way to get this
         None
     }

@@ -214,7 +214,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
 
     fn update_progress(&mut self) {
         if let Some(callback) = &mut self.on_progress {
-            callback(self.samples.progress_hint())
+            callback(self.samples.progress())
         }
     }
 }

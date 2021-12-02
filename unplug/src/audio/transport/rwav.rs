@@ -469,7 +469,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         &self.tag
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         match &self.channel {
             Some(_) => ProgressHint::new(0, 1),
             None => ProgressHint::new(1, 1),

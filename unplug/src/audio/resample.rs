@@ -207,10 +207,10 @@ where
         self.inner.tag()
     }
 
-    fn progress_hint(&self) -> Option<ProgressHint> {
+    fn progress(&self) -> Option<ProgressHint> {
         // Ideally we could know how many blocks we plan to output, but variable sample rate streams
         // make this difficult, so we have to fall back on the progress of the inner stream
-        self.inner.progress_hint()
+        self.inner.progress()
     }
 }
 
