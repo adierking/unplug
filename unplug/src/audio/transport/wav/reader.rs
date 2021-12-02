@@ -15,8 +15,8 @@ struct RiffReader<'a> {
     next_offset: Option<u64>,
     /// The offset of the chunk header within the parent chunk.
     header_offset: u64,
-    /// This chunk's ID.
-    id: u32,
+    /// The chunk's header.
+    header: ChunkHeader,
     /// The RIFF data's form ID.
     form: u32,
 }
@@ -26,24 +26,28 @@ impl<'a> RiffReader<'a> {
     fn open_form(mut reader: impl ReadSeek + 'a) -> Result<Self> {
         let header_offset = reader.seek(SeekFrom::Current(0))?;
         let header = ChunkHeader::read_from(&mut reader)?;
-        let id = header.id;
-        if id != ID_RIFF {
+        if header.id != ID_RIFF {
             return Err(Error::InvalidRiff);
         }
         let form = reader.read_u32::<LE>()?;
-        Ok(Self { reader: Box::from(reader), next_offset: None, header_offset, id, form })
+        Ok(Self { reader: Box::from(reader), next_offset: None, header_offset, header, form })
     }
 
     /// Opens a RIFF chunk.
-    fn open_chunk(reader: impl ReadSeek + 'a, header_offset: u64, id: u32, form: u32) -> Self {
-        Self { reader: Box::from(reader), next_offset: None, header_offset, id, form }
+    fn open_chunk(
+        reader: impl ReadSeek + 'a,
+        header_offset: u64,
+        header: ChunkHeader,
+        form: u32,
+    ) -> Self {
+        Self { reader: Box::from(reader), next_offset: None, header_offset, header, form }
     }
 
     /// Reads the next available chunk. If this is called immediately after another call to
     /// `next_chunk()`, it will automatically seek to the following chunk, otherwise it will read
     /// the chunk at the current offset.
     fn next_chunk(&mut self) -> Result<Option<RiffReader<'_>>> {
-        let chunk = match ChunkHeader::read_from(self) {
+        let header = match ChunkHeader::read_from(self) {
             Ok(c) => c,
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => return Err(e.into()),
@@ -54,11 +58,11 @@ impl<'a> RiffReader<'a> {
         // we return and the next call to `next_chunk()` will always read from the right place.
         let data_offset = self.seek(SeekFrom::Current(0))?;
         let header_offset = data_offset - CHUNK_HEADER_SIZE;
-        let end_offset = data_offset + chunk.size as u64;
+        let end_offset = data_offset + header.size as u64;
         self.next_offset = Some(align(end_offset, RIFF_ALIGN));
 
-        let region = Region::new(&mut self.reader, data_offset, chunk.size as u64);
-        Ok(Some(RiffReader::open_chunk(region, header_offset, chunk.id, self.form)))
+        let region = Region::new(&mut self.reader, data_offset, header.size as u64);
+        Ok(Some(RiffReader::open_chunk(region, header_offset, header, self.form)))
     }
 }
 
@@ -94,8 +98,8 @@ pub struct WavReader<'a> {
     riff: RiffReader<'a>,
     /// An id -> offset mapping for each chunk in the form.
     chunk_offsets: HashMap<u32, u64>,
-    /// true if the data chunk has not been read yet.
-    data_available: bool,
+    /// The number of bytes which have not been read from the data chunk yet.
+    data_remaining: u32,
     /// The audio source tag for debugging purposes.
     tag: SourceTag,
     /// The number of channels in the audio data.
@@ -120,7 +124,7 @@ impl<'a> WavReader<'a> {
         let mut wav = Self {
             riff,
             chunk_offsets: HashMap::new(),
-            data_available: true,
+            data_remaining: 0,
             tag,
             channels: 0,
             sample_rate: 0,
@@ -133,9 +137,12 @@ impl<'a> WavReader<'a> {
     /// Iterates over the chunks in the WAV data and builds the internal chunk offset map.
     fn read_chunks(&mut self) -> Result<()> {
         while let Some(chunk) = self.riff.next_chunk()? {
-            if self.chunk_offsets.insert(chunk.id, chunk.header_offset).is_some() {
-                error!("Duplicate WAV chunk {:#x}", chunk.id);
+            if self.chunk_offsets.insert(chunk.header.id, chunk.header_offset).is_some() {
+                error!("Duplicate WAV chunk {:#x}", chunk.header.id);
                 return Err(Error::InvalidWav);
+            }
+            if chunk.header.id == ID_DATA {
+                self.data_remaining = chunk.header.size;
             }
         }
         Ok(())
@@ -182,7 +189,7 @@ impl<'a> WavReader<'a> {
         };
         self.riff.seek(SeekFrom::Start(offset))?;
         match self.riff.next_chunk()? {
-            Some(c) if c.id == id => Ok(Some(c)),
+            Some(c) if c.header.id == id => Ok(Some(c)),
             _ => {
                 error!("Failed to open chunk {:#x}", id);
                 Err(Error::InvalidWav)
@@ -196,14 +203,14 @@ impl ReadSamples<'static> for WavReader<'_> {
 
     #[instrument(level = "trace", name = "WavReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
-        if !self.data_available {
+        if self.data_remaining == 0 {
             return Ok(None);
         }
         let mut samples = vec![];
         if let Some(chunk) = self.open_chunk(ID_DATA)? {
             samples = PcmS16Le::read_bytes(chunk)?;
         }
-        self.data_available = false;
+        self.data_remaining = 0;
         if samples.is_empty() {
             Ok(None)
         } else {
@@ -221,11 +228,15 @@ impl ReadSamples<'static> for WavReader<'_> {
 
     fn progress(&self) -> Option<ProgressHint> {
         // We just read everything at once, so...
-        if self.data_available {
+        if self.data_remaining > 0 {
             ProgressHint::new(0, 1)
         } else {
             ProgressHint::new(1, 1)
         }
+    }
+
+    fn data_remaining(&self) -> Option<u64> {
+        Some(self.data_remaining as u64 / 2) // Convert from bytes to samples
     }
 }
 
@@ -243,9 +254,11 @@ mod tests {
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
         assert_eq!(wav.progress(), ProgressHint::new(0, 1));
+        assert_eq!(wav.data_remaining(), Some(expected.len() as u64));
 
         let samples = wav.read_all_samples()?;
         assert_eq!(wav.progress(), ProgressHint::new(1, 1));
+        assert_eq!(wav.data_remaining(), Some(0));
         assert_eq!(samples.channels, 2);
         assert_eq!(samples.rate, 44100);
         assert_eq!(samples.len, expected.len());

@@ -74,6 +74,10 @@ impl ReadSamples<'static> for OggReader<'_> {
         // There doesn't seem to be a way to get this
         None
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        None
+    }
 }
 
 #[cfg(test)]

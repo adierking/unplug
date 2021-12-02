@@ -341,6 +341,10 @@ where
     fn progress(&self) -> Option<ProgressHint> {
         self.inner.progress()
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        self.inner.data_remaining()
+    }
 }
 
 #[cfg(test)]

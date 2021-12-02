@@ -687,6 +687,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
     fn progress(&self) -> Option<ProgressHint> {
         ProgressHint::new(self.pos as u64, self.blocks.len() as u64)
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        Some(self.blocks[self.pos..].iter().map(|b| b.end_address as u64 + 1).sum())
+    }
 }
 
 #[cfg(test)]

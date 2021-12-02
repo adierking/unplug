@@ -148,6 +148,11 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
     fn progress(&self) -> Option<ProgressHint> {
         ProgressHint::new(self.frame_index, self.info.num_frames as u64)
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        // TODO: Can we get this from the frame count?
+        None
+    }
 }
 
 /// MP3 encoding and file structure info.

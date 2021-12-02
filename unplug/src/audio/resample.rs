@@ -212,6 +212,10 @@ where
         // make this difficult, so we have to fall back on the progress of the inner stream
         self.inner.progress()
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        None
+    }
 }
 
 #[cfg(test)]

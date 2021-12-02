@@ -121,6 +121,10 @@ impl ReadSamples<'static> for FlacReader<'_> {
         // There doesn't seem to be an easy way to get this
         None
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        None
+    }
 }
 
 #[cfg(test)]

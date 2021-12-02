@@ -92,6 +92,15 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
     fn progress(&self) -> Option<ProgressHint> {
         self.source.progress()
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        self.source.data_remaining().map(|len| {
+            let bytes = (len + 1) / 2;
+            let bytes_per_frame = BYTES_PER_FRAME as u64;
+            let num_frames = (bytes + bytes_per_frame - 1) / bytes_per_frame;
+            len - num_frames * 2
+        })
+    }
 }
 
 #[cfg(test)]
@@ -151,10 +160,11 @@ mod tests {
             },
         };
 
-        let mut decoder = Decoder::new(encoded.into_reader("test"));
-        let decoded = decoder.read_samples()?.unwrap();
-
         let expected = PcmS16Le::read_bytes(SINE_DECODED)?;
+        let mut decoder = Decoder::new(encoded.into_reader("test"));
+        assert_eq!(decoder.data_remaining(), Some(expected.len() as u64));
+        let decoded = decoder.read_samples()?.unwrap();
+        assert_eq!(decoder.data_remaining(), Some(0));
         assert_eq!(decoded.data, expected);
 
         Ok(())

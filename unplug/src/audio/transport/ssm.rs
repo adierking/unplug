@@ -477,6 +477,13 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
             None => ProgressHint::new(1, 1),
         }
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        match &self.channel {
+            Some(c) => Some(c.address.end_address as u64 + 1),
+            None => Some(0),
+        }
+    }
 }
 
 #[cfg(test)]

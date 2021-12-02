@@ -262,6 +262,11 @@ pub trait ReadSamples<'s> {
     /// arbitrary and this should only be used for reporting progress back to the user.
     fn progress(&self) -> Option<ProgressHint>;
 
+    /// Returns the amount of data (in the format's smallest addressable unit) which has not been
+    /// read yet (if available). Do not assume this is always a sample count - this will only be
+    /// true for PCM formats.
+    fn data_remaining(&self) -> Option<u64>;
+
     /// Reads all available samples and concatenates them into a single `Samples` object. The
     /// samples must have a static format and follow the rules for `Samples::append()`. If no
     /// samples are available, `Err(EmptyStream)` is returned.
@@ -370,6 +375,9 @@ where
     fn progress(&self) -> Option<ProgressHint> {
         (**self).progress()
     }
+    fn data_remaining(&self) -> Option<u64> {
+        (**self).data_remaining()
+    }
 }
 
 impl<'a, F, R> ReadSamples<'a> for Box<R>
@@ -389,6 +397,9 @@ where
     }
     fn progress(&self) -> Option<ProgressHint> {
         (**self).progress()
+    }
+    fn data_remaining(&self) -> Option<u64> {
+        (**self).data_remaining()
     }
 }
 
@@ -438,6 +449,9 @@ impl<'s, F: DynamicFormat> ReadSamples<'s> for ReadSampleList<'s, F> {
         let current = self.original_len - (self.samples.len() as u64);
         ProgressHint::new(current, self.original_len)
     }
+    fn data_remaining(&self) -> Option<u64> {
+        Some(self.samples.iter().map(|s| s.len as u64).sum())
+    }
 }
 
 /// An adapter which ensures all samples contain owned data. Borrowed sample data returned by the
@@ -466,6 +480,9 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'static> for OwnedSamples<'s, R> {
     }
     fn progress(&self) -> Option<ProgressHint> {
         self.inner.progress()
+    }
+    fn data_remaining(&self) -> Option<u64> {
+        self.inner.data_remaining()
     }
 }
 
@@ -516,6 +533,10 @@ where
 
     fn progress(&self) -> Option<ProgressHint> {
         self.inner.progress()
+    }
+
+    fn data_remaining(&self) -> Option<u64> {
+        self.inner.data_remaining()
     }
 }
 
@@ -569,6 +590,13 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for PeekSamples<'s, R> {
         match &self.next {
             Some(next) => next.progress,
             None => self.inner.progress(),
+        }
+    }
+
+    fn data_remaining(&self) -> Option<u64> {
+        match &self.next {
+            Some(next) => Some(self.inner.data_remaining()? + (next.samples.len as u64)),
+            None => self.inner.data_remaining(),
         }
     }
 }
@@ -690,6 +718,10 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
             None
         }
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        Some(self.left.data_remaining()? + self.right.data_remaining()?)
+    }
 }
 
 /// An adapter which splits a stereo stream into two mono streams.
@@ -806,6 +838,15 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
     fn progress(&self) -> Option<ProgressHint> {
         let state = self.state.lock().unwrap();
         state.reader.progress()
+    }
+
+    fn data_remaining(&self) -> Option<u64> {
+        let state = self.state.lock().unwrap();
+        state.reader.data_remaining().map(|len| {
+            let is_right = self.tag.channel == SourceChannel::Right;
+            let queue = if is_right { &state.right } else { &state.left };
+            (len + queue.iter().map(|s| s.len as u64).sum::<u64>()) / 2
+        })
     }
 }
 
@@ -1102,7 +1143,10 @@ mod tests {
         let right = Samples::<PcmS16Le>::from_pcm(&rdata[..7], 1, 44100);
 
         let mut joiner = JoinChannels::new(left.into_reader("left"), right.into_reader("right"));
+        assert_eq!(joiner.data_remaining(), Some(14));
         let joined = joiner.read_samples()?.unwrap();
+        assert_eq!(joiner.data_remaining(), Some(0));
+
         assert_eq!(joined.len, 14);
         assert_eq!(joined.channels, 2);
         assert_eq!(
@@ -1121,8 +1165,15 @@ mod tests {
         let splitter = SplitChannels::new(stereo.into_reader("test"));
         let mut left_split = splitter.left();
         let mut right_split = splitter.right();
+        assert_eq!(left_split.data_remaining(), Some(7));
+        assert_eq!(right_split.data_remaining(), Some(7));
+
         let left = left_split.read_samples()?.unwrap();
+        assert_eq!(left_split.data_remaining(), Some(0));
+        assert_eq!(right_split.data_remaining(), Some(7));
+
         let right = right_split.read_samples()?.unwrap();
+        assert_eq!(right_split.data_remaining(), Some(0));
         assert!(left_split.read_samples()?.is_none());
         assert!(right_split.read_samples()?.is_none());
 
@@ -1160,18 +1211,23 @@ mod tests {
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 0);
         assert_eq!(reader.progress(), ProgressHint::new(0, 3));
+        assert_eq!(reader.data_remaining(), Some(3));
 
         assert_eq!(reader.read_samples()?.unwrap().data[0], 0);
         assert_eq!(reader.progress(), ProgressHint::new(1, 3));
+        assert_eq!(reader.data_remaining(), Some(2));
 
         assert_eq!(reader.read_samples()?.unwrap().data[0], 1);
         assert_eq!(reader.progress(), ProgressHint::new(2, 3));
+        assert_eq!(reader.data_remaining(), Some(1));
 
         assert_eq!(reader.peek_samples()?.unwrap().data[0], 2);
         assert_eq!(reader.progress(), ProgressHint::new(2, 3));
+        assert_eq!(reader.data_remaining(), Some(1));
 
         assert_eq!(reader.read_samples()?.unwrap().data[0], 2);
         assert_eq!(reader.progress(), ProgressHint::new(3, 3));
+        assert_eq!(reader.data_remaining(), Some(0));
 
         assert!(reader.peek_samples()?.is_none());
         assert!(reader.read_samples()?.is_none());

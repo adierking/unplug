@@ -188,6 +188,17 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
         let total = (total_frames + frames_per_block - 1) / frames_per_block;
         ProgressHint::new(current as u64, total as u64)
     }
+
+    fn data_remaining(&self) -> Option<u64> {
+        let samples_per_frame = SAMPLES_PER_FRAME as u64;
+        let num_samples = if !self.pcm.is_empty() {
+            (self.pcm.len() - self.pos) as u64
+        } else {
+            self.reader.data_remaining()?
+        };
+        let num_frames = (num_samples + samples_per_frame - 1) / samples_per_frame;
+        Some(num_samples + num_frames * 2)
+    }
 }
 
 #[cfg(test)]
@@ -196,6 +207,8 @@ mod tests {
     use crate::audio::format::adpcm::FrameContext;
     use crate::audio::Result;
     use crate::test;
+
+    const EXPECTED_LEN: usize = 0x30af9;
 
     #[test]
     fn test_calculate_coefficients() -> Result<()> {
@@ -252,6 +265,8 @@ mod tests {
         let splitter = samples.into_reader("test").split_channels();
         let mut left_encoder = Encoder::new(splitter.left());
         let mut right_encoder = Encoder::new(splitter.right());
+        assert_eq!(left_encoder.data_remaining(), Some(EXPECTED_LEN as u64));
+        assert_eq!(right_encoder.data_remaining(), Some(EXPECTED_LEN as u64));
 
         let left = left_encoder.read_samples()?.unwrap();
         assert_eq!(left.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
@@ -259,21 +274,23 @@ mod tests {
         assert_eq!(right.params.coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
 
         assert_eq!(left_encoder.progress(), ProgressHint::new(1, 1));
+        assert_eq!(left_encoder.data_remaining(), Some(0));
         assert_eq!(
             left.params.context,
             FrameContext { predictor_and_scale: 0x75, last_samples: [0; 2] }
         );
-        assert_eq!(left.len, 0x30af9);
+        assert_eq!(left.len, EXPECTED_LEN);
         assert_eq!(left.channels, 1);
         assert_eq!(left.rate, 44100);
         assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
         assert_eq!(right_encoder.progress(), ProgressHint::new(1, 1));
+        assert_eq!(right_encoder.data_remaining(), Some(0));
         assert_eq!(
             right.params.context,
             FrameContext { predictor_and_scale: 0x16, last_samples: [0; 2] }
         );
-        assert_eq!(right.len, 0x30af9);
+        assert_eq!(right.len, EXPECTED_LEN);
         assert_eq!(right.channels, 1);
         assert_eq!(right.rate, 44100);
         assert!(right.data == test::TEST_WAV_RIGHT_DSP);
@@ -291,17 +308,22 @@ mod tests {
             &[[0, 0], [-5232, -5240], [1236, 1218], [33, 42]];
 
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
+        let samples = Samples::<PcmS16Le>::from_pcm(&data, 2, 44100);
 
         let splitter = samples.into_reader("test").split_channels();
         let mut encoder = Encoder::with_block_size(splitter.left(), BLOCK_SIZE);
 
         let mut blocks = vec![];
         let mut i = 0;
+        let mut expected_remaining =
+            EXPECTED_END_ADDRESSES.iter().skip(i as usize).map(|&a| a as u64 + 1).sum();
         assert_eq!(encoder.progress(), None);
+        assert_eq!(encoder.data_remaining(), Some(expected_remaining));
         while let Some(block) = encoder.read_samples()? {
             i += 1;
+            expected_remaining -= block.len as u64;
             assert_eq!(encoder.progress(), ProgressHint::new(i, EXPECTED_NUM_BLOCKS));
+            assert_eq!(encoder.data_remaining(), Some(expected_remaining));
             blocks.push(block);
         }
         assert_eq!(blocks.len(), 4);
