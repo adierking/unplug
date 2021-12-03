@@ -1,4 +1,4 @@
-use crate::audio::format::adpcm::{self, GcAdpcm};
+use crate::audio::format::adpcm::{self, EncoderBuilder, GcAdpcm};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{
     AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat,
@@ -304,19 +304,13 @@ impl HpsStream {
     /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
     #[instrument(level = "trace", skip_all)]
     pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
-        let samples = reader.read_all_samples()?;
-        let channels = samples.channels;
-        let samples = samples.into_reader(reader.tag().clone());
-        if channels == 2 {
-            let splitter = samples.split_channels();
-            let mut left = adpcm::Encoder::with_block_size(splitter.left(), STEREO_BLOCK_SIZE);
-            let mut right = adpcm::Encoder::with_block_size(splitter.right(), STEREO_BLOCK_SIZE);
-            Self::from_adpcm_stereo(&mut left, &mut right)
-        } else if channels == 1 {
-            let mut encoder = adpcm::Encoder::with_block_size(samples, MONO_BLOCK_SIZE);
-            Self::from_adpcm_mono(&mut encoder)
-        } else {
-            Err(Error::UnsupportedChannels)
+        let (mut left, right) = EncoderBuilder::new(reader)
+            .mono_block_size(MONO_BLOCK_SIZE)
+            .stereo_block_size(STEREO_BLOCK_SIZE)
+            .build()?;
+        match right {
+            Some(mut right) => Self::from_adpcm_stereo(&mut left, &mut right),
+            None => Self::from_adpcm_mono(&mut left),
         }
     }
 

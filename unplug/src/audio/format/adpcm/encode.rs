@@ -2,8 +2,13 @@ use super::vgaudio::coefficients::{self, PcmHistory, Vec3};
 use super::vgaudio::encode;
 use super::{Coefficients, GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
+use crate::audio::sample::ReadSampleList;
 use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
-use tracing::{debug, instrument, trace, trace_span};
+use arrayvec::ArrayVec;
+use std::collections::VecDeque;
+use std::mem;
+use std::num::NonZeroU64;
+use tracing::{instrument, trace_span};
 
 /// Calculates ADPCM coefficients for sample data.
 #[derive(Default, Clone)]
@@ -56,81 +61,319 @@ impl CoefficientCalculator {
     }
 }
 
-/// Encodes raw PCM data into GameCube ADPCM format.
+type ProgressCallback<'a> = Box<dyn FnMut(Option<ProgressHint>) + 'a>;
+type EncoderPair<'s> = (Encoder<'s, 's>, Option<Encoder<'s, 's>>);
+
+/// A helper API for building up an `Encoder` by reading and analyzing samples.
+pub struct EncoderBuilder<'r, 's: 'r> {
+    reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
+    mono_block_size: usize,
+    stereo_block_size: usize,
+    on_progress: Option<ProgressCallback<'r>>,
+}
+
+impl<'r, 's: 'r> EncoderBuilder<'r, 's> {
+    /// Creates a new `EncoderBuilder` which analyzes samples in `reader` and builds an encoder to
+    /// encode them.
+    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Self {
+        Self::new_impl(Box::from(reader))
+    }
+
+    fn new_impl(reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>) -> Self {
+        Self {
+            reader,
+            mono_block_size: usize::MAX,
+            stereo_block_size: usize::MAX,
+            on_progress: None,
+        }
+    }
+
+    /// Sets the encoder block size for both the mono and stereo channel layouts.
+    pub fn block_size(mut self, size: usize) -> Self {
+        self.mono_block_size = size;
+        self.stereo_block_size = size;
+        self
+    }
+
+    /// Sets the encoder block size to use for mono streams.
+    pub fn mono_block_size(mut self, size: usize) -> Self {
+        self.mono_block_size = size;
+        self
+    }
+
+    /// Sets the encoder block size to use for stereo streams.
+    pub fn stereo_block_size(mut self, size: usize) -> Self {
+        self.stereo_block_size = size;
+        self
+    }
+
+    /// Sets a callback to run for progress updates. If the total amount of work is unknown, the
+    /// callback will still be invoked with a `None` hint.
+    pub fn on_progress(mut self, callback: impl FnMut(Option<ProgressHint>) + 'r) -> Self {
+        self.on_progress = Some(Box::from(callback));
+        self
+    }
+
+    /// Analyzes the audio stream and builds encoder(s) to encode the samples. The return value is a
+    /// `(left, right)` pair of encoders, where the right encoder is only present for stereo
+    /// streams.
+    pub fn build(mut self) -> Result<EncoderPair<'s>> {
+        let mut reader = self.reader.peekable();
+        let first = match reader.peek_samples()? {
+            Some(s) => s,
+            None => return Err(Error::EmptyStream),
+        };
+        let channels = first.channels;
+        self.reader = Box::from(reader);
+        match channels {
+            1 => self.build_mono(),
+            2 => self.build_stereo(),
+            _ => Err(Error::InvalidChannelCount(channels as u32)),
+        }
+    }
+
+    /// Helper function for quickly building `Encoder`s over samples read from `reader` using
+    /// default settings. See `build()` for an explanation of the return value.
+    pub fn simple(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Result<EncoderPair<'s>> {
+        Self::new_impl(Box::from(reader)).build()
+    }
+
+    fn build_mono(mut self) -> Result<EncoderPair<'s>> {
+        let mut channel = EncoderChannel::new(self.mono_block_size, self.reader.tag().clone());
+        Self::update_progress(self.on_progress.as_mut(), self.reader.progress());
+        while let Some(samples) = self.reader.read_samples()? {
+            channel.add_samples(samples);
+            Self::update_progress(self.on_progress.as_mut(), self.reader.progress());
+        }
+        Ok((channel.into_encoder(), None))
+    }
+
+    fn build_stereo(self) -> Result<EncoderPair<'s>> {
+        let splitter = self.reader.split_channels();
+        let mut left = splitter.left();
+        let mut right = splitter.right();
+        let mut left_channel = EncoderChannel::new(self.stereo_block_size, left.tag().clone());
+        let mut right_channel = EncoderChannel::new(self.stereo_block_size, right.tag().clone());
+        let mut on_progress = self.on_progress;
+        Self::update_progress(on_progress.as_mut(), left.progress());
+        while let (Some(l), Some(r)) = (left.read_samples()?, right.read_samples()?) {
+            left_channel.add_samples(l);
+            right_channel.add_samples(r);
+            Self::update_progress(on_progress.as_mut(), left.progress());
+        }
+        Ok((left_channel.into_encoder(), Some(right_channel.into_encoder())))
+    }
+
+    fn update_progress(
+        on_progress: Option<&mut ProgressCallback<'r>>,
+        progress: Option<ProgressHint>,
+    ) {
+        if let Some(on_progress) = on_progress {
+            on_progress(progress);
+        }
+    }
+}
+
+/// Implementation detail for `EncoderBuilder` which builds an encoder for a single channel.
+struct EncoderChannel<'s> {
+    block_size: usize,
+    tag: SourceTag,
+    samples: Vec<Samples<'s, PcmS16Le>>,
+    coeff: CoefficientCalculator,
+}
+
+impl<'s> EncoderChannel<'s> {
+    fn new(block_size: usize, tag: SourceTag) -> Self {
+        Self { block_size, tag, samples: vec![], coeff: Default::default() }
+    }
+
+    fn add_samples(&mut self, samples: Samples<'s, PcmS16Le>) {
+        self.coeff.process(&samples.data[..samples.len]);
+        // We have to keep a list of all the samples so we can "replay" them to the encoder.
+        // Unfortunately it isn't possible to encode in a single pass due to the coefficient
+        // calculation.
+        self.samples.push(samples);
+    }
+
+    fn into_encoder(self) -> Encoder<'s, 's> {
+        let state = Info { coefficients: self.coeff.finish(), ..Default::default() };
+        let reader = ReadSampleList::new(self.samples, self.tag);
+        Encoder::with_block_size(reader, state, self.block_size)
+    }
+}
+
+/// A partial block of encoded GameCube ADPCM data.
+#[derive(Default)]
+struct Block {
+    data: Vec<u8>,
+    len: usize,
+    initial_state: Info,
+}
+
+impl Block {
+    /// Encodes `samples`, adds them to the block, and updates `state`.
+    fn encode(&mut self, samples: &[i16], state: &mut Info) {
+        let bytes = trace_span!("encode").in_scope(|| encode::encode(samples, state));
+        self.len += bytes.len() * 2 - samples.len() % 2;
+        self.data.extend(bytes);
+    }
+
+    /// Completes the block and turns it into a `Samples` object.
+    fn finish<'s>(mut self, rate: u32, max_size: usize) -> Samples<'s, GcAdpcm> {
+        assert!(!self.data.is_empty());
+        assert!(self.data.len() <= max_size);
+        self.initial_state.context.predictor_and_scale = self.data[0] as u16;
+        Samples {
+            channels: 1,
+            rate,
+            len: self.len,
+            data: self.data.into(),
+            params: self.initial_state,
+        }
+    }
+}
+
+/// Encodes raw PCM data into GameCube ADPCM format. Samples are encoded on-demand as they are read
+/// from the encoder.
 pub struct Encoder<'r, 's> {
     /// The inner reader to read samples from.
     reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
-    /// The raw PCM samples to encode.
-    pcm: Vec<i16>,
+    /// The maximum size of each block in bytes.
+    block_size: usize,
     /// The sample rate.
     sample_rate: u32,
-    /// The index of the next sample to start encoding from.
-    pos: usize,
-    /// The size of each block in bytes.
-    block_size: usize,
+    /// The number of samples which have been encoded so far.
+    samples_encoded: u64,
+    /// The total number of samples which will need to be encoded.
+    total_samples: Option<NonZeroU64>,
+    /// The current frame which needs to be filled before it can be encoded.
+    frame: ArrayVec<[i16; SAMPLES_PER_FRAME]>,
+    /// A buffer for samples which have been read but not encoded yet.
+    buffer: VecDeque<Samples<'s, PcmS16Le>>,
+    /// The offset within the samples at the front of `buffer` to start encoding from.
+    sample_offset: usize,
+    /// The block currently being built.
+    block: Block,
     /// The current encoding state.
     state: Info,
+    /// `true` if encoding has finished and there are no more samples to read.
+    done: bool,
 }
 
 impl<'r, 's> Encoder<'r, 's> {
-    /// Creates an `Encoder` which reads samples from `reader`.
-    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Self {
-        Self::with_block_size_impl(Box::from(reader), usize::MAX)
+    /// Creates an `Encoder` which reads samples from `reader` and has initial state `state`. This
+    /// is a low-level interface; consider using `EncoderBuilder` instead.
+    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r, state: Info) -> Self {
+        Self::with_block_size_impl(Box::from(reader), state, usize::MAX)
     }
 
-    /// Creates an `Encoder` which reads samples from `reader` and outputs blocks of data which are
-    /// no larger than `block_size`.
+    /// Creates an `Encoder` which reads samples from `reader`, has initial state `state`, and
+    /// outputs blocks of data which are no larger than `block_size`. This is a low-level interface;
+    /// consider using `EncoderBuilder` instead.
     pub fn with_block_size(
         reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r,
+        state: Info,
         block_size: usize,
     ) -> Self {
-        Self::with_block_size_impl(Box::from(reader), block_size)
+        Self::with_block_size_impl(Box::from(reader), state, block_size)
+    }
+
+    /// Returns a copy of the current encoding state.
+    pub fn state(&self) -> Info {
+        self.state
     }
 
     fn with_block_size_impl(
         reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
+        state: Info,
         block_size: usize,
     ) -> Self {
         let block_size_aligned = block_size & !(BYTES_PER_FRAME - 1);
         assert!(block_size_aligned > 0, "block size is too small");
+        let total_samples = reader.data_remaining().and_then(NonZeroU64::new);
         Self {
             reader,
-            pcm: vec![],
-            sample_rate: 0,
-            pos: 0,
             block_size: block_size_aligned,
-            state: Info::default(),
+            sample_rate: 0,
+            samples_encoded: 0,
+            total_samples,
+            frame: ArrayVec::new(),
+            buffer: VecDeque::new(),
+            sample_offset: 0,
+            block: Block { data: vec![], len: 0, initial_state: state },
+            state,
+            done: false,
         }
     }
 
-    #[instrument(level = "trace", skip_all)]
-    fn start_encoding(&mut self) -> Result<()> {
-        while let Some(samples) = self.reader.read_samples()? {
-            if samples.channels != 1 {
-                return Err(Error::StreamNotMono);
-            }
-            if self.pcm.is_empty() {
-                self.sample_rate = samples.rate;
-            } else if samples.rate != self.sample_rate {
-                return Err(Error::InconsistentSampleRate);
-            }
-            self.pcm.extend(&*samples.data);
-        }
-        if self.pcm.is_empty() {
-            return Ok(());
-        }
+    fn encode(&mut self, samples: &[i16]) {
+        self.block.encode(samples, &mut self.state);
+        self.samples_encoded += samples.len() as u64;
+    }
 
-        debug!(
-            "Calculating ADPCM coefficients over {} samples from {:?}",
-            self.pcm.len(),
-            self.tag()
-        );
-        self.state.coefficients = CoefficientCalculator::calculate(&self.pcm);
-        debug!(
-            "Encoder context initialized (block size = {:#x}, coefficients = {:?})",
-            self.block_size, self.state.coefficients
-        );
-        Ok(())
+    fn extend_frame(&mut self, samples: &[i16]) {
+        self.frame.try_extend_from_slice(samples).expect("cannot fit samples in the frame buffer");
+    }
+
+    fn encode_more(&mut self) -> Option<Block> {
+        while let Some(mut samples) = self.buffer.pop_front() {
+            let mut offset = mem::take(&mut self.sample_offset);
+
+            // If the last sample packet produced a partial frame, append the samples from the
+            // beginning of this packet to see if we can complete it. We can only encode a partial
+            // frame if it is the last frame (see `finish()`).
+            if !self.frame.is_empty() {
+                let num_samples = samples.len.min(SAMPLES_PER_FRAME - self.frame.len());
+                self.extend_frame(&samples.data[offset..(offset + num_samples)]);
+                offset += num_samples;
+                samples.len -= num_samples;
+                if self.frame.len() == SAMPLES_PER_FRAME {
+                    let frame = mem::take(&mut self.frame);
+                    self.encode(&frame);
+                }
+            }
+
+            // Encode as many whole frames as possible until we either run out or complete a block
+            while samples.len >= SAMPLES_PER_FRAME && self.block.data.len() < self.block_size {
+                let remaining_frames = (self.block_size - self.block.data.len()) / BYTES_PER_FRAME;
+                let available_frames = samples.len / SAMPLES_PER_FRAME;
+                let num_frames = remaining_frames.min(available_frames);
+                let num_samples = num_frames * SAMPLES_PER_FRAME;
+                self.encode(&samples.data[offset..(offset + num_samples)]);
+                offset += num_samples;
+                samples.len -= num_samples;
+            }
+
+            debug_assert!(self.block.data.len() <= self.block_size);
+            if self.block.data.len() == self.block_size {
+                // A full block is complete
+                let block = mem::take(&mut self.block);
+                self.block.initial_state = self.state;
+                if samples.len > 0 {
+                    // There are still samples left in this packet
+                    self.buffer.push_front(samples);
+                    self.sample_offset = offset;
+                }
+                return Some(block);
+            }
+
+            // We have a partial frame; save any unencoded samples and keep going
+            self.extend_frame(&samples.data[offset..]);
+        }
+        None
+    }
+
+    fn finish(&mut self) -> Option<Block> {
+        if !self.frame.is_empty() {
+            // The last frame is allowed to be incomplete because there will be no more samples
+            let frame = mem::take(&mut self.frame);
+            self.encode(&frame);
+        }
+        if self.block.len > 0 {
+            Some(mem::take(&mut self.block))
+        } else {
+            None
+        }
     }
 }
 
@@ -139,34 +382,26 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
 
     #[instrument(level = "trace", name = "Encoder", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
-        if self.pcm.is_empty() {
-            self.start_encoding()?;
-        }
-        if self.pos >= self.pcm.len() {
-            return Ok(None);
-        }
-
-        let start = self.pos;
-        let remaining = self.pcm.len() - start;
-        let remaining_frames = (remaining + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
-        let num_frames = remaining_frames.min(self.block_size / BYTES_PER_FRAME);
-        let num_samples = (num_frames * SAMPLES_PER_FRAME).min(remaining);
-        let end = start + num_samples;
-
-        trace!("Encoding {} samples to ADPCM", num_samples);
-        let mut initial_state = self.state;
-        let bytes = trace_span!("encode")
-            .in_scope(|| encode::encode(&self.pcm[start..end], &mut self.state));
-        initial_state.context.predictor_and_scale = bytes[0] as u16;
-        self.pos = end;
-
-        Ok(Some(Samples {
-            channels: 1,
-            rate: self.sample_rate,
-            len: bytes.len() * 2 - num_samples % 2,
-            data: bytes.into(),
-            params: initial_state,
-        }))
+        let block = loop {
+            if let Some(block) = self.encode_more() {
+                break Some(block);
+            } else if self.done {
+                return Ok(None);
+            } else if let Some(samples) = self.reader.read_samples()? {
+                if samples.rate == 0 {
+                    return Err(Error::InvalidSampleRate(samples.rate));
+                } else if self.sample_rate == 0 {
+                    self.sample_rate = samples.rate;
+                } else if samples.rate != self.sample_rate {
+                    return Err(Error::InconsistentSampleRate);
+                }
+                self.buffer.push_front(samples);
+            } else {
+                self.done = true;
+                break self.finish();
+            }
+        };
+        Ok(block.map(|b| b.finish(self.sample_rate, self.block_size)))
     }
 
     fn format(&self) -> Format {
@@ -178,24 +413,16 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
     }
 
     fn progress(&self) -> Option<ProgressHint> {
-        if self.pcm.is_empty() {
-            return None; // Not initialized yet, so we don't know
+        if let Some(total_samples) = self.total_samples {
+            ProgressHint::new(self.samples_encoded, total_samples.get())
+        } else {
+            self.reader.progress()
         }
-        let current_frame = (self.pos + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
-        let total_frames = (self.pcm.len() + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
-        let frames_per_block = total_frames.min(self.block_size / BYTES_PER_FRAME);
-        let current = (current_frame + frames_per_block - 1) / frames_per_block;
-        let total = (total_frames + frames_per_block - 1) / frames_per_block;
-        ProgressHint::new(current as u64, total as u64)
     }
 
     fn data_remaining(&self) -> Option<u64> {
         let samples_per_frame = SAMPLES_PER_FRAME as u64;
-        let num_samples = if !self.pcm.is_empty() {
-            (self.pcm.len() - self.pos) as u64
-        } else {
-            self.reader.data_remaining()?
-        };
+        let num_samples = self.total_samples?.get() - self.samples_encoded;
         let num_frames = (num_samples + samples_per_frame - 1) / samples_per_frame;
         Some(num_samples + num_frames * 2)
     }
@@ -260,20 +487,30 @@ mod tests {
     #[test]
     fn test_encode() -> Result<()> {
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
+        let samples = Samples::<PcmS16Le>::from_pcm(&data, 2, 44100);
+        let total_samples = data.len() as u64 / 2;
 
         let splitter = samples.into_reader("test").split_channels();
-        let mut left_encoder = Encoder::new(splitter.left());
-        let mut right_encoder = Encoder::new(splitter.right());
+        let left_state =
+            Info { coefficients: test::TEST_WAV_LEFT_COEFFICIENTS, ..Default::default() };
+        let right_state =
+            Info { coefficients: test::TEST_WAV_RIGHT_COEFFICIENTS, ..Default::default() };
+        let mut left_encoder = Encoder::new(splitter.left(), left_state);
+        let mut right_encoder = Encoder::new(splitter.right(), right_state);
+        assert_eq!(left_encoder.progress(), ProgressHint::new(0, total_samples));
+        assert_eq!(right_encoder.progress(), ProgressHint::new(0, total_samples));
         assert_eq!(left_encoder.data_remaining(), Some(EXPECTED_LEN as u64));
         assert_eq!(right_encoder.data_remaining(), Some(EXPECTED_LEN as u64));
 
         let left = left_encoder.read_samples()?.unwrap();
+        assert!(left_encoder.read_samples()?.is_none());
         assert_eq!(left.params.coefficients, test::TEST_WAV_LEFT_COEFFICIENTS);
+
         let right = right_encoder.read_samples()?.unwrap();
+        assert!(right_encoder.read_samples()?.is_none());
         assert_eq!(right.params.coefficients, test::TEST_WAV_RIGHT_COEFFICIENTS);
 
-        assert_eq!(left_encoder.progress(), ProgressHint::new(1, 1));
+        assert_eq!(left_encoder.progress(), ProgressHint::new(total_samples, total_samples));
         assert_eq!(left_encoder.data_remaining(), Some(0));
         assert_eq!(
             left.params.context,
@@ -284,7 +521,7 @@ mod tests {
         assert_eq!(left.rate, 44100);
         assert!(left.data == test::TEST_WAV_LEFT_DSP);
 
-        assert_eq!(right_encoder.progress(), ProgressHint::new(1, 1));
+        assert_eq!(right_encoder.progress(), ProgressHint::new(total_samples, total_samples));
         assert_eq!(right_encoder.data_remaining(), Some(0));
         assert_eq!(
             right.params.context,
@@ -301,32 +538,35 @@ mod tests {
     #[test]
     fn test_encode_in_blocks() -> Result<()> {
         const BLOCK_SIZE: usize = 0x8000;
-        const EXPECTED_NUM_BLOCKS: u64 = 4;
+        const EXPECTED_NUM_BLOCKS: usize = 4;
         const EXPECTED_BLOCK_LENGTHS: &[usize] = &[0x8000, 0x8000, 0x8000, 0x57d];
         const EXPECTED_END_ADDRESSES: &[usize] = &[0xffff, 0xffff, 0xffff, 0xaf8];
         const EXPECTED_LAST_SAMPLES: &[[i16; 2]] =
             &[[0, 0], [-5232, -5240], [1236, 1218], [33, 42]];
 
         let data = test::open_test_wav();
-        let samples = Samples::<PcmS16Le>::from_pcm(&data, 2, 44100);
+        let total_samples = data.len() as u64 / 2;
+        let mut samples = vec![];
+        for chunk in data.chunks(1000) {
+            samples.push(Samples::from_pcm(chunk, 2, 44100));
+        }
 
-        let splitter = samples.into_reader("test").split_channels();
-        let mut encoder = Encoder::with_block_size(splitter.left(), BLOCK_SIZE);
+        let splitter = ReadSampleList::new(samples, "test").split_channels();
+        let state = Info { coefficients: test::TEST_WAV_LEFT_COEFFICIENTS, ..Default::default() };
+        let mut encoder = Encoder::with_block_size(splitter.left(), state, BLOCK_SIZE);
 
         let mut blocks = vec![];
-        let mut i = 0;
-        let mut expected_remaining =
-            EXPECTED_END_ADDRESSES.iter().skip(i as usize).map(|&a| a as u64 + 1).sum();
-        assert_eq!(encoder.progress(), None);
+        let mut expected_remaining = EXPECTED_LEN as u64;
+        assert_eq!(encoder.progress(), ProgressHint::new(0, total_samples));
         assert_eq!(encoder.data_remaining(), Some(expected_remaining));
         while let Some(block) = encoder.read_samples()? {
-            i += 1;
             expected_remaining -= block.len as u64;
-            assert_eq!(encoder.progress(), ProgressHint::new(i, EXPECTED_NUM_BLOCKS));
+            let expected_samples = total_samples - expected_remaining * 14 / 16;
+            assert_eq!(encoder.progress(), ProgressHint::new(expected_samples, total_samples));
             assert_eq!(encoder.data_remaining(), Some(expected_remaining));
             blocks.push(block);
         }
-        assert_eq!(blocks.len(), 4);
+        assert_eq!(blocks.len(), EXPECTED_NUM_BLOCKS);
 
         let mut offset = 0;
         for (i, block) in blocks.iter().enumerate() {
@@ -339,7 +579,6 @@ mod tests {
             assert_eq!(block.data.len(), EXPECTED_BLOCK_LENGTHS[i]);
             offset = end_offset;
         }
-
         Ok(())
     }
 }

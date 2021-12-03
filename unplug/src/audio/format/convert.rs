@@ -47,7 +47,11 @@ where
     From: PcmFormat + Cast<AnyFormat> + Sealed,
 {
     fn convert<'r, 's: 'r>(reader: DynReader<'r, 's, Self>) -> DynReader<'r, 's, GcAdpcm> {
-        Box::from(adpcm::Encoder::new(ConvertPcm::new(reader)))
+        // TODO: Better error handling?
+        let pcm16 = ConvertPcm::new(reader);
+        let (left, right) = adpcm::EncoderBuilder::simple(pcm16).expect("ADPCM encoding failed");
+        assert!(right.is_none());
+        Box::from(left)
     }
 }
 

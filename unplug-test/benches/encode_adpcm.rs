@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::io::Cursor;
-use unplug::audio::format::adpcm::Encoder;
+use unplug::audio::format::adpcm::EncoderBuilder;
 use unplug::audio::format::GcAdpcm;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::transport::WavReader;
@@ -16,7 +16,7 @@ fn load_music() -> Samples<'static, PcmS16Le> {
 fn encode_adpcm(music: &Samples<'static, PcmS16Le>) -> Samples<'static, GcAdpcm> {
     let music = Samples::from_pcm(music.data.as_ref(), music.channels, music.rate);
     let channel = music.into_reader("").split_channels().left();
-    let mut encoder = Encoder::new(channel).owned();
+    let mut encoder = EncoderBuilder::simple(channel).expect("failed to encode audio").0.owned();
     encoder.read_all_samples().expect("failed to encode audio")
 }
 

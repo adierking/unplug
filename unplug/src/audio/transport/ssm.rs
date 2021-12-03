@@ -1,4 +1,4 @@
-use crate::audio::format::adpcm::{Decoder, Encoder, FrameContext, GcAdpcm, Info};
+use crate::audio::format::adpcm::{Decoder, EncoderBuilder, FrameContext, GcAdpcm, Info};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
 use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
@@ -237,19 +237,10 @@ impl Sound {
     /// Creates a new `Sound` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
     #[instrument(level = "trace", skip_all)]
     pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
-        let samples = reader.read_all_samples()?;
-        let channels = samples.channels;
-        let samples = samples.into_reader(reader.tag().clone());
-        if channels == 2 {
-            let splitter = samples.split_channels();
-            let mut left = Encoder::new(splitter.left());
-            let mut right = Encoder::new(splitter.right());
-            Self::from_adpcm_stereo(&mut left, &mut right)
-        } else if channels == 1 {
-            let mut encoder = Encoder::new(samples);
-            Self::from_adpcm_mono(&mut encoder)
-        } else {
-            Err(Error::UnsupportedChannels)
+        let (mut left, right) = EncoderBuilder::simple(reader)?;
+        match right {
+            Some(mut right) => Self::from_adpcm_stereo(&mut left, &mut right),
+            None => Self::from_adpcm_mono(&mut left),
         }
     }
 
