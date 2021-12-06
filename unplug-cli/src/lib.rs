@@ -14,6 +14,7 @@
     variant_size_differences
 )]
 
+pub mod audio;
 pub mod commands;
 pub mod common;
 pub mod globals;

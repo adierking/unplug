@@ -4,7 +4,7 @@ use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogge
 use std::process;
 use structopt::StructOpt;
 use unplug_cli::opt::{Opt, Subcommand};
-use unplug_cli::{commands, globals, msg, shop};
+use unplug_cli::{audio, commands, globals, msg, shop};
 
 fn init_logging(verbosity: u64) {
     let filter = if verbosity >= 2 {
@@ -71,9 +71,9 @@ fn run_app() -> Result<()> {
         Subcommand::ImportGlobals(opt) => globals::import_globals(opt),
         Subcommand::ExportShop(opt) => shop::export_shop(opt),
         Subcommand::ImportShop(opt) => shop::import_shop(opt),
-        Subcommand::ExportMusic(opt) => commands::export_music(opt),
-        Subcommand::ImportMusic(opt) => commands::import_music(opt),
-        Subcommand::ExportSounds(opt) => commands::export_sounds(opt),
+        Subcommand::ExportMusic(opt) => audio::export_music(opt),
+        Subcommand::ImportMusic(opt) => audio::import_music(opt),
+        Subcommand::ExportSounds(opt) => audio::export_sounds(opt),
     }
 }
 
