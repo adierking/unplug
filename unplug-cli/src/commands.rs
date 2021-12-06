@@ -11,9 +11,8 @@ use std::path::Path;
 use std::time::Instant;
 use unicase::UniCase;
 use unplug::audio::format::PcmS16Le;
-use unplug::audio::transport::{
-    FlacReader, HpsStream, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter,
-};
+use unplug::audio::transport::hps::{HpsStream, PcmHpsBuilder};
+use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::{ReadSeek, WriteTo};
@@ -350,31 +349,42 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
 
     info!("Opening audio file");
     let file = File::open(&opt.path)?;
-    let name = opt.path.file_name().map(|p| p.to_str().unwrap()).unwrap_or_default();
+    let name = opt.path.file_name().map(|p| p.to_str().unwrap()).unwrap_or_default().to_owned();
     let ext = opt.path.extension().map(|p| p.to_str().unwrap().to_lowercase()).unwrap_or_default();
+    let tag = name.clone();
     let mut audio: Box<dyn ReadSamples<'_, Format = PcmS16Le>> = match ext.as_str() {
-        "flac" => FlacReader::new(file, name)?.convert(),
-        "mp3" => Box::from(Mp3Reader::new(file, name)?),
-        "ogg" => Box::from(OggReader::new(file, name)?),
-        "wav" => Box::from(WavReader::new(file, name)?),
+        "flac" => FlacReader::new(file, tag)?.convert(),
+        "mp3" => Box::from(Mp3Reader::new(file, tag)?),
+        "ogg" => Box::from(OggReader::new(file, tag)?),
+        "wav" => Box::from(WavReader::new(file, tag)?),
         other => bail!("unsupported file extension: \"{}\"", other),
     };
 
-    let mut peek = audio.peekable();
-    let first = match peek.peek_samples()? {
-        Some(s) => s,
-        None => bail!("audio file is empty"),
-    };
-    if first.rate > MAX_MUSIC_SAMPLE_RATE {
-        warn!("The input audio file has a high sample rate ({} Hz)!", first.rate);
+    // Using preread_all_samples() here is necessary to have a functioning progress bar with some
+    // formats which don't know their size.
+    let cached = audio.preread_all_samples()?;
+    let rate = cached.front().expect("no audio packets").rate;
+    if rate > MAX_MUSIC_SAMPLE_RATE {
+        warn!("The audio file has a high sample rate ({} Hz)!", rate);
         warn!("It will be automatically resampled to {} Hz.", MAX_MUSIC_SAMPLE_RATE);
-        audio = Box::from(peek.resample(MAX_MUSIC_SAMPLE_RATE));
+        audio = Box::from(cached.resample(MAX_MUSIC_SAMPLE_RATE));
     } else {
-        audio = Box::from(peek);
+        audio = Box::from(cached);
     }
 
+    info!("Analyzing audio waveform");
+    let progress = progress_bar(1);
+    progress.set_message(name);
+    let encoder =
+        PcmHpsBuilder::new(audio).on_progress(|p| update_audio_progress(&progress, p)).prepare()?;
+    progress.finish_using_style();
+
     info!("Encoding audio to GameCube format");
-    let hps = HpsStream::from_pcm(&mut audio)?;
+    let progress = progress_bar(1);
+    progress.set_message(iso.files[entry].name().to_owned());
+    let hps = encoder.on_progress(|p| update_audio_progress(&progress, p)).build()?;
+    progress.finish_using_style();
+
     let mut writer = Cursor::new(vec![]);
     hps.write_to(&mut writer)?;
     writer.seek(SeekFrom::Start(0))?;
