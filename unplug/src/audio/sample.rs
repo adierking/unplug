@@ -6,7 +6,7 @@ use std::any;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fmt::{self, Debug, Formatter};
-use std::iter::{self, FusedIterator};
+use std::iter::FusedIterator;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::result::Result as StdResult;
@@ -52,7 +52,9 @@ impl<'a, F: DynamicFormat> Samples<'a, F> {
     /// Moves the samples into a reader which returns them. `tag` is a string or tag to identify
     /// the reader for debugging purposes.
     pub fn into_reader(self, tag: impl Into<SourceTag>) -> ReadSampleList<'a, F> {
-        ReadSampleList::new(iter::once(self), tag.into())
+        let mut samples = VecDeque::new();
+        samples.push_back(self);
+        ReadSampleList::new(samples, tag.into())
     }
 
     /// Casts the samples into another compatible format. This will fail if the format is dynamic
@@ -284,6 +286,23 @@ pub trait ReadSamples<'s> {
         result.ok_or(Error::EmptyStream)
     }
 
+    /// Reads all available samples into memory and returns a new reader which returns the sample
+    /// packets in the same order they were read.
+    fn preread_all_samples(&mut self) -> Result<ReadSampleList<'s, Self::Format>>
+    where
+        Self::Format: StaticFormat,
+    {
+        let mut samples = VecDeque::new();
+        while let Some(packet) = self.read_samples()? {
+            samples.push_back(packet);
+        }
+        if !samples.is_empty() {
+            Ok(ReadSampleList::new(samples, self.tag().clone()))
+        } else {
+            Err(Error::EmptyStream)
+        }
+    }
+
     /// Creates an adapter which ensures all samples contain owned data. Borrowed sample data
     /// returned by the underlying reader will be cloned.
     fn owned(self) -> OwnedSamples<'s, Self>
@@ -413,11 +432,8 @@ pub struct ReadSampleList<'s, F: DynamicFormat> {
 }
 
 impl<'s, F: DynamicFormat> ReadSampleList<'s, F> {
-    pub fn new(
-        samples: impl IntoIterator<Item = Samples<'s, F>>,
-        tag: impl Into<SourceTag>,
-    ) -> Self {
-        Self::new_impl(samples.into_iter().collect(), tag.into())
+    pub fn new(samples: impl Into<VecDeque<Samples<'s, F>>>, tag: impl Into<SourceTag>) -> Self {
+        Self::new_impl(samples.into(), tag.into())
     }
 
     fn new_impl(samples: VecDeque<Samples<'s, F>>, tag: SourceTag) -> Self {
@@ -431,6 +447,11 @@ impl<'s, F: DynamicFormat> ReadSampleList<'s, F> {
         }
         let original_len = samples.len() as u64;
         Self { samples, original_len, format, tag }
+    }
+
+    /// Gets the sample packet at the front of the queue, if any.
+    pub fn front(&self) -> Option<&Samples<'s, F>> {
+        self.samples.front()
     }
 }
 
@@ -1199,6 +1220,21 @@ mod tests {
         assert_eq!(all.channels, 1);
         assert_eq!(all.data, (0..48).collect::<Vec<_>>());
         assert!(matches!(reader.read_all_samples(), Err(Error::EmptyStream)));
+    }
+
+    #[test]
+    fn test_preread_all_samples() {
+        let samples1 = Samples::<PcmS16Le>::from_pcm((0..16).collect::<Vec<_>>(), 1, 44100);
+        let samples2 = Samples::<PcmS16Le>::from_pcm((16..32).collect::<Vec<_>>(), 1, 44100);
+        let samples3 = Samples::<PcmS16Le>::from_pcm((32..48).collect::<Vec<_>>(), 1, 44100);
+        let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3], "test");
+        let mut reader = reader.preread_all_samples().unwrap();
+        assert_eq!(reader.front().unwrap().data, (0..16).collect::<Vec<_>>());
+        assert_eq!(reader.read_samples().unwrap().unwrap().data, (0..16).collect::<Vec<_>>());
+        assert_eq!(reader.read_samples().unwrap().unwrap().data, (16..32).collect::<Vec<_>>());
+        assert_eq!(reader.read_samples().unwrap().unwrap().data, (32..48).collect::<Vec<_>>());
+        assert!(reader.read_samples().unwrap().is_none());
+        assert!(reader.front().is_none());
     }
 
     #[test]
