@@ -22,9 +22,9 @@ pub type MemoryCursor = Cursor<Box<[u8]>>;
 lazy_static! {
     /// The style to use for progress bars.
     pub static ref PROGRESS_STYLE: ProgressStyle = ProgressStyle::default_bar()
-        .template("{spinner:.green} [{eta_precise}] [{bar:40}] {percent}% {msg}")
+        .template("{spinner:.cyan} [{eta_precise}] [{bar:40}] {percent}% {msg}")
         .progress_chars("=> ")
-        .tick_chars(r"-\|/ ")
+        .tick_chars(r"⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ")
         .on_finish(ProgressFinish::AndClear);
 }
 
@@ -167,6 +167,8 @@ pub fn progress_bar(len: u64) -> ProgressBar {
         // conflict with logging. This effectively makes the operations on the returned progress bar
         // be no-ops.
         bar.set_draw_target(ProgressDrawTarget::hidden());
+    } else {
+        bar.enable_steady_tick(100);
     }
     bar
 }
