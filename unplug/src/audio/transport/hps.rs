@@ -85,6 +85,12 @@ pub struct Channel {
     pub adpcm: adpcm::Info,
 }
 
+impl Channel {
+    fn is_initialized(&self) -> bool {
+        self.address.current_address > 0 && self.address.end_address > 0
+    }
+}
+
 /// Size of a marker in bytes.
 const MARKER_SIZE: usize = 0x8;
 
@@ -191,6 +197,211 @@ impl<W: Write + ?Sized> WriteTo<W> for BlockHeader {
             Marker::default().write_to(writer)?;
         }
         Ok(())
+    }
+}
+
+type ProgressCallback<'a> = Box<dyn FnMut(Option<ProgressHint>) + 'a>;
+
+/// Builds an HPS stream by reading and encoding PCM sample data. The encoding actually takes place
+/// in two steps: a "preparation" step where the audio samples are gathered and analyzed, and then
+/// the actual encoding step which is driven by the `AdpcmHpsBuilder` that `prepare()` returns.
+pub struct PcmHpsBuilder<'r, 's> {
+    reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
+    on_progress: Option<ProgressCallback<'r>>,
+}
+
+impl<'r, 's> PcmHpsBuilder<'r, 's> {
+    /// Creates a new `PcmHpsBuilder` which reads samples from `reader`.
+    pub fn new(reader: impl ReadSamples<'s, Format = PcmS16Le> + 'r) -> Self {
+        Self { reader: Box::from(reader), on_progress: None }
+    }
+
+    /// Sets a callback to run for progress updates. If the total amount of work is unknown, the
+    /// callback will still be invoked with a `None` hint. This callback is only for the preparation
+    /// step and a new callback must be set on the builder returned by `prepare()` to monitor
+    /// encoding progress.
+    pub fn on_progress(mut self, callback: impl FnMut(Option<ProgressHint>) + 'r) -> Self {
+        self.on_progress = Some(Box::from(callback));
+        self
+    }
+
+    /// Gathers samples and analyzes the waveform to prepare for encoding. The actual encoding is
+    /// done separately with the returned `AdpcmHpsBuilder`.
+    pub fn prepare(self) -> Result<AdpcmHpsBuilder<'s, 's>> {
+        let mut builder = EncoderBuilder::new(self.reader)
+            .mono_block_size(MONO_BLOCK_SIZE)
+            .stereo_block_size(STEREO_BLOCK_SIZE);
+        if let Some(on_progress) = self.on_progress {
+            builder = builder.on_progress(on_progress);
+        }
+        match builder.build()? {
+            (left, Some(right)) => Ok(AdpcmHpsBuilder::with_stereo(left, right)),
+            (mono, None) => Ok(AdpcmHpsBuilder::with_mono(mono)),
+        }
+    }
+}
+
+type AdpcmReader<'r, 's> = Box<dyn ReadSamples<'s, Format = GcAdpcm> + 'r>;
+
+/// Builds an HPS stream by reading ADPCM sample data.
+pub struct AdpcmHpsBuilder<'r, 's> {
+    left: AdpcmReader<'r, 's>,
+    right: Option<AdpcmReader<'r, 's>>,
+    on_progress: Option<ProgressCallback<'r>>,
+    looping: bool,
+    left_channel: Channel,
+    right_channel: Channel,
+    blocks: Vec<Block>,
+    rate: u32,
+}
+
+impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
+    /// Creates a new `AdpcmHpsBuilder` which reads mono samples from `reader`.
+    pub fn with_mono(reader: impl ReadSamples<'s, Format = GcAdpcm> + 'r) -> Self {
+        Self::new_impl(Box::from(reader), None)
+    }
+
+    /// Creates a new `AdpcmHpsBuilder` which reads stereo samples from `left` and `right`.
+    pub fn with_stereo(
+        left: impl ReadSamples<'s, Format = GcAdpcm> + 'r,
+        right: impl ReadSamples<'s, Format = GcAdpcm> + 'r,
+    ) -> Self {
+        Self::new_impl(Box::from(left), Some(Box::from(right)))
+    }
+
+    fn new_impl(left: AdpcmReader<'r, 's>, right: Option<AdpcmReader<'r, 's>>) -> Self {
+        Self {
+            left,
+            right,
+            on_progress: None,
+            looping: true,
+            left_channel: Channel::default(),
+            right_channel: Channel::default(),
+            blocks: vec![],
+            rate: 0,
+        }
+    }
+
+    /// Sets a callback to run for progress updates. If the total amount of work is unknown, the
+    /// callback will still be invoked with a `None` hint.
+    pub fn on_progress(mut self, callback: impl FnMut(Option<ProgressHint>) + 'r) -> Self {
+        self.on_progress = Some(Box::from(callback));
+        self
+    }
+
+    /// Sets whether the HPS should loop (enabled by default).
+    pub fn looping(mut self, enabled: bool) -> Self {
+        self.looping = enabled;
+        self
+    }
+
+    /// Reads all samples and builds the final HPS stream.
+    pub fn build(mut self) -> Result<HpsStream> {
+        self.update_progress();
+        match self.right.take() {
+            Some(right) => self.build_stereo(right),
+            None => self.build_mono(),
+        }
+    }
+
+    #[instrument(level = "trace", skip_all)]
+    fn build_mono(mut self) -> Result<HpsStream> {
+        while let Some(samples) = self.left.read_samples()? {
+            if samples.len == 0 {
+                continue;
+            }
+
+            if self.blocks.is_empty() {
+                self.rate = samples.rate;
+            } else if samples.rate != self.rate {
+                return Err(Error::InconsistentSampleRate);
+            }
+
+            let adpcm = samples.params;
+            let block = Block::from_mono(samples)?;
+            Self::expand_channel(&mut self.left_channel, &block, &adpcm)?;
+            self.blocks.push(block);
+            self.update_progress();
+        }
+        let tag = self.left.tag().clone();
+        self.finish(tag)
+    }
+
+    #[instrument(level = "trace", skip_all)]
+    fn build_stereo(mut self, mut right: AdpcmReader<'r, 's>) -> Result<HpsStream> {
+        loop {
+            let (left, right) = match (self.left.read_samples()?, right.read_samples()?) {
+                (Some(l), Some(r)) => (l, r),
+                (None, None) => break,
+                _ => return Err(Error::DifferentChannelSizes),
+            };
+
+            if left.len != right.len {
+                return Err(Error::DifferentChannelSizes);
+            } else if left.len == 0 {
+                continue;
+            }
+
+            if self.blocks.is_empty() {
+                self.rate = left.rate;
+            }
+            if left.rate != self.rate || right.rate != self.rate {
+                return Err(Error::InconsistentSampleRate);
+            }
+
+            let left_adpcm = left.params;
+            let right_adpcm = right.params;
+            let block = Block::from_stereo(left, right)?;
+            Self::expand_channel(&mut self.left_channel, &block, &left_adpcm)?;
+            Self::expand_channel(&mut self.right_channel, &block, &right_adpcm)?;
+            self.blocks.push(block);
+            self.update_progress();
+        }
+        let tag = self.left.tag().join(right.tag());
+        self.finish(tag)
+    }
+
+    fn expand_channel(channel: &mut Channel, block: &Block, state: &adpcm::Info) -> Result<()> {
+        if channel.is_initialized() {
+            if state.coefficients != channel.adpcm.coefficients {
+                return Err(Error::DifferentCoefficients);
+            }
+            channel.address.end_address += block.end_address + 1;
+        } else {
+            *channel = Channel {
+                address: AudioAddress {
+                    looping: true, // TODO
+                    format: DspFormat::Adpcm,
+                    loop_address: 0x2,
+                    end_address: block.end_address,
+                    current_address: 0x2,
+                },
+                adpcm: *state,
+            };
+        }
+        Ok(())
+    }
+
+    fn finish(self, tag: SourceTag) -> Result<HpsStream> {
+        if self.blocks.is_empty() {
+            return Err(Error::EmptyStream);
+        }
+        if self.rate == 0 {
+            return Err(Error::InvalidSampleRate(self.rate));
+        }
+        let mut channels = ArrayVec::new();
+        channels.push(self.left_channel);
+        if self.right_channel.is_initialized() {
+            channels.push(self.right_channel);
+        }
+        let loop_start = if self.looping { Some(0) } else { None }; // TODO
+        Ok(HpsStream { sample_rate: self.rate, channels, loop_start, blocks: self.blocks, tag })
+    }
+
+    fn update_progress(&mut self) {
+        if let Some(on_progress) = &mut self.on_progress {
+            on_progress(self.left.progress())
+        }
     }
 }
 
@@ -301,117 +512,30 @@ impl HpsStream {
         }
     }
 
-    /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
+    /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format. For
+    /// more control over the stream creation, use `PcmHpsBuilder` instead.
     #[instrument(level = "trace", skip_all)]
     pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
-        let (mut left, right) = EncoderBuilder::new(reader)
-            .mono_block_size(MONO_BLOCK_SIZE)
-            .stereo_block_size(STEREO_BLOCK_SIZE)
-            .build()?;
-        match right {
-            Some(mut right) => Self::from_adpcm_stereo(&mut left, &mut right),
-            None => Self::from_adpcm_mono(&mut left),
-        }
+        PcmHpsBuilder::new(reader).prepare()?.build()
     }
 
-    /// Creates a new `HpsStream` from mono ADPCM sample data.
+    /// Creates a new `HpsStream` from mono ADPCM sample data. For more control over the stream
+    /// creation, use `AdpcmHpsBuilder` instead.
     #[instrument(level = "trace", skip_all)]
-    pub fn from_adpcm_mono(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
-        let mut channel = Channel::default();
-        let mut blocks = vec![];
-        let mut sample_rate = 0;
-        while let Some(samples) = reader.read_samples()? {
-            if blocks.is_empty() {
-                sample_rate = samples.rate;
-            } else if samples.rate != sample_rate {
-                return Err(Error::InconsistentSampleRate);
-            }
-
-            let adpcm = samples.params;
-            let block = Block::from_mono(samples)?;
-            if blocks.is_empty() {
-                channel = Channel {
-                    address: AudioAddress {
-                        looping: true, // TODO
-                        format: DspFormat::Adpcm,
-                        loop_address: 0x2,
-                        end_address: block.end_address,
-                        current_address: 0x2,
-                    },
-                    adpcm,
-                };
-            } else {
-                if adpcm.coefficients != channel.adpcm.coefficients {
-                    return Err(Error::DifferentCoefficients);
-                }
-                channel.address.end_address += block.end_address + 1;
-            }
-            blocks.push(block);
-        }
-
-        let mut channels = ArrayVec::new();
-        channels.push(channel);
-        let tag = reader.tag().clone();
-        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks, tag })
-    }
-
-    /// Creates a new `HpsStream` from stereo ADPCM sample data.
-    #[instrument(level = "trace", skip_all)]
-    pub fn from_adpcm_stereo(
-        left_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
-        right_reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
+    pub fn from_adpcm_mono<'r, 's>(
+        reader: &'r mut dyn ReadSamples<'s, Format = GcAdpcm>,
     ) -> Result<Self> {
-        let mut left_channel = Channel::default();
-        let mut right_channel = Channel::default();
-        let mut blocks = vec![];
-        let mut sample_rate = 0;
-        loop {
-            let left = left_reader.read_samples()?;
-            let right = right_reader.read_samples()?;
-            let (left, right) = match (left, right) {
-                (Some(l), Some(r)) => (l, r),
-                (None, None) => break,
-                _ => return Err(Error::DifferentChannelSizes),
-            };
+        AdpcmHpsBuilder::with_mono(reader).build()
+    }
 
-            if blocks.is_empty() {
-                sample_rate = left.rate;
-            }
-            if left.rate != sample_rate || right.rate != sample_rate {
-                return Err(Error::InconsistentSampleRate);
-            }
-
-            let left_adpcm = left.params;
-            let right_adpcm = right.params;
-            let block = Block::from_stereo(left, right)?;
-            if blocks.is_empty() {
-                let address = AudioAddress {
-                    looping: true, // TODO
-                    format: DspFormat::Adpcm,
-                    loop_address: 0x2,
-                    end_address: block.end_address,
-                    current_address: 0x2,
-                };
-                left_channel = Channel { address, adpcm: left_adpcm };
-                right_channel = Channel { address, adpcm: right_adpcm };
-            } else {
-                if left_adpcm.coefficients != left_channel.adpcm.coefficients {
-                    return Err(Error::DifferentCoefficients);
-                }
-                if right_adpcm.coefficients != right_channel.adpcm.coefficients {
-                    return Err(Error::DifferentCoefficients);
-                }
-                left_channel.address.end_address += block.end_address + 1;
-                right_channel.address.end_address = left_channel.address.end_address;
-            }
-            blocks.push(block);
-        }
-
-        let mut channels = ArrayVec::new();
-        channels.push(left_channel);
-        channels.push(right_channel);
-        let tag = left_reader.tag().join(right_reader.tag());
-        Ok(Self { sample_rate, channels, loop_start: Some(0), blocks, tag })
+    /// Creates a new `HpsStream` from stereo ADPCM sample data. For more control over the stream
+    /// creation, use `AdpcmHpsBuilder` instead.
+    #[instrument(level = "trace", skip_all)]
+    pub fn from_adpcm_stereo<'r, 's>(
+        left: &'r mut dyn ReadSamples<'s, Format = GcAdpcm>,
+        right: &'r mut dyn ReadSamples<'s, Format = GcAdpcm>,
+    ) -> Result<Self> {
+        AdpcmHpsBuilder::with_stereo(left, right).build()
     }
 }
 
