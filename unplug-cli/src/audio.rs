@@ -31,20 +31,27 @@ fn open_sound_file(
 ) -> Result<Box<dyn ReadSamples<'static, Format = PcmS16Le>>> {
     let name = path.file_name().map(|p| p.to_str().unwrap()).unwrap_or_default().to_owned();
     let ext = path.extension().map(|p| p.to_str().unwrap().to_lowercase()).unwrap_or_default();
+    let message = format!("Opening audio file: {}", name);
+    let spinner = progress_spinner(message);
 
-    info!("Opening audio file: {}", name);
     let file = File::open(path)?;
+    let tag = name.clone();
     let mut audio: Box<dyn ReadSamples<'_, Format = PcmS16Le>> = match ext.as_str() {
-        "flac" => FlacReader::new(file, name)?.convert(),
-        "mp3" => Box::from(Mp3Reader::new(file, name)?),
-        "ogg" => Box::from(OggReader::new(file, name)?),
-        "wav" => Box::from(WavReader::new(file, name)?),
+        "flac" => FlacReader::new(file, tag)?.convert(),
+        "mp3" => Box::from(Mp3Reader::new(file, tag)?),
+        "ogg" => Box::from(OggReader::new(file, tag)?),
+        "wav" => Box::from(WavReader::new(file, tag)?),
         other => bail!("unsupported file extension: \"{}\"", other),
     };
 
     // Using preread_all_samples() here is necessary to have a functioning progress bar with some
     // formats which don't know their size.
     let cached = audio.preread_all_samples()?;
+    spinner.finish_using_style();
+    if !spinner.is_hidden() {
+        info!("Opened audio file: {}", name);
+    }
+
     let rate = cached.front().expect("no audio packets").rate;
     if rate > max_sample_rate {
         warn!("The audio file has a high sample rate ({} Hz)!", rate);

@@ -19,12 +19,21 @@ pub const QP_PATH: &str = "qp.bin";
 /// A cursor around a byte slice.
 pub type MemoryCursor = Cursor<Box<[u8]>>;
 
+/// Progress bar spinner characters.
+const TICK_CHARS: &str = r"⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ";
+
 lazy_static! {
     /// The style to use for progress bars.
     pub static ref PROGRESS_STYLE: ProgressStyle = ProgressStyle::default_bar()
-        .template("{spinner:.cyan} [{eta_precise}] [{bar:40}] {percent}% {msg}")
+        .template("       {spinner:.cyan} [{eta_precise}] [{bar:40}] {percent}% {msg}")
         .progress_chars("=> ")
-        .tick_chars(r"⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ")
+        .tick_chars(TICK_CHARS)
+        .on_finish(ProgressFinish::AndClear);
+
+    /// The style to use for progress spinners.
+    pub static ref SPINNER_STYLE: ProgressStyle = ProgressStyle::default_spinner()
+        .template("       {spinner:.cyan} [{elapsed_precise}] {msg}")
+        .tick_chars(TICK_CHARS)
         .on_finish(ProgressFinish::AndClear);
 }
 
@@ -168,6 +177,20 @@ pub fn progress_bar(len: u64) -> ProgressBar {
         // be no-ops.
         bar.set_draw_target(ProgressDrawTarget::hidden());
     } else {
+        bar.enable_steady_tick(100);
+    }
+    bar
+}
+
+/// Creates a progress spinner using the standard style which displays `message`. If verbose logging
+/// is enabled, the spinner will be hidden and the message will be logged instead.
+pub fn progress_spinner(message: String) -> ProgressBar {
+    let bar = ProgressBar::new_spinner().with_style(SPINNER_STYLE.clone());
+    if log_enabled!(Level::Debug) {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+        info!("{}", message);
+    } else {
+        bar.set_message(message);
         bar.enable_steady_tick(100);
     }
     bar
