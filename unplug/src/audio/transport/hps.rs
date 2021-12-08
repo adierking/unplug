@@ -92,32 +92,32 @@ impl Channel {
     }
 }
 
-/// Size of a marker in bytes.
-const MARKER_SIZE: usize = 0x8;
+/// Size of a cue in bytes.
+const CUE_SIZE: usize = 0x8;
 
-/// A marker in an audio stream which allows the game to trigger events when it is reached.
+/// A cue point in an audio stream which allows the game to trigger events when it is reached.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Marker {
-    /// Index of the sample where the marker is at.
+pub struct CuePoint {
+    /// Index of the sample where the cue point is at.
     pub sample_index: i32,
-    /// User-assigned ID value for this marker.
+    /// User-assigned ID value for this cue.
     pub id: u32,
 }
 
-impl Default for Marker {
+impl Default for CuePoint {
     fn default() -> Self {
         Self { sample_index: -1, id: 0 }
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for Marker {
+impl<R: Read + ?Sized> ReadFrom<R> for CuePoint {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self { sample_index: reader.read_i32::<BE>()?, id: reader.read_u32::<BE>()? })
     }
 }
 
-impl<W: Write + ?Sized> WriteTo<W> for Marker {
+impl<W: Write + ?Sized> WriteTo<W> for CuePoint {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_i32::<BE>(self.sample_index)?;
@@ -140,8 +140,8 @@ struct BlockHeader {
     next_offset: u32,
     /// Initial playback parameters for each channel.
     channel_contexts: [adpcm::FrameContext; 2],
-    /// Markers in this block.
-    markers: Vec<Marker>,
+    /// Cue points in this block.
+    cues: Vec<CuePoint>,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for BlockHeader {
@@ -159,18 +159,18 @@ impl<R: Read + ?Sized> ReadFrom<R> for BlockHeader {
             let _padding = reader.read_u16::<BE>()?;
         }
 
-        let num_markers = reader.read_u8()?;
+        let num_cues = reader.read_u8()?;
         let _padding = reader.read_u24::<BE>()?;
 
-        // Marker data follows the header if it's present
-        for _ in 0..num_markers {
-            header.markers.push(Marker::read_from(reader)?);
+        // Cue point data follows the header if it's present
+        for _ in 0..num_cues {
+            header.cues.push(CuePoint::read_from(reader)?);
         }
 
-        // In order to preserve alignment, data is padded with extra markers
-        let aligned = align(num_markers, DATA_ALIGN / MARKER_SIZE);
-        for _ in (num_markers as usize)..aligned {
-            Marker::read_from(reader)?;
+        // In order to preserve alignment, data is padded with extra cues
+        let aligned = align(num_cues, DATA_ALIGN / CUE_SIZE);
+        for _ in (num_cues as usize)..aligned {
+            CuePoint::read_from(reader)?;
         }
 
         Ok(header)
@@ -187,15 +187,15 @@ impl<W: Write + ?Sized> WriteTo<W> for BlockHeader {
             context.write_to(writer)?;
             writer.write_u16::<BE>(0)?; // padding
         }
-        writer.write_u8(self.markers.len() as u8)?;
+        writer.write_u8(self.cues.len() as u8)?;
         writer.write_u24::<BE>(0)?; // padding
-        for marker in &self.markers {
-            marker.write_to(writer)?;
+        for cue in &self.cues {
+            cue.write_to(writer)?;
         }
-        let aligned = align(self.markers.len(), DATA_ALIGN / MARKER_SIZE);
-        for _ in self.markers.len()..aligned {
-            // Writing default markers gives us parity with the official files
-            Marker::default().write_to(writer)?;
+        let aligned = align(self.cues.len(), DATA_ALIGN / CUE_SIZE);
+        for _ in self.cues.len()..aligned {
+            // Writing default cues gives us parity with the official files
+            CuePoint::default().write_to(writer)?;
         }
         Ok(())
     }
@@ -584,8 +584,8 @@ pub struct Block {
     pub end_address: u32,
     /// The info for each channel in the block.
     pub channels: ArrayVec<[BlockChannel; 2]>,
-    /// The markers in the block.
-    pub markers: Vec<Marker>,
+    /// The cue points in the block.
+    pub cues: Vec<CuePoint>,
 }
 
 impl Block {
@@ -606,7 +606,7 @@ impl Block {
         let mut channels = ArrayVec::new();
         let end_address = (samples.len - 1) as u32;
         channels.push(BlockChannel::from_samples(samples)?);
-        Ok(Self { end_address, channels, markers: vec![] })
+        Ok(Self { end_address, channels, cues: vec![] })
     }
 
     /// Creates a `Block` from stereo ADPCM sample data.
@@ -628,7 +628,7 @@ impl Block {
         let end_address = (left.len - 1) as u32;
         channels.push(BlockChannel::from_samples(left)?);
         channels.push(BlockChannel::from_samples(right)?);
-        Ok(Self { end_address, channels, markers: vec![] })
+        Ok(Self { end_address, channels, cues: vec![] })
     }
 
     /// Reads block data from `reader` using information from `header` and `channels`.
@@ -661,7 +661,7 @@ impl Block {
         Ok(Block {
             end_address: header.end_address,
             channels: block_channels,
-            markers: header.markers.clone(),
+            cues: header.cues.clone(),
         })
     }
 
@@ -688,7 +688,7 @@ impl Block {
         } else {
             let current_offset = writer.seek(SeekFrom::Current(0))?;
             let total_size =
-                BLOCK_HEADER_SIZE + align(MARKER_SIZE * self.markers.len(), DATA_ALIGN) + data_size;
+                BLOCK_HEADER_SIZE + align(CUE_SIZE * self.cues.len(), DATA_ALIGN) + data_size;
             (current_offset + total_size as u64) as u32
         };
 
@@ -697,7 +697,7 @@ impl Block {
             end_address: self.end_address,
             next_offset,
             channel_contexts,
-            markers: self.markers.clone(),
+            cues: self.cues.clone(),
         };
         header.write_to(writer)?;
 
@@ -714,7 +714,7 @@ impl Debug for Block {
         f.debug_struct("Block")
             .field("end_address", &self.end_address)
             .field("channels", &self.channels)
-            .field("markers", &self.markers)
+            .field("cues", &self.cues)
             .finish()
     }
 }
@@ -995,7 +995,7 @@ mod tests {
             0x00, 0x08, 0x00, 0x09, // channel_contexts[1].last_samples
             0x00, 0x00, // padding
 
-            0x00, // num_markers
+            0x00, // num_cues
             0x00, 0x00, 0x00, // padding
         ];
 
@@ -1010,13 +1010,13 @@ mod tests {
         assert_eq!(header.channel_contexts[0].last_samples, [5, 6]);
         assert_eq!(header.channel_contexts[1].predictor_and_scale, 7);
         assert_eq!(header.channel_contexts[1].last_samples, [8, 9]);
-        assert_eq!(header.markers.len(), 0);
+        assert_eq!(header.cues.len(), 0);
 
         Ok(())
     }
 
     #[test]
-    fn test_read_block_header_with_markers() -> Result<()> {
+    fn test_read_block_header_with_cues() -> Result<()> {
         // This is bogus data, the point is just to test the I/O logic.
         #[rustfmt::skip]
         let bytes: &[u8] = &[
@@ -1032,15 +1032,15 @@ mod tests {
             0x00, 0x08, 0x00, 0x09, // channel_contexts[1].last_samples
             0x00, 0x00, // padding
 
-            0x02, // num_markers
+            0x02, // num_cues
             0x00, 0x00, 0x00, // padding
 
-            0x00, 0x00, 0x00, 0x0a, // markers[0].sample_index
-            0x00, 0x00, 0x00, 0x0b, // markers[0].id
-            0x00, 0x00, 0x00, 0x0c, // markers[1].sample_index
-            0x00, 0x00, 0x00, 0x0d, // markers[1].id
-            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, // padding marker
-            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, // padding marker
+            0x00, 0x00, 0x00, 0x0a, // cues[0].sample_index
+            0x00, 0x00, 0x00, 0x0b, // cues[0].id
+            0x00, 0x00, 0x00, 0x0c, // cues[1].sample_index
+            0x00, 0x00, 0x00, 0x0d, // cues[1].id
+            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, // padding cue
+            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, // padding cue
         ];
 
         let mut reader = Cursor::new(bytes);
@@ -1055,8 +1055,8 @@ mod tests {
         assert_eq!(header.channel_contexts[1].predictor_and_scale, 7);
         assert_eq!(header.channel_contexts[1].last_samples, [8, 9]);
         assert_eq!(
-            header.markers,
-            [Marker { sample_index: 10, id: 11 }, Marker { sample_index: 12, id: 13 }]
+            header.cues,
+            [CuePoint { sample_index: 10, id: 11 }, CuePoint { sample_index: 12, id: 13 }]
         );
 
         Ok(())
@@ -1072,7 +1072,10 @@ mod tests {
                 adpcm::FrameContext { predictor_and_scale: 4, last_samples: [5, 6] },
                 adpcm::FrameContext { predictor_and_scale: 7, last_samples: [8, 9] },
             ],
-            markers: vec![Marker { sample_index: 10, id: 11 }, Marker { sample_index: 12, id: 13 },],
+            cues: vec![
+                CuePoint { sample_index: 10, id: 11 },
+                CuePoint { sample_index: 12, id: 13 },
+            ],
         });
     }
 
@@ -1084,7 +1087,7 @@ mod tests {
             end_address: 0x1f,
             next_offset: 0,
             channel_contexts: [Default::default(); 2],
-            markers: vec![],
+            cues: vec![],
         };
         let channel = Channel {
             address: AudioAddress {
