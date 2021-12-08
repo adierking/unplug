@@ -1,11 +1,10 @@
 use super::*;
 use crate::audio::format::{PcmS16Le, ReadWriteBytes, StaticFormat};
-use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Cue, Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
-use std::iter;
-use tracing::{error, instrument, trace};
+use tracing::{error, instrument, trace, warn};
 
 /// RIFF data reader which can recursively read chunks.
 struct RiffReader<'a> {
@@ -99,10 +98,14 @@ pub struct WavReader<'a> {
     riff: RiffReader<'a>,
     /// An id -> offset mapping for each chunk in the form.
     chunk_offsets: HashMap<u32, u64>,
+    /// An id -> offsets mapping for each IFF list in the form.
+    list_offsets: HashMap<u32, Vec<u64>>,
     /// The number of bytes which have not been read from the data chunk yet.
     data_remaining: u32,
     /// The audio source tag for debugging purposes.
     tag: SourceTag,
+    /// Audio cue points.
+    cues: Vec<Cue>,
     /// The number of channels in the audio data.
     pub channels: usize,
     /// The audio's sample rate.
@@ -125,20 +128,28 @@ impl<'a> WavReader<'a> {
         let mut wav = Self {
             riff,
             chunk_offsets: HashMap::new(),
+            list_offsets: HashMap::new(),
             data_remaining: 0,
             tag,
+            cues: vec![],
             channels: 0,
             sample_rate: 0,
         };
         wav.read_chunks()?;
         wav.read_format()?;
+        wav.read_cues()?;
         Ok(wav)
     }
 
     /// Iterates over the chunks in the WAV data and builds the internal chunk offset map.
     fn read_chunks(&mut self) -> Result<()> {
-        while let Some(chunk) = self.riff.next_chunk()? {
-            if self.chunk_offsets.insert(chunk.header.id, chunk.header_offset).is_some() {
+        while let Some(mut chunk) = self.riff.next_chunk()? {
+            if chunk.header.id == ID_LIST {
+                // Special case for IFF lists - storing the offset of the LIST chunk isn't useful
+                // when there can be different kinds of lists
+                let list_type = chunk.read_u32::<LE>()?;
+                self.list_offsets.entry(list_type).or_default().push(chunk.header_offset);
+            } else if self.chunk_offsets.insert(chunk.header.id, chunk.header_offset).is_some() {
                 error!("Duplicate WAV chunk {:#x}", chunk.header.id);
                 return Err(Error::InvalidWav);
             }
@@ -182,6 +193,65 @@ impl<'a> WavReader<'a> {
         Ok(())
     }
 
+    /// Reads cue point information from the cue chunk.
+    fn read_cues(&mut self) -> Result<()> {
+        let mut cues: HashMap<u32, Cue> = {
+            let mut chunk = match self.open_chunk(ID_CUE)? {
+                Some(c) => c,
+                None => return Ok(()),
+            };
+            let raw_cues = CueChunk::read_from(&mut chunk)?;
+            trace!("cue chunk: {:?}", raw_cues);
+            raw_cues
+                .points
+                .into_iter()
+                .filter(|c| c.chunk_id == ID_DATA)
+                .map(|c| (c.name, Cue::new("", c.sample_offset as u64)))
+                .collect()
+        };
+
+        // Cue names have to be pulled from the adtl list
+        self.open_lists(ID_ADTL, |mut adtl| {
+            while let Some(mut chunk) = adtl.next_chunk()? {
+                match chunk.header.id {
+                    ID_LABL => {
+                        let label = LabelChunk::read_from(&mut chunk)?;
+                        if let Some(cue) = cues.get_mut(&label.name) {
+                            cue.name = label.text.to_string_lossy().into();
+                        }
+                    }
+                    ID_LTXT => {
+                        let label = LabelTextChunk::read_from(&mut chunk)?;
+                        if let Some(cue) = cues.get_mut(&label.name) {
+                            // ltxt is primarily useful for getting the cue duration
+                            cue.duration = label.sample_length as u64;
+                            // Give the name in labl precedence over this if there's more than one
+                            // chunk for a cue
+                            if cue.name.is_empty() {
+                                cue.name = label.text.to_string_lossy().into();
+                            }
+                        }
+                    }
+                    _ => continue,
+                };
+            }
+            Ok(())
+        })?;
+
+        // Make sure unnamed cues have some sort of name
+        for (id, cue) in &mut cues {
+            if cue.name.is_empty() {
+                cue.name = format!("{}", id).into();
+            }
+        }
+
+        // Sort and deduplicate in case any cues are duplicated for whatever reason
+        self.cues = cues.into_values().collect();
+        self.cues.sort_unstable();
+        self.cues.dedup();
+        Ok(())
+    }
+
     /// Opens a reader on chunk `id` if it is present.
     fn open_chunk(&mut self, id: u32) -> Result<Option<RiffReader<'_>>> {
         let offset = match self.chunk_offsets.get(&id) {
@@ -196,6 +266,34 @@ impl<'a> WavReader<'a> {
                 Err(Error::InvalidWav)
             }
         }
+    }
+
+    /// Loops through all IFF lists named `id` and passes a reader for each one to `callback`.
+    fn open_lists<F>(&mut self, id: u32, mut callback: F) -> Result<()>
+    where
+        F: FnMut(RiffReader<'_>) -> Result<()>,
+    {
+        let offsets = match self.list_offsets.get(&id) {
+            Some(o) => o,
+            None => return Ok(()),
+        };
+        for &offset in offsets {
+            self.riff.seek(SeekFrom::Start(offset))?;
+            let mut list = match self.riff.next_chunk()? {
+                Some(c) if c.header.id == ID_LIST => c,
+                _ => {
+                    error!("Failed to open chunk {:#x}", ID_LIST);
+                    return Err(Error::InvalidWav);
+                }
+            };
+            let list_type = list.read_u32::<LE>()?;
+            if list_type != id {
+                error!("Unexpected list type: {:#x}", list_type);
+                return Err(Error::InvalidWav);
+            }
+            callback(list)?;
+        }
+        Ok(())
     }
 }
 
@@ -240,22 +338,22 @@ impl ReadSamples<'static> for WavReader<'_> {
         Some(self.data_remaining as u64 / 2) // Convert from bytes to samples
     }
 
-    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
-        Box::from(iter::empty())
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(self.cues.iter().cloned())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{open_test_wav, TEST_WAV};
+    use crate::test::{open_test_wav, TEST_WAV, TEST_WAV_CUES};
     use std::io::Cursor;
 
     #[test]
     fn test_read_wav() -> Result<()> {
         let expected = open_test_wav();
 
-        let mut wav = WavReader::new(Cursor::new(TEST_WAV), "TEST_WAV")?;
+        let mut wav = WavReader::new(Cursor::new(TEST_WAV), "test")?;
         assert_eq!(wav.sample_rate, 44100);
         assert_eq!(wav.channels, 2);
         assert_eq!(wav.progress(), ProgressHint::new(0, 1));
@@ -268,6 +366,21 @@ mod tests {
         assert_eq!(samples.rate, 44100);
         assert_eq!(samples.len, expected.len());
         assert!(samples.data[..samples.len] == expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_wav_cues() -> Result<()> {
+        let wav = WavReader::new(Cursor::new(TEST_WAV_CUES), "test")?;
+        let cues = wav.cues().collect::<Vec<_>>();
+        assert_eq!(
+            cues,
+            &[
+                Cue::new("start", 0),
+                Cue::with_duration("range", 44100, 88200),
+                Cue::new("end", 174489),
+            ]
+        );
         Ok(())
     }
 }

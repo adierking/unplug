@@ -54,6 +54,12 @@ impl Cue {
     }
 }
 
+impl Default for Cue {
+    fn default() -> Self {
+        Self { start: 0, duration: 0, name: "".into() }
+    }
+}
+
 /// The result type for audio operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
