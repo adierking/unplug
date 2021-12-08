@@ -3,7 +3,9 @@
 
 use crate::audio::format::adpcm::{self, GcAdpcm};
 use crate::audio::format::{AnyFormat, Format, PcmS16Le};
-use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
+use crate::audio::{
+    Cue, Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag,
+};
 use crate::common::{ReadFrom, ReadSeek, Region};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, BE};
@@ -12,6 +14,7 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom};
+use std::iter;
 use tracing::error;
 
 const RWAV_MAGIC: u32 = 0x52574156; // 'RWAV'
@@ -481,6 +484,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
             Some(_) => Some(self.end_address as u64 + 1),
             None => Some(0),
         }
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(iter::empty())
     }
 }
 

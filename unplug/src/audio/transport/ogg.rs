@@ -1,8 +1,9 @@
 use crate::audio::format::{PcmS16Le, StaticFormat};
-use crate::audio::{Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Cue, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::ReadSeek;
 use lewton::inside_ogg::OggStreamReader;
 use std::io::{Read, Seek};
+use std::iter;
 use tracing::{debug, instrument};
 
 /// Reads audio samples from Ogg Vorbis data.
@@ -77,6 +78,10 @@ impl ReadSamples<'static> for OggReader<'_> {
 
     fn data_remaining(&self) -> Option<u64> {
         None
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(iter::empty())
     }
 }
 

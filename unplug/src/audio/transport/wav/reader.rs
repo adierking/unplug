@@ -4,6 +4,7 @@ use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, So
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::iter;
 use tracing::{error, instrument, trace};
 
 /// RIFF data reader which can recursively read chunks.
@@ -237,6 +238,10 @@ impl ReadSamples<'static> for WavReader<'_> {
 
     fn data_remaining(&self) -> Option<u64> {
         Some(self.data_remaining as u64 / 2) // Convert from bytes to samples
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
+        Box::from(iter::empty())
     }
 }
 

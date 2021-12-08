@@ -3,7 +3,7 @@ use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, So
 use claxon::{self};
 use std::convert::TryFrom;
 use std::io::Read;
-use std::mem;
+use std::{iter, mem};
 use tracing::{debug, instrument, trace_span};
 
 /// Reads audio samples from FLAC data.
@@ -124,6 +124,10 @@ impl ReadSamples<'static> for FlacReader<'_> {
 
     fn data_remaining(&self) -> Option<u64> {
         None
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
+        Box::from(iter::empty())
     }
 }
 

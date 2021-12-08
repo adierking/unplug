@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::iter;
 use tracing::{debug, instrument, trace};
 use unplug_proc::{ReadFrom, WriteTo};
 
@@ -808,6 +809,10 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
 
     fn data_remaining(&self) -> Option<u64> {
         Some(self.blocks[self.pos..].iter().map(|b| b.end_address as u64 + 1).sum())
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
+        Box::from(iter::empty())
     }
 }
 

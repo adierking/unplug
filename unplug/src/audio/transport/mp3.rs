@@ -4,6 +4,7 @@ use crate::common::{ReadSeek, Region};
 use byteorder::{ReadBytesExt, BE};
 use minimp3::{Decoder, Error as Mp3Error, Frame};
 use std::io::{Read, Seek, SeekFrom};
+use std::iter;
 use tracing::{debug, error, instrument, trace, warn};
 
 /// Reads audio samples from MP3 data.
@@ -152,6 +153,10 @@ impl ReadSamples<'static> for Mp3Reader<'_> {
     fn data_remaining(&self) -> Option<u64> {
         // TODO: Can we get this from the frame count?
         None
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
+        Box::from(iter::empty())
     }
 }
 

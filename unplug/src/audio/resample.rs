@@ -1,9 +1,10 @@
 use super::format::pcm::{AnyPcm, ConvertPcm, PcmF32Le};
 use super::format::Convert;
-use super::{Error, ProgressHint, ReadSamples, Result, Samples};
+use super::{Cue, Error, ProgressHint, ReadSamples, Result, Samples};
 use libsamplerate_sys::*;
 use std::convert::TryInto;
 use std::ffi::CStr;
+use std::iter;
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::{c_double, c_int, c_long};
@@ -215,6 +216,11 @@ where
 
     fn data_remaining(&self) -> Option<u64> {
         None
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        // TODO: Ideally we shouldn't discard cues from the base stream
+        Box::from(iter::empty())
     }
 }
 

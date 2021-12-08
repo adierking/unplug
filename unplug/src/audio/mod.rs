@@ -10,6 +10,7 @@ pub use sample::{ReadSamples, Samples, SourceChannel, SourceTag};
 use lewton::VorbisError;
 use std::io;
 use std::num::NonZeroU64;
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Represents the current progress of an audio processing operation. Units are arbitrary and this
@@ -27,6 +28,29 @@ impl ProgressHint {
     /// return `None` to prevent potential divide-by-zero errors.
     pub fn new(current: u64, total: u64) -> Option<ProgressHint> {
         NonZeroU64::new(total).map(|total| ProgressHint { current, total })
+    }
+}
+
+/// A marked section of samples in an audio stream.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Cue {
+    /// The index of the sample frame where the cue starts.
+    pub start: u64,
+    /// The cue's duration in sample frames. For simple markers, this can be zero.
+    pub duration: u64,
+    /// The cue's name.
+    pub name: Arc<str>,
+}
+
+impl Cue {
+    /// Creates a new `Cue` which does not have a duration.
+    pub fn new(name: impl Into<Arc<str>>, start: u64) -> Self {
+        Self::with_duration(name, start, 0)
+    }
+
+    /// Creates a new `Cue` with a duration.
+    pub fn with_duration(name: impl Into<Arc<str>>, start: u64, duration: u64) -> Self {
+        Self { name: name.into(), start, duration }
     }
 }
 

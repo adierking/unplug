@@ -1,7 +1,7 @@
 use super::format::pcm::AnyPcm;
 use super::format::*;
 use super::resample::Resample;
-use super::{Error, ProgressHint, Result};
+use super::{Cue, Error, ProgressHint, Result};
 use std::any;
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -269,6 +269,9 @@ pub trait ReadSamples<'s> {
     /// true for PCM formats.
     fn data_remaining(&self) -> Option<u64>;
 
+    /// Returns an iterator over the cues in the audio stream. The order is undefined.
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_>;
+
     /// Reads all available samples and concatenates them into a single `Samples` object. The
     /// samples must have a static format and follow the rules for `Samples::append()`. If no
     /// samples are available, `Err(EmptyStream)` is returned.
@@ -397,6 +400,9 @@ where
     fn data_remaining(&self) -> Option<u64> {
         (**self).data_remaining()
     }
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        (**self).cues()
+    }
 }
 
 impl<'a, F, R> ReadSamples<'a> for Box<R>
@@ -420,23 +426,37 @@ where
     fn data_remaining(&self) -> Option<u64> {
         (**self).data_remaining()
     }
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        (**self).cues()
+    }
 }
 
 /// `ReadSamples` implementation which yields `Samples` structs from a queue. All samples must have
 /// the same format and channel count.
 pub struct ReadSampleList<'s, F: DynamicFormat> {
     samples: VecDeque<Samples<'s, F>>,
+    cues: Vec<Cue>,
     original_len: u64,
     format: Format,
     tag: SourceTag,
 }
 
 impl<'s, F: DynamicFormat> ReadSampleList<'s, F> {
+    /// Creates a new `ReadSampleList` which returns samples from `samples`.
     pub fn new(samples: impl Into<VecDeque<Samples<'s, F>>>, tag: impl Into<SourceTag>) -> Self {
-        Self::new_impl(samples.into(), tag.into())
+        Self::new_impl(samples.into(), vec![], tag.into())
     }
 
-    fn new_impl(samples: VecDeque<Samples<'s, F>>, tag: SourceTag) -> Self {
+    /// Creates a new `ReadSampleList` which returns samples from `samples` and cues from `cues`.
+    pub fn with_cues(
+        samples: impl Into<VecDeque<Samples<'s, F>>>,
+        cues: impl Into<Vec<Cue>>,
+        tag: impl Into<SourceTag>,
+    ) -> Self {
+        Self::new_impl(samples.into(), cues.into(), tag.into())
+    }
+
+    fn new_impl(samples: VecDeque<Samples<'s, F>>, cues: Vec<Cue>, tag: SourceTag) -> Self {
         assert!(!samples.is_empty(), "sample list is empty");
         let front = samples.front().unwrap();
         let format = front.format();
@@ -446,7 +466,7 @@ impl<'s, F: DynamicFormat> ReadSampleList<'s, F> {
             assert_eq!(s.channels, channels);
         }
         let original_len = samples.len() as u64;
-        Self { samples, original_len, format, tag }
+        Self { samples, cues, original_len, format, tag }
     }
 
     /// Gets the sample packet at the front of the queue, if any.
@@ -472,6 +492,9 @@ impl<'s, F: DynamicFormat> ReadSamples<'s> for ReadSampleList<'s, F> {
     }
     fn data_remaining(&self) -> Option<u64> {
         Some(self.samples.iter().map(|s| s.len as u64).sum())
+    }
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(self.cues.iter().cloned())
     }
 }
 
@@ -504,6 +527,9 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'static> for OwnedSamples<'s, R> {
     }
     fn data_remaining(&self) -> Option<u64> {
         self.inner.data_remaining()
+    }
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        self.inner.cues()
     }
 }
 
@@ -558,6 +584,10 @@ where
 
     fn data_remaining(&self) -> Option<u64> {
         self.inner.data_remaining()
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        self.inner.cues()
     }
 }
 
@@ -620,6 +650,10 @@ impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for PeekSamples<'s, R> {
             None => self.inner.data_remaining(),
         }
     }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        self.inner.cues()
+    }
 }
 
 struct SavedSamples<'s, F: FormatTag> {
@@ -660,6 +694,7 @@ impl<F: PcmFormat> FusedIterator for SampleIterator<'_, F> {}
 pub struct JoinChannels<'r, 's, F: PcmFormat> {
     left: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     right: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+    cues: Vec<Cue>,
     format: Format,
     tag: SourceTag,
     _marker: PhantomData<F>,
@@ -670,10 +705,23 @@ impl<'r, 's, F: PcmFormat> JoinChannels<'r, 's, F> {
         left: impl ReadSamples<'s, Format = F> + 'r,
         right: impl ReadSamples<'s, Format = F> + 'r,
     ) -> Self {
+        Self::new_impl(Box::from(left), Box::from(right))
+    }
+
+    fn new_impl(
+        left: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+        right: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+    ) -> Self {
         assert_eq!(left.format(), right.format());
         let format = left.format();
         let tag = left.tag().join(right.tag());
-        Self { left: Box::from(left), right: Box::from(right), format, tag, _marker: PhantomData }
+
+        // Merge the cues together to avoid duplicates
+        let mut cues = left.cues().chain(right.cues()).collect::<Vec<_>>();
+        cues.sort_unstable();
+        cues.dedup();
+
+        Self { left, right, cues, format, tag, _marker: PhantomData }
     }
 }
 
@@ -743,6 +791,10 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
     fn data_remaining(&self) -> Option<u64> {
         Some(self.left.data_remaining()? + self.right.data_remaining()?)
     }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(self.cues.iter().cloned())
+    }
 }
 
 /// An adapter which splits a stereo stream into two mono streams.
@@ -775,12 +827,20 @@ struct SplitChannelsState<'r, 's, F: PcmFormat> {
     left: VecDeque<Rc<Samples<'s, F>>>,
     /// Samples which have not yet been processed by the right reader.
     right: VecDeque<Rc<Samples<'s, F>>>,
+    /// Cue points to return from each reader.
+    cues: Arc<[Cue]>,
 }
 
 impl<'r, 's, F: PcmFormat> SplitChannelsState<'r, 's, F> {
     /// Creates a new `SplitChannelsState` wrapping `reader`.
     fn new(reader: Box<dyn ReadSamples<'s, Format = F> + 'r>) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self { reader, left: VecDeque::new(), right: VecDeque::new() }))
+        let cues = reader.cues().collect::<Vec<_>>();
+        Arc::new(Mutex::new(Self {
+            reader,
+            cues: cues.into(),
+            left: VecDeque::new(),
+            right: VecDeque::new(),
+        }))
     }
 
     /// Reads more samples from the inner reader and updates the queues. Returns `Ok(true)` if
@@ -799,6 +859,7 @@ impl<'r, 's, F: PcmFormat> SplitChannelsState<'r, 's, F> {
 /// `ReadSamples` implementation for a single channel returned by a `SplitChannels`.
 pub struct SplitChannelsReader<'r, 's, F: PcmFormat> {
     state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>,
+    cues: Arc<[Cue]>,
     format: Format,
     tag: SourceTag,
 }
@@ -808,10 +869,11 @@ impl<'r, 's, F: PcmFormat> SplitChannelsReader<'r, 's, F> {
     fn new(state: Arc<Mutex<SplitChannelsState<'r, 's, F>>>, channel: SourceChannel) -> Self {
         debug_assert!(matches!(channel, SourceChannel::Left | SourceChannel::Right));
         let lock = state.lock().unwrap();
+        let cues = Arc::clone(&lock.cues);
         let format = lock.reader.format();
         let tag = lock.reader.tag().clone().for_channel(channel);
         drop(lock);
-        Self { state, format, tag }
+        Self { state, cues, format, tag }
     }
 }
 
@@ -868,6 +930,10 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
             let queue = if is_right { &state.right } else { &state.left };
             (len + queue.iter().map(|s| s.len as u64).sum::<u64>()) / 2
         })
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(self.cues.iter().cloned())
     }
 }
 
@@ -1160,10 +1226,14 @@ mod tests {
     fn test_join_channels() -> Result<()> {
         let ldata: Vec<i16> = (0..16).step_by(2).collect();
         let rdata: Vec<i16> = (0..16).skip(1).step_by(2).collect();
-        let left = Samples::<PcmS16Le>::from_pcm(&ldata[..7], 1, 44100);
-        let right = Samples::<PcmS16Le>::from_pcm(&rdata[..7], 1, 44100);
+        let lcues = vec![Cue::new("a", 0), Cue::new("b", 1)];
+        let rcues = vec![Cue::new("a", 0), Cue::new("c", 2)];
+        let lsamples = Samples::<PcmS16Le>::from_pcm(&ldata[..7], 1, 44100);
+        let rsamples = Samples::<PcmS16Le>::from_pcm(&rdata[..7], 1, 44100);
+        let left = ReadSampleList::with_cues(vec![lsamples], lcues, "left");
+        let right = ReadSampleList::with_cues(vec![rsamples], rcues, "right");
 
-        let mut joiner = JoinChannels::new(left.into_reader("left"), right.into_reader("right"));
+        let mut joiner = left.with_right_channel(right);
         assert_eq!(joiner.data_remaining(), Some(14));
         let joined = joiner.read_samples()?.unwrap();
         assert_eq!(joiner.data_remaining(), Some(0));
@@ -1175,6 +1245,8 @@ mod tests {
             &[0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd]
         );
 
+        let cues = joiner.cues().collect::<Vec<_>>();
+        assert_eq!(cues, &[Cue::new("a", 0), Cue::new("b", 1), Cue::new("c", 2)]);
         Ok(())
     }
 
@@ -1182,8 +1254,10 @@ mod tests {
     fn test_split_channels() -> Result<()> {
         let samples: Vec<i16> = (0..16).collect();
         let stereo = Samples::<PcmS16Le>::from_pcm(&samples[..14], 2, 44100);
+        let cues = vec![Cue::new("a", 0), Cue::new("b", 1)];
+        let reader = ReadSampleList::with_cues(vec![stereo], cues, "test");
 
-        let splitter = SplitChannels::new(stereo.into_reader("test"));
+        let splitter = reader.split_channels();
         let mut left_split = splitter.left();
         let mut right_split = splitter.right();
         assert_eq!(left_split.data_remaining(), Some(7));
@@ -1205,6 +1279,11 @@ mod tests {
         assert_eq!(right.len, 7);
         assert_eq!(right.channels, 1);
         assert_eq!(right.data.as_ref(), &[0x1, 0x3, 0x5, 0x7, 0x9, 0xb, 0xd]);
+
+        let lcues = left_split.cues().collect::<Vec<_>>();
+        let rcues = right_split.cues().collect::<Vec<_>>();
+        assert_eq!(lcues, &[Cue::new("a", 0), Cue::new("b", 1)]);
+        assert_eq!(rcues, lcues);
 
         Ok(())
     }

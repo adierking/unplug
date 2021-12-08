@@ -345,6 +345,10 @@ where
     fn data_remaining(&self) -> Option<u64> {
         self.inner.data_remaining()
     }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
+        self.inner.cues()
+    }
 }
 
 #[cfg(test)]

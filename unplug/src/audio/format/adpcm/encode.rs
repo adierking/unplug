@@ -426,6 +426,10 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
         let num_frames = (num_samples + samples_per_frame - 1) / samples_per_frame;
         Some(num_samples + num_frames * 2)
     }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
+        self.reader.cues()
+    }
 }
 
 #[cfg(test)]

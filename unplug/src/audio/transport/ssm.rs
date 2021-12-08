@@ -1,13 +1,16 @@
 use crate::audio::format::adpcm::{Decoder, EncoderBuilder, FrameContext, GcAdpcm, Info};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
-use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
+use crate::audio::{
+    Cue, Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag,
+};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::iter;
 use tracing::{debug, error, instrument};
 
 /// The size of the file header.
@@ -474,6 +477,10 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
             Some(c) => Some(c.address.end_address as u64 + 1),
             None => Some(0),
         }
+    }
+
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(iter::empty())
     }
 }
 
