@@ -22,6 +22,7 @@ const ID_ISFT: u32 = fourcc(b"ISFT");
 const ID_LABL: u32 = fourcc(b"labl");
 const ID_LIST: u32 = fourcc(b"LIST");
 const ID_LTXT: u32 = fourcc(b"ltxt");
+const ID_RGN: u32 = fourcc(b"rgn ");
 const ID_RIFF: u32 = fourcc(b"RIFF");
 const ID_WAVE: u32 = fourcc(b"WAVE");
 

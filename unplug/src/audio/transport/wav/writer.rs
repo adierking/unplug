@@ -11,6 +11,9 @@ use tracing::{debug, instrument, Level};
 
 const DEFAULT_SOFTWARE_NAME: &str = concat!("unplug v", env!("CARGO_PKG_VERSION"));
 
+/// Windows UTF-8 code page.
+const CP_UTF8: u16 = 65001;
+
 /// Wraps a writer and provides methods for writing RIFF chunks.
 struct RiffWriter<W: Write + Seek> {
     /// The inner writer.
@@ -132,6 +135,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
         let mut riff = RiffWriter::new(writer);
         riff.open_form(ID_WAVE)?;
         self.write_format(&mut riff)?;
+        self.write_cues(&mut riff)?;
         self.write_info(&mut riff)?;
         self.write_data(&mut riff)?;
         riff.close_form()?;
@@ -153,6 +157,68 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
         };
         format.write_to(riff)?;
         riff.close_chunk(ID_FMT)?;
+        Ok(())
+    }
+
+    /// Writes the `cue ` and `adtl` chunks with cue information.
+    fn write_cues(&self, riff: &mut RiffWriter<impl Write + Seek>) -> Result<()> {
+        let mut cues = self.samples.cues().collect::<Vec<_>>();
+        if cues.is_empty() {
+            return Ok(());
+        }
+        cues.sort_unstable();
+        cues.dedup();
+
+        let mut chunk = CueChunk::default();
+        let mut labels: Vec<LabelChunk> = vec![];
+        let mut ltxts: Vec<LabelTextChunk> = vec![];
+        for (i, cue) in cues.into_iter().enumerate() {
+            // Each cue gets an entry in the cue chunk and a label in the labl list.
+            let id = (i + 1) as u32;
+            chunk.points.push(CuePoint {
+                name: id,
+                position: cue.start as u32,
+                chunk_id: ID_DATA,
+                chunk_start: 0,
+                block_start: 0,
+                sample_offset: cue.start as u32,
+            });
+            let text = CString::new(&*cue.name).unwrap();
+            // Cues with a duration need an entry in ltxt to store the duration.
+            if cue.duration > 0 {
+                ltxts.push(LabelTextChunk {
+                    name: id,
+                    sample_length: cue.duration as u32,
+                    purpose: ID_RGN,
+                    country: 0,
+                    language: 0,
+                    dialect: 0,
+                    code_page: CP_UTF8,
+                    // What's the difference between this and the text in labl? Who knows. Just
+                    // duplicate the label name in case some program out there wants it.
+                    text: text.clone(),
+                });
+            }
+            labels.push(LabelChunk { name: id, text });
+        }
+
+        riff.open_chunk(ID_CUE)?;
+        chunk.write_to(riff)?;
+        riff.close_chunk(ID_CUE)?;
+
+        riff.open_chunk(ID_LIST)?;
+        riff.write_u32::<LE>(ID_ADTL)?;
+        for label in labels {
+            riff.open_chunk(ID_LABL)?;
+            label.write_to(riff)?;
+            riff.close_chunk(ID_LABL)?;
+        }
+        for ltxt in ltxts {
+            riff.open_chunk(ID_LTXT)?;
+            ltxt.write_to(riff)?;
+            riff.close_chunk(ID_LTXT)?;
+        }
+        riff.close_chunk(ID_LIST)?;
         Ok(())
     }
 
@@ -222,7 +288,8 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::{sample::ReadSampleList, Samples};
+    use crate::audio::sample::ReadSampleList;
+    use crate::audio::{Cue, Samples};
     use std::io::Cursor;
 
     #[rustfmt::skip]
@@ -282,6 +349,23 @@ mod tests {
             assert_eq!(progress.current, i as u64);
             assert_eq!(progress.total.get(), 4);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_and_read_cues() -> Result<()> {
+        let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2, 44100);
+        let cues =
+            vec![Cue::new("start", 0), Cue::with_duration("range", 1, 2), Cue::new("end", 3)];
+
+        let samples = ReadSampleList::with_cues(vec![samples], cues.clone(), "test");
+        let mut cursor = Cursor::new(vec![]);
+        WavWriter::new(samples).write_to(&mut cursor)?;
+
+        cursor.seek(SeekFrom::Start(0))?;
+        let wav = WavReader::new(cursor, "test")?;
+        let actual = wav.cues().collect::<Vec<_>>();
+        assert_eq!(actual, cues);
         Ok(())
     }
 }
