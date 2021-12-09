@@ -254,6 +254,7 @@ pub struct AdpcmHpsBuilder<'r, 's> {
     left_channel: Channel,
     right_channel: Channel,
     blocks: Vec<Block>,
+    cues: Vec<audio::Cue>,
     rate: u32,
 }
 
@@ -280,6 +281,7 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
             left_channel: Channel::default(),
             right_channel: Channel::default(),
             blocks: vec![],
+            cues: vec![],
             rate: 0,
         }
     }
@@ -300,6 +302,7 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
     /// Reads all samples and builds the final HPS stream.
     pub fn build(mut self) -> Result<HpsStream> {
         self.update_progress();
+        self.collect_cues();
         match self.right.take() {
             Some(right) => self.build_stereo(right),
             None => self.build_mono(),
@@ -384,13 +387,50 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
         Ok(())
     }
 
-    fn finish(self, tag: SourceTag) -> Result<HpsStream> {
+    /// Merges cue points from the inner readers and populates the `self.cues` list.
+    fn collect_cues(&mut self) {
+        self.cues = match &self.right {
+            Some(right) => self.left.cues().chain(right.cues()).collect(),
+            None => self.left.cues().collect(),
+        };
+        self.cues.sort_unstable();
+        self.cues.dedup();
+    }
+
+    /// Assigns the cue points from `self.cues` to their corresponding blocks.
+    fn assign_cues(&mut self) {
+        let mut cue_index = 0;
+        let mut block_index = 0;
+        let mut sample_base = 0;
+        let num_cues = self.cues.len();
+        let num_blocks = self.blocks.len();
+        while cue_index < num_cues && block_index < num_blocks {
+            let block = &mut self.blocks[block_index];
+            let num_samples = block.num_samples(DspFormat::Adpcm);
+            let end_sample = sample_base + (num_samples as u64);
+            while cue_index < num_cues {
+                let cue = &self.cues[cue_index];
+                if cue.start >= end_sample && block_index < num_blocks - 1 {
+                    break;
+                }
+                let start = cue.start - sample_base;
+                let point = CuePoint { sample_index: start as i32, id: (cue_index + 1) as u32 };
+                block.cues.push(point);
+                cue_index += 1;
+            }
+            block_index += 1;
+            sample_base = end_sample;
+        }
+    }
+
+    fn finish(mut self, tag: SourceTag) -> Result<HpsStream> {
         if self.blocks.is_empty() {
             return Err(Error::EmptyStream);
         }
         if self.rate == 0 {
             return Err(Error::InvalidSampleRate(self.rate));
         }
+        self.assign_cues();
         let mut channels = ArrayVec::new();
         channels.push(self.left_channel);
         if self.right_channel.is_initialized() {
@@ -598,6 +638,19 @@ impl Block {
     /// Creates an empty `Block`.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Calculates the number of samples in the block according to `format`.
+    pub fn num_samples(&self, format: DspFormat) -> usize {
+        let len = (self.end_address as usize) + 1;
+        match format {
+            DspFormat::Adpcm => {
+                let bytes = (len + 1) / 2;
+                let num_frames = (bytes + adpcm::BYTES_PER_FRAME - 1) / adpcm::BYTES_PER_FRAME;
+                len - len.min(num_frames * 2)
+            }
+            DspFormat::Pcm16 | DspFormat::Pcm8 => len,
+        }
     }
 
     /// Creates a `Block` from mono ADPCM sample data.
@@ -859,16 +912,7 @@ impl Iterator for CueIterator<'_> {
             } else {
                 self.block_index += 1;
                 self.cue_index = 0;
-                let length = (block.end_address as usize) + 1;
-                let num_samples = match self.format {
-                    DspFormat::Adpcm => {
-                        let num_bytes = GcAdpcm::address_to_byte_up(length);
-                        let num_frames = num_bytes / adpcm::BYTES_PER_FRAME;
-                        num_frames * adpcm::SAMPLES_PER_FRAME
-                    }
-                    DspFormat::Pcm16 | DspFormat::Pcm8 => length,
-                };
-                self.sample_base += num_samples as u64;
+                self.sample_base += block.num_samples(self.format) as u64;
             }
         }
     }
@@ -877,6 +921,8 @@ impl Iterator for CueIterator<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::sample::ReadSampleList;
+    use crate::audio::Cue;
     use crate::{assert_write_and_read, test};
     use std::io::Cursor;
 
@@ -1250,6 +1296,32 @@ mod tests {
             assert_eq!(right.data.len(), EXPECTED_BLOCK_LENGTHS[i]);
             offset = end_offset;
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_assign_cues() -> Result<()> {
+        let mut blocks = vec![];
+        for _ in 0..4 {
+            blocks.push(Samples::<GcAdpcm> {
+                channels: 1,
+                rate: 44100,
+                len: 0x10,
+                data: vec![0; 8].into(),
+                params: adpcm::Info::default(),
+            });
+        }
+        let cues = vec![Cue::new("b", 28), Cue::new("a", 0), Cue::new("c", 29), Cue::new("d", 56)];
+        let reader = ReadSampleList::with_cues(blocks, cues, "test");
+
+        let hps = AdpcmHpsBuilder::with_mono(reader).build()?;
+        assert_eq!(hps.blocks.len(), 4);
+        assert_eq!(hps.blocks[0].cues, &[CuePoint { sample_index: 0, id: 1 }]);
+        assert_eq!(
+            hps.blocks[2].cues,
+            &[CuePoint { sample_index: 0, id: 2 }, CuePoint { sample_index: 1, id: 3 }]
+        );
+        assert_eq!(hps.blocks[3].cues, &[CuePoint { sample_index: 14, id: 4 }]);
         Ok(())
     }
 }

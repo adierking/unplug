@@ -98,7 +98,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
             let bytes = (len + 1) / 2;
             let bytes_per_frame = BYTES_PER_FRAME as u64;
             let num_frames = (bytes + bytes_per_frame - 1) / bytes_per_frame;
-            len - num_frames * 2
+            len - len.min(num_frames * 2)
         })
     }
 
