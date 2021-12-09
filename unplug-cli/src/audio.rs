@@ -8,6 +8,7 @@ use std::io::{BufReader, BufWriter, Cursor, Seek, SeekFrom};
 use std::path::Path;
 use std::time::Instant;
 use unplug::audio::format::PcmS16Le;
+use unplug::audio::metadata::audacity;
 use unplug::audio::transport::hps::{HpsStream, PcmHpsBuilder};
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
@@ -22,6 +23,9 @@ const MAX_MUSIC_SAMPLE_RATE: u32 = 44100;
 
 const SFX_HORI_NAME: &str = "sfx_hori.ssm";
 const SFX_HORI_PATH: &str = "qp/sfx_hori.ssm";
+
+/// Extension to use for Audacity label output
+const LABELS_EXTENSION: &str = "labels.txt";
 
 /// Opens the sound file at `path` and enqueues it for resampling if the sample rate is higher than
 /// `max_sample_rate`.
@@ -81,8 +85,18 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     WavWriter::new(hps.decoder())
         .on_progress(|p| update_audio_progress(&progress, p))
         .write_to(out)?;
-
     progress.finish_using_style();
+
+    if opt.labels {
+        let cues = hps.cues().collect::<Vec<_>>();
+        if !cues.is_empty() {
+            let label_path = opt.output.with_extension(LABELS_EXTENSION);
+            info!("Writing label track to {}", label_path.display());
+            let labels = BufWriter::new(File::create(label_path)?);
+            audacity::write_labels(labels, cues, hps.sample_rate)?;
+        }
+    }
+
     info!("Export finished in {:?}", start_time.elapsed());
     Ok(())
 }

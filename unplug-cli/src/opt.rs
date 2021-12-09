@@ -383,6 +383,11 @@ pub struct ExportMusicOpt {
     #[structopt(long, value_name("PATH"), parse(from_os_str))]
     pub iso: Option<PathBuf>,
 
+    /// If the music has cue points, exports a .labels.txt file alongside the output file which
+    /// defines the cues using Audacity's label track format.
+    #[structopt(long)]
+    pub labels: bool,
+
     /// Path to the HPS file to export
     #[structopt(parse(from_os_str))]
     pub path: PathBuf,
