@@ -12,8 +12,8 @@ use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
 use std::borrow::Cow;
 use std::io::{Read, Write};
 
-const SAMPLES_PER_FRAME: usize = 14;
-const BYTES_PER_FRAME: usize = 8;
+pub const SAMPLES_PER_FRAME: usize = 14;
+pub const BYTES_PER_FRAME: usize = 8;
 
 #[derive(Copy, Clone)]
 pub struct GcAdpcm;

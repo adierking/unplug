@@ -1,10 +1,12 @@
 use anyhow::Result;
+use lazy_static::lazy_static;
 use log::info;
 use seahash::SeaHasher;
 use std::hash::Hasher;
 use std::io::BufReader;
 use unplug::audio::format::{DspFormat, PcmS16Le, ReadWriteBytes};
 use unplug::audio::transport::hps::{Block, HpsStream};
+use unplug::audio::Cue;
 use unplug::data::music::{Music, MusicDefinition};
 use unplug::dvd::OpenFile;
 use unplug_test as common;
@@ -54,6 +56,10 @@ fn test_read_all_music() -> Result<()> {
             validate_channel(&hps, block, 0);
             validate_channel(&hps, block, 1);
         }
+        if id == Music::Teriyaki {
+            let cues = hps.cues().collect::<Vec<_>>();
+            assert_eq!(cues, *TERIYAKI_CUE_POINTS);
+        }
         let actual = decode_and_hash(&hps)?;
         if rehash {
             println!("    (Music::{}, {:?}, 0x{:>016x}),", name, name, actual);
@@ -66,6 +72,19 @@ fn test_read_all_music() -> Result<()> {
         println!("];")
     }
     Ok(())
+}
+
+lazy_static! {
+    /// Expected teriyaki.hps cue points.
+    static ref TERIYAKI_CUE_POINTS: Vec<Cue> = vec![
+        Cue::new("1", 1),
+        Cue::new("2", 793600),
+        Cue::new("3", 1111296),
+        Cue::new("4", 1384448),
+        Cue::new("5", 1907968),
+        Cue::new("6", 2218368),
+        Cue::new("7", 2435200),
+    ];
 }
 
 /// Decoded audio seahashes for finding regressions.

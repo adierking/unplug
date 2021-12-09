@@ -3,7 +3,9 @@ use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{
     AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes, StaticFormat,
 };
-use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
+use crate::audio::{
+    self, Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag,
+};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, Region, WriteTo};
 use arrayvec::ArrayVec;
@@ -12,7 +14,6 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::iter;
 use tracing::{debug, instrument, trace};
 use unplug_proc::{ReadFrom, WriteTo};
 
@@ -513,6 +514,11 @@ impl HpsStream {
         }
     }
 
+    /// Returns an iterator over the cues in the stream.
+    pub fn cues(&self) -> CueIterator<'_> {
+        CueIterator::new(&self.blocks, self.channels[0].address.format)
+    }
+
     /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format. For
     /// more control over the stream creation, use `PcmHpsBuilder` instead.
     #[instrument(level = "trace", skip_all)]
@@ -811,8 +817,60 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         Some(self.blocks[self.pos..].iter().map(|b| b.end_address as u64 + 1).sum())
     }
 
-    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
-        Box::from(iter::empty())
+    fn cues(&self) -> Box<dyn Iterator<Item = audio::Cue> + '_> {
+        Box::from(CueIterator::new(self.blocks, self.format))
+    }
+}
+
+/// An iterator over the cues in an HPS stream.
+pub struct CueIterator<'a> {
+    /// The blocks to iterate over and obtain cue points from.
+    blocks: &'a [Block],
+    /// The format of the data in each block.
+    format: DspFormat,
+    /// The index of the current block.
+    block_index: usize,
+    /// The index of the current cue within the current block.
+    cue_index: usize,
+    /// The number of samples before the current block.
+    sample_base: u64,
+}
+
+impl<'a> CueIterator<'a> {
+    fn new(blocks: &'a [Block], format: DspFormat) -> Self {
+        Self { blocks, format, block_index: 0, cue_index: 0, sample_base: 0 }
+    }
+}
+
+impl Iterator for CueIterator<'_> {
+    type Item = audio::Cue;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.block_index >= self.blocks.len() {
+                return None;
+            }
+            let block = &self.blocks[self.block_index];
+            if self.cue_index < block.cues.len() {
+                let cue = &block.cues[self.cue_index];
+                self.cue_index += 1;
+                let name = format!("{}", cue.id);
+                let start = self.sample_base + (cue.sample_index as u64);
+                return Some(audio::Cue::new(name, start));
+            } else {
+                self.block_index += 1;
+                self.cue_index = 0;
+                let length = (block.end_address as usize) + 1;
+                let num_samples = match self.format {
+                    DspFormat::Adpcm => {
+                        let num_bytes = GcAdpcm::address_to_byte_up(length);
+                        let num_frames = num_bytes / adpcm::BYTES_PER_FRAME;
+                        num_frames * adpcm::SAMPLES_PER_FRAME
+                    }
+                    DspFormat::Pcm16 | DspFormat::Pcm8 => length,
+                };
+                self.sample_base += num_samples as u64;
+            }
+        }
     }
 }
 

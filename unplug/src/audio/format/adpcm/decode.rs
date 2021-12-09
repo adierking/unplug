@@ -1,8 +1,7 @@
 use super::{GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
-use crate::audio::{Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Cue, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::clamp_i16;
-use std::iter;
 use tracing::{instrument, trace};
 
 /// Decodes GameCube ADPCM samples into PCM.
@@ -103,8 +102,8 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
         })
     }
 
-    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
-        Box::from(iter::empty())
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        self.source.cues()
     }
 }
 
