@@ -3,7 +3,7 @@ use super::vgaudio::encode;
 use super::{Coefficients, GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::sample::ReadSampleList;
-use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{Cue, Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use arrayvec::ArrayVec;
 use std::collections::VecDeque;
 use std::mem;
@@ -139,7 +139,9 @@ impl<'r, 's: 'r> EncoderBuilder<'r, 's> {
     }
 
     fn build_mono(mut self) -> Result<EncoderPair<'s>> {
-        let mut channel = EncoderChannel::new(self.mono_block_size, self.reader.tag().clone());
+        let cues = self.reader.cues().collect::<Vec<_>>();
+        let mut channel =
+            EncoderChannel::new(self.mono_block_size, cues, self.reader.tag().clone());
         Self::update_progress(self.on_progress.as_mut(), self.reader.progress());
         while let Some(samples) = self.reader.read_samples()? {
             channel.add_samples(samples);
@@ -149,11 +151,14 @@ impl<'r, 's: 'r> EncoderBuilder<'r, 's> {
     }
 
     fn build_stereo(self) -> Result<EncoderPair<'s>> {
+        let cues = self.reader.cues().collect::<Vec<_>>();
         let splitter = self.reader.split_channels();
         let mut left = splitter.left();
         let mut right = splitter.right();
-        let mut left_channel = EncoderChannel::new(self.stereo_block_size, left.tag().clone());
-        let mut right_channel = EncoderChannel::new(self.stereo_block_size, right.tag().clone());
+        let mut left_channel =
+            EncoderChannel::new(self.stereo_block_size, cues.clone(), left.tag().clone());
+        let mut right_channel =
+            EncoderChannel::new(self.stereo_block_size, cues, right.tag().clone());
         let mut on_progress = self.on_progress;
         Self::update_progress(on_progress.as_mut(), left.progress());
         while let (Some(l), Some(r)) = (left.read_samples()?, right.read_samples()?) {
@@ -177,14 +182,15 @@ impl<'r, 's: 'r> EncoderBuilder<'r, 's> {
 /// Implementation detail for `EncoderBuilder` which builds an encoder for a single channel.
 struct EncoderChannel<'s> {
     block_size: usize,
+    cues: Vec<Cue>,
     tag: SourceTag,
     samples: Vec<Samples<'s, PcmS16Le>>,
     coeff: CoefficientCalculator,
 }
 
 impl<'s> EncoderChannel<'s> {
-    fn new(block_size: usize, tag: SourceTag) -> Self {
-        Self { block_size, tag, samples: vec![], coeff: Default::default() }
+    fn new(block_size: usize, cues: Vec<Cue>, tag: SourceTag) -> Self {
+        Self { block_size, cues, tag, samples: vec![], coeff: Default::default() }
     }
 
     fn add_samples(&mut self, samples: Samples<'s, PcmS16Le>) {
@@ -197,7 +203,7 @@ impl<'s> EncoderChannel<'s> {
 
     fn into_encoder(self) -> Encoder<'s, 's> {
         let state = Info { coefficients: self.coeff.finish(), ..Default::default() };
-        let reader = ReadSampleList::new(self.samples, self.tag);
+        let reader = ReadSampleList::with_cues(self.samples, self.cues, self.tag);
         Encoder::with_block_size(reader, state, self.block_size)
     }
 }
@@ -427,7 +433,7 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
         Some(num_samples + num_frames * 2)
     }
 
-    fn cues(&self) -> Box<dyn Iterator<Item = crate::audio::Cue> + '_> {
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
         self.reader.cues()
     }
 }

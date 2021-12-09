@@ -300,7 +300,8 @@ pub trait ReadSamples<'s> {
             samples.push_back(packet);
         }
         if !samples.is_empty() {
-            Ok(ReadSampleList::new(samples, self.tag().clone()))
+            let cues = self.cues().collect::<Vec<_>>();
+            Ok(ReadSampleList::with_cues(samples, cues, self.tag().clone()))
         } else {
             Err(Error::EmptyStream)
         }
@@ -1306,7 +1307,9 @@ mod tests {
         let samples1 = Samples::<PcmS16Le>::from_pcm((0..16).collect::<Vec<_>>(), 1, 44100);
         let samples2 = Samples::<PcmS16Le>::from_pcm((16..32).collect::<Vec<_>>(), 1, 44100);
         let samples3 = Samples::<PcmS16Le>::from_pcm((32..48).collect::<Vec<_>>(), 1, 44100);
-        let mut reader = ReadSampleList::new(vec![samples1, samples2, samples3], "test");
+        let cues = vec![Cue::new("a", 7)];
+        let mut reader =
+            ReadSampleList::with_cues(vec![samples1, samples2, samples3], cues.clone(), "test");
         let mut reader = reader.preread_all_samples().unwrap();
         assert_eq!(reader.front().unwrap().data, (0..16).collect::<Vec<_>>());
         assert_eq!(reader.read_samples().unwrap().unwrap().data, (0..16).collect::<Vec<_>>());
@@ -1314,6 +1317,7 @@ mod tests {
         assert_eq!(reader.read_samples().unwrap().unwrap().data, (32..48).collect::<Vec<_>>());
         assert!(reader.read_samples().unwrap().is_none());
         assert!(reader.front().is_none());
+        assert_eq!(reader.cues().collect::<Vec<_>>(), cues);
     }
 
     #[test]

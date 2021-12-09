@@ -1218,13 +1218,16 @@ mod tests {
     fn test_hps_from_pcm_mono() -> Result<()> {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
+        let cues = vec![Cue::new("1", 44100)];
+        let reader = ReadSampleList::with_cues(vec![samples], cues.clone(), "test");
+        let splitter = reader.split_channels();
 
-        let splitter = samples.into_reader("test").split_channels();
         let hps = HpsStream::from_pcm(&mut splitter.left())?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 1);
         assert_eq!(hps.loop_start, Some(0));
         assert_eq!(hps.blocks.len(), 2);
+        assert_eq!(hps.cues().collect::<Vec<_>>(), cues);
 
         let left = &hps.channels[0];
         assert_eq!(left.address.end_address, 0x30af8);
@@ -1254,12 +1257,15 @@ mod tests {
     fn test_hps_from_pcm_stereo() -> Result<()> {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
+        let cues = vec![Cue::new("1", 44100)];
+        let mut reader = ReadSampleList::with_cues(vec![samples], cues.clone(), "test");
 
-        let hps = HpsStream::from_pcm(&mut samples.into_reader("test"))?;
+        let hps = HpsStream::from_pcm(&mut reader)?;
         assert_eq!(hps.sample_rate, 44100);
         assert_eq!(hps.channels.len(), 2);
         assert_eq!(hps.loop_start, Some(0));
         assert_eq!(hps.blocks.len(), 4);
+        assert_eq!(hps.cues().collect::<Vec<_>>(), cues);
 
         let left = &hps.channels[0];
         assert_eq!(left.address.end_address, 0x30af8);
