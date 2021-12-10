@@ -1,9 +1,12 @@
 use super::*;
 use crate::audio::format::{PcmS16Le, ReadWriteBytes, StaticFormat};
-use crate::audio::{Cue, Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
+use crate::audio::{
+    Cue, CueKind, Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag,
+};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::num::NonZeroU64;
 use tracing::{error, instrument, trace, warn};
 
 /// RIFF data reader which can recursively read chunks.
@@ -224,7 +227,9 @@ impl<'a> WavReader<'a> {
                         let label = LabelTextChunk::read_from(&mut chunk)?;
                         if let Some(cue) = cues.get_mut(&label.name) {
                             // ltxt is primarily useful for getting the cue duration
-                            cue.duration = label.sample_length as u64;
+                            if let Some(duration) = NonZeroU64::new(label.sample_length.into()) {
+                                cue.kind = CueKind::Range(duration);
+                            }
                             // Give the name in labl precedence over this if there's more than one
                             // chunk for a cue
                             if cue.name.is_empty() {
@@ -375,11 +380,7 @@ mod tests {
         let cues = wav.cues().collect::<Vec<_>>();
         assert_eq!(
             cues,
-            &[
-                Cue::new("start", 0),
-                Cue::with_duration("range", 44100, 88200),
-                Cue::new("end", 174489),
-            ]
+            &[Cue::new("start", 0), Cue::new_range("range", 44100, 88200), Cue::new("end", 174489)]
         );
         Ok(())
     }

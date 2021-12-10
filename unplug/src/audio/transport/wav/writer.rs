@@ -1,7 +1,7 @@
 use super::*;
 use crate::audio::format::{PcmFormat, PcmS16Le, ReadWriteBytes};
 use crate::audio::sample::{PeekSamples, ReadSamples};
-use crate::audio::{Error, ProgressHint, Result};
+use crate::audio::{CueKind, Error, ProgressHint, Result};
 use crate::common::WriteTo;
 use byteorder::{WriteBytesExt, LE};
 use std::borrow::Cow;
@@ -185,10 +185,10 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
             });
             let text = CString::new(&*cue.name).unwrap();
             // Cues with a duration need an entry in ltxt to store the duration.
-            if cue.duration > 0 {
+            if let CueKind::Range(duration) = cue.kind {
                 ltxts.push(LabelTextChunk {
                     name: id,
-                    sample_length: cue.duration as u32,
+                    sample_length: duration.get() as u32,
                     purpose: ID_RGN,
                     country: 0,
                     language: 0,
@@ -355,8 +355,7 @@ mod tests {
     #[test]
     fn test_write_and_read_cues() -> Result<()> {
         let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2, 44100);
-        let cues =
-            vec![Cue::new("start", 0), Cue::with_duration("range", 1, 2), Cue::new("end", 3)];
+        let cues = vec![Cue::new("start", 0), Cue::new_range("range", 1, 2), Cue::new("end", 3)];
 
         let samples = ReadSampleList::with_cues(vec![samples], cues.clone(), "test");
         let mut cursor = Cursor::new(vec![]);
