@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::opt::*;
+use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
 use anyhow::{bail, Result};
 use log::{info, warn};
 use std::convert::TryFrom;

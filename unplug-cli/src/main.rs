@@ -1,28 +1,9 @@
 use anyhow::Result;
 use log::error;
-use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::process;
 use structopt::StructOpt;
 use unplug_cli::opt::{Opt, Subcommand};
-use unplug_cli::{audio, commands, globals, msg, shop};
-
-fn init_logging(verbosity: u64) {
-    let filter = if verbosity >= 2 {
-        // Note: trace logs are compiled out in release builds
-        LevelFilter::Trace
-    } else if verbosity == 1 {
-        LevelFilter::Debug
-    } else {
-        LevelFilter::Info
-    };
-    let config = ConfigBuilder::new()
-        .set_thread_level(LevelFilter::Off)
-        .set_target_level(LevelFilter::Trace)
-        .set_time_format_str("%T%.3f")
-        .set_level_color(Level::Info, Some(Color::Green))
-        .build();
-    TermLogger::init(filter, config, TerminalMode::Stderr, ColorChoice::Auto).unwrap();
-}
+use unplug_cli::{audio, commands, globals, msg, shop, terminal};
 
 #[cfg(feature = "trace")]
 fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
@@ -44,7 +25,7 @@ fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
 
 fn run_app() -> Result<()> {
     let opt = Opt::from_args();
-    init_logging(opt.verbose);
+    terminal::init_logging(opt.verbose);
 
     #[cfg(feature = "trace")]
     let mut _trace_guard = None;

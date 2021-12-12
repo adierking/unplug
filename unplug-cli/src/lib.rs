@@ -23,3 +23,4 @@ pub mod io;
 pub mod msg;
 pub mod opt;
 pub mod shop;
+pub mod terminal;

@@ -1,13 +1,10 @@
 use crate::io::copy_into_memory;
 use crate::opt::{OptionalContainerOpt, RequiredContainerOpt};
 use anyhow::{bail, Result};
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressFinish, ProgressStyle};
-use lazy_static::lazy_static;
-use log::{debug, info, log_enabled, Level};
+use log::{debug, info};
 use std::fs::{File, OpenOptions};
 use std::io::Cursor;
 use std::path::Path;
-use unplug::audio::ProgressHint;
 use unplug::common::ReadSeek;
 use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
@@ -18,24 +15,6 @@ pub const QP_PATH: &str = "qp.bin";
 
 /// A cursor around a byte slice.
 pub type MemoryCursor = Cursor<Box<[u8]>>;
-
-/// Progress bar spinner characters.
-const TICK_CHARS: &str = r"⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ";
-
-lazy_static! {
-    /// The style to use for progress bars.
-    pub static ref PROGRESS_STYLE: ProgressStyle = ProgressStyle::default_bar()
-        .template("       {spinner:.cyan} [{eta_precise}] [{bar:40}] {percent}% {msg}")
-        .progress_chars("=> ")
-        .tick_chars(TICK_CHARS)
-        .on_finish(ProgressFinish::AndClear);
-
-    /// The style to use for progress spinners.
-    pub static ref SPINNER_STYLE: ProgressStyle = ProgressStyle::default_spinner()
-        .template("       {spinner:.cyan} [{elapsed_precise}] {msg}")
-        .tick_chars(TICK_CHARS)
-        .on_finish(ProgressFinish::AndClear);
-}
 
 /// Optionally opens an ISO file for reading.
 pub fn open_iso_optional(path: Option<impl AsRef<Path>>) -> Result<Option<DiscStream<File>>> {
@@ -165,45 +144,5 @@ pub fn read_stage_qp_or_file(
     match qp {
         Some(qp) => read_stage_qp(qp, name.as_ref().to_str().unwrap(), libs),
         None => Ok(Stage::read_from(&mut read_file(name)?, libs)?),
-    }
-}
-
-/// Creates a progress bar using the standard style with initial length `len`.
-pub fn progress_bar(len: u64) -> ProgressBar {
-    let bar = ProgressBar::new(len).with_style(PROGRESS_STYLE.clone());
-    if log_enabled!(Level::Debug) {
-        // We don't actually want to draw the bar if debug logging is enabled because the bar will
-        // conflict with logging. This effectively makes the operations on the returned progress bar
-        // be no-ops.
-        bar.set_draw_target(ProgressDrawTarget::hidden());
-    } else {
-        bar.enable_steady_tick(100);
-    }
-    bar
-}
-
-/// Creates a progress spinner using the standard style which displays `message`. If verbose logging
-/// is enabled, the spinner will be hidden and the message will be logged instead.
-pub fn progress_spinner(message: String) -> ProgressBar {
-    let bar = ProgressBar::new_spinner().with_style(SPINNER_STYLE.clone());
-    if log_enabled!(Level::Debug) {
-        bar.set_draw_target(ProgressDrawTarget::hidden());
-        info!("{}", message);
-    } else {
-        bar.set_message(message);
-        bar.enable_steady_tick(100);
-    }
-    bar
-}
-
-/// Updates a progress bar based on an audio progress hint.
-pub fn update_audio_progress(bar: &ProgressBar, progress: Option<ProgressHint>) {
-    if let Some(progress) = progress {
-        if bar.length() != progress.total.get() {
-            bar.set_length(progress.total.get());
-        }
-        bar.set_position(progress.current);
-    } else {
-        bar.tick();
     }
 }

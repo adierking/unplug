@@ -1295,6 +1295,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "byteorder",
+ "console",
  "indicatif",
  "lazy_static",
  "log",

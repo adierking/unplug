@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0"
 byteorder = "1"
+console = { version = "0.15.0", default-features = false }
 indicatif = "0.16.2"
 lazy_static = "1.4.0"
 log = { version = "0.4" }
