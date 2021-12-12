@@ -10,7 +10,7 @@ use std::path::Path;
 use std::time::Instant;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
-use unplug::audio::transport::hps::{HpsStream, PcmHpsBuilder};
+use unplug::audio::transport::hps::{HpsStream, Looping, PcmHpsBuilder};
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
 use unplug::common::{ReadSeek, WriteTo};
@@ -106,7 +106,14 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
     let mut iso = edit_iso_optional(Some(opt.iso))?.unwrap();
-    let entry = iso.files.at(opt.hps.to_str().unwrap())?;
+    let hps_path = opt.hps;
+    info!("Checking {}", hps_path.display());
+    let entry = iso.files.at(hps_path.to_str().unwrap())?;
+    let hps_name = iso.files[entry].name().to_owned();
+    let original = {
+        let mut reader = BufReader::new(iso.open_file(entry)?);
+        HpsStream::open(&mut reader, hps_name)?
+    };
 
     let audio = open_sound_file(&opt.path, MAX_MUSIC_SAMPLE_RATE)?;
     info!("Analyzing audio waveform");
@@ -119,7 +126,10 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
     info!("Encoding audio to GameCube format");
     let progress = progress_bar(1);
     progress.set_message(iso.files[entry].name().to_owned());
-    let hps = encoder.on_progress(|p| update_audio_progress(&progress, p)).build()?;
+    // Copy the loop setting from the original HPS
+    let looping = if original.loop_start.is_some() { Looping::Enabled } else { Looping::Disabled };
+    let hps =
+        encoder.looping(looping).on_progress(|p| update_audio_progress(&progress, p)).build()?;
     progress.finish_using_style();
 
     let mut writer = Cursor::new(vec![]);
