@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument, trace, warn};
 use unplug_proc::{ReadFrom, WriteTo};
 
 /// The magic string at the beginning of an HPS file.
@@ -32,6 +32,9 @@ const DATA_ALIGN: usize = 0x20;
 const MONO_BLOCK_SIZE: usize = 0x10000;
 /// The ADPCM encoder block size for stereo audio data.
 const STEREO_BLOCK_SIZE: usize = MONO_BLOCK_SIZE / 2;
+
+/// The name to use for returned loop point cues.
+const LOOP_CUE_NAME: &str = "loop";
 
 /// Convenience type for an opaque decoder.
 type HpsDecoder<'r, 's> = Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>;
@@ -245,15 +248,27 @@ impl<'r, 's> PcmHpsBuilder<'r, 's> {
 
 type AdpcmReader<'r, 's> = Box<dyn ReadSamples<'s, Format = GcAdpcm> + 'r>;
 
+/// Audio looping strategies.
+pub enum Looping {
+    /// Always disable looping, even if the source audio has a loop point.
+    Disabled,
+    /// Always enable looping. If the source audio does not have a loop point, one will be set at
+    /// the beginning.
+    Enabled,
+    /// Use the loop settings from the source audio (default).
+    Auto,
+}
+
 /// Builds an HPS stream by reading ADPCM sample data.
 pub struct AdpcmHpsBuilder<'r, 's> {
     left: AdpcmReader<'r, 's>,
     right: Option<AdpcmReader<'r, 's>>,
     on_progress: Option<ProgressCallback<'r>>,
-    looping: bool,
+    looping: Looping,
     left_channel: Channel,
     right_channel: Channel,
     blocks: Vec<Block>,
+    loop_start: Option<usize>,
     cues: Vec<audio::Cue>,
     rate: u32,
 }
@@ -277,10 +292,11 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
             left,
             right,
             on_progress: None,
-            looping: true,
+            looping: Looping::Auto,
             left_channel: Channel::default(),
             right_channel: Channel::default(),
             blocks: vec![],
+            loop_start: None,
             cues: vec![],
             rate: 0,
         }
@@ -293,9 +309,9 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
         self
     }
 
-    /// Sets whether the HPS should loop (enabled by default).
-    pub fn looping(mut self, enabled: bool) -> Self {
-        self.looping = enabled;
+    /// Sets the audio's looping strategy. Defaults to `Auto`.
+    pub fn looping(mut self, looping: Looping) -> Self {
+        self.looping = looping;
         self
     }
 
@@ -402,6 +418,7 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
         let mut cue_index = 0;
         let mut block_index = 0;
         let mut sample_base = 0;
+        let mut next_id = 1;
         let num_cues = self.cues.len();
         let num_blocks = self.blocks.len();
         while cue_index < num_cues && block_index < num_blocks {
@@ -413,13 +430,43 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
                 if cue.start >= end_sample && block_index < num_blocks - 1 {
                     break;
                 }
-                let start = cue.start - sample_base;
-                let point = CuePoint { sample_index: start as i32, id: (cue_index + 1) as u32 };
-                block.cues.push(point);
+                if cue.is_loop() {
+                    if self.loop_start.is_none() {
+                        if cue.start != sample_base {
+                            warn!(
+                                "Loop point \"{}\" is not block-aligned - rounding down to sample {}",
+                                cue.name, sample_base
+                            );
+                        }
+                        self.loop_start = Some(block_index);
+                    } else {
+                        warn!("Discarding extra loop point \"{}\"", cue.name);
+                    }
+                } else {
+                    let start = cue.start - sample_base;
+                    let point = CuePoint { sample_index: start as i32, id: next_id };
+                    block.cues.push(point);
+                    next_id += 1;
+                }
                 cue_index += 1;
             }
             block_index += 1;
             sample_base = end_sample;
+        }
+        match self.looping {
+            Looping::Disabled => {
+                if self.loop_start.is_some() {
+                    warn!("Discarding loop point because looping is disabled");
+                    self.loop_start = None;
+                }
+            }
+            Looping::Enabled => {
+                if self.loop_start.is_none() {
+                    warn!("Setting loop point at the start because none was defined");
+                    self.loop_start = Some(0);
+                }
+            }
+            Looping::Auto => (),
         }
     }
 
@@ -436,8 +483,13 @@ impl<'r, 's> AdpcmHpsBuilder<'r, 's> {
         if self.right_channel.is_initialized() {
             channels.push(self.right_channel);
         }
-        let loop_start = if self.looping { Some(0) } else { None }; // TODO
-        Ok(HpsStream { sample_rate: self.rate, channels, loop_start, blocks: self.blocks, tag })
+        Ok(HpsStream {
+            sample_rate: self.rate,
+            channels,
+            loop_start: self.loop_start,
+            blocks: self.blocks,
+            tag,
+        })
     }
 
     fn update_progress(&mut self) {
@@ -483,9 +535,9 @@ impl HpsStream {
         loop {
             reader.seek(SeekFrom::Start(current_offset as u64))?;
             let block_header = BlockHeader::read_from(reader)?;
+            trace!("Block {:#x}: {:?}", current_offset, block_header);
             let block = Block::read_from(reader, &block_header, &channels)?;
             blocks_by_offset.insert(current_offset, blocks.len());
-            trace!("Block {:#x}: {:?}", current_offset, block);
             blocks.push(block);
 
             // Advance to the offset in the block header, unless it's the end or we've already
@@ -524,6 +576,7 @@ impl HpsStream {
         };
         ChannelReader {
             blocks: &self.blocks,
+            loop_block: self.loop_start,
             pos: 0,
             channel,
             format: self.channels[channel].address.format,
@@ -556,7 +609,7 @@ impl HpsStream {
 
     /// Returns an iterator over the cues in the stream.
     pub fn cues(&self) -> CueIterator<'_> {
-        CueIterator::new(&self.blocks, self.channels[0].address.format)
+        CueIterator::new(&self.blocks, self.channels[0].address.format, self.loop_start)
     }
 
     /// Creates a new `HpsStream` by encoding mono/stereo PCMS16LE sample data to ADPCM format. For
@@ -803,6 +856,7 @@ impl BlockChannel {
 /// Reads sample data from a single HPS channel.
 pub struct ChannelReader<'a> {
     blocks: &'a [Block],
+    loop_block: Option<usize>,
     pos: usize,
     channel: usize,
     format: DspFormat,
@@ -871,7 +925,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
     }
 
     fn cues(&self) -> Box<dyn Iterator<Item = audio::Cue> + '_> {
-        Box::from(CueIterator::new(self.blocks, self.format))
+        Box::from(CueIterator::new(self.blocks, self.format, self.loop_block))
     }
 }
 
@@ -881,6 +935,8 @@ pub struct CueIterator<'a> {
     blocks: &'a [Block],
     /// The format of the data in each block.
     format: DspFormat,
+    /// The index of the block to loop back to at the end of the stream.
+    loop_block: Option<usize>,
     /// The index of the current block.
     block_index: usize,
     /// The index of the current cue within the current block.
@@ -890,8 +946,8 @@ pub struct CueIterator<'a> {
 }
 
 impl<'a> CueIterator<'a> {
-    fn new(blocks: &'a [Block], format: DspFormat) -> Self {
-        Self { blocks, format, block_index: 0, cue_index: 0, sample_base: 0 }
+    fn new(blocks: &'a [Block], format: DspFormat, loop_block: Option<usize>) -> Self {
+        Self { blocks, format, loop_block, block_index: 0, cue_index: 0, sample_base: 0 }
     }
 }
 
@@ -901,6 +957,10 @@ impl Iterator for CueIterator<'_> {
         loop {
             if self.block_index >= self.blocks.len() {
                 return None;
+            }
+            if self.loop_block == Some(self.block_index) {
+                self.loop_block = None;
+                return Some(audio::Cue::new_loop(LOOP_CUE_NAME, self.sample_base));
             }
             let block = &self.blocks[self.block_index];
             if self.cue_index < block.cues.len() {
@@ -1218,7 +1278,7 @@ mod tests {
     fn test_hps_from_pcm_mono() -> Result<()> {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
-        let cues = vec![Cue::new("1", 44100)];
+        let cues = vec![Cue::new_loop("loop", 0), Cue::new("1", 88200)];
         let reader = ReadSampleList::with_cues(vec![samples], cues.clone(), "test");
         let splitter = reader.split_channels();
 
@@ -1257,7 +1317,7 @@ mod tests {
     fn test_hps_from_pcm_stereo() -> Result<()> {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
-        let cues = vec![Cue::new("1", 44100)];
+        let cues = vec![Cue::new_loop("loop", 0), Cue::new("1", 88200)];
         let mut reader = ReadSampleList::with_cues(vec![samples], cues.clone(), "test");
 
         let hps = HpsStream::from_pcm(&mut reader)?;
@@ -1328,6 +1388,46 @@ mod tests {
             &[CuePoint { sample_index: 0, id: 2 }, CuePoint { sample_index: 1, id: 3 }]
         );
         assert_eq!(hps.blocks[3].cues, &[CuePoint { sample_index: 14, id: 4 }]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_looping() -> Result<()> {
+        fn make_reader(cues: Vec<Cue>) -> ReadSampleList<'static, GcAdpcm> {
+            let mut blocks = vec![];
+            for _ in 0..4 {
+                blocks.push(Samples::<GcAdpcm> {
+                    channels: 1,
+                    rate: 44100,
+                    len: 0x10,
+                    data: vec![0; 8].into(),
+                    params: adpcm::Info::default(),
+                });
+            }
+            ReadSampleList::with_cues(blocks, cues, "test")
+        }
+
+        let cues = vec![Cue::new_loop("loop", 14)];
+        let hps = AdpcmHpsBuilder::with_mono(make_reader(cues)).build()?;
+        assert_eq!(hps.loop_start, Some(1));
+
+        let cues = vec![Cue::new_loop("loop", 41)];
+        let hps = AdpcmHpsBuilder::with_mono(make_reader(cues)).build()?;
+        assert_eq!(hps.loop_start, Some(2));
+
+        let cues = vec![Cue::new_loop("loop", 56)];
+        let hps = AdpcmHpsBuilder::with_mono(make_reader(cues)).build()?;
+        assert_eq!(hps.loop_start, Some(3));
+
+        let cues = vec![Cue::new_loop("loop", 0)];
+        let hps =
+            AdpcmHpsBuilder::with_mono(make_reader(cues)).looping(Looping::Disabled).build()?;
+        assert_eq!(hps.loop_start, None);
+
+        let cues = vec![];
+        let hps =
+            AdpcmHpsBuilder::with_mono(make_reader(cues)).looping(Looping::Enabled).build()?;
+        assert_eq!(hps.loop_start, Some(0));
         Ok(())
     }
 }

@@ -30,8 +30,6 @@ fn test_rebuild_all_music() -> Result<()> {
             other => panic!("unexpected channel count: {}", other),
         };
 
-        // HACK: We currently lose the loop settings
-        rebuilt.loop_start = hps.loop_start;
         // HACK: It seems like our end_address computations don't always match, but it isn't clear
         // how to calculate it to match (or if it even matters...)
         for (a, b) in hps.channels.iter().zip(rebuilt.channels.iter_mut()) {
