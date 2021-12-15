@@ -1,3 +1,4 @@
+use crate::audio::cue::{Cue, LOOP_PREFIX};
 use crate::audio::format::adpcm::{self, EncoderBuilder, GcAdpcm};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{
@@ -32,9 +33,6 @@ const DATA_ALIGN: usize = 0x20;
 const MONO_BLOCK_SIZE: usize = 0x10000;
 /// The ADPCM encoder block size for stereo audio data.
 const STEREO_BLOCK_SIZE: usize = MONO_BLOCK_SIZE / 2;
-
-/// The name to use for returned loop point cues.
-const LOOP_CUE_NAME: &str = "loop";
 
 /// Convenience type for an opaque decoder.
 type HpsDecoder<'r, 's> = Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>;
@@ -269,7 +267,7 @@ pub struct AdpcmHpsBuilder<'r, 's> {
     right_channel: Channel,
     blocks: Vec<Block>,
     loop_start: Option<usize>,
-    cues: Vec<audio::Cue>,
+    cues: Vec<Cue>,
     rate: u32,
 }
 
@@ -924,7 +922,7 @@ impl<'a> ReadSamples<'a> for ChannelReader<'a> {
         Some(self.blocks[self.pos..].iter().map(|b| b.end_address as u64 + 1).sum())
     }
 
-    fn cues(&self) -> Box<dyn Iterator<Item = audio::Cue> + '_> {
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
         Box::from(CueIterator::new(self.blocks, self.format, self.loop_block))
     }
 }
@@ -952,7 +950,7 @@ impl<'a> CueIterator<'a> {
 }
 
 impl Iterator for CueIterator<'_> {
-    type Item = audio::Cue;
+    type Item = Cue;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if self.block_index >= self.blocks.len() {
@@ -960,7 +958,7 @@ impl Iterator for CueIterator<'_> {
             }
             if self.loop_block == Some(self.block_index) {
                 self.loop_block = None;
-                return Some(audio::Cue::new_loop(LOOP_CUE_NAME, self.sample_base));
+                return Some(Cue::new_loop(LOOP_PREFIX, self.sample_base));
             }
             let block = &self.blocks[self.block_index];
             if self.cue_index < block.cues.len() {

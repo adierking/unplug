@@ -1,5 +1,10 @@
+use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+
+/// The "magic" prefix to use to name loop cues in formats which do not support marking cues as loop
+/// points. See `has_loop_prefix()` for more information.
+pub(crate) const LOOP_PREFIX: &str = "loop";
 
 /// A marked point or range in an audio stream.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -70,6 +75,30 @@ impl Default for Cue {
     }
 }
 
+// If `name` does not start with the `LOOP_PREFIX`, prepends it.
+pub(crate) fn add_loop_prefix(name: &str) -> Cow<'_, str> {
+    match has_loop_prefix(name) {
+        true => name.into(),
+        false if name.trim().is_empty() => LOOP_PREFIX.into(),
+        false => format!("{}:{}", LOOP_PREFIX, name).into(),
+    }
+}
+
+// Returns `true` if `name` contains the `LOOP_PREFIX` at the beginning. The match is
+// case-insensitive and the prefix may not be followed by an alphanumeric character.
+pub(crate) fn has_loop_prefix(name: &str) -> bool {
+    let prefix_len = LOOP_PREFIX.len();
+    let chars = name.chars().take(prefix_len + 1).collect::<Vec<_>>();
+    if chars.len() < prefix_len {
+        return false; // Too short
+    }
+    if chars.get(prefix_len).map_or(false, |c| c.is_alphanumeric()) {
+        return false; // Following character is alphanumeric
+    }
+    // Case-insensitive match
+    chars.into_iter().zip(LOOP_PREFIX.chars()).all(|(a, b)| a.to_ascii_lowercase() == b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +128,27 @@ mod tests {
                 Cue::new("g", 2),
             ]
         );
+    }
+
+    #[test]
+    fn test_add_loop_prefix() {
+        assert!(matches!(add_loop_prefix("loop"), Cow::Borrowed("loop")));
+        assert!(matches!(add_loop_prefix(""), Cow::Borrowed("loop")));
+        assert!(matches!(add_loop_prefix("   "), Cow::Borrowed("loop")));
+        assert_eq!(add_loop_prefix("loot"), "loop:loot");
+    }
+
+    #[test]
+    fn test_match_loop_prefix() {
+        assert!(has_loop_prefix("loop"));
+        assert!(has_loop_prefix("LoOp"));
+        assert!(has_loop_prefix("loop:"));
+        assert!(has_loop_prefix("loop 1"));
+
+        assert!(!has_loop_prefix(""));
+        assert!(!has_loop_prefix("lop"));
+        assert!(!has_loop_prefix("loot"));
+        assert!(!has_loop_prefix("loopa"));
+        assert!(!has_loop_prefix("loop0"));
     }
 }

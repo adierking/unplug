@@ -1,8 +1,7 @@
 use super::*;
+use crate::audio::cue::{self, Cue, CueKind};
 use crate::audio::format::{PcmS16Le, ReadWriteBytes, StaticFormat};
-use crate::audio::{
-    Cue, CueKind, Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag,
-};
+use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{align, ReadFrom, ReadSeek, Region};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -243,10 +242,12 @@ impl<'a> WavReader<'a> {
             Ok(())
         })?;
 
-        // Make sure unnamed cues have some sort of name
+        // Make sure unnamed cues have some sort of name, and convert loop cues
         for (id, cue) in &mut cues {
             if cue.name.is_empty() {
                 cue.name = format!("{}", id).into();
+            } else if cue::has_loop_prefix(&*cue.name) {
+                cue.kind = CueKind::Loop;
             }
         }
 

@@ -1,7 +1,9 @@
 // See <https://manual.audacityteam.org/man/importing_and_exporting_labels.html> for details on the
 // label track format.
 
-use crate::audio::{Cue, Result};
+use crate::audio::cue::{self, Cue, CueKind};
+use crate::audio::Result;
+use std::borrow::Cow;
 use std::io::Write;
 
 /// Writes a set of cues to `writer` in Audacity's label track format. `sample_rate` is the sample
@@ -23,7 +25,11 @@ fn write_labels_impl(
     for cue in cues {
         let start = (cue.start as f64) / (sample_rate as f64);
         let end = ((cue.start + cue.duration()) as f64) / (sample_rate as f64);
-        write!(writer, "{:.6}\t{:.6}\t{}\r\n", start, end, cue.name)?;
+        let name = match cue.kind {
+            CueKind::Loop => cue::add_loop_prefix(&*cue.name),
+            CueKind::Point | CueKind::Range(_) => Cow::from(&*cue.name),
+        };
+        write!(writer, "{:.6}\t{:.6}\t{}\r\n", start, end, name)?;
     }
     writer.flush()?;
     Ok(())
@@ -35,8 +41,12 @@ mod tests {
 
     #[test]
     fn test_write_labels() -> Result<()> {
-        let cues =
-            vec![Cue::new("one", 0), Cue::new("two", 22050), Cue::new_range("three", 44100, 22050)];
+        let cues = vec![
+            Cue::new("one", 0),
+            Cue::new("two", 22050),
+            Cue::new_range("three", 44100, 22050),
+            Cue::new_loop("four", 88200),
+        ];
         let mut labels = vec![];
         write_labels(&mut labels, cues, 44100)?;
         let labels = String::from_utf8(labels).unwrap();
@@ -46,6 +56,7 @@ mod tests {
                 "0.000000\t0.000000\tone\r\n",
                 "0.500000\t0.500000\ttwo\r\n",
                 "1.000000\t1.500000\tthree\r\n",
+                "2.000000\t2.000000\tloop:four\r\n",
             )
         );
         Ok(())

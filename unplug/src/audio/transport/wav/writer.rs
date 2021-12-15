@@ -1,7 +1,8 @@
 use super::*;
+use crate::audio::cue::{self, CueKind};
 use crate::audio::format::{PcmFormat, PcmS16Le, ReadWriteBytes};
 use crate::audio::sample::{PeekSamples, ReadSamples};
-use crate::audio::{CueKind, Error, ProgressHint, Result};
+use crate::audio::{Error, ProgressHint, Result};
 use crate::common::WriteTo;
 use byteorder::{WriteBytesExt, LE};
 use std::borrow::Cow;
@@ -183,7 +184,12 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
                 block_start: 0,
                 sample_offset: cue.start as u32,
             });
-            let text = CString::new(&*cue.name).unwrap();
+            // Loop cues are stored with the loop prefix so they can be loaded back
+            let name = match cue.kind {
+                CueKind::Loop => cue::add_loop_prefix(&*cue.name),
+                CueKind::Point | CueKind::Range(_) => Cow::from(&*cue.name),
+            };
+            let text = CString::new(&*name).unwrap();
             // Cues with a duration need an entry in ltxt to store the duration.
             if let CueKind::Range(duration) = cue.kind {
                 ltxts.push(LabelTextChunk {
@@ -355,7 +361,8 @@ mod tests {
     #[test]
     fn test_write_and_read_cues() -> Result<()> {
         let samples = Samples::<PcmS16Le>::from_pcm((0..8).collect::<Vec<_>>(), 2, 44100);
-        let cues = vec![Cue::new("start", 0), Cue::new_range("range", 1, 2), Cue::new("end", 3)];
+        let cues =
+            vec![Cue::new("start", 0), Cue::new_range("range", 1, 2), Cue::new_loop("test", 3)];
 
         let samples = ReadSampleList::with_cues(vec![samples], cues.clone(), "test");
         let mut cursor = Cursor::new(vec![]);
@@ -364,7 +371,9 @@ mod tests {
         cursor.seek(SeekFrom::Start(0))?;
         let wav = WavReader::new(cursor, "test")?;
         let actual = wav.cues().collect::<Vec<_>>();
-        assert_eq!(actual, cues);
+        assert_eq!(actual.len(), 3);
+        assert_eq!(&actual[0..2], &cues[0..2]);
+        assert_eq!(actual[2], Cue::new_loop("loop:test", 3));
         Ok(())
     }
 }
