@@ -1,7 +1,8 @@
+use super::cue::{Cue, WithCues};
 use super::format::pcm::AnyPcm;
 use super::format::*;
 use super::resample::Resample;
-use super::{Cue, Error, ProgressHint, Result};
+use super::{Error, ProgressHint, Result};
 use std::any;
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -377,6 +378,14 @@ pub trait ReadSamples<'s> {
         Self::Format: AnyPcm,
     {
         Resample::new(self, rate)
+    }
+
+    /// Creates an adapter which replaces the stream's cues with `cues`.
+    fn with_cues(self, cues: impl Into<Vec<Cue>>) -> WithCues<'s, Self>
+    where
+        Self: Sized,
+    {
+        WithCues::new(self, cues)
     }
 }
 

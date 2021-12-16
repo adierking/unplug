@@ -1,4 +1,6 @@
+use super::{Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use std::borrow::Cow;
+use std::marker::PhantomData;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
@@ -99,9 +101,47 @@ pub(crate) fn has_loop_prefix(name: &str) -> bool {
     chars.into_iter().zip(LOOP_PREFIX.chars()).all(|(a, b)| a.to_ascii_lowercase() == b)
 }
 
+/// An adapter which wraps an audio source and replaces its cues with a custom list.
+pub struct WithCues<'s, R: ReadSamples<'s>> {
+    inner: R,
+    cues: Vec<Cue>,
+    _marker: PhantomData<&'s ()>,
+}
+
+impl<'s, R: ReadSamples<'s>> WithCues<'s, R> {
+    /// Creates a new `WithCues` which wraps `inner` and returns `cues` from the `cues()` iterator.
+    pub fn new(inner: R, cues: impl Into<Vec<Cue>>) -> Self {
+        Self { inner, cues: cues.into(), _marker: PhantomData }
+    }
+}
+
+impl<'s, R: ReadSamples<'s>> ReadSamples<'s> for WithCues<'s, R> {
+    type Format = R::Format;
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+        self.inner.read_samples()
+    }
+    fn format(&self) -> Format {
+        self.inner.format()
+    }
+    fn tag(&self) -> &SourceTag {
+        self.inner.tag()
+    }
+    fn progress(&self) -> Option<ProgressHint> {
+        self.inner.progress()
+    }
+    fn data_remaining(&self) -> Option<u64> {
+        self.inner.data_remaining()
+    }
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        Box::from(self.cues.iter().cloned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::format::PcmS16Le;
+    use crate::audio::sample::ReadSampleList;
 
     #[test]
     fn test_cue_ordering() {
@@ -150,5 +190,15 @@ mod tests {
         assert!(!has_loop_prefix("loot"));
         assert!(!has_loop_prefix("loopa"));
         assert!(!has_loop_prefix("loop0"));
+    }
+
+    #[test]
+    fn test_with_cues() {
+        let samples = Samples::<PcmS16Le>::from_pcm((0..4).collect::<Vec<_>>(), 2, 44100);
+        let cues = vec![Cue::new("three", 3)];
+        let reader = ReadSampleList::with_cues(vec![samples], cues, "test");
+        let new_cues = vec![Cue::new("one", 1), Cue::new("two", 2)];
+        let reader = WithCues::new(reader, new_cues);
+        assert_eq!(reader.cues().collect::<Vec<_>>(), &[Cue::new("one", 1), Cue::new("two", 2)]);
     }
 }
