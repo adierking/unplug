@@ -38,36 +38,40 @@ fn default_progress_target() -> ProgressDrawTarget {
     if log_enabled!(Level::Trace) {
         ProgressDrawTarget::hidden()
     } else {
-        ProgressDrawTarget::term(PROGRESS_TERM.clone(), PROGRESS_UPDATE_RATE)
+        ProgressDrawTarget::term(PROGRESS_TERM.clone(), None)
     }
 }
 
-/// Hides the currently-visible progress bar.
-fn hide_progress() {
+/// Hides the currently-visible progress bar. Returns `true` if the bar was visible beforehand.
+fn hide_progress() -> bool {
     let mut lock = PROGRESS_BAR.lock().unwrap();
     if let Some(bar) = &*lock {
         if bar.is_finished() {
             *lock = None;
-            return;
+            return false;
         }
         if !bar.is_hidden() {
-            // This is so hacky but it seems to work
+            // Disabling steady tick and then ticking ensures that the bar is drawn so we don't
+            // accidentally clear a line with a log message on it
+            bar.disable_steady_tick();
+            bar.tick();
+            // Now disable drawing and clear one line up to make room for the log message
             bar.set_draw_target(ProgressDrawTarget::hidden());
             let _ = PROGRESS_TERM.clear_last_lines(1);
             let _ = PROGRESS_TERM.flush();
+            return true;
         }
     }
+    false
 }
 
 /// Shows the progress bar again after it was hidden with `hide_progress()`.
 fn show_progress() {
-    let mut lock = PROGRESS_BAR.lock().unwrap();
+    let lock = PROGRESS_BAR.lock().unwrap();
     if let Some(bar) = &*lock {
-        if bar.is_finished() {
-            *lock = None;
-            return;
-        }
         if bar.is_hidden() {
+            // Steady tick was disabled in hide_progress()
+            bar.enable_steady_tick(1000 / PROGRESS_UPDATE_RATE);
             bar.set_draw_target(default_progress_target());
         }
     }
@@ -84,9 +88,11 @@ impl<L: Log> Log for ProgressBarLogger<L> {
     }
 
     fn log(&self, record: &log::Record<'_>) {
-        hide_progress();
+        let hidden = hide_progress();
         self.inner.log(record);
-        show_progress();
+        if hidden {
+            show_progress();
+        }
     }
 
     fn flush(&self) {
