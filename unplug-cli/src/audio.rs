@@ -28,10 +28,11 @@ const SFX_HORI_PATH: &str = "qp/sfx_hori.ssm";
 /// Extension to use for Audacity label output
 const LABELS_EXTENSION: &str = "labels.txt";
 
-/// Opens the sound file at `path` and enqueues it for resampling if the sample rate is higher than
-/// `max_sample_rate`.
+/// Opens the sound file at `path`, optionally reads Audacity labels from `labels`, and enqueues it
+/// for resampling if the sample rate is higher than `max_sample_rate`.
 fn open_sound_file(
     path: &Path,
+    labels: Option<&Path>,
     max_sample_rate: u32,
 ) -> Result<Box<dyn ReadSamples<'static, Format = PcmS16Le>>> {
     let name = path.file_name().map(|p| p.to_str().unwrap()).unwrap_or_default().to_owned();
@@ -52,19 +53,30 @@ fn open_sound_file(
     // Using preread_all_samples() here is necessary to have a functioning progress bar with some
     // formats which don't know their size.
     let cached = audio.preread_all_samples()?;
+
+    let mut rate = cached.front().expect("no audio packets").rate;
+    audio = if rate > max_sample_rate {
+        warn!("The audio file has a high sample rate ({} Hz)!", rate);
+        warn!("It will be automatically resampled to {} Hz.", max_sample_rate);
+        rate = max_sample_rate;
+        Box::from(cached.resample(rate))
+    } else {
+        Box::from(cached)
+    };
+
+    // Labels should be loaded last to ensure they don't get discarded/ignored by an adapter
+    if let Some(labels) = labels {
+        info!("Reading label track: {}", labels.display());
+        let reader = BufReader::new(File::open(labels)?);
+        let cues = audacity::read_labels(reader, rate)?;
+        audio = Box::from(audio.with_cues(cues));
+    }
+
     spinner.finish_using_style();
     if !spinner.is_hidden() {
         info!("Opened audio file: {}", name);
     }
-
-    let rate = cached.front().expect("no audio packets").rate;
-    if rate > max_sample_rate {
-        warn!("The audio file has a high sample rate ({} Hz)!", rate);
-        warn!("It will be automatically resampled to {} Hz.", max_sample_rate);
-        Ok(Box::from(cached.resample(max_sample_rate)))
-    } else {
-        Ok(Box::from(cached))
-    }
+    Ok(audio)
 }
 
 pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
@@ -115,7 +127,7 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
         HpsStream::open(&mut reader, hps_name)?
     };
 
-    let audio = open_sound_file(&opt.path, MAX_MUSIC_SAMPLE_RATE)?;
+    let audio = open_sound_file(&opt.path, opt.labels.as_deref(), MAX_MUSIC_SAMPLE_RATE)?;
     info!("Analyzing audio waveform");
     let progress = progress_bar(1);
     progress.set_message(audio.tag().name.clone());

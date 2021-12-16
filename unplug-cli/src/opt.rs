@@ -403,6 +403,11 @@ pub struct ImportMusicOpt {
     #[structopt(long, value_name("PATH"), parse(from_os_str))]
     pub iso: PathBuf,
 
+    /// Imports an Audacity label track from a file and uses it in place of the audio file's
+    /// original cues.
+    #[structopt(long)]
+    pub labels: Option<PathBuf>,
+
     /// Path to the HPS file to replace
     #[structopt(value_name("PATH"), parse(from_os_str))]
     pub hps: PathBuf,
