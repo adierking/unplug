@@ -7,12 +7,12 @@ use std::ffi::CStr;
 use std::iter;
 use std::marker::PhantomData;
 use std::mem;
-use std::os::raw::{c_double, c_int, c_long};
+use std::os::raw::{c_double, c_int};
 use std::ptr;
 use tracing::{instrument, trace, trace_span};
 
-/// The maximum number of output frames to allocate.
-const OUT_BUFFER_FRAMES: usize = 0x1000;
+/// The minimum number of output frames to allocate.
+const MIN_OUTPUT_FRAMES: usize = 0x1000;
 
 /// Converts a libsamplerate error code into an `Error` value.
 #[allow(clippy::useless_conversion)]
@@ -124,12 +124,14 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
         };
 
         let input_frames = data_in.len() / self.channels;
-        let mut data_out = Vec::with_capacity(OUT_BUFFER_FRAMES * self.channels);
+        let output_frames =
+            MIN_OUTPUT_FRAMES.max(((input_frames as c_double) * ratio).ceil() as usize);
+        let mut data_out = Vec::with_capacity(output_frames * self.channels);
         let mut data = SRC_DATA {
             data_in: data_in.as_ptr(),
             data_out: data_out.as_mut_ptr(),
             input_frames: input_frames.try_into().unwrap(),
-            output_frames: OUT_BUFFER_FRAMES as c_long,
+            output_frames: output_frames.try_into().unwrap(),
             end_of_input: end_of_input.into(),
             src_ratio: ratio,
             ..Default::default()
