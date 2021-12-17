@@ -14,14 +14,14 @@ const TICK_CHARS: &str = r"⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ";
 lazy_static! {
     /// The style to use for progress bars.
     static ref PROGRESS_STYLE: ProgressStyle = ProgressStyle::default_bar()
-        .template("       {spinner:.cyan} [{eta_precise}] [{bar:40}] {percent}% {msg}")
+        .template("       {spinner:.cyan} [{eta_precise}] [{bar:40}] {percent}% {wide_msg}")
         .progress_chars("=> ")
         .tick_chars(TICK_CHARS)
         .on_finish(ProgressFinish::AndClear);
 
     /// The style to use for progress spinners.
     static ref SPINNER_STYLE: ProgressStyle = ProgressStyle::default_spinner()
-        .template("       {spinner:.cyan} [{elapsed_precise}] {msg}")
+        .template("       {spinner:.cyan} [{elapsed_precise}] {wide_msg}")
         .tick_chars(TICK_CHARS)
         .on_finish(ProgressFinish::AndClear);
 
