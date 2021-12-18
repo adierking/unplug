@@ -9,7 +9,6 @@ use std::collections::VecDeque;
 use std::fmt::{self, Debug, Formatter};
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
-use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::sync::{Arc, Mutex};
 use tracing::instrument;
@@ -247,7 +246,7 @@ impl Default for SourceChannel {
 }
 
 /// Trait for an audio source.
-pub trait ReadSamples<'s> {
+pub trait ReadSamples<'s>: Send {
     /// The format that samples are decoded as. If this is `AnyFormat`, the stream can be in any
     /// format and the actual format can be retrieved with `format()`.
     type Format: FormatTag;
@@ -834,9 +833,9 @@ struct SplitChannelsState<'r, 's, F: PcmFormat> {
     /// The inner reader to read new samples from.
     reader: Box<dyn ReadSamples<'s, Format = F> + 'r>,
     /// Samples which have not yet been processed by the left reader.
-    left: VecDeque<Rc<Samples<'s, F>>>,
+    left: VecDeque<Arc<Samples<'s, F>>>,
     /// Samples which have not yet been processed by the right reader.
-    right: VecDeque<Rc<Samples<'s, F>>>,
+    right: VecDeque<Arc<Samples<'s, F>>>,
     /// Cue points to return from each reader.
     cues: Arc<[Cue]>,
 }
@@ -857,10 +856,10 @@ impl<'r, 's, F: PcmFormat> SplitChannelsState<'r, 's, F> {
     /// samples were read and `Ok(false)` if no more samples are available.
     fn read_next(&mut self) -> Result<bool> {
         let samples = match self.reader.read_samples()? {
-            Some(s) => Rc::new(s),
+            Some(s) => Arc::new(s),
             None => return Ok(false),
         };
-        self.left.push_back(Rc::clone(&samples));
+        self.left.push_back(Arc::clone(&samples));
         self.right.push_back(samples);
         Ok(true)
     }

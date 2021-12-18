@@ -4,9 +4,9 @@ use super::metadata::Metadata;
 use super::reader::CopyGlobals;
 use super::{Libs, Result};
 use crate::common::io::pad;
-use crate::common::{Region, WriteTo};
+use crate::common::{Region, WriteSeek, WriteTo};
 use crate::event::opcodes::CMD_RETURN;
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufWriter, SeekFrom, Write};
 
 /// Partitions are aligned on 4-byte boundaries
 const PARTITION_ALIGN: u64 = 4;
@@ -51,7 +51,7 @@ impl<'a> GlobalsBuilder<'a> {
     }
 
     /// Writes out a globals.bin file.
-    pub fn write_to(&mut self, mut writer: (impl Write + Seek)) -> Result<()> {
+    pub fn write_to(&mut self, mut writer: impl WriteSeek) -> Result<()> {
         // Write an empty header we can fill in later
         writer.seek(SeekFrom::Start(0))?;
         let mut buf = BufWriter::new(&mut writer);

@@ -103,12 +103,12 @@ impl Default for Format {
 }
 
 /// A type tag for an audio sample format.
-pub trait FormatTag: 'static {
+pub trait FormatTag: 'static + Send + Sync {
     /// The type of the data that this format stores.
-    type Data: Clone + Copy + PartialEq;
+    type Data: Clone + Copy + PartialEq + Send + Sync;
 
     /// The type of format-dependent parameters that can be associated with samples.
-    type Params;
+    type Params: Send + Sync;
 }
 
 pub trait DynamicFormat: FormatTag {
@@ -255,7 +255,7 @@ pub struct AnyParams {
     /// The actual sample format.
     pub(super) format: Format,
     /// The actual codec info for the sample data.
-    pub(super) inner: Box<dyn Any>,
+    pub(super) inner: Box<dyn Any + Send + Sync>,
 }
 
 type DataCow<'a, F> = Cow<'a, [<F as FormatTag>::Data]>;

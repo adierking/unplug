@@ -3,16 +3,16 @@ use std::ffi::CString;
 use std::io::{self, Read, Seek, Write};
 
 /// Trait for a readable and seekable stream.
-pub trait ReadSeek: Read + Seek {}
-impl<R: Read + Seek + ?Sized> ReadSeek for R {}
+pub trait ReadSeek: Read + Seek + Send {}
+impl<R: Read + Seek + Send + ?Sized> ReadSeek for R {}
 
 /// Trait for a writable and seekable stream.
-pub trait WriteSeek: Write + Seek {}
-impl<W: Write + Seek + ?Sized> WriteSeek for W {}
+pub trait WriteSeek: Write + Seek + Send {}
+impl<W: Write + Seek + Send + ?Sized> WriteSeek for W {}
 
 /// Trait for a readable, writable, and seekable stream.
-pub trait ReadWriteSeek: Read + Write + Seek {}
-impl<S: Read + Write + Seek + ?Sized> ReadWriteSeek for S {}
+pub trait ReadWriteSeek: Read + Write + Seek + Send {}
+impl<S: Read + Write + Seek + Send + ?Sized> ReadWriteSeek for S {}
 
 /// Trait for an object which can be read from a stream.
 pub trait ReadFrom<R: Read + ?Sized>: Sized {

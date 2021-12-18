@@ -1,16 +1,16 @@
 use super::collision::ObjectColliders;
 use super::header::{FileHeader, HEADER_SIZE};
 use super::{Libs, Metadata, Result};
-use crate::common::{ReadFrom, Region};
-use std::io::{self, BufReader, Read, Seek, SeekFrom, Write};
+use crate::common::{ReadFrom, ReadSeek, Region};
+use std::io::{self, BufReader, Seek, SeekFrom, Write};
 
 /// A stream for reading globals.bin data.
-pub struct GlobalsReader<R: Read + Seek> {
+pub struct GlobalsReader<R: ReadSeek> {
     reader: R,
     header: FileHeader,
 }
 
-impl<R: Read + Seek> GlobalsReader<R> {
+impl<R: ReadSeek> GlobalsReader<R> {
     /// Constructs a new `GlobalsReader<R>` which reads existing disc data from `stream`. This does
     /// its own buffering, so `stream` should not be buffered.
     pub fn open(reader: R) -> Result<Self> {
@@ -73,7 +73,7 @@ pub trait CopyGlobals: private::Sealed {
     fn copy_libs(&mut self, writer: &mut dyn Write) -> Result<()>;
 }
 
-impl<R: Read + Seek> CopyGlobals for GlobalsReader<R> {
+impl<R: ReadSeek> CopyGlobals for GlobalsReader<R> {
     fn copy_metadata(&mut self, writer: &mut dyn Write) -> Result<()> {
         io::copy(&mut self.open_metadata(), writer)?;
         Ok(())
@@ -93,5 +93,5 @@ impl<R: Read + Seek> CopyGlobals for GlobalsReader<R> {
 mod private {
     use super::*;
     pub trait Sealed {}
-    impl<R: Read + Seek> Sealed for GlobalsReader<R> {}
+    impl<R: ReadSeek> Sealed for GlobalsReader<R> {}
 }

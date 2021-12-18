@@ -139,14 +139,14 @@ impl<W: Write + ?Sized> WriteTo<W> for DiscHeader {
 }
 
 /// A stream for reading and manipulating GameCube DVD data (e.g. a .iso).
-pub struct DiscStream<S: Read + Seek> {
+pub struct DiscStream<S: ReadSeek> {
     header: Box<DiscHeader>,
     free_regions: Vec<DiscRegion>,
     pub stream: S,
     pub files: FileTree,
 }
 
-impl<S: Read + Seek> DiscStream<S> {
+impl<S: ReadSeek> DiscStream<S> {
     /// Constructs a new `DiscStream` which reads existing disc data from `stream`.
     /// `DiscStream` does its own buffering, so `stream` should not be buffered.
     pub fn open(stream: S) -> Result<Self> {
@@ -274,7 +274,7 @@ impl<S: Read + Seek> DiscStream<S> {
     }
 }
 
-impl<S: Read + Write + Seek> DiscStream<S> {
+impl<S: ReadWriteSeek> DiscStream<S> {
     /// Moves file `id` to `new_offset` and updates the FST.
     pub fn move_file(&mut self, id: EntryId, new_offset: u32) -> Result<()> {
         let size = self.files.file(id)?.size;
@@ -427,7 +427,7 @@ impl<S: Read + Write + Seek> DiscStream<S> {
     }
 }
 
-impl<S: Read + Seek> OpenFile for DiscStream<S> {
+impl<S: ReadSeek> OpenFile for DiscStream<S> {
     fn open_file<'s>(&'s mut self, id: EntryId) -> fst::Result<Box<dyn ReadSeek + 's>> {
         self.files.file(id)?.open(&mut self.stream)
     }
@@ -437,7 +437,7 @@ impl<S: Read + Seek> OpenFile for DiscStream<S> {
     }
 }
 
-impl<S: Read + Write + Seek> EditFile for DiscStream<S> {
+impl<S: ReadWriteSeek> EditFile for DiscStream<S> {
     fn edit_file<'s>(&'s mut self, id: EntryId) -> fst::Result<Box<dyn ReadWriteSeek + 's>> {
         let file = self.files.file(id)?;
         let max_size = self.max_region_size(file.offset, file.size);

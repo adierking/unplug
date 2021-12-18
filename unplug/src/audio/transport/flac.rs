@@ -9,7 +9,7 @@ use tracing::{debug, instrument, trace_span};
 /// Reads audio samples from FLAC data.
 pub struct FlacReader<'r> {
     /// The inner FLAC stream.
-    flac: claxon::FlacReader<Box<dyn Read + 'r>>,
+    flac: claxon::FlacReader<Box<dyn Read + Send + 'r>>,
     /// The audio source tag for debugging purposes.
     tag: SourceTag,
     /// The buffer to store decoded samples in.
@@ -25,12 +25,12 @@ pub struct FlacReader<'r> {
 impl<'r> FlacReader<'r> {
     /// Creates a new `FlacReader` which reads FLAC data from `reader`. `tag` is a string or tag
     /// to identify the stream for debugging purposes.
-    pub fn new(reader: impl Read + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
+    pub fn new(reader: impl Read + Send + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
         Self::new_impl(Box::from(reader), tag.into())
     }
 
     #[instrument(level = "trace", skip_all)]
-    fn new_impl(reader: Box<dyn Read + 'r>, tag: SourceTag) -> Result<Self> {
+    fn new_impl(reader: Box<dyn Read + Send + 'r>, tag: SourceTag) -> Result<Self> {
         let flac = claxon::FlacReader::new(reader)?;
         let info = flac.streaminfo();
         let channels = info.channels as usize;

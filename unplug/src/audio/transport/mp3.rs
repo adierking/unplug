@@ -22,7 +22,7 @@ impl<'r> Mp3Reader<'r> {
     /// Creates a new `Mp3Reader` which reads MP3 data from `reader`. The first frame will be
     /// decoded to get stream metadata. `tag` is a string or tag to identify the stream for
     /// debugging purposes.
-    pub fn new(reader: impl Read + Seek + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
+    pub fn new(reader: impl ReadSeek + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
         Self::new_impl(Box::from(reader), tag.into())
     }
 

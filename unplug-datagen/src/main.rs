@@ -35,7 +35,7 @@ use std::path::PathBuf;
 use std::process;
 use unplug::audio::metadata::sem::{Command, EventBank};
 use unplug::audio::transport::Brsar;
-use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom};
+use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek};
 use unplug::data::stage::GLOBALS_PATH;
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
 use unplug::globals::metadata::{Atc, Item, Stage, Suit};
@@ -750,7 +750,7 @@ struct SoundBankDefinition {
 
 /// Reads sound bank information from the ISO.
 fn read_sound_banks(
-    disc: &mut DiscStream<impl Read + Seek>,
+    disc: &mut DiscStream<impl ReadSeek>,
     events: &EventBank,
 ) -> Result<Vec<SoundBankDefinition>> {
     let mut bank_bases: Vec<(&'static str, u32)> = vec![];

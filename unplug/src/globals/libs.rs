@@ -1,9 +1,9 @@
 use super::{Error, Result};
-use crate::common::{ReadFrom, WriteTo};
+use crate::common::{ReadFrom, ReadSeek, WriteSeek, WriteTo};
 use crate::event::block::BlockId;
 use crate::event::script::{Script, ScriptReader, ScriptWriter};
 use byteorder::{ByteOrder, ReadBytesExt, LE};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, SeekFrom, Write};
 
 /// The number of library functions in a globals.bin file.
 pub const NUM_LIBS: usize = 376;
@@ -39,7 +39,7 @@ pub struct Libs {
     pub entry_points: Box<[BlockId]>,
 }
 
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for Libs {
+impl<R: ReadSeek + ?Sized> ReadFrom<R> for Libs {
     type Error = Error;
     fn read_from(mut reader: &mut R) -> Result<Self> {
         let table = LibTable::read_from(reader)?;
@@ -54,7 +54,7 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for Libs {
     }
 }
 
-impl<W: Write + Seek + ?Sized> WriteTo<W> for Libs {
+impl<W: WriteSeek + ?Sized> WriteTo<W> for Libs {
     type Error = Error;
     fn write_to(&self, mut writer: &mut W) -> Result<()> {
         assert_eq!(self.entry_points.len(), NUM_LIBS);

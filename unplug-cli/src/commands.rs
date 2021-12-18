@@ -6,11 +6,12 @@ use anyhow::Result;
 use log::{debug, info};
 use std::convert::TryFrom;
 use std::fs::{self, File};
-use std::io::{BufWriter, Read, Seek, Write};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 use unicase::UniCase;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
+use unplug::common::ReadSeek;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
@@ -105,7 +106,7 @@ pub fn list_stages(opt: ListStagesOpt) -> Result<()> {
 }
 
 fn extract_files(
-    mut reader: (impl Read + Seek),
+    mut reader: impl ReadSeek,
     tree: &FileTree,
     output: &Path,
     iobuf: &mut [u8],

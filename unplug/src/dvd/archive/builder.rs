@@ -6,7 +6,7 @@ use crate::dvd::OpenFile;
 use slotmap::SecondaryMap;
 use std::cell::RefCell;
 use std::convert::TryFrom;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::rc::Rc;
 use tracing::trace;
 
@@ -15,12 +15,12 @@ const ARCHIVE_ALIGN: u64 = 0x20;
 /// An `OpenFile` wrapper around a closure which returns a reader for a file.
 struct Opener<R, F>(Option<F>)
 where
-    R: Read + Seek,
+    R: ReadSeek,
     F: FnOnce() -> R;
 
 impl<R, F> OpenFile for Opener<R, F>
 where
-    R: Read + Seek,
+    R: ReadSeek,
     F: FnOnce() -> R,
 {
     fn open_file<'s>(&'s mut self, _id: EntryId) -> fst::Result<Box<dyn ReadSeek + 's>> {
@@ -49,7 +49,7 @@ impl<'a> ArchiveBuilder<'a> {
     }
 
     /// Constructs a new `ArchiveBuilder` which imports files from `archive`.
-    pub fn with_archive<S: Read + Seek>(archive: &'a mut ArchiveReader<S>) -> Self {
+    pub fn with_archive<S: ReadSeek>(archive: &'a mut ArchiveReader<S>) -> Self {
         let files = archive.files.clone();
         let mut sources = SecondaryMap::new();
         // OpenFile is implemented for &mut T
@@ -70,7 +70,7 @@ impl<'a> ArchiveBuilder<'a> {
     /// will be called to get a reader for the file's data.
     pub fn replace<'s, R, F>(&'s mut self, entry: EntryId, opener: F) -> &'s mut Self
     where
-        R: Read + Seek + 'a,
+        R: ReadSeek + 'a,
         F: (FnOnce() -> R) + 'a,
     {
         let boxed: Box<dyn OpenFile> = Box::new(Opener(Some(opener)));
@@ -82,7 +82,7 @@ impl<'a> ArchiveBuilder<'a> {
     /// out, `opener` will be called to get a reader for the file's data.
     pub fn replace_at<'s, R, F>(&'s mut self, path: &str, opener: F) -> Result<&'s mut Self>
     where
-        R: Read + Seek + 'a,
+        R: ReadSeek + 'a,
         F: (FnOnce() -> R) + 'a,
     {
         Ok(self.replace(self.files.at(path)?, opener))

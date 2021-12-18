@@ -6,12 +6,12 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 
 /// A stream for reading U8 archives.
 #[non_exhaustive]
-pub struct ArchiveReader<R: Read + Seek> {
+pub struct ArchiveReader<R: ReadSeek> {
     pub reader: R,
     pub files: FileTree,
 }
 
-impl<R: Read + Seek> ArchiveReader<R> {
+impl<R: ReadSeek> ArchiveReader<R> {
     /// Constructs a new `ArchiveReader` which reads existing data from `reader`.
     /// `ArchiveReader` does its own buffering, so `stream` should not be buffered.
     pub fn open(reader: R) -> Result<Self> {
@@ -24,7 +24,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
     }
 }
 
-impl<S: Read + Seek> OpenFile for ArchiveReader<S> {
+impl<S: ReadSeek> OpenFile for ArchiveReader<S> {
     fn open_file<'s>(&'s mut self, id: EntryId) -> fst::Result<Box<dyn ReadSeek + 's>> {
         self.files.file(id)?.open(&mut self.reader)
     }

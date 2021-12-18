@@ -226,6 +226,8 @@ where
     }
 }
 
+unsafe impl<F: AnyPcm> Send for Resample<'_, '_, F> {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

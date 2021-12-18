@@ -1,10 +1,12 @@
 use super::{Actor, Error, ObjectPlacement, Result};
-use crate::common::{NonNoneList, ReadFrom, ReadOptionFrom, WriteOptionTo, WriteTo};
+use crate::common::{
+    NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek, WriteOptionTo, WriteSeek, WriteTo,
+};
 use crate::event::block::BlockId;
 use crate::event::script::{Script, ScriptReader, ScriptWriter};
 use crate::globals::Libs;
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE, LE};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, SeekFrom, Write};
 use std::num::NonZeroU32;
 
 const HEADER_SIZE: u32 = 52;
@@ -317,7 +319,7 @@ pub struct Stage {
 }
 
 impl Stage {
-    pub fn read_from<R: Read + Seek + ?Sized>(mut reader: &mut R, libs: &Libs) -> Result<Self> {
+    pub fn read_from<R: ReadSeek + ?Sized>(mut reader: &mut R, libs: &Libs) -> Result<Self> {
         let header = Header::read_from(reader)?;
 
         reader.seek(SeekFrom::Start(header.settings_offset as u64))?;
@@ -384,7 +386,7 @@ impl Stage {
     }
 }
 
-impl<W: Write + Seek + ?Sized> WriteTo<W> for Stage {
+impl<W: WriteSeek + ?Sized> WriteTo<W> for Stage {
     type Error = Error;
     fn write_to(&self, mut writer: &mut W) -> Result<()> {
         assert_eq!(writer.seek(SeekFrom::Current(0))?, 0);

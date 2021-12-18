@@ -3,10 +3,11 @@ use log::{info, warn};
 use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::env;
 use std::fs::{self, File};
-use std::io::{Read, Seek};
+use std::io::Read;
 use std::sync::Once;
 use tempfile::{NamedTempFile, TempPath};
 // rust-analyzer doesn't like this import but it should be fine, just disable the diagnostic
+use unplug::common::ReadSeek;
 use unplug::dvd::DiscStream;
 
 pub const GAME_ID: &str = "GGTE01";
@@ -61,7 +62,7 @@ pub fn open_iso() -> Result<DiscStream<File>> {
 }
 
 /// Checks that an ISO is GGTE01.
-pub fn check_iso(iso: &DiscStream<impl Read + Seek>) -> Result<()> {
+pub fn check_iso(iso: &DiscStream<impl ReadSeek>) -> Result<()> {
     let game_id = iso.game_id();
     ensure!(game_id == GAME_ID, "Unsupported game id: {}", game_id);
     Ok(())
