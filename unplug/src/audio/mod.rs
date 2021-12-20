@@ -4,10 +4,11 @@ pub mod metadata;
 pub mod resample;
 pub mod sample;
 pub mod transport;
+pub mod volume;
 
 pub use cue::{Cue, CueKind};
 pub use format::{Format, FormatTag};
-pub use sample::{ReadSamples, Samples, SourceChannel, SourceTag};
+pub use sample::{ReadSamples, SampleFilter, Samples, SourceChannel, SourceTag};
 
 use lewton::VorbisError;
 use std::io;
@@ -74,6 +75,9 @@ pub enum Error {
 
     #[error("invalid sample rate: {0}")]
     InvalidSampleRate(u32),
+
+    #[error("invalid audio volume: {0}")]
+    InvalidVolume(f64),
 
     #[error("invalid WAV data")]
     InvalidWav,

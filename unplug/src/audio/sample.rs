@@ -111,6 +111,13 @@ impl<'a, F: DynamicFormat> Samples<'a, F> {
     }
 }
 
+impl<F: StaticFormat> Samples<'_, F> {
+    /// Applies `filter` to the sample data, modifying it in-place.
+    pub fn apply<T: SampleFilter<Format = F>>(&mut self, filter: &mut T) -> Result<()> {
+        filter.apply(self.data.to_mut(), self.channels, self.len)
+    }
+}
+
 impl<F: PcmFormat> Samples<'_, F> {
     /// Returns an iterator over the samples.
     pub fn iter(&self) -> SampleIterator<'_, F> {
@@ -388,6 +395,16 @@ pub trait ReadSamples<'s>: Send {
     {
         WithCues::new(self, cues)
     }
+
+    /// Creates an adapter which applies a filter to the stream's sample data.
+    fn filter<'r, T>(self, filter: T) -> ApplyFilter<'r, 's, Self::Format, T>
+    where
+        T: SampleFilter<Format = Self::Format> + Send,
+        Self: Sized + 'r,
+        Self::Format: StaticFormat,
+    {
+        ApplyFilter::new(self, filter)
+    }
 }
 
 impl<'a, F, R> ReadSamples<'a> for &mut R
@@ -439,6 +456,85 @@ where
     }
     fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
         (**self).cues()
+    }
+}
+
+/// A sample filter which can be applied to real-time sample processing.
+pub trait SampleFilter {
+    /// The sample format that the filter expects.
+    type Format: StaticFormat;
+
+    /// Applies the filter to `samples`. `channels` is the number of channels in the sample data and
+    /// `len` is the number of addressable units to process.
+    fn apply(
+        &mut self,
+        samples: &mut [<Self::Format as FormatTag>::Data],
+        channels: usize,
+        len: usize,
+    ) -> Result<()>;
+}
+
+/// An adapter which applies a filter to samples as they are read.
+pub struct ApplyFilter<'r, 's, F, T>
+where
+    F: StaticFormat,
+    T: SampleFilter<Format = F> + Send,
+{
+    inner: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+    filter: T,
+}
+
+impl<'r, 's, F, T> ApplyFilter<'r, 's, F, T>
+where
+    F: StaticFormat,
+    T: SampleFilter<Format = F> + Send,
+{
+    /// Creates a new `ApplyFilter` which reads samples from `inner` and applies `filter` over them
+    /// as they are read. Samples will always be returned as owned.
+    pub fn new(inner: impl ReadSamples<'s, Format = F> + 'r, filter: T) -> Self {
+        Self { inner: Box::from(inner), filter }
+    }
+
+    /// Returns a reference to the inner filter.
+    pub fn filter(&self) -> &T {
+        &self.filter
+    }
+
+    /// Returns a mutable reference to the inner filter.
+    pub fn filter_mut(&mut self) -> &mut T {
+        &mut self.filter
+    }
+}
+
+impl<'r, 's, F, T> ReadSamples<'s> for ApplyFilter<'r, 's, F, T>
+where
+    F: StaticFormat,
+    T: SampleFilter<Format = F> + Send,
+{
+    type Format = F;
+
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+        let mut samples = self.inner.read_samples()?;
+        if let Some(samples) = &mut samples {
+            samples.apply(&mut self.filter)?;
+        }
+        Ok(samples)
+    }
+
+    fn format(&self) -> Format {
+        Self::Format::FORMAT
+    }
+    fn tag(&self) -> &SourceTag {
+        self.inner.tag()
+    }
+    fn progress(&self) -> Option<ProgressHint> {
+        self.inner.progress()
+    }
+    fn data_remaining(&self) -> Option<u64> {
+        self.inner.data_remaining()
+    }
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        self.inner.cues()
     }
 }
 
@@ -1361,6 +1457,28 @@ mod tests {
         assert!(reader.peek_samples()?.is_none());
         assert!(reader.read_samples()?.is_none());
         assert!(reader.peek_samples()?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_filter() -> Result<()> {
+        struct InvertFilter;
+        impl SampleFilter for InvertFilter {
+            type Format = PcmF32Le;
+            fn apply(&mut self, samples: &mut [f32], _channels: usize, len: usize) -> Result<()> {
+                for sample in &mut samples[..len] {
+                    *sample *= -1.0;
+                }
+                Ok(())
+            }
+        }
+        let samples = Samples::<PcmF32Le>::from_pcm(vec![1.0, -2.0, 3.0, -4.0], 1, 44100);
+        let mut filtered1 = samples.clone();
+        filtered1.apply(&mut InvertFilter)?;
+        let filtered2 = samples.into_reader("test").filter(InvertFilter).read_all_samples()?;
+        let expected = Samples::<PcmF32Le>::from_pcm(vec![-1.0, 2.0, -3.0, 4.0], 1, 44100);
+        assert!(filtered1.data == expected.data);
+        assert!(filtered2.data == expected.data);
         Ok(())
     }
 }

@@ -14,6 +14,8 @@ pub(crate) const TEST_WAV: &[u8] = include_bytes!("test/ionpack.wav");
 pub(crate) const TEST_WAV_DATA_OFFSET: usize = 0x24;
 /// Test sound with some cue points
 pub(crate) const TEST_WAV_CUES: &[u8] = include_bytes!("test/ionpack-cues.wav");
+/// Test sound with a gain of -30dB
+pub(crate) const TEST_WAV_VOL: &[u8] = include_bytes!("test/ionpack-vol.wav");
 
 /// Test sound left channel encoded to GC ADPCM format
 pub(crate) const TEST_WAV_LEFT_DSP: &[u8] = include_bytes!("test/ionpack-dsp-left.bin");
