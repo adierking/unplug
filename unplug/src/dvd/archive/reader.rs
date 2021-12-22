@@ -25,11 +25,25 @@ impl<R: ReadSeek> ArchiveReader<R> {
 }
 
 impl<S: ReadSeek> OpenFile for ArchiveReader<S> {
-    fn open_file<'s>(&'s mut self, id: EntryId) -> fst::Result<Box<dyn ReadSeek + 's>> {
+    fn open_file(&mut self, id: EntryId) -> fst::Result<Box<dyn ReadSeek + '_>> {
         self.files.file(id)?.open(&mut self.reader)
     }
 
-    fn open_file_at<'s>(&'s mut self, path: &str) -> fst::Result<Box<dyn ReadSeek + 's>> {
+    fn into_file<'s>(self, id: EntryId) -> fst::Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's,
+    {
+        self.files.file(id)?.open(self.reader)
+    }
+
+    fn open_file_at(&mut self, path: &str) -> fst::Result<Box<dyn ReadSeek + '_>> {
         self.files.file_at(path)?.open(&mut self.reader)
+    }
+
+    fn into_file_at<'s>(self, path: &str) -> fst::Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's,
+    {
+        self.files.file_at(path)?.open(self.reader)
     }
 }

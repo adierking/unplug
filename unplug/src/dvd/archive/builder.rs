@@ -23,14 +23,30 @@ where
     R: ReadSeek,
     F: FnOnce() -> R,
 {
-    fn open_file<'s>(&'s mut self, _id: EntryId) -> fst::Result<Box<dyn ReadSeek + 's>> {
+    fn open_file(&mut self, _id: EntryId) -> fst::Result<Box<dyn ReadSeek + '_>> {
         let func = self.0.take().unwrap();
-        Ok(Box::new(func()))
+        Ok(Box::from(func()))
     }
 
-    fn open_file_at<'s>(&'s mut self, _path: &str) -> fst::Result<Box<dyn ReadSeek + 's>> {
+    fn into_file<'s>(self, _id: EntryId) -> fst::Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's,
+    {
+        let func = self.0.unwrap();
+        Ok(Box::from(func()))
+    }
+
+    fn open_file_at(&mut self, _path: &str) -> fst::Result<Box<dyn ReadSeek + '_>> {
         let func = self.0.take().unwrap();
-        Ok(Box::new(func()))
+        Ok(Box::from(func()))
+    }
+
+    fn into_file_at<'s>(self, _path: &str) -> fst::Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's,
+    {
+        let func = self.0.unwrap();
+        Ok(Box::from(func()))
     }
 }
 

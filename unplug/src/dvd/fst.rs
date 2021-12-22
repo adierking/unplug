@@ -656,19 +656,43 @@ impl IndexMut<EntryId> for FileTree {
 pub trait OpenFile {
     /// Returns a reader which reads the data inside the file with ID `id`.
     /// ***Panics*** if the ID is invalid.
-    fn open_file<'s>(&'s mut self, id: EntryId) -> Result<Box<dyn ReadSeek + 's>>;
+    fn open_file(&mut self, id: EntryId) -> Result<Box<dyn ReadSeek + '_>>;
+
+    /// Similar to `open_file()`, but consumes this stream.
+    fn into_file<'s>(self, id: EntryId) -> Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's;
 
     /// Returns a reader which reads the data inside the file at `path`.
-    fn open_file_at<'s>(&'s mut self, path: &str) -> Result<Box<dyn ReadSeek + 's>>;
+    fn open_file_at(&mut self, path: &str) -> Result<Box<dyn ReadSeek + '_>>;
+
+    /// Similar to `open_file_at()`, but consumes this stream.
+    fn into_file_at<'s>(self, path: &str) -> Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's;
 }
 
 impl<T: OpenFile> OpenFile for &mut T {
-    fn open_file<'s>(&'s mut self, id: EntryId) -> Result<Box<dyn ReadSeek + 's>> {
+    fn open_file(&mut self, id: EntryId) -> Result<Box<dyn ReadSeek + '_>> {
         (**self).open_file(id)
     }
 
-    fn open_file_at<'s>(&'s mut self, path: &str) -> Result<Box<dyn ReadSeek + 's>> {
+    fn into_file<'s>(self, id: EntryId) -> Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's,
+    {
+        self.open_file(id)
+    }
+
+    fn open_file_at(&mut self, path: &str) -> Result<Box<dyn ReadSeek + '_>> {
         (**self).open_file_at(path)
+    }
+
+    fn into_file_at<'s>(self, path: &str) -> Result<Box<dyn ReadSeek + 's>>
+    where
+        Self: 's,
+    {
+        self.open_file_at(path)
     }
 }
 
@@ -676,10 +700,10 @@ impl<T: OpenFile> OpenFile for &mut T {
 pub trait EditFile: OpenFile {
     /// Returns a stream which can read and write the data inside the file with ID `id`.
     /// ***Panics*** if the ID is invalid.
-    fn edit_file<'s>(&'s mut self, id: EntryId) -> Result<Box<dyn ReadWriteSeek + 's>>;
+    fn edit_file(&mut self, id: EntryId) -> Result<Box<dyn ReadWriteSeek + '_>>;
 
     /// Returns a reader which can read and write the data inside the file at `path`.
-    fn edit_file_at<'s>(&'s mut self, path: &str) -> Result<Box<dyn ReadWriteSeek + 's>>;
+    fn edit_file_at(&mut self, path: &str) -> Result<Box<dyn ReadWriteSeek + '_>>;
 }
 
 #[cfg(test)]
