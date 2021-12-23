@@ -4,28 +4,14 @@ use log::info;
 use seahash::SeaHasher;
 use std::hash::Hasher;
 use std::io::BufReader;
-use unplug::audio::format::{DspFormat, PcmS16Le, ReadWriteBytes};
-use unplug::audio::transport::hps::{Block, HpsStream};
+use unplug::audio::format::{PcmS16Le, ReadWriteBytes};
+use unplug::audio::transport::HpsReader;
 use unplug::audio::Cue;
 use unplug::data::music::{Music, MusicDefinition};
 use unplug::dvd::OpenFile;
 use unplug_test as common;
 
-fn validate_channel(hps: &HpsStream, block: &Block, channel: usize) {
-    if channel >= hps.channels.len() {
-        return;
-    }
-    if hps.channels[channel].address.format != DspFormat::Adpcm {
-        return;
-    }
-    // Basic validity check: the first byte should match the context's predictor_and_scale
-    // TODO: anything else?
-    let data = &block.channels[channel].data;
-    let expected = block.channels[channel].initial_context.predictor_and_scale;
-    assert_eq!(data[0] as u16, expected);
-}
-
-fn decode_and_hash(hps: &HpsStream) -> Result<u64> {
+fn decode_and_hash(hps: &HpsReader) -> Result<u64> {
     let mut hasher = SeaHasher::new();
     let mut decoder = hps.decoder();
     while let Some(samples) = decoder.read_samples()? {
@@ -49,13 +35,9 @@ fn test_read_all_music() -> Result<()> {
     for &(id, name, expected) in CHECKSUMS {
         let path = MusicDefinition::get(id).path();
         info!("Reading {}", path);
-        let mut reader = BufReader::new(iso.open_file_at(&path)?);
-        let hps = HpsStream::open(&mut reader, path)?;
-        assert!(!hps.blocks.is_empty());
-        for block in &hps.blocks {
-            validate_channel(&hps, block, 0);
-            validate_channel(&hps, block, 1);
-        }
+        let reader = BufReader::new(iso.open_file_at(&path)?);
+        let hps = HpsReader::new(reader, path)?;
+        assert!(hps.blocks().next().is_some());
         if id == Music::Teriyaki {
             let cues = hps.cues().collect::<Vec<_>>();
             assert_eq!(cues, *TERIYAKI_CUE_POINTS);

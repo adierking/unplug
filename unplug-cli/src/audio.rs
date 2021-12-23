@@ -10,10 +10,10 @@ use std::path::Path;
 use std::time::Instant;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
-use unplug::audio::transport::hps::{HpsStream, Looping, PcmHpsBuilder};
+use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
-use unplug::common::{ReadSeek, WriteTo};
+use unplug::common::ReadSeek;
 use unplug::data::sound::{Sound, SoundDefinition};
 use unplug::data::sound_bank::SOUND_BANKS;
 use unplug::dvd::OpenFile;
@@ -83,9 +83,9 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
     let mut iso = open_iso_optional(opt.iso.as_ref())?;
-    let mut reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), &opt.path)?);
+    let reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), &opt.path)?);
     let name = opt.path.file_name().unwrap().to_string_lossy();
-    let hps = HpsStream::open(&mut reader, name)?;
+    let hps = HpsReader::new(reader, name)?;
 
     info!("Writing {}", opt.output.display());
     let progress = progress_bar(1);
@@ -106,7 +106,7 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
             let label_path = opt.output.with_extension(LABELS_EXTENSION);
             info!("Writing label track to {}", label_path.display());
             let labels = BufWriter::new(File::create(label_path)?);
-            audacity::write_labels(labels, cues, hps.sample_rate)?;
+            audacity::write_labels(labels, cues, hps.sample_rate())?;
         }
     }
 
@@ -122,9 +122,9 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
     info!("Checking {}", hps_path.display());
     let entry = iso.files.at(hps_path.to_str().unwrap())?;
     let hps_name = iso.files[entry].name().to_owned();
-    let original = {
-        let mut reader = BufReader::new(iso.open_file(entry)?);
-        HpsStream::open(&mut reader, hps_name)?
+    let original_loop = {
+        let reader = BufReader::new(iso.open_file(entry)?);
+        HpsReader::new(reader, hps_name)?.loop_start()
     };
 
     let audio = open_sound_file(&opt.path, opt.labels.as_deref(), MAX_MUSIC_SAMPLE_RATE)?;
@@ -132,23 +132,23 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
     let progress = progress_bar(1);
     progress.set_message(audio.tag().name.clone());
     let encoder =
-        PcmHpsBuilder::new(audio).on_progress(|p| update_audio_progress(&progress, p)).prepare()?;
+        PcmHpsWriter::new(audio).on_progress(|p| update_audio_progress(&progress, p)).prepare()?;
     progress.finish_using_style();
 
     info!("Encoding audio to GameCube format");
     let progress = progress_bar(1);
     progress.set_message(iso.files[entry].name().to_owned());
     // Copy the loop setting from the original HPS
-    let looping = if original.loop_start.is_some() { Looping::Enabled } else { Looping::Disabled };
-    let hps =
-        encoder.looping(looping).on_progress(|p| update_audio_progress(&progress, p)).build()?;
+    let looping = if original_loop.is_some() { Looping::Enabled } else { Looping::Disabled };
+    let mut writer = Cursor::new(vec![]);
+    encoder
+        .looping(looping)
+        .on_progress(|p| update_audio_progress(&progress, p))
+        .write_to(&mut writer)?;
     progress.finish_using_style();
 
-    let mut writer = Cursor::new(vec![]);
-    hps.write_to(&mut writer)?;
-    writer.seek(SeekFrom::Start(0))?;
-
     info!("Updating ISO");
+    writer.seek(SeekFrom::Start(0))?;
     iso.replace_file(entry, writer)?;
 
     info!("Import finished in {:?}", start_time.elapsed());

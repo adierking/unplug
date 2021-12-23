@@ -28,12 +28,13 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
             Err(e) => return Err(e),
         };
 
+        let data = &*encoded.data; // This makes debug builds faster...
         let info = encoded.params;
         let mut context = info.context;
         trace!(
             "Decoding ADPCM block from {:?}: len={:#x} ps={:#x} s0={:#x} s1={:#x}",
             self.tag(),
-            encoded.data.len(),
+            data.len(),
             context.predictor_and_scale,
             context.last_samples[0],
             context.last_samples[1],
@@ -50,16 +51,16 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
             if address & 0xf == 0 {
                 // Frames are aligned on 16-byte boundaries and each begins with a new
                 // predictor_and_scale byte
-                context.predictor_and_scale = encoded.data[address / 2] as u16;
+                context.predictor_and_scale = data[address / 2] as u16;
                 address += 2;
                 continue;
             }
 
             // Read next nibble
             let mut val = if address % 2 == 0 {
-                (encoded.data[address / 2] >> 4) as i32
+                (data[address / 2] >> 4) as i32
             } else {
-                (encoded.data[address / 2] & 0xf) as i32
+                (data[address / 2] & 0xf) as i32
             };
             if val >= 8 {
                 val -= 16; // Sign-extend

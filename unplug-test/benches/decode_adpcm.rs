@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::io::BufReader;
+use std::io::Cursor;
 use unplug::audio::format::PcmS16Le;
-use unplug::audio::transport::HpsStream;
+use unplug::audio::transport::HpsReader;
 use unplug::audio::{ReadSamples, Samples};
 use unplug::data::music::{Music, MusicDefinition};
 use unplug::dvd::OpenFile;
@@ -9,15 +9,16 @@ use unplug_test as common;
 
 const MUSIC_TO_DECODE: Music = Music::Bgm;
 
-fn load_music() -> HpsStream {
+fn load_music() -> HpsReader<'static> {
     let mut iso = common::open_iso().expect("could not open ISO");
     let music = MusicDefinition::get(MUSIC_TO_DECODE);
-    let reader = iso.open_file_at(&music.path()).expect("could not open HPS file");
-    let mut reader = BufReader::new(reader);
-    HpsStream::open(&mut reader, music.name).expect("failed to load HPS file")
+    let mut reader = iso.open_file_at(&music.path()).expect("could not open HPS file");
+    let mut bytes = vec![];
+    reader.read_to_end(&mut bytes).expect("could not read HPS file");
+    HpsReader::new(Cursor::new(bytes), music.name).expect("failed to load HPS file")
 }
 
-fn decode_adpcm(music: &HpsStream) -> Vec<Samples<'static, PcmS16Le>> {
+fn decode_adpcm(music: &HpsReader) -> Vec<Samples<'static, PcmS16Le>> {
     let mut decoder = music.decoder().owned();
     let mut samples = vec![];
     loop {
