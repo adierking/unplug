@@ -6,8 +6,7 @@ use crate::audio::{Cue, Error, ProgressHint, ReadSamples, Result, Samples};
 use crate::common::io::pad;
 use crate::common::{align, WriteSeek, WriteTo};
 use arrayvec::ArrayVec;
-use std::convert::TryFrom;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::SeekFrom;
 use std::num::NonZeroU32;
 use tracing::{instrument, warn};
 
@@ -77,13 +76,15 @@ impl Block {
     }
 
     /// Writes the block header and data to `writer`. If `next_offset` is not `None`, it will be
-    /// used as the block's `next_offset` instead of the offset after this block.
+    /// used as the block's `next_offset` instead of the offset after this block. Returns the total
+    /// size of the written data in bytes.
     #[instrument(level = "trace", skip_all)]
-    fn write_to<W: Write + Seek + ?Sized>(
+    fn write_to(
         &self,
-        writer: &mut W,
+        writer: &mut dyn WriteSeek,
+        offset: u32,
         next_offset: Option<u32>,
-    ) -> Result<()> {
+    ) -> Result<u32> {
         if !(1..=2).contains(&self.channels.len()) {
             return Err(Error::UnsupportedChannels);
         }
@@ -91,33 +92,25 @@ impl Block {
         let mut data_size = 0;
         for (i, channel) in self.channels.iter().enumerate() {
             channel_contexts[i] = channel.initial_context;
-            data_size += align(channel.data.len(), super::DATA_ALIGN);
+            data_size += align(channel.data.len(), super::DATA_ALIGN) as u32;
         }
 
-        let next_offset = if let Some(offset) = next_offset {
-            offset
-        } else {
-            let current_offset = writer.seek(SeekFrom::Current(0))?;
-            let total_size = super::BLOCK_HEADER_SIZE
-                + align(super::CUE_SIZE * self.cues.len(), super::DATA_ALIGN)
-                + data_size;
-            (current_offset + total_size as u64) as u32
-        };
-
-        let header = BlockHeader {
-            size: data_size as u32,
+        let mut header = BlockHeader {
+            size: data_size,
             end_address: self.end_address,
-            next_offset,
+            next_offset: 0,
             channel_contexts,
             cues: self.cues.clone(),
         };
+        let total_size = (header.file_size() as u32) + data_size;
+        header.next_offset = next_offset.unwrap_or(offset + total_size);
         header.write_to(writer)?;
 
         for channel in &self.channels {
             writer.write_all(&channel.data)?;
             pad(&mut *writer, super::DATA_ALIGN as u64, 0)?;
         }
-        Ok(())
+        Ok(total_size)
     }
 }
 
@@ -163,6 +156,7 @@ impl<'r, 's> PcmHpsWriter<'r, 's> {
 type AdpcmReader<'r, 's> = Box<dyn ReadSamples<'s, Format = GcAdpcm> + 'r>;
 
 /// Audio looping strategies.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Looping {
     /// Always disable looping, even if the source audio has a loop point.
     Disabled,
@@ -182,7 +176,9 @@ pub struct HpsWriter<'r, 's> {
     looping: Looping,
     left_channel: Channel,
     right_channel: Channel,
-    loop_sample: Option<u64>,
+    offset: u32,
+    sample: u64,
+    loop_offset: u32,
     cues: Vec<Cue>,
     next_cue_index: usize,
     next_cue_id: u32,
@@ -211,7 +207,9 @@ impl<'r, 's> HpsWriter<'r, 's> {
             looping: Looping::Auto,
             left_channel: Channel::default(),
             right_channel: Channel::default(),
-            loop_sample: None,
+            offset: super::FIRST_BLOCK_OFFSET,
+            sample: 0,
+            loop_offset: super::END_BLOCK_OFFSET,
             cues: vec![],
             next_cue_index: 0,
             next_cue_id: 1,
@@ -233,7 +231,7 @@ impl<'r, 's> HpsWriter<'r, 's> {
     }
 
     /// Finishes building the HPS stream and writes it out to `writer`.
-    pub fn write_to(self, mut writer: impl Write + Seek + Send) -> Result<()> {
+    pub fn write_to(self, mut writer: impl WriteSeek) -> Result<()> {
         self.write_to_impl(&mut writer)
     }
 
@@ -269,8 +267,6 @@ impl<'r, 's> HpsWriter<'r, 's> {
     /// Processes each block in the stream and writes them out to `writer`.
     fn write_blocks(&mut self, writer: &mut dyn WriteSeek) -> Result<()> {
         let mut last_block: Option<Block> = None;
-        let mut loop_offset = super::END_BLOCK_OFFSET;
-        let mut current_sample = 0;
         loop {
             let mut right = self.right.take();
             let block = match &mut right {
@@ -278,7 +274,7 @@ impl<'r, 's> HpsWriter<'r, 's> {
                 None => self.next_block_mono()?,
             };
             self.right = right;
-            let mut block = match block {
+            let block = match block {
                 Some(block) => block,
                 None => break,
             };
@@ -287,23 +283,36 @@ impl<'r, 's> HpsWriter<'r, 's> {
             // otherwise we don't know when the end of the stream is. The last block has to be
             // written specially in order to set the next offset correctly based on the looping
             // settings.
-            if let Some(last) = last_block {
-                last.write_to(writer, None)?;
+            if let Some(mut last) = last_block {
+                self.write_block(&mut last, writer, false)?;
             }
 
-            self.assign_cues(&mut block, current_sample);
-            if self.loop_sample == Some(current_sample) {
-                loop_offset = u32::try_from(writer.seek(SeekFrom::Current(0))?).unwrap();
-            }
-
-            current_sample += super::num_samples(block.end_address, DspFormat::Adpcm);
             last_block = Some(block);
             self.update_progress();
         }
         match last_block {
-            Some(last) => last.write_to(writer, Some(loop_offset))?,
+            Some(mut last) => self.write_block(&mut last, writer, true)?,
             None => return Err(Error::EmptyStream),
         }
+        Ok(())
+    }
+
+    fn write_block(
+        &mut self,
+        block: &mut Block,
+        writer: &mut dyn WriteSeek,
+        is_last: bool,
+    ) -> Result<()> {
+        let end_sample = if is_last {
+            u64::MAX // Write all remaining cues
+        } else {
+            let num_samples = super::num_samples(block.end_address, DspFormat::Adpcm);
+            self.sample + num_samples
+        };
+        self.assign_cues(block, self.offset, self.sample, end_sample);
+        let next_offset = if is_last { Some(self.loop_offset) } else { None };
+        self.offset += block.write_to(writer, self.offset, next_offset)?;
+        self.sample += super::num_samples(block.end_address, DspFormat::Adpcm);
         Ok(())
     }
 
@@ -388,53 +397,41 @@ impl<'r, 's> HpsWriter<'r, 's> {
         };
         self.cues.sort_unstable();
         self.cues.dedup();
+        if self.looping == Looping::Enabled && !self.cues.iter().any(|c| c.is_loop()) {
+            warn!("Setting loop point at the start because none was defined");
+            self.cues.insert(0, Cue::new_loop("loop", 0));
+        }
     }
 
-    /// Assigns the cue points from `self.cues` to a block.
-    fn assign_cues(&mut self, block: &mut Block, current_sample: u64) {
-        let num_cues = self.cues.len();
-        let mut loop_sample: Option<u64> = None;
-        while self.next_cue_index < num_cues {
+    /// Assigns the cue points from `start_sample` up until `end_sample` to `block`. `offset` is the
+    /// file offset of the block used for loop point handling.
+    fn assign_cues(&mut self, block: &mut Block, offset: u32, start_sample: u64, end_sample: u64) {
+        while self.next_cue_index < self.cues.len() {
             let cue = &self.cues[self.next_cue_index];
-            let num_samples = super::num_samples(block.end_address, DspFormat::Adpcm);
-            let end_sample = current_sample + num_samples;
             if cue.start >= end_sample {
                 break;
             }
             if cue.is_loop() {
-                if loop_sample.is_none() {
-                    if cue.start != current_sample {
+                if self.looping == Looping::Disabled {
+                    warn!("Discarding loop point \"{}\" because looping is disabled", cue.name);
+                } else if self.loop_offset == super::END_BLOCK_OFFSET {
+                    if cue.start != start_sample {
                         warn!(
                             "Loop point \"{}\" is not block-aligned - rounding down to sample {}",
-                            cue.name, current_sample
+                            cue.name, start_sample
                         );
                     }
-                    loop_sample = Some(current_sample);
+                    self.loop_offset = offset;
                 } else {
                     warn!("Discarding extra loop point \"{}\"", cue.name);
                 }
             } else {
-                let start = cue.start - current_sample;
+                let start = cue.start - start_sample;
                 let point = CuePoint { sample_index: start as i32, id: self.next_cue_id };
                 block.cues.push(point);
                 self.next_cue_id += 1;
             }
             self.next_cue_index += 1;
-        }
-        self.loop_sample = match self.looping {
-            Looping::Disabled => {
-                if loop_sample.is_some() {
-                    warn!("Discarding loop point because looping is disabled");
-                }
-                None
-            }
-            Looping::Enabled => {
-                if loop_sample.is_none() {
-                    warn!("Setting loop point at the start because none was defined");
-                }
-                Some(loop_sample.unwrap_or(0))
-            }
-            Looping::Auto => loop_sample,
         }
     }
 
@@ -452,7 +449,7 @@ mod tests {
     use crate::audio::transport::hps::HpsReader;
     use crate::audio::Cue;
     use crate::test;
-    use std::io::Cursor;
+    use std::io::{Cursor, Seek};
 
     fn write_and_read_hps<'r, 's>(writer: HpsWriter<'r, 's>) -> Result<HpsReader<'static>> {
         let mut cursor = Cursor::new(vec![]);
@@ -563,7 +560,7 @@ mod tests {
             blocks[2].cues,
             &[CuePoint { sample_index: 0, id: 2 }, CuePoint { sample_index: 1, id: 3 }]
         );
-        assert!(blocks[3].cues.is_empty());
+        assert_eq!(blocks[3].cues, &[CuePoint { sample_index: 14, id: 4 }]);
         Ok(())
     }
 
@@ -593,7 +590,7 @@ mod tests {
 
         let cues = vec![Cue::new_loop("loop", 56)];
         let hps = write_and_read_hps(HpsWriter::with_mono(make_reader(cues)))?;
-        assert_eq!(hps.loop_start(), None);
+        assert_eq!(hps.loop_start(), Some(3));
 
         let cues = vec![Cue::new_loop("loop", 0)];
         let hps =
