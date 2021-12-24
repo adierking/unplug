@@ -89,6 +89,7 @@ impl<'r, 's: 'r> EncoderBuilder<'r, 's> {
     }
 
     /// Sets the encoder block size for both the mono and stereo channel layouts.
+    #[must_use]
     pub fn block_size(mut self, size: usize) -> Self {
         self.mono_block_size = size;
         self.stereo_block_size = size;
@@ -96,12 +97,14 @@ impl<'r, 's: 'r> EncoderBuilder<'r, 's> {
     }
 
     /// Sets the encoder block size to use for mono streams.
+    #[must_use]
     pub fn mono_block_size(mut self, size: usize) -> Self {
         self.mono_block_size = size;
         self
     }
 
     /// Sets the encoder block size to use for stereo streams.
+    #[must_use]
     pub fn stereo_block_size(mut self, size: usize) -> Self {
         self.stereo_block_size = size;
         self
@@ -109,6 +112,7 @@ impl<'r, 's: 'r> EncoderBuilder<'r, 's> {
 
     /// Sets a callback to run for progress updates. If the total amount of work is unknown, the
     /// callback will still be invoked with a `None` hint.
+    #[must_use]
     pub fn on_progress(mut self, callback: impl FnMut(Option<ProgressHint>) + 'r) -> Self {
         self.on_progress = Some(Box::from(callback));
         self

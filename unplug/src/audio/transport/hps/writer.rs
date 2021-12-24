@@ -132,6 +132,7 @@ impl<'r, 's> PcmHpsWriter<'r, 's> {
     /// callback will still be invoked with a `None` hint. This callback is only for the preparation
     /// step and a new callback must be set on the builder returned by `prepare()` to monitor
     /// encoding progress.
+    #[must_use]
     pub fn on_progress(mut self, callback: impl FnMut(Option<ProgressHint>) + 'r) -> Self {
         self.on_progress = Some(Box::from(callback));
         self
@@ -219,12 +220,14 @@ impl<'r, 's> HpsWriter<'r, 's> {
 
     /// Sets a callback to run for progress updates. If the total amount of work is unknown, the
     /// callback will still be invoked with a `None` hint.
+    #[must_use]
     pub fn on_progress(mut self, callback: impl FnMut(Option<ProgressHint>) + 'r) -> Self {
         self.on_progress = Some(Box::from(callback));
         self
     }
 
     /// Sets the audio's looping strategy. Defaults to `Auto`.
+    #[must_use]
     pub fn looping(mut self, looping: Looping) -> Self {
         self.looping = looping;
         self

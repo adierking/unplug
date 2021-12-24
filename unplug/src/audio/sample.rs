@@ -181,12 +181,14 @@ impl SourceTag {
     }
 
     /// Updates the tag with a new channel and returns the new tag.
+    #[must_use]
     pub fn for_channel(self, channel: SourceChannel) -> Self {
         Self { name: self.name, channel }
     }
 
     /// Joins this tag with `other` to produce a new tag with `SourceChannel::All`. If the names do
     /// not match, they will be concatenated.
+    #[must_use]
     pub fn join(&self, other: &SourceTag) -> Self {
         if self.name == other.name {
             Self::new(self.name.clone())

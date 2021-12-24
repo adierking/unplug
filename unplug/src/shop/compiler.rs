@@ -466,8 +466,7 @@ mod tests {
         script
             .reverse_postorder(root)
             .into_iter()
-            .map(|id| script.block(id).commands().unwrap())
-            .flatten()
+            .flat_map(|id| script.block(id).commands().unwrap())
             .cloned()
             .collect()
     }

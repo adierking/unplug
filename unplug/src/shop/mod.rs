@@ -104,6 +104,7 @@ pub enum Requirement {
 
 impl Requirement {
     /// Returns the opposite of the requirement.
+    #[must_use]
     pub fn negate(&self) -> Self {
         match *self {
             Self::HaveItem(i) => Self::MissingItem(i),

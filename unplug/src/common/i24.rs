@@ -39,6 +39,7 @@ impl I24 {
     }
 
     /// Reverses the byte order of the integer.
+    #[must_use]
     pub const fn swap_bytes(self) -> Self {
         Self([self.0[2], self.0[1], self.0[0]])
     }

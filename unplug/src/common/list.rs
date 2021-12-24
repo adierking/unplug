@@ -40,6 +40,8 @@ impl<T: Clone> IntoIterator for NonNoneList<'_, T> {
     type Item = T;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
+    #[allow(unknown_lints)]
+    #[allow(clippy::unnecessary_to_owned)]
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_owned().into_iter()
     }
