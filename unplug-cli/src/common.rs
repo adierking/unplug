@@ -52,6 +52,20 @@ pub fn open_iso_entry_or_file<'a>(
     }
 }
 
+/// Similar to `open_iso_entry_or_file()`, but consumes `iso`.
+pub fn iso_into_entry_or_file<'a>(
+    iso: Option<DiscStream<File>>,
+    path: impl AsRef<Path>,
+) -> Result<Box<dyn ReadSeek + 'a>> {
+    if let Some(iso) = iso {
+        info!("Opening {} from ISO", path.as_ref().display());
+        Ok(iso.into_file_at(path.as_ref().to_str().unwrap())?)
+    } else {
+        info!("Opening file: {}", path.as_ref().display());
+        Ok(Box::new(File::open(path)?))
+    }
+}
+
 fn open_qp<'a>(
     iso: Option<&'a mut DiscStream<File>>,
     path: Option<impl AsRef<Path>>,

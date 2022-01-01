@@ -22,5 +22,6 @@ pub mod id;
 pub mod io;
 pub mod msg;
 pub mod opt;
+pub mod playback;
 pub mod shop;
 pub mod terminal;

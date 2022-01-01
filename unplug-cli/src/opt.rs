@@ -1,8 +1,14 @@
 #![allow(trivial_numeric_casts)]
 
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use structopt::clap::ArgGroup;
 use structopt::StructOpt;
+
+/// The minimum accepted volume level for playback.
+const MIN_VOLUME: i32 = 0;
+/// The maximum accepted volume level for playback.
+const MAX_VOLUME: i32 = 100;
 
 #[derive(StructOpt)]
 #[structopt(name = "Unplug")]
@@ -81,6 +87,9 @@ pub enum Subcommand {
 
     /// Imports an audio file, replacing an existing HPS music file
     ImportMusic(ImportMusicOpt),
+
+    /// Plays an HPS music file
+    PlayMusic(PlayMusicOpt),
 
     /// Exports sound effects to WAV files
     ExportSounds(ExportSoundsOpt),
@@ -430,4 +439,35 @@ pub struct ExportSoundsOpt {
     /// Path to the output directory
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: PathBuf,
+}
+
+/// `try_from_str` parser for parsing a playback volume
+fn parse_volume(s: &str) -> Result<f64> {
+    let volume = s.parse::<i32>()?;
+    if (MIN_VOLUME..=MAX_VOLUME).contains(&volume) {
+        Ok(f64::from(volume) / 100.0)
+    } else {
+        Err(anyhow!("volume must be between {} and {}", MIN_VOLUME, MAX_VOLUME))
+    }
+}
+
+#[derive(StructOpt)]
+pub struct PlaybackOpt {
+    /// Volume level as a percentage (0-100, default 90)
+    #[structopt(long, default_value = "90", parse(try_from_str = parse_volume))]
+    pub volume: f64,
+}
+
+#[derive(StructOpt)]
+pub struct PlayMusicOpt {
+    /// Run within a Chibi-Robo! ISO
+    #[structopt(long, value_name("PATH"), parse(from_os_str))]
+    pub iso: Option<PathBuf>,
+
+    /// Path to the HPS file to play
+    #[structopt(value_name("PATH"), parse(from_os_str))]
+    pub path: PathBuf,
+
+    #[structopt(flatten)]
+    pub playback: PlaybackOpt,
 }

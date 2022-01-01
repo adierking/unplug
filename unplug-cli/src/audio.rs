@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::opt::*;
+use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
 use anyhow::{bail, Result};
 use log::{info, warn};
@@ -231,5 +232,30 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
     }
 
     info!("Export finished in {:?}", start_time.elapsed());
+    Ok(())
+}
+
+fn play_audio(
+    audio: impl ReadSamples<'static, Format = PcmS16Le> + 'static,
+    opt: PlaybackOpt,
+) -> Result<()> {
+    info!("Checking system audio configuration");
+    let mut device = PlaybackDevice::open_default()?;
+
+    info!("Starting playback");
+    let name = audio.tag().name.clone();
+    let source = PlaybackSource::new(audio)?.with_volume(opt.volume);
+    playback::play(&mut device, source, name);
+
+    info!("Playback finished");
+    Ok(())
+}
+
+pub fn play_music(opt: PlayMusicOpt) -> Result<()> {
+    let iso = open_iso_optional(opt.iso.as_ref())?;
+    let reader = iso_into_entry_or_file(iso, &opt.path)?;
+    let name = opt.path.file_name().unwrap().to_string_lossy();
+    let hps = HpsReader::new(reader, name)?;
+    play_audio(hps.decoder(), opt.playback)?;
     Ok(())
 }
