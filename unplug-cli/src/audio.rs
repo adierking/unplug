@@ -3,7 +3,7 @@ use crate::opt::*;
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
 use anyhow::{bail, Result};
-use log::{info, warn};
+use log::{debug, info, warn};
 use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Cursor, Seek, SeekFrom};
@@ -11,12 +11,14 @@ use std::path::Path;
 use std::time::Instant;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
+use unplug::audio::metadata::EventBank;
 use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
-use unplug::common::ReadSeek;
+use unplug::common::{ReadFrom, ReadSeek};
 use unplug::data::sound::{Sound, SoundDefinition};
-use unplug::data::sound_bank::SOUND_BANKS;
+use unplug::data::sound_bank::{SoundBank as SoundBankId, SoundBankDefinition, SOUND_BANKS};
+use unplug::data::sound_event::{EVENT_BANK_PATH, SOUND_EVENTS};
 use unplug::dvd::OpenFile;
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
@@ -253,9 +255,42 @@ fn play_audio(
 
 pub fn play_music(opt: PlayMusicOpt) -> Result<()> {
     let iso = open_iso_optional(opt.iso.as_ref())?;
-    let reader = iso_into_entry_or_file(iso, &opt.path)?;
+    let reader = BufReader::new(iso_into_entry_or_file(iso, &opt.path)?);
     let name = opt.path.file_name().unwrap().to_string_lossy();
     let hps = HpsReader::new(reader, name)?;
     play_audio(hps.decoder(), opt.playback)?;
+    Ok(())
+}
+
+/// Finds a sound event by name and returns a `(bank, index)` pair for its sound.
+fn find_sound(events: &EventBank, name: &str) -> Result<(SoundBankId, usize)> {
+    let def = match SOUND_EVENTS.iter().find(|e| unicase::eq(e.name, name)) {
+        Some(def) => def,
+        None => bail!("unknown sound event: \"{}\"", name),
+    };
+    let index = def.id.index();
+    let sound = match events.events[index].sound_id() {
+        Some(id) => Sound::try_from(id).unwrap(),
+        None => bail!("sound event \"{}\" does not play a sound", def.name),
+    };
+    let bank = SoundBankDefinition::get(def.id.bank());
+    let bank_index = u32::from(sound) - bank.sound_base;
+    debug!("Resolved sound \"{}\": bank={}, index={}", name, bank.name, bank_index);
+    Ok((bank.id, bank_index as usize))
+}
+
+pub fn play_sound(opt: PlaySoundOpt) -> Result<()> {
+    let mut iso = open_iso_optional(Some(opt.iso))?.unwrap();
+    let events = {
+        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), EVENT_BANK_PATH)?);
+        EventBank::read_from(&mut reader)?
+    };
+    let (bank_id, index) = find_sound(&events, &opt.sound)?;
+    let bank_def = SoundBankDefinition::get(bank_id);
+    let bank = {
+        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), bank_def.path())?);
+        SoundBank::open(&mut reader, bank_def.name)?
+    };
+    play_audio(bank.decoder(index), opt.playback)?;
     Ok(())
 }

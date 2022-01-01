@@ -93,6 +93,9 @@ pub enum Subcommand {
 
     /// Exports sound effects to WAV files
     ExportSounds(ExportSoundsOpt),
+
+    /// Plays a sound effect
+    PlaySound(PlaySoundOpt),
 }
 
 #[derive(StructOpt)]
@@ -467,6 +470,20 @@ pub struct PlayMusicOpt {
     /// Path to the HPS file to play
     #[structopt(value_name("PATH"), parse(from_os_str))]
     pub path: PathBuf,
+
+    #[structopt(flatten)]
+    pub playback: PlaybackOpt,
+}
+
+#[derive(StructOpt)]
+pub struct PlaySoundOpt {
+    /// Path to the Chibi-Robo! ISO
+    #[structopt(long, value_name("PATH"), parse(from_os_str))]
+    pub iso: PathBuf,
+
+    /// Name of the sound event to play
+    #[structopt(value_name("NAME"))]
+    pub sound: String,
 
     #[structopt(flatten)]
     pub playback: PlaybackOpt,

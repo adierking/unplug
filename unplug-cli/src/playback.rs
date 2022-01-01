@@ -65,13 +65,22 @@ impl PlaybackSource {
         Duration::from_secs_f64((total_frames as f64) / (self.sample_rate as f64))
     }
 
-    /// Transforms the playback source into a reader to use for buffering. `target_rate` is the
-    /// required sample rate for the output stream.
-    fn into_reader(self, target_rate: u32) -> Box<dyn ReadSamples<'static, Format = PcmF32Le>> {
+    /// Transforms the playback source into a reader to use for buffering. `target_channels` and
+    /// `target_rate` are the required channel count and sample rate for the output stream.
+    fn into_reader(
+        self,
+        target_channels: usize,
+        target_rate: u32,
+    ) -> Box<dyn ReadSamples<'static, Format = PcmF32Le>> {
         let mut audio = self.reader;
         if self.sample_rate != target_rate {
             debug!("Audio will be resampled from {} Hz to {} Hz", self.sample_rate, target_rate);
             audio = Box::from(audio.resample(target_rate));
+        }
+        if self.channels != target_channels {
+            assert_eq!(target_channels, 2);
+            debug!("Audio will be converted from mono to stereo");
+            audio = Box::from(audio.stereo());
         }
         audio
     }
@@ -338,6 +347,7 @@ impl BufferThread {
                     samples.push(packet);
                 }
                 None => {
+                    trace!("Reached end of buffer, setting EOF");
                     self.eof = true;
                     break;
                 }
@@ -363,7 +373,7 @@ struct SampleCallback {
     command_send: Sender<StreamCommand>,
     /// A sender for sending stream notifications.
     notify_send: Sender<StreamNotification>,
-    /// `true` if a `FillBuffer` command has recently been sent. Used for debouncing.
+    /// `true` if the buffer is low and a `FillBuffer` command has already been sent.
     buffer_low: bool,
 }
 
@@ -402,19 +412,23 @@ impl SampleCallback {
             state.instants.push(instant);
         }
 
+        // It's possible that we could refill the buffer and then immediately end up in a "buffer
+        // low" state after the next pop. Reset the `buffer_low` flag first so that we can catch
+        // this transition. For example, `npc_papa_mupyokakkoee` will hang without this.
+        if self.buffer_low && !state.buffer_low() {
+            self.buffer_low = false;
+        }
+
         let num_samples = state.pop_samples::<F>(data);
         state.next_frame += (num_samples / state.channels) as u64;
 
         if state.status == Status::Finished {
             trace!("Sending notification: {:?}", StreamNotification::Finished);
             self.notify_send.send(StreamNotification::Finished).unwrap();
-        } else {
-            let buffer_low = state.buffer_low();
-            if buffer_low && !self.buffer_low {
-                trace!("Sending command: {:?}", StreamCommand::FillBuffer);
-                self.command_send.send(StreamCommand::FillBuffer).unwrap();
-            }
-            self.buffer_low = buffer_low;
+        } else if !self.buffer_low && state.buffer_low() {
+            trace!("Sending command: {:?}", StreamCommand::FillBuffer);
+            self.command_send.send(StreamCommand::FillBuffer).unwrap();
+            self.buffer_low = true;
         }
 
         drop(state);
@@ -628,7 +642,7 @@ impl PlaybackDevice {
         let channels = self.config.channels() as usize;
         let sample_rate = self.config.sample_rate().0;
         let volume = source.volume;
-        let reader = source.into_reader(sample_rate);
+        let reader = source.into_reader(channels, sample_rate);
         let mut stream = PlaybackStream::new(reader, channels, sample_rate, volume);
         stream.run_until_buffered();
         let output = self

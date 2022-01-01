@@ -33,7 +33,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::process;
-use unplug::audio::metadata::sem::{Command, EventBank};
+use unplug::audio::metadata::sem::EventBank;
 use unplug::audio::transport::Brsar;
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek};
 use unplug::data::stage::GLOBALS_PATH;
@@ -872,12 +872,8 @@ fn build_sounds(events: &EventBank, event_defs: &[SoundEventDefinition]) -> Vec<
         if DUPLICATE_SOUND_DISCARDS.is_match(&def.name) {
             continue;
         }
-        if let Some(action) = event.actions.iter().find(|a| a.command == Command::Sound) {
-            defs.push(SoundDefinition {
-                id: action.data as u32,
-                label: def.label.clone(),
-                name: def.name.clone(),
-            });
+        if let Some(id) = event.sound_id() {
+            defs.push(SoundDefinition { id, label: def.label.clone(), name: def.name.clone() });
         }
     }
     debug!("Found {} sound names", defs.len());

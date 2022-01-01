@@ -1,6 +1,9 @@
-use super::sound_bank::SOUND_BANKS;
+use super::sound_bank::{SoundBank, SoundBankDefinition, SOUND_BANKS};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug};
+
+/// ISO path to the main sound event bank.
+pub const EVENT_BANK_PATH: &str = "qp/sfx_sample.sem";
 
 /// Metadata describing a sound event.
 #[derive(Debug)]
@@ -43,10 +46,16 @@ macro_rules! declare_sound_events {
 }
 
 impl SoundEvent {
+    /// Returns the `SoundBank` which contains this event's sound.
+    pub fn bank(&self) -> SoundBank {
+        let id = u32::from(*self);
+        SOUND_BANKS[(id >> 16) as usize].id
+    }
+
     /// Calculates the event's global index.
     pub fn index(&self) -> usize {
+        let bank = SoundBankDefinition::get(self.bank());
         let id = u32::from(*self);
-        let bank = &SOUND_BANKS[(id >> 16) as usize];
         (bank.event_base + (id & 0xffff)) as usize
     }
 }
@@ -70,5 +79,11 @@ mod tests {
             let actual = SoundEventDefinition::get(event.id);
             assert_eq!(actual.id, event.id);
         }
+    }
+
+    #[test]
+    fn test_get_sound_event_bank() {
+        assert_eq!(SoundEvent::VoiceHelpMe.bank(), SoundBank::Sample);
+        assert_eq!(SoundEvent::KitchenOil.bank(), SoundBank::Kitchen);
     }
 }
