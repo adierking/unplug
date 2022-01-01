@@ -2,7 +2,7 @@ use super::adpcm;
 use super::pcm::{ConvertPcm, Scalable};
 use super::{
     AnyFormat, Cast, DynamicFormat, Format, GcAdpcm, PcmF32Le, PcmFormat, PcmS16Be, PcmS16Le,
-    PcmS24Le, PcmS32Le, PcmS8, StaticFormat,
+    PcmS24Le, PcmS32Le, PcmS8, PcmU16Le, StaticFormat,
 };
 use crate::audio::ReadSamples;
 
@@ -11,6 +11,7 @@ mod private {
     impl Sealed for super::PcmS8 {}
     impl Sealed for super::PcmS16Le {}
     impl Sealed for super::PcmS16Be {}
+    impl Sealed for super::PcmU16Le {}
     impl Sealed for super::PcmS24Le {}
     impl Sealed for super::PcmS32Le {}
     impl Sealed for super::PcmF32Le {}
@@ -81,6 +82,7 @@ where
     PcmS8: Convert<To>,
     PcmS16Le: Convert<To>,
     PcmS16Be: Convert<To>,
+    PcmU16Le: Convert<To>,
     PcmS24Le: Convert<To>,
     PcmS32Le: Convert<To>,
     PcmF32Le: Convert<To>,
@@ -91,6 +93,7 @@ where
             Format::PcmS8 => PcmS8::convert(Box::from(reader.cast())),
             Format::PcmS16Le => PcmS16Le::convert(Box::from(reader.cast())),
             Format::PcmS16Be => PcmS16Be::convert(Box::from(reader.cast())),
+            Format::PcmU16Le => PcmU16Le::convert(Box::from(reader.cast())),
             Format::PcmS24Le => PcmS24Le::convert(Box::from(reader.cast())),
             Format::PcmS32Le => PcmS32Le::convert(Box::from(reader.cast())),
             Format::PcmF32Le => PcmF32Le::convert(Box::from(reader.cast())),

@@ -6,7 +6,7 @@ pub mod pcm;
 pub use adpcm::GcAdpcm;
 pub use convert::Convert;
 pub use dsp::DspFormat;
-pub use pcm::{PcmF32Le, PcmS16Be, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
+pub use pcm::{PcmF32Le, PcmS16Be, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8, PcmU16Le};
 
 use super::Result;
 use crate::common::endian::{ConvertEndian, IsNative, ReadValuesExt, WriteValuesExt};
@@ -26,6 +26,7 @@ pub enum Format {
     PcmS8,
     PcmS16Le,
     PcmS16Be,
+    PcmU16Le,
     PcmS24Le,
     PcmS32Le,
     PcmF32Le,
@@ -37,7 +38,7 @@ impl Format {
     pub fn bits(&self) -> usize {
         match *self {
             Self::PcmS8 => 8,
-            Self::PcmS16Le | Self::PcmS16Be => 16,
+            Self::PcmS16Le | Self::PcmS16Be | Self::PcmU16Le => 16,
             Self::PcmS24Le => 24,
             Self::PcmS32Le | Self::PcmF32Le => 32,
             Self::GcAdpcm => 4,

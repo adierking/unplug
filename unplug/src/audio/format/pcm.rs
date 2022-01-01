@@ -55,6 +55,7 @@ macro_rules! pcm_format {
 pcm_format!(PcmS8, i8, NE, 0);
 pcm_format!(PcmS16Le, i16, LE, 0);
 pcm_format!(PcmS16Be, i16, BE, 0);
+pcm_format!(PcmU16Le, u16, LE, 0);
 pcm_format!(PcmS24Le, I24, LE, I24::new(0));
 pcm_format!(PcmS32Le, i32, LE, 0);
 pcm_format!(PcmF32Le, f32, LE, 0.0);
@@ -322,6 +323,7 @@ where
                 Format::PcmS8 => Self::convert(samples.cast::<PcmS8>()),
                 Format::PcmS16Le => Self::convert(samples.cast::<PcmS16Le>()),
                 Format::PcmS16Be => Self::convert(samples.cast::<PcmS16Be>()),
+                Format::PcmU16Le => Self::convert(samples.cast::<PcmU16Le>()),
                 Format::PcmS24Le => Self::convert(samples.cast::<PcmS24Le>()),
                 Format::PcmS32Le => Self::convert(samples.cast::<PcmS32Le>()),
                 Format::PcmF32Le => Self::convert(samples.cast::<PcmF32Le>()),
