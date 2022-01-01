@@ -23,7 +23,7 @@ fn test_read_all_sounds() -> Result<()> {
         let mut reader = BufReader::new(iso.open_file_at(path)?);
         let ssm = SoundBank::open(&mut reader, path)?;
         let mut hasher = SeaHasher::new();
-        for i in 0..ssm.sounds.len() {
+        for i in 0..ssm.len() {
             let mut decoder = ssm.decoder(i);
             while let Some(samples) = decoder.read_samples()? {
                 let mut bytes = vec![];

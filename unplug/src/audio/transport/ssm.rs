@@ -11,6 +11,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::iter;
+use std::sync::Arc;
 use tracing::{debug, error, instrument};
 
 /// The size of the file header.
@@ -21,7 +22,7 @@ const DATA_ALIGN: u64 = 0x20;
 const FRAME_ALIGN: u64 = 8;
 
 /// Convenience type for an opaque decoder.
-type SsmDecoder<'r, 's> = Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>;
+type SsmDecoder = Box<dyn ReadSamples<'static, Format = PcmS16Le>>;
 
 /// SSM file header.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -138,20 +139,6 @@ pub struct Channel {
 }
 
 impl Channel {
-    /// Creates a `SoundReader` over the raw sample data.
-    pub fn reader(&self, sample_rate: u32, tag: SourceTag) -> SoundReader<'_> {
-        SoundReader { channel: Some(self), format: self.address.format, sample_rate, tag }
-    }
-
-    /// Creates a decoder which decodes the channel into PCM16 format.
-    pub fn decoder(&self, sample_rate: u32, tag: SourceTag) -> SsmDecoder<'_, '_> {
-        let reader = self.reader(sample_rate, tag);
-        match self.address.format {
-            DspFormat::Adpcm => Box::new(Decoder::new(reader.cast())),
-            DspFormat::Pcm8 | DspFormat::Pcm16 => reader.convert(),
-        }
-    }
-
     /// Creates a new `Channel` from ADPCM sample data.
     pub fn from_adpcm(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
         let samples = reader.read_all_samples()?;
@@ -226,14 +213,35 @@ pub struct Sound {
 
 impl Sound {
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
-    pub fn decoder(&self, tag: SourceTag) -> SsmDecoder<'_, '_> {
-        let rate = self.sample_rate;
+    pub fn decoder(self: &Arc<Self>, tag: SourceTag) -> SsmDecoder {
         if self.channels.len() == 1 {
-            self.channels[0].decoder(rate, tag)
+            self.channel_decoder(0, tag)
         } else {
-            let left = self.channels[0].decoder(rate, tag.clone().for_channel(SourceChannel::Left));
-            let right = self.channels[1].decoder(rate, tag.for_channel(SourceChannel::Right));
+            let left = self.channel_decoder(0, tag.clone().for_channel(SourceChannel::Left));
+            let right = self.channel_decoder(1, tag.for_channel(SourceChannel::Right));
             Box::new(left.with_right_channel(right))
+        }
+    }
+
+    /// Creates a `SoundReader` over the raw sample data in a channel.
+    pub fn channel_reader(self: &Arc<Sound>, channel: usize, tag: SourceTag) -> SoundReader {
+        let format = self.channels[channel].address.format;
+        SoundReader {
+            sound: Some(Arc::clone(self)),
+            channel,
+            format,
+            sample_rate: self.sample_rate,
+            tag,
+        }
+    }
+
+    /// Creates a decoder which decodes a single channel into PCM16 format.
+    pub fn channel_decoder(self: &Arc<Sound>, channel: usize, tag: SourceTag) -> SsmDecoder {
+        let reader = self.channel_reader(channel, tag);
+        let format = self.channels[channel].address.format;
+        match format {
+            DspFormat::Adpcm => Box::new(Decoder::new(reader.cast())),
+            DspFormat::Pcm8 | DspFormat::Pcm16 => reader.convert(),
         }
     }
 
@@ -298,9 +306,9 @@ impl Sound {
 #[non_exhaustive]
 pub struct SoundBank {
     /// The global index of the first sound in the bank.
-    pub base_index: u32,
+    base_index: u32,
     /// The sounds in the bank.
-    pub sounds: Vec<Sound>,
+    sounds: Vec<Arc<Sound>>,
     /// The audio source tag for debugging purposes.
     tag: SourceTag,
 }
@@ -334,21 +342,52 @@ impl SoundBank {
 
         // Split the data up across all the different sounds
         let sounds: Vec<_> =
-            sound_headers.into_iter().map(|sound| Sound::from_bank(&sound, &data)).collect();
+            sound_headers.into_iter().map(|s| Arc::new(Sound::from_bank(&s, &data))).collect();
 
         debug!("Loaded sound bank {:?} with {} sounds", tag, sounds.len());
         Ok(Self { base_index: header.base_index, sounds, tag })
     }
 
+    /// Returns the global index of the first sound in the bank.
+    pub fn base_index(&self) -> u32 {
+        self.base_index
+    }
+
+    /// Returns the number of sounds in the bank.
+    pub fn len(&self) -> usize {
+        self.sounds.len()
+    }
+
+    /// Returns `true` if the bank has no sounds.
+    pub fn is_empty(&self) -> bool {
+        self.sounds.is_empty()
+    }
+
+    /// Returns a reference to the sound at `index`, relative to the start of this sound bank.
+    pub fn sound(&self, index: usize) -> &Arc<Sound> {
+        &self.sounds[index]
+    }
+
+    /// Replaces the sound at `index` (relative to the start of this sound bank) with `sound`.
+    pub fn replace_sound(&mut self, index: usize, sound: Sound) {
+        self.sounds[index] = Arc::new(sound);
+    }
+
+    /// Returns an iterator over references to sounds in the bank.
+    pub fn sounds(&self) -> impl Iterator<Item = &Arc<Sound>> {
+        self.sounds.iter()
+    }
+
     /// Returns a reader over the raw sample data for a channel in a sound.
-    pub fn reader(&self, index: usize, channel: usize) -> SoundReader<'_> {
+    pub fn reader(&self, index: usize, channel: usize) -> SoundReader {
         let sound = &self.sounds[index];
-        sound.channels[channel].reader(sound.sample_rate, self.sound_tag(index))
+        sound.channel_reader(channel, self.sound_tag(index))
     }
 
     /// Returns a decoder which decodes a sound into PCM16 format.
-    pub fn decoder(&self, index: usize) -> SsmDecoder<'_, '_> {
-        self.sounds[index].decoder(self.sound_tag(index))
+    pub fn decoder(&self, index: usize) -> SsmDecoder {
+        let sound = &self.sounds[index];
+        sound.decoder(self.sound_tag(index))
     }
 
     /// Creates a `SourceTag` for a sound in the bank.
@@ -417,22 +456,24 @@ impl Debug for SoundBank {
 }
 
 /// Reads sample data from a sound channel.
-pub struct SoundReader<'a> {
-    channel: Option<&'a Channel>,
+pub struct SoundReader {
+    sound: Option<Arc<Sound>>,
+    channel: usize,
     format: DspFormat,
     sample_rate: u32,
     tag: SourceTag,
 }
 
-impl<'a> ReadSamples<'a> for SoundReader<'a> {
+impl ReadSamples<'static> for SoundReader {
     type Format = AnyFormat;
 
     #[instrument(level = "trace", name = "SoundReader", skip_all)]
-    fn read_samples(&mut self) -> Result<Option<Samples<'a, Self::Format>>> {
-        let channel = match self.channel.take() {
-            Some(c) => c,
+    fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
+        let sound = match self.sound.take() {
+            Some(s) => s,
             None => return Ok(None),
         };
+        let channel = &sound.channels[self.channel];
         let data = &channel.data;
         let len = channel.address.end_address as usize + 1;
         match self.format {
@@ -441,7 +482,7 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
                     channels: 1,
                     rate: self.sample_rate,
                     len,
-                    data: data.into(),
+                    data: data.clone().into(),
                     params: channel.adpcm,
                 }
                 .cast(),
@@ -466,15 +507,13 @@ impl<'a> ReadSamples<'a> for SoundReader<'a> {
     }
 
     fn progress(&self) -> Option<ProgressHint> {
-        match &self.channel {
-            Some(_) => ProgressHint::new(0, 1),
-            None => ProgressHint::new(1, 1),
-        }
+        let current = if self.sound.is_some() { 0 } else { 1 };
+        ProgressHint::new(current, 1)
     }
 
     fn data_remaining(&self) -> Option<u64> {
-        match &self.channel {
-            Some(c) => Some(c.address.end_address as u64 + 1),
+        match &self.sound {
+            Some(sound) => Some((sound.channels[self.channel].address.end_address as u64) + 1),
             None => Some(0),
         }
     }

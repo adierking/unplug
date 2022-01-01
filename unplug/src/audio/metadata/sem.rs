@@ -143,6 +143,13 @@ pub struct Event {
     pub actions: Vec<Action>,
 }
 
+impl Event {
+    /// Returns the ID of the sound that the event will play, if any.
+    pub fn sound_id(&self) -> Option<u32> {
+        self.actions.iter().find(|a| a.command == Command::Sound).map(|a| a.data.into())
+    }
+}
+
 impl<R: Read + ?Sized> ReadFrom<R> for Event {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {

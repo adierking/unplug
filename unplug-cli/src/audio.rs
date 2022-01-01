@@ -157,7 +157,7 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
 }
 
 fn make_sound_filename(bank: &SoundBank, index: usize, have_names: bool) -> String {
-    let id = bank.base_index + (index as u32);
+    let id = bank.base_index() + (index as u32);
     if have_names {
         if let Ok(sound) = Sound::try_from(id) {
             return format!("{}.wav", SoundDefinition::get(sound).name);
@@ -190,10 +190,10 @@ fn export_bank_impl<'r>(
     let mut reader = BufReader::new(reader);
     let bank = SoundBank::open(&mut reader, name)?;
     // Omit names for unusable banks (sfx_hori.ssm)
-    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index);
+    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index());
     fs::create_dir_all(&dir)?;
-    let progress = progress_bar(bank.sounds.len() as u64);
-    for (i, _) in bank.sounds.iter().enumerate() {
+    let progress = progress_bar(bank.len() as u64);
+    for (i, _) in bank.sounds().enumerate() {
         let filename = make_sound_filename(&bank, i, have_names);
         if progress.is_hidden() {
             info!("Writing {}{}", display_prefix, filename);
