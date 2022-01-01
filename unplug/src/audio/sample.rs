@@ -405,6 +405,16 @@ pub trait ReadSamples<'s>: Send {
     {
         ApplyFilter::new(self, filter)
     }
+
+    /// Creates an adapter which converts mono PCM audio data to stereo audio data.
+    fn stereo<'r>(self) -> MonoToStereo<'r, 's, Self::Format>
+    where
+        Self: Sized + 'r,
+        Self::Format: PcmFormat,
+        <Self::Format as FormatTag>::Data: Default,
+    {
+        MonoToStereo::new(self)
+    }
 }
 
 impl<'a, F, R> ReadSamples<'a> for &mut R
@@ -565,12 +575,9 @@ impl<'s, F: DynamicFormat> ReadSampleList<'s, F> {
 
     fn new_impl(samples: VecDeque<Samples<'s, F>>, cues: Vec<Cue>, tag: SourceTag) -> Self {
         assert!(!samples.is_empty(), "sample list is empty");
-        let front = samples.front().unwrap();
-        let format = front.format();
-        let channels = front.channels;
+        let format = samples.front().unwrap().format();
         for s in samples.iter().skip(1) {
             assert_eq!(s.format(), format);
-            assert_eq!(s.channels, channels);
         }
         let original_len = samples.len() as u64;
         Self { samples, cues, original_len, format, tag }
@@ -1044,6 +1051,75 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for SplitChannelsReader<'_, 's, F> {
     }
 }
 
+/// An adapter which converts mono audio packets to stereo ones.
+pub struct MonoToStereo<'r, 's, F: PcmFormat>
+where
+    F::Data: Default,
+{
+    inner: Box<dyn ReadSamples<'s, Format = F> + 'r>,
+}
+
+impl<'r, 's, F: PcmFormat> MonoToStereo<'r, 's, F>
+where
+    F::Data: Default,
+{
+    pub fn new(inner: impl ReadSamples<'s, Format = F> + 'r) -> Self {
+        Self { inner: Box::from(inner) }
+    }
+}
+
+impl<'s, F: PcmFormat> ReadSamples<'s> for MonoToStereo<'_, 's, F>
+where
+    F::Data: Default,
+{
+    type Format = F;
+
+    fn read_samples(&mut self) -> Result<Option<Samples<'s, Self::Format>>> {
+        let mut samples = match self.inner.read_samples()? {
+            Some(samples) => samples,
+            None => return Ok(None),
+        };
+        if samples.channels == 2 {
+            return Ok(Some(samples));
+        } else if samples.channels != 1 {
+            return Err(Error::StreamNotMono);
+        }
+        // Expand in-place and duplicate each sample
+        let mut data = samples.data.into_owned();
+        let old_len = samples.len;
+        let new_len = old_len * 2;
+        data.resize(new_len, F::Data::default());
+        for i in (0..old_len).rev() {
+            let sample = data[i];
+            data[i * 2] = sample;
+            data[i * 2 + 1] = sample;
+        }
+        samples.channels = 2;
+        samples.len = new_len;
+        samples.data = data.into();
+        Ok(Some(samples))
+    }
+
+    fn format(&self) -> Format {
+        Self::Format::FORMAT
+    }
+    fn tag(&self) -> &SourceTag {
+        self.inner.tag()
+    }
+    fn progress(&self) -> Option<ProgressHint> {
+        self.inner.progress()
+    }
+    fn data_remaining(&self) -> Option<u64> {
+        // Unfortunately, since we accept streams with either stereo or mono packets for the sake of
+        // convenience, we cannot know how much data is left without reading all of it. However,
+        // `progress()` will still work fine.
+        None
+    }
+    fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
+        self.inner.cues()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1479,6 +1555,19 @@ mod tests {
         let expected = Samples::<PcmF32Le>::from_pcm(vec![-1.0, 2.0, -3.0, 4.0], 1, 44100);
         assert!(filtered1.data == expected.data);
         assert!(filtered2.data == expected.data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_stereo() -> Result<()> {
+        let samples1 = Samples::<PcmS16Le>::from_pcm((0..2).collect::<Vec<_>>(), 1, 44100);
+        let samples2 = Samples::<PcmS16Le>::from_pcm((2..4).collect::<Vec<_>>(), 2, 44100);
+        let samples3 = Samples::<PcmS16Le>::from_pcm((4..6).collect::<Vec<_>>(), 1, 44100);
+        let reader = ReadSampleList::new(vec![samples1, samples2, samples3], "test");
+        let stereo = reader.stereo().read_all_samples()?;
+        assert_eq!(stereo.channels, 2);
+        assert_eq!(stereo.len, 10);
+        assert_eq!(&*stereo.data, &[0, 0, 1, 1, 2, 3, 4, 4, 5, 5]);
         Ok(())
     }
 }
