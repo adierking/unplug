@@ -467,9 +467,9 @@ pub struct PlayMusicOpt {
     #[structopt(long, value_name("PATH"), parse(from_os_str))]
     pub iso: Option<PathBuf>,
 
-    /// Path to the HPS file to play
-    #[structopt(value_name("PATH"), parse(from_os_str))]
-    pub path: PathBuf,
+    /// Name or path of the music to play
+    #[structopt(value_name("NAME"), parse(from_os_str))]
+    pub name: PathBuf,
 
     #[structopt(flatten)]
     pub playback: PlaybackOpt,

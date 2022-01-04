@@ -2,7 +2,7 @@ use crate::common::*;
 use crate::opt::*;
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use log::{debug, info, warn};
 use std::convert::TryFrom;
 use std::fs::{self, File};
@@ -16,6 +16,7 @@ use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
 use unplug::common::{ReadFrom, ReadSeek};
+use unplug::data::music::MUSIC;
 use unplug::data::sound::{Sound, SoundDefinition};
 use unplug::data::sound_bank::{SoundBank as SoundBankId, SoundBankDefinition, SOUND_BANKS};
 use unplug::data::sound_event::{EVENT_BANK_PATH, SOUND_EVENTS};
@@ -80,6 +81,34 @@ fn open_sound_file(
         info!("Opened audio file: {}", name);
     }
     Ok(audio)
+}
+
+/// Finds a music file by name and returns its path in the ISO.
+fn find_music(name: &str) -> Result<String> {
+    let path = MUSIC
+        .iter()
+        .find(|m| unicase::eq(m.name, name))
+        .map(|m| m.path())
+        .ok_or_else(|| anyhow!("unknown music: \"{}\"", name))?;
+    debug!("Resolved music \"{}\": {}", name, path);
+    Ok(path)
+}
+
+/// Finds a sound event by name and returns a `(bank, index)` pair for its sound.
+fn find_sound(events: &EventBank, name: &str) -> Result<(SoundBankId, usize)> {
+    let def = match SOUND_EVENTS.iter().find(|e| unicase::eq(e.name, name)) {
+        Some(def) => def,
+        None => bail!("unknown sound event: \"{}\"", name),
+    };
+    let index = def.id.index();
+    let sound = match events.events[index].sound_id() {
+        Some(id) => Sound::try_from(id).unwrap(),
+        None => bail!("sound event \"{}\" does not play a sound", def.name),
+    };
+    let bank = SoundBankDefinition::get(def.id.bank());
+    let bank_index = u32::from(sound) - bank.sound_base;
+    debug!("Resolved sound \"{}\": bank={}, index={}", name, bank.name, bank_index);
+    Ok((bank.id, bank_index as usize))
 }
 
 pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
@@ -255,28 +284,16 @@ fn play_audio(
 
 pub fn play_music(opt: PlayMusicOpt) -> Result<()> {
     let iso = open_iso_optional(opt.iso.as_ref())?;
-    let reader = BufReader::new(iso_into_entry_or_file(iso, &opt.path)?);
-    let name = opt.path.file_name().unwrap().to_string_lossy();
+    let path = if iso.is_some() {
+        find_music(opt.name.to_str().unwrap())?
+    } else {
+        opt.name.to_str().unwrap().to_owned()
+    };
+    let name = Path::new(&path).file_name().unwrap().to_string_lossy();
+    let reader = BufReader::new(iso_into_entry_or_file(iso, &path)?);
     let hps = HpsReader::new(reader, name)?;
     play_audio(hps.decoder(), opt.playback)?;
     Ok(())
-}
-
-/// Finds a sound event by name and returns a `(bank, index)` pair for its sound.
-fn find_sound(events: &EventBank, name: &str) -> Result<(SoundBankId, usize)> {
-    let def = match SOUND_EVENTS.iter().find(|e| unicase::eq(e.name, name)) {
-        Some(def) => def,
-        None => bail!("unknown sound event: \"{}\"", name),
-    };
-    let index = def.id.index();
-    let sound = match events.events[index].sound_id() {
-        Some(id) => Sound::try_from(id).unwrap(),
-        None => bail!("sound event \"{}\" does not play a sound", def.name),
-    };
-    let bank = SoundBankDefinition::get(def.id.bank());
-    let bank_index = u32::from(sound) - bank.sound_base;
-    debug!("Resolved sound \"{}\": bank={}, index={}", name, bank.name, bank_index);
-    Ok((bank.id, bank_index as usize))
 }
 
 pub fn play_sound(opt: PlaySoundOpt) -> Result<()> {
