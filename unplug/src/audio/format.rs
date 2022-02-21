@@ -173,6 +173,7 @@ impl<T: StaticFormat> DynamicFormat for T {
 pub trait ExtendSamples: DynamicFormat {
     /// Appends the sample data described by `src` and `src_params` to the sample data described by
     /// `dest` and `dest_params`.
+    #[allow(clippy::ptr_arg)]
     fn extend_samples(
         dest: &mut Cow<'_, [Self::Data]>,
         dest_params: &mut Self::Params,

@@ -327,7 +327,7 @@ impl DataSection {
 
             section.seek(SeekFrom::Start(start_offset as u64))?;
             let mut data = vec![];
-            (&mut section).take(size as u64).read_to_end(&mut data)?;
+            section.by_ref().take(size as u64).read_to_end(&mut data)?;
             if data.len() != size {
                 return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
             }

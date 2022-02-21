@@ -19,7 +19,7 @@ impl<R: ReadSeek> ArchiveReader<R> {
         buf.seek(SeekFrom::Start(0))?;
         let header = Header::read_from(&mut buf)?;
         buf.seek(SeekFrom::Start(header.fst_offset as u64))?;
-        let fst = FileStringTable::read_from(&mut (&mut buf).take(header.fst_size as u64))?;
+        let fst = FileStringTable::read_from(&mut buf.by_ref().take(header.fst_size as u64))?;
         Ok(Self { reader: buf.into_inner(), files: FileTree::from_fst(&fst)? })
     }
 }

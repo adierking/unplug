@@ -400,26 +400,26 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Stage {
 
         header.objects_offset = writer.seek(SeekFrom::Current(0))? as u32;
         assert!(header.objects_offset == EXPECTED_OBJECTS_OFFSET);
-        NonNoneList((&self.objects).into()).write_to(writer)?;
+        NonNoneList(self.objects.as_slice().into()).write_to(writer)?;
 
         header.events_offset = writer.seek(SeekFrom::Current(0))? as u32;
         let mut events = EventTable { entry_points: vec![0; self.objects.len()] };
         events.write_to(writer)?;
 
         header.actors_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        NonNoneList((&self.actors).into()).write_to(writer)?;
+        NonNoneList(self.actors.as_slice().into()).write_to(writer)?;
 
         if !self.unk_28.is_empty() {
             header.unk_28_offset = NonZeroU32::new(writer.seek(SeekFrom::Current(0))? as u32);
-            NonNoneList((&self.unk_28).into()).write_to(writer)?;
+            NonNoneList(self.unk_28.as_slice().into()).write_to(writer)?;
         }
         if !self.unk_2c.is_empty() {
             header.unk_2c_offset = NonZeroU32::new(writer.seek(SeekFrom::Current(0))? as u32);
-            NonNoneList((&self.unk_2c).into()).write_to(writer)?;
+            NonNoneList(self.unk_2c.as_slice().into()).write_to(writer)?;
         }
         if !self.unk_30.is_empty() {
             header.unk_30_offset = NonZeroU32::new(writer.seek(SeekFrom::Current(0))? as u32);
-            NonNoneList((&self.unk_30).into()).write_to(writer)?;
+            NonNoneList(self.unk_30.as_slice().into()).write_to(writer)?;
         }
 
         let mut script_writer = ScriptWriter::new(&self.script, &mut writer);

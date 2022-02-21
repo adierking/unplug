@@ -155,7 +155,7 @@ impl<S: ReadSeek> DiscStream<S> {
         let header = DiscHeader::read_from(&mut stream)?;
         debug!("Found FST at {:#x} (size = {:#x})", header.fst_offset, header.fst_size);
         stream.seek(SeekFrom::Start(header.fst_offset as u64))?;
-        let fst = FileStringTable::read_from(&mut (&mut stream).take(header.fst_size as u64))?;
+        let fst = FileStringTable::read_from(&mut stream.by_ref().take(header.fst_size as u64))?;
         let free_regions = Self::find_free_regions(&header, &fst);
         let files = FileTree::from_fst(&fst)?;
         Ok(Self { header: header.into(), free_regions, stream: stream.into_inner(), files })
