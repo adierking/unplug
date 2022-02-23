@@ -431,10 +431,12 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
     }
 
     fn data_remaining(&self) -> Option<u64> {
-        let samples_per_frame = SAMPLES_PER_FRAME as u64;
         let num_samples = self.total_samples?.get() - self.samples_encoded;
-        let num_frames = (num_samples + samples_per_frame - 1) / samples_per_frame;
-        Some(num_samples + num_frames * 2)
+        if num_samples > 0 {
+            Some(GcAdpcm::sample_to_address(num_samples as usize) as u64)
+        } else {
+            Some(0)
+        }
     }
 
     fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {

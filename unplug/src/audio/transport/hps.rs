@@ -4,7 +4,7 @@ mod writer;
 pub use reader::*;
 pub use writer::*;
 
-use crate::audio::format::adpcm;
+use crate::audio::format::adpcm::{self, GcAdpcm};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::{Error, Result};
 use crate::common::{align, ReadFrom, WriteTo};
@@ -139,11 +139,7 @@ const BLOCK_HEADER_SIZE: usize = 0x20;
 fn num_samples(end_address: u32, format: DspFormat) -> u64 {
     let len = end_address as usize + 1;
     match format {
-        DspFormat::Adpcm => {
-            let bytes = (len + 1) / 2;
-            let num_frames = (bytes + adpcm::BYTES_PER_FRAME - 1) / adpcm::BYTES_PER_FRAME;
-            (len - len.min(num_frames * 2)) as u64
-        }
+        DspFormat::Adpcm => GcAdpcm::address_to_sample(len) as u64,
         DspFormat::Pcm16 | DspFormat::Pcm8 => len as u64,
     }
 }

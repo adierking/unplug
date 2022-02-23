@@ -14,9 +14,28 @@ use std::io::{Read, Write};
 
 pub const SAMPLES_PER_FRAME: usize = 14;
 pub const BYTES_PER_FRAME: usize = 8;
+pub const NIBBLES_PER_FRAME: usize = BYTES_PER_FRAME * 2;
 
 #[derive(Copy, Clone)]
 pub struct GcAdpcm;
+
+impl GcAdpcm {
+    /// Converts an ADPCM address to a sample index.
+    pub fn address_to_sample(mut address: usize) -> usize {
+        if address & (NIBBLES_PER_FRAME - 1) < 2 {
+            // Push the address past a frame boundary
+            address = (address & !(NIBBLES_PER_FRAME - 1)) + 2;
+        }
+        let num_frames = address / NIBBLES_PER_FRAME + 1;
+        address - num_frames * 2
+    }
+
+    /// Converts a sample index to an ADPCM address.
+    pub fn sample_to_address(sample: usize) -> usize {
+        let num_frames = sample / SAMPLES_PER_FRAME + 1;
+        sample + num_frames * 2
+    }
+}
 
 impl FormatTag for GcAdpcm {
     type Data = u8;
@@ -161,6 +180,28 @@ mod tests {
             gain: 0,
             context: FrameContext { predictor_and_scale, last_samples: [0; 2] },
         }
+    }
+
+    #[test]
+    fn test_address_to_sample() {
+        assert_eq!(GcAdpcm::address_to_sample(0x0), 0);
+        assert_eq!(GcAdpcm::address_to_sample(0x1), 0);
+        assert_eq!(GcAdpcm::address_to_sample(0x2), 0);
+        assert_eq!(GcAdpcm::address_to_sample(0x3), 1);
+        assert_eq!(GcAdpcm::address_to_sample(0xf), 13);
+        assert_eq!(GcAdpcm::address_to_sample(0x10), 14);
+        assert_eq!(GcAdpcm::address_to_sample(0x11), 14);
+        assert_eq!(GcAdpcm::address_to_sample(0x12), 14);
+        assert_eq!(GcAdpcm::address_to_sample(0x13), 15);
+    }
+
+    #[test]
+    fn test_sample_to_address() {
+        assert_eq!(GcAdpcm::sample_to_address(0), 0x2);
+        assert_eq!(GcAdpcm::sample_to_address(1), 0x3);
+        assert_eq!(GcAdpcm::sample_to_address(13), 0xf);
+        assert_eq!(GcAdpcm::sample_to_address(14), 0x12);
+        assert_eq!(GcAdpcm::sample_to_address(15), 0x13);
     }
 
     #[test]

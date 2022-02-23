@@ -95,12 +95,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
     }
 
     fn data_remaining(&self) -> Option<u64> {
-        self.source.data_remaining().map(|len| {
-            let bytes = (len + 1) / 2;
-            let bytes_per_frame = BYTES_PER_FRAME as u64;
-            let num_frames = (bytes + bytes_per_frame - 1) / bytes_per_frame;
-            len - len.min(num_frames * 2)
-        })
+        self.source.data_remaining().map(|len| GcAdpcm::address_to_sample(len as usize) as u64)
     }
 
     fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
