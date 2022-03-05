@@ -31,7 +31,7 @@ struct HpsState {
     blocks: Vec<BlockInfo>,
 }
 
-/// An HPS audio stream.
+/// Reads HAL program stream audio from a .hps file.
 pub struct HpsReader<'r> {
     reader: Arc<Mutex<Box<dyn ReadSeek + 'r>>>,
     state: Arc<HpsState>,
@@ -40,8 +40,8 @@ pub struct HpsReader<'r> {
 }
 
 impl<'r> HpsReader<'r> {
-    /// Opens an HPS stream read from `reader`. `tag` is a string or tag to identify the stream for
-    /// debugging purposes.
+    /// Opens a program stream read from `reader`. `tag` is a string or tag to identify the stream
+    /// for debugging purposes.
     pub fn new(reader: impl ReadSeek + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
         Self::new_impl(Box::from(reader), tag.into())
     }
@@ -80,7 +80,7 @@ impl<'r> HpsReader<'r> {
         }
 
         debug!(
-            "Loaded HPS stream {:?}: {} Hz, {}, {} blocks",
+            "Loaded program stream {:?}: {} Hz, {}, {} blocks",
             tag,
             header.sample_rate,
             if channels.len() == 2 { "stereo" } else { "mono" },
@@ -168,7 +168,7 @@ impl<'r> HpsReader<'r> {
     }
 }
 
-/// Reads sample data from a single HPS channel.
+/// Reads sample data from a single program stream channel.
 pub struct ChannelReader<'r> {
     reader: Arc<Mutex<Box<dyn ReadSeek + 'r>>>,
     state: Arc<HpsState>,
@@ -220,9 +220,9 @@ impl ReadSamples<'static> for ChannelReader<'_> {
                 .cast(),
             )),
 
-            // Chibi-Robo's engine doesn't actually play HPS files with non-ADPCM samples correctly,
-            // but the format *technically* should support it and there's even some code referencing
-            // other formats...
+            // Chibi-Robo's engine doesn't actually play program streams with non-ADPCM samples
+            // correctly, but the format *technically* should support it and there's even some code
+            // referencing other formats...
             DspFormat::Pcm16 => {
                 let samples = PcmS16Be::read_bytes(&data[..(len * 2)])?;
                 Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1, rate).cast()))
@@ -255,7 +255,7 @@ impl ReadSamples<'static> for ChannelReader<'_> {
     }
 }
 
-/// An iterator over the cues in an HPS stream.
+/// An iterator over the cues in a program stream.
 pub struct CueIterator {
     state: Arc<HpsState>,
     /// The index of the block to loop back to at the end of the stream.

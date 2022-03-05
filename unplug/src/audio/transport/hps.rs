@@ -13,7 +13,7 @@ use std::fmt::Debug;
 use std::io::{Read, Write};
 use unplug_proc::{ReadFrom, WriteTo};
 
-/// The magic string at the beginning of an HPS file.
+/// The magic string at the beginning of an HPS file. (HALPST = HAL Program STream)
 const HPS_MAGIC: [u8; 8] = *b" HALPST\0";
 
 /// The offset of the first block in an HPS file.

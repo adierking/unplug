@@ -12,7 +12,7 @@ use tracing::{instrument, warn};
 
 type ProgressCallback<'a> = Box<dyn FnMut(Option<ProgressHint>) + 'a>;
 
-/// A channel within an HPS block.
+/// A channel within a program stream block.
 struct BlockChannel {
     /// Initial playback parameters.
     initial_context: adpcm::FrameContext,
@@ -27,7 +27,7 @@ impl BlockChannel {
     }
 }
 
-/// A block within an HPS stream.
+/// A block within a program stream.
 struct Block {
     /// The end address of the audio data in the block.
     end_address: u32,
@@ -114,9 +114,9 @@ impl Block {
     }
 }
 
-/// Builds an HPS stream by reading and encoding PCM sample data. The encoding actually takes place
-/// in two steps: a "preparation" step where the audio samples are gathered and analyzed, and then
-/// the actual writing step which is driven by the `HpsWriter` that `prepare()` returns.
+/// Builds a program stream by reading and encoding PCM sample data. The encoding actually takes
+/// place in two steps: a "preparation" step where the audio samples are gathered and analyzed, and
+/// then the actual writing step which is driven by the `HpsWriter` that `prepare()` returns.
 pub struct PcmHpsWriter<'r, 's> {
     reader: Box<dyn ReadSamples<'s, Format = PcmS16Le> + 'r>,
     on_progress: Option<ProgressCallback<'r>>,
@@ -168,8 +168,8 @@ pub enum Looping {
     Auto,
 }
 
-/// Writes out an HPS stream from ADPCM sample data. Use `PcmHpsBuilder` to create a writer for PCM
-/// samples.
+/// Writes out a program stream from ADPCM sample data. Use `PcmHpsBuilder` to create a writer for
+/// PCM samples.
 pub struct HpsWriter<'r, 's> {
     left: AdpcmReader<'r, 's>,
     right: Option<AdpcmReader<'r, 's>>,
@@ -233,12 +233,12 @@ impl<'r, 's> HpsWriter<'r, 's> {
         self
     }
 
-    /// Finishes building the HPS stream and writes it out to `writer`.
+    /// Finishes building the program stream and writes it out to `writer`.
     pub fn write_to(self, mut writer: impl WriteSeek) -> Result<()> {
         self.write_to_impl(&mut writer)
     }
 
-    /// Reads all samples and builds the final HPS stream.
+    /// Reads all samples and builds the final program stream.
     fn write_to_impl(mut self, writer: &mut dyn WriteSeek) -> Result<()> {
         self.update_progress();
         self.collect_cues();
