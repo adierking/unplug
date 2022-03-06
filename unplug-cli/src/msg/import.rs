@@ -15,9 +15,9 @@ use std::mem;
 use std::path::Path;
 use std::str;
 use tempfile::NamedTempFile;
-use unplug::common::{SoundId, Text, WriteTo};
+use unplug::common::{SfxId, Text, WriteTo};
 use unplug::data::music::MUSIC;
-use unplug::data::sound_event::SOUND_EVENTS;
+use unplug::data::sfx::SFX;
 use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
 use unplug::dvd::ArchiveBuilder;
 use unplug::event::msg::*;
@@ -58,13 +58,13 @@ fn parse_yes_no(string: &str) -> Result<bool> {
 }
 
 /// Parses a sound or music name into a `SoundId`.
-fn parse_sound(name: &str) -> Result<SoundId> {
+fn parse_sound(name: &str) -> Result<SfxId> {
     for music in MUSIC {
         if unicase::eq(music.name, name) {
             return Ok(music.id.into());
         }
     }
-    for sound in SOUND_EVENTS {
+    for sound in SFX {
         if unicase::eq(sound.name, name) {
             return Ok(sound.id.into());
         }
@@ -654,7 +654,7 @@ mod tests {
     use super::*;
 
     use std::io::Cursor;
-    use unplug::data::{Music, SoundEvent};
+    use unplug::data::{Music, Sfx};
 
     fn cmd(xml: &[u8]) -> Result<MsgCommand> {
         let mut reader = MessageReader::new(Cursor::new(xml));
@@ -693,10 +693,10 @@ mod tests {
 
     #[test]
     fn test_parse_sound() -> Result<()> {
-        assert_eq!(parse_sound("elec")?, SoundId::Sound(SoundEvent::Elec));
-        assert_eq!(parse_sound("ElEc")?, SoundId::Sound(SoundEvent::Elec));
-        assert_eq!(parse_sound("bgm_night")?, SoundId::Music(Music::BgmNight));
-        assert_eq!(parse_sound("BgM_NiGhT")?, SoundId::Music(Music::BgmNight));
+        assert_eq!(parse_sound("elec")?, SfxId::Sound(Sfx::Elec));
+        assert_eq!(parse_sound("ElEc")?, SfxId::Sound(Sfx::Elec));
+        assert_eq!(parse_sound("bgm_night")?, SfxId::Music(Music::BgmNight));
+        assert_eq!(parse_sound("BgM_NiGhT")?, SfxId::Music(Music::BgmNight));
         assert!(parse_sound("foo").is_err());
         Ok(())
     }

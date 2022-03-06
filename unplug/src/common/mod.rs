@@ -3,7 +3,7 @@ mod list;
 mod math;
 mod read_write;
 mod region;
-mod sound_id;
+mod sfx_id;
 
 pub mod endian;
 pub mod io;
@@ -15,6 +15,6 @@ pub use list::*;
 pub use math::*;
 pub use read_write::*;
 pub use region::*;
-pub use sound_id::*;
+pub use sfx_id::*;
 pub use string_table::StringTable;
 pub use text::Text;

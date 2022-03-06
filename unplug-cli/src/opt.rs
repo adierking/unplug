@@ -481,7 +481,7 @@ pub struct PlaySoundOpt {
     #[structopt(long, value_name("PATH"), parse(from_os_str))]
     pub iso: PathBuf,
 
-    /// Name of the sound event to play
+    /// Name of the sound effect to play
     #[structopt(value_name("NAME"))]
     pub sound: String,
 

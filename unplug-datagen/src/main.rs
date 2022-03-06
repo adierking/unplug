@@ -143,11 +143,11 @@ const SFX_GROUPS_FILE_NAME: &str = "sfx_groups.inc.rs";
 const SFX_GROUPS_HEADER: &str = "declare_sfx_groups! {\n";
 const SFX_GROUPS_FOOTER: &str = "}\n";
 
-const SOUND_EVENTS_FILE_NAME: &str = "sound_events.inc.rs";
-const SOUND_EVENTS_HEADER: &str = "declare_sound_events! {\n";
-const SOUND_EVENTS_FOOTER: &str = "}\n";
+const SFX_FILE_NAME: &str = "sfx.inc.rs";
+const SFX_HEADER: &str = "declare_sfx! {\n";
+const SFX_FOOTER: &str = "}\n";
 
-const SOUNDS_FILE_NAME: &str = "sfx_samples.inc.rs";
+const SFX_SAMPLES_FILE_NAME: &str = "sfx_samples.inc.rs";
 const SFX_SAMPLES_HEADER: &str = "declare_sfx_samples! {\n";
 const SFX_SAMPLES_FOOTER: &str = "}\n";
 
@@ -779,37 +779,37 @@ fn read_sfx_groups(
     Ok(groups)
 }
 
-/// Representation of a sound event which is written to the generated source.
-struct SoundEventDefinition {
+/// Representation of a sound effect which is written to the generated source.
+struct SfxDefinition {
     id: u32,
     label: Label,
     name: String,
 }
 
-/// Builds the sound event list by matching sounds in a BRSAR with a playlist.
-fn build_sound_events(
+/// Builds the SFX list by matching sounds in a BRSAR with a playlist.
+fn build_sfx(
     playlist: &SfxPlaylist,
     brsar: &Brsar,
     groups: &[SfxGroupDefinition],
-) -> Vec<SoundEventDefinition> {
+) -> Vec<SfxDefinition> {
     #[derive(Default, Copy, Clone)]
-    struct BankState {
+    struct GroupState {
         next_id: u32,
         end_id: u32,
     }
 
     // Compute each bank's starting ID and ending ID. NPC has sounds that the GCN version doesn't,
     // so we have to make sure not to emit definitions for extra sounds.
-    let mut states = vec![BankState::default(); groups.len()];
-    let mut end_event = playlist.sounds.len() as u32;
+    let mut states = vec![GroupState::default(); groups.len()];
+    let mut end_index = playlist.sounds.len() as u32;
     for (id, &base) in playlist.group_indexes.iter().enumerate().rev() {
         states[id].next_id = (id as u32) << 16;
-        states[id].end_id = states[id].next_id + end_event - base;
-        end_event = base;
+        states[id].end_id = states[id].next_id + end_index - base;
+        end_index = base;
     }
 
     // Build a map of collection indexes to bank indexes
-    let mut collection_to_bank: HashMap<u32, usize> = HashMap::new();
+    let mut collection_to_group: HashMap<u32, usize> = HashMap::new();
     for (i, collection) in brsar.collections.iter().enumerate() {
         if !collection.groups.is_empty() {
             let group_index = collection.groups[0].index;
@@ -817,11 +817,11 @@ fn build_sound_events(
             let group_name = brsar.symbol(group.name_index);
             let bank_name = SFX_GROUPS.iter().find(|&&(_, g)| g == group_name);
             if let Some(&(name, _)) = bank_name {
-                let bank_def = groups.iter().find(|b| b.name == name).unwrap();
-                let bank_index = bank_def.id as usize;
-                collection_to_bank.insert(i as u32, bank_index);
+                let group_def = groups.iter().find(|b| b.name == name).unwrap();
+                let group_index = group_def.id as usize;
+                collection_to_group.insert(i as u32, group_index);
             } else {
-                warn!("No bank found for group \"{}\"", group_name);
+                warn!("No GCN group found for Wii group \"{}\"", group_name);
             }
         }
     }
@@ -830,7 +830,7 @@ fn build_sound_events(
     // that the order sounds are stored in the BRSAR matches the order of the sounds in the .sem.
     let mut defs = Vec::with_capacity(playlist.sounds.len());
     for sound in &brsar.sounds {
-        if let Some(&bank_id) = collection_to_bank.get(&sound.collection_index) {
+        if let Some(&bank_id) = collection_to_group.get(&sound.collection_index) {
             let bank = &mut states[bank_id];
             if bank.next_id < bank.end_id {
                 // Convert sound names to lowercase. While the names in the BRSAR are in uppercase,
@@ -838,7 +838,7 @@ fn build_sound_events(
                 // names more consistent with everything else.
                 let name = brsar.symbol(sound.name_index).to_lowercase();
                 let label = Label::from_string_lossy(&name);
-                defs.push(SoundEventDefinition { id: bank.next_id, label, name });
+                defs.push(SfxDefinition { id: bank.next_id, label, name });
                 bank.next_id += 1;
             }
         }
@@ -850,7 +850,7 @@ fn build_sound_events(
         while bank.next_id < bank.end_id {
             let name = format!("unk_{:>06x}", bank.next_id);
             let label = Label::from_string_lossy(&name);
-            defs.push(SoundEventDefinition { id: bank.next_id, label, name });
+            defs.push(SfxDefinition { id: bank.next_id, label, name });
             bank.next_id += 1;
         }
     }
@@ -868,14 +868,14 @@ struct SfxSampleDefinition {
 /// Builds the sample list by matching effect names.
 fn build_sfx_samples(
     playlist: &SfxPlaylist,
-    event_defs: &[SoundEventDefinition],
+    sfx_defs: &[SfxDefinition],
 ) -> Vec<SfxSampleDefinition> {
-    let mut defs: Vec<SfxSampleDefinition> = Vec::with_capacity(event_defs.len());
-    for (event, def) in playlist.sounds.iter().zip(event_defs) {
+    let mut defs: Vec<SfxSampleDefinition> = Vec::with_capacity(sfx_defs.len());
+    for (sfx, def) in playlist.sounds.iter().zip(sfx_defs) {
         if DUPLICATE_SOUND_DISCARDS.is_match(&def.name) {
             continue;
         }
-        if let Some(id) = event.sample_id() {
+        if let Some(id) = sfx.sample_id() {
             defs.push(SfxSampleDefinition { id, label: def.label.clone(), name: def.name.clone() });
         }
     }
@@ -974,13 +974,13 @@ fn write_sfx_groups(mut writer: impl Write, groups: &[SfxGroupDefinition]) -> Re
     Ok(())
 }
 
-/// Writes the list of sound events to the generated file.
-fn write_sound_events(mut writer: impl Write, events: &[SoundEventDefinition]) -> Result<()> {
-    write!(writer, "{}{}", GEN_HEADER_BRSAR, SOUND_EVENTS_HEADER)?;
-    for event in events {
-        writeln!(writer, "    0x{:>06x} => {} {{ \"{}\" }},", event.id, event.label.0, event.name)?;
+/// Writes the list of sound effects to the generated file.
+fn write_sfx(mut writer: impl Write, sfx_defs: &[SfxDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER_BRSAR, SFX_HEADER)?;
+    for sfx in sfx_defs {
+        writeln!(writer, "    0x{:>06x} => {} {{ \"{}\" }},", sfx.id, sfx.label.0, sfx.name)?;
     }
-    write!(writer, "{}", SOUND_EVENTS_FOOTER)?;
+    write!(writer, "{}", SFX_FOOTER)?;
     writer.flush()?;
     Ok(())
 }
@@ -1026,17 +1026,17 @@ fn run_app() -> Result<()> {
     };
 
     info!("Reading SFX groups");
-    let banks = read_sfx_groups(&mut iso, &playlist)?;
+    let sfx_groups = read_sfx_groups(&mut iso, &playlist)?;
 
-    let mut sound_events = vec![];
-    let mut sounds = vec![];
+    let mut sfx = vec![];
+    let mut sfx_samples = vec![];
     if let Some(brsar_path) = options.brsar {
         info!("Reading BRSAR");
         let mut brsar_reader = BufReader::new(File::open(&brsar_path)?);
         let brsar = Brsar::read_from(&mut brsar_reader)?;
-        info!("Matching sound event names");
-        sound_events = build_sound_events(&playlist, &brsar, &banks);
-        sounds = build_sfx_samples(&playlist, &sound_events);
+        info!("Matching sound effect names");
+        sfx = build_sfx(&playlist, &brsar, &sfx_groups);
+        sfx_samples = build_sfx_samples(&playlist, &sfx);
     }
 
     let metadata = {
@@ -1113,23 +1113,23 @@ fn run_app() -> Result<()> {
     let music_writer = BufWriter::new(File::create(music_path)?);
     write_music(music_writer, &music)?;
 
-    let sound_banks_path = out_dir.join(SFX_GROUPS_FILE_NAME);
-    info!("Writing {}", sound_banks_path.display());
-    let sound_banks_writer = BufWriter::new(File::create(sound_banks_path)?);
-    write_sfx_groups(sound_banks_writer, &banks)?;
+    let sfx_groups_path = out_dir.join(SFX_GROUPS_FILE_NAME);
+    info!("Writing {}", sfx_groups_path.display());
+    let sfx_groups_writer = BufWriter::new(File::create(sfx_groups_path)?);
+    write_sfx_groups(sfx_groups_writer, &sfx_groups)?;
 
-    if !sound_events.is_empty() {
-        let sound_events_path = out_dir.join(SOUND_EVENTS_FILE_NAME);
-        info!("Writing {}", sound_events_path.display());
-        let sound_events_writer = BufWriter::new(File::create(sound_events_path)?);
-        write_sound_events(sound_events_writer, &sound_events)?;
+    if !sfx.is_empty() {
+        let sfx_path = out_dir.join(SFX_FILE_NAME);
+        info!("Writing {}", sfx_path.display());
+        let sfx_writer = BufWriter::new(File::create(sfx_path)?);
+        write_sfx(sfx_writer, &sfx)?;
     }
 
-    if !sounds.is_empty() {
-        let sounds_path = out_dir.join(SOUNDS_FILE_NAME);
-        info!("Writing {}", sounds_path.display());
-        let sounds_writer = BufWriter::new(File::create(sounds_path)?);
-        write_sfx_samples(sounds_writer, &sounds)?;
+    if !sfx_samples.is_empty() {
+        let sfx_samples_path = out_dir.join(SFX_SAMPLES_FILE_NAME);
+        info!("Writing {}", sfx_samples_path.display());
+        let sfx_samples_writer = BufWriter::new(File::create(sfx_samples_path)?);
+        write_sfx_samples(sfx_samples_writer, &sfx_samples)?;
     }
 
     Ok(())

@@ -17,9 +17,9 @@ use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SfxBank, WavRea
 use unplug::audio::ReadSamples;
 use unplug::common::{ReadFrom, ReadSeek};
 use unplug::data::music::MUSIC;
+use unplug::data::sfx::{PLAYLIST_PATH, SFX};
 use unplug::data::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
-use unplug::data::sound_event::{EVENT_BANK_PATH, SOUND_EVENTS};
 use unplug::dvd::OpenFile;
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
@@ -94,21 +94,21 @@ fn find_music(name: &str) -> Result<String> {
     Ok(path)
 }
 
-/// Finds a sound effect by name and returns a `(group, index)` pair for its sound.
+/// Finds a sound effect by name and returns a `(group, index)` pair.
 fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SfxGroup, usize)> {
-    let def = match SOUND_EVENTS.iter().find(|e| unicase::eq(e.name, name)) {
+    let def = match SFX.iter().find(|e| unicase::eq(e.name, name)) {
         Some(def) => def,
         None => bail!("unknown sound effect: \"{}\"", name),
     };
-    let index = def.id.index();
+    let index = def.id.material_index();
     let sample = match playlist.sounds[index].sample_id() {
         Some(id) => SfxSample::try_from(id).unwrap(),
         None => bail!("sound effect \"{}\" does not have an associated sample", def.name),
     };
     let group = SfxGroupDefinition::get(def.id.group());
-    let bank_index = u32::from(sample) - group.first_sample;
-    debug!("Resolved sound \"{}\": group={}, index={}", name, group.name, bank_index);
-    Ok((group.id, bank_index as usize))
+    let sample_index = u32::from(sample) - group.first_sample;
+    debug!("Resolved sound \"{}\": group={}, index={}", name, group.name, sample_index);
+    Ok((group.id, sample_index as usize))
 }
 
 pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
@@ -299,7 +299,7 @@ pub fn play_music(opt: PlayMusicOpt) -> Result<()> {
 pub fn play_sound(opt: PlaySoundOpt) -> Result<()> {
     let mut iso = open_iso_optional(Some(opt.iso))?.unwrap();
     let playlist = {
-        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), EVENT_BANK_PATH)?);
+        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), PLAYLIST_PATH)?);
         SfxPlaylist::read_from(&mut reader)?
     };
     let (group, index) = find_sound(&playlist, &opt.sound)?;

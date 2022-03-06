@@ -1,6 +1,6 @@
 use super::opcodes::*;
 use crate::common::text::{self, Text};
-use crate::common::{ReadFrom, SoundId, WriteTo};
+use crate::common::{ReadFrom, SfxId, WriteTo};
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -75,7 +75,7 @@ pub enum MsgCommand {
     /// Plays an animation.
     Anim(MsgAnimArgs),
     /// Plays a sound effect.
-    Sfx(SoundId, MsgSfxType),
+    Sfx(SfxId, MsgSfxType),
     /// Sets the voice to play.
     Voice(Voice),
     /// Sets the index of the default option in a `Select` command.
@@ -184,7 +184,7 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
                 MSG_WAIT => Some(MsgCommand::Wait(MsgWaitType::read_from(reader)?)),
                 MSG_ANIM => Some(MsgCommand::Anim(MsgAnimArgs::read_from(reader)?)),
                 MSG_SFX => {
-                    let sound = match SoundId::try_from(reader.read_u32::<LE>()?) {
+                    let sound = match SfxId::try_from(reader.read_u32::<LE>()?) {
                         Ok(sound) => sound,
                         Err(id) => return Err(Error::UnrecognizedSound(id)),
                     };
@@ -833,7 +833,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_msg() {
-        let sfx = SoundId::Music(Music::Bgm);
+        let sfx = SfxId::Music(Music::Bgm);
         assert_write_and_read!(msg(MsgCommand::Speed(1)));
         assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::Time(1))));
         assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::AtcMenu)));
