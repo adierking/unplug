@@ -11,7 +11,7 @@ use std::path::Path;
 use std::time::Instant;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
-use unplug::audio::metadata::EventBank;
+use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
@@ -94,16 +94,16 @@ fn find_music(name: &str) -> Result<String> {
     Ok(path)
 }
 
-/// Finds a sound event by name and returns a `(bank, index)` pair for its sound.
-fn find_sound(events: &EventBank, name: &str) -> Result<(SoundBankId, usize)> {
+/// Finds a sound effect by name and returns a `(bank, index)` pair for its sound.
+fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SoundBankId, usize)> {
     let def = match SOUND_EVENTS.iter().find(|e| unicase::eq(e.name, name)) {
         Some(def) => def,
-        None => bail!("unknown sound event: \"{}\"", name),
+        None => bail!("unknown sound effect: \"{}\"", name),
     };
     let index = def.id.index();
-    let sound = match events.events[index].sound_id() {
+    let sound = match playlist.sounds[index].sample_id() {
         Some(id) => Sound::try_from(id).unwrap(),
-        None => bail!("sound event \"{}\" does not play a sound", def.name),
+        None => bail!("sound effect \"{}\" does not have an associated sample", def.name),
     };
     let bank = SoundBankDefinition::get(def.id.bank());
     let bank_index = u32::from(sound) - bank.sound_base;
@@ -298,11 +298,11 @@ pub fn play_music(opt: PlayMusicOpt) -> Result<()> {
 
 pub fn play_sound(opt: PlaySoundOpt) -> Result<()> {
     let mut iso = open_iso_optional(Some(opt.iso))?.unwrap();
-    let events = {
+    let playlist = {
         let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), EVENT_BANK_PATH)?);
-        EventBank::read_from(&mut reader)?
+        SfxPlaylist::read_from(&mut reader)?
     };
-    let (bank_id, index) = find_sound(&events, &opt.sound)?;
+    let (bank_id, index) = find_sound(&playlist, &opt.sound)?;
     let bank_def = SoundBankDefinition::get(bank_id);
     let bank = {
         let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), bank_def.path())?);

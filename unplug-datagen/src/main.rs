@@ -33,7 +33,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::process;
-use unplug::audio::metadata::sem::EventBank;
+use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::Brsar;
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek};
 use unplug::data::stage::GLOBALS_PATH;
@@ -101,7 +101,7 @@ const SOUND_BANKS: &[(&str, &str)] = &[
 const SOUND_BANK_DIR: &str = "qp";
 const SOUND_BANK_PREFIX: &str = "sfx_";
 const SOUND_BANK_EXT: &str = ".ssm";
-const SOUND_EVENTS_PATH: &str = "qp/sfx_sample.sem";
+const SOUND_PLAYLIST_PATH: &str = "qp/sfx_sample.sem";
 
 const UNPLUG_DATA_PATH: &str = "unplug-data";
 const SRC_DIR_NAME: &str = "src";
@@ -744,14 +744,14 @@ struct SoundBankDefinition {
     id: i16,
     label: Label,
     sound_base: u32,
-    event_base: u32,
+    playlist_base: u32,
     name: String,
 }
 
 /// Reads sound bank information from the ISO.
 fn read_sound_banks(
     disc: &mut DiscStream<impl ReadSeek>,
-    events: &EventBank,
+    playlist: &SfxPlaylist,
 ) -> Result<Vec<SoundBankDefinition>> {
     let mut bank_bases: Vec<(&'static str, u32)> = vec![];
     for &(name, _) in SOUND_BANKS {
@@ -764,15 +764,15 @@ fn read_sound_banks(
     bank_bases.sort_unstable_by_key(|(_, b)| *b);
 
     let mut banks = vec![];
-    for (id, ((name, sound_base), &event_base)) in
-        bank_bases.into_iter().zip(&events.group_bases).enumerate()
+    for (id, ((name, sound_base), &playlist_base)) in
+        bank_bases.into_iter().zip(&playlist.group_indexes).enumerate()
     {
         let label = Label::from_string_lossy(name.strip_prefix(SOUND_BANK_PREFIX).unwrap());
         banks.push(SoundBankDefinition {
             id: id as i16,
             label,
             sound_base,
-            event_base,
+            playlist_base,
             name: name.to_owned(),
         })
     }
@@ -786,9 +786,9 @@ struct SoundEventDefinition {
     name: String,
 }
 
-/// Builds the sound event list by matching sounds in a BRSAR with an event bank.
+/// Builds the sound event list by matching sounds in a BRSAR with a playlist.
 fn build_sound_events(
-    events: &EventBank,
+    playlist: &SfxPlaylist,
     brsar: &Brsar,
     banks: &[SoundBankDefinition],
 ) -> Vec<SoundEventDefinition> {
@@ -801,8 +801,8 @@ fn build_sound_events(
     // Compute each bank's starting ID and ending ID. NPC has sounds that the GCN version doesn't,
     // so we have to make sure not to emit definitions for extra sounds.
     let mut states = vec![BankState::default(); banks.len()];
-    let mut end_event = events.events.len() as u32;
-    for (id, &base) in events.group_bases.iter().enumerate().rev() {
+    let mut end_event = playlist.sounds.len() as u32;
+    for (id, &base) in playlist.group_indexes.iter().enumerate().rev() {
         states[id].next_id = (id as u32) << 16;
         states[id].end_id = states[id].next_id + end_event - base;
         end_event = base;
@@ -827,8 +827,8 @@ fn build_sound_events(
     }
 
     // Look up each sound's corresponding bank and give it the next ID for the bank. It turns out
-    // that the order sounds are stored in the BRSAR matches the order of the events in the .sem.
-    let mut defs = Vec::with_capacity(events.events.len());
+    // that the order sounds are stored in the BRSAR matches the order of the sounds in the .sem.
+    let mut defs = Vec::with_capacity(playlist.sounds.len());
     for sound in &brsar.sounds {
         if let Some(&bank_id) = collection_to_bank.get(&sound.collection_index) {
             let bank = &mut states[bank_id];
@@ -843,7 +843,7 @@ fn build_sound_events(
             }
         }
     }
-    debug!("Found names for {}/{} sound events", defs.len(), events.events.len());
+    debug!("Found names for {}/{} sound effects", defs.len(), playlist.sounds.len());
 
     // Fill in any IDs we somehow missed
     for bank in &mut states {
@@ -865,14 +865,17 @@ struct SoundDefinition {
     name: String,
 }
 
-/// Builds the sound list by matching event names.
-fn build_sounds(events: &EventBank, event_defs: &[SoundEventDefinition]) -> Vec<SoundDefinition> {
+/// Builds the sound list by matching effect names.
+fn build_sounds(
+    playlist: &SfxPlaylist,
+    event_defs: &[SoundEventDefinition],
+) -> Vec<SoundDefinition> {
     let mut defs: Vec<SoundDefinition> = Vec::with_capacity(event_defs.len());
-    for (event, def) in events.events.iter().zip(event_defs) {
+    for (event, def) in playlist.sounds.iter().zip(event_defs) {
         if DUPLICATE_SOUND_DISCARDS.is_match(&def.name) {
             continue;
         }
-        if let Some(id) = event.sound_id() {
+        if let Some(id) = event.sample_id() {
             defs.push(SoundDefinition { id, label: def.label.clone(), name: def.name.clone() });
         }
     }
@@ -963,7 +966,7 @@ fn write_sound_banks(mut writer: impl Write, banks: &[SoundBankDefinition]) -> R
         writeln!(
             writer,
             "    {} => {} {{ 0x{:>04x}, 0x{:>04x}, \"{}\" }},",
-            bank.id, bank.label.0, bank.sound_base, bank.event_base, bank.name
+            bank.id, bank.label.0, bank.sound_base, bank.playlist_base, bank.name
         )?;
     }
     write!(writer, "{}", SOUND_BANKS_FOOTER)?;
@@ -1016,14 +1019,14 @@ fn run_app() -> Result<()> {
     info!("Opening ISO");
     let mut iso = DiscStream::open(File::open(&options.iso)?)?;
 
-    info!("Reading sound events");
-    let events = {
-        let mut reader = BufReader::new(iso.open_file_at(SOUND_EVENTS_PATH)?);
-        EventBank::read_from(&mut reader)?
+    info!("Reading sound playlist");
+    let playlist = {
+        let mut reader = BufReader::new(iso.open_file_at(SOUND_PLAYLIST_PATH)?);
+        SfxPlaylist::read_from(&mut reader)?
     };
 
     info!("Reading sound banks");
-    let banks = read_sound_banks(&mut iso, &events)?;
+    let banks = read_sound_banks(&mut iso, &playlist)?;
 
     let mut sound_events = vec![];
     let mut sounds = vec![];
@@ -1032,8 +1035,8 @@ fn run_app() -> Result<()> {
         let mut brsar_reader = BufReader::new(File::open(&brsar_path)?);
         let brsar = Brsar::read_from(&mut brsar_reader)?;
         info!("Matching sound event names");
-        sound_events = build_sound_events(&events, &brsar, &banks);
-        sounds = build_sounds(&events, &sound_events);
+        sound_events = build_sound_events(&playlist, &brsar, &banks);
+        sounds = build_sounds(&playlist, &sound_events);
     }
 
     let metadata = {

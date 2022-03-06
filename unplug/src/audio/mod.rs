@@ -94,8 +94,8 @@ pub enum Error {
     #[error("audio stream is not stereo")]
     StreamNotStereo,
 
-    #[error("unrecognized event command: {0}")]
-    UnrecognizedEventCommand(u8),
+    #[error("unrecognized playlist command: {0}")]
+    UnrecognizedPlaylistCommand(u8),
 
     #[error("unrecognized sample format: {0}")]
     UnrecognizedSampleFormat(u16),

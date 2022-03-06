@@ -11,10 +11,10 @@ use tracing::debug;
 struct Header {
     _unk_00: u32, // zero
     _unk_04: u32, // zero
-    /// The base index for each event group. Usually these just correspond to each sound bank.
-    group_bases: Vec<u32>,
-    /// The file offsets of the first action in each event.
-    event_offsets: Vec<u32>,
+    /// The base index for each sound group.
+    group_indexes: Vec<u32>,
+    /// The file offsets for each sound material.
+    sound_offsets: Vec<u32>,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for Header {
@@ -27,11 +27,11 @@ impl<R: Read + ?Sized> ReadFrom<R> for Header {
         };
         let num_groups = reader.read_u32::<BE>()?;
         for _ in 0..num_groups {
-            header.group_bases.push(reader.read_u32::<BE>()?);
+            header.group_indexes.push(reader.read_u32::<BE>()?);
         }
-        let num_events = reader.read_u32::<BE>()?;
-        for _ in 0..num_events {
-            header.event_offsets.push(reader.read_u32::<BE>()?);
+        let num_sounds = reader.read_u32::<BE>()?;
+        for _ in 0..num_sounds {
+            header.sound_offsets.push(reader.read_u32::<BE>()?);
         }
         Ok(header)
     }
@@ -43,8 +43,8 @@ impl<R: Read + ?Sized> ReadFrom<R> for Header {
 pub enum Command {
     /// Does nothing except process the delay (if any).
     None = 0,
-    /// Sets the sound to play.
-    Sound = 1,
+    /// Sets the sound sample to play.
+    Sample = 1,
     Unk2 = 2,
     Unk3 = 3,
     Unk4 = 4,
@@ -57,9 +57,9 @@ pub enum Command {
     Unk11 = 11,
     Unk12 = 12,
     Unk13 = 13,
-    /// Ends the event.
-    End1 = 14,
-    /// Also ends the event but sets a different flag than `End1`.
+    /// Ends the sound material.
+    End = 14,
+    /// Also ends the sound material but sets a different flag than `End`.
     End2 = 15,
     Unk16 = 16,
     Unk17 = 17,
@@ -76,7 +76,7 @@ pub enum Command {
     Unk28 = 28,
 }
 
-/// An action to perform as part of an event.
+/// An action to perform as part of a sound effect.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Action {
     /// The command to perform.
@@ -95,14 +95,14 @@ impl<R: Read + ?Sized> ReadFrom<R> for Action {
         let code = (op >> 24) as u8;
         let command = match Command::try_from(code) {
             Ok(c) => c,
-            Err(_) => return Err(Error::UnrecognizedEventCommand(code)),
+            Err(_) => return Err(Error::UnrecognizedPlaylistCommand(code)),
         };
         let (delay, data) = match command {
             // No data
-            Command::None | Command::End1 | Command::End2 => (op & 0xff, 0),
+            Command::None | Command::End | Command::End2 => (op & 0xff, 0),
 
             // 16-bit data
-            Command::Sound
+            Command::Sample
             | Command::Unk2
             | Command::Unk3
             | Command::Unk12
@@ -136,21 +136,21 @@ impl<R: Read + ?Sized> ReadFrom<R> for Action {
     }
 }
 
-/// A sound event in an event bank.
+/// A set of actions describing how to play a sound effect.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Event {
-    /// The actions in the event.
+pub struct SoundMaterial {
+    /// The actions to perform when playing the sound effect.
     pub actions: Vec<Action>,
 }
 
-impl Event {
-    /// Returns the ID of the sound that the event will play, if any.
-    pub fn sound_id(&self) -> Option<u32> {
-        self.actions.iter().find(|a| a.command == Command::Sound).map(|a| a.data.into())
+impl SoundMaterial {
+    /// Returns the ID of the sample that the effect will play, if any.
+    pub fn sample_id(&self) -> Option<u32> {
+        self.actions.iter().find(|a| a.command == Command::Sample).map(|a| a.data.into())
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for Event {
+impl<R: Read + ?Sized> ReadFrom<R> for SoundMaterial {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         // Keep reading until we hit an end command
@@ -158,7 +158,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for Event {
         loop {
             let action = Action::read_from(reader)?;
             actions.push(action);
-            if let Command::End1 | Command::End2 = action.command {
+            if let Command::End | Command::End2 = action.command {
                 break;
             }
         }
@@ -166,30 +166,34 @@ impl<R: Read + ?Sized> ReadFrom<R> for Event {
     }
 }
 
-/// A collection of sound events (.sem).
+/// A sysdolphin sound effect playlist file (.sem) which defines "sound materials" that are divided
+/// into groups for each sample bank. Sound effects are instantiated from sound materials, and an
+/// SFX ID is a concatenation of a 16-bit group index and a 16-bit material index.
+///
+/// (SEM = Sound Effect Materials?)
 #[derive(Debug, Clone)]
-pub struct EventBank {
-    /// The base index for each event group. Usually these just correspond to each sound bank.
-    pub group_bases: Vec<u32>,
-    /// The events in the bank.
-    pub events: Vec<Event>,
+pub struct SfxPlaylist {
+    /// The base index for each sound group.
+    pub group_indexes: Vec<u32>,
+    /// The sound materials in the playlist.
+    pub sounds: Vec<SoundMaterial>,
 }
 
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for EventBank {
+impl<R: Read + Seek + ?Sized> ReadFrom<R> for SfxPlaylist {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let header = Header::read_from(reader)?;
-        let mut events = Vec::with_capacity(header.event_offsets.len());
-        for offset in header.event_offsets {
+        let mut sounds = Vec::with_capacity(header.sound_offsets.len());
+        for offset in header.sound_offsets {
             reader.seek(SeekFrom::Start(offset as u64))?;
-            events.push(Event::read_from(reader)?);
+            sounds.push(SoundMaterial::read_from(reader)?);
         }
         debug!(
-            "Loaded event bank with {} groups and {} events",
-            header.group_bases.len(),
-            events.len()
+            "Loaded SFX playlist with {} groups and {} sounds",
+            header.group_indexes.len(),
+            sounds.len()
         );
-        Ok(Self { group_bases: header.group_bases, events })
+        Ok(Self { group_indexes: header.group_indexes, sounds })
     }
 }
 
@@ -202,12 +206,12 @@ mod tests {
     fn test_read_action() -> Result<()> {
         let bytes: &[u8] = &[0x0e, 0x12, 0x34, 0x56];
         let actual = Action::read_from(&mut Cursor::new(bytes))?;
-        let expected = Action { command: Command::End1, delay: 0x56, data: 0 };
+        let expected = Action { command: Command::End, delay: 0x56, data: 0 };
         assert_eq!(actual, expected);
 
         let bytes: &[u8] = &[0x01, 0x12, 0x34, 0x56];
         let actual = Action::read_from(&mut Cursor::new(bytes))?;
-        let expected = Action { command: Command::Sound, delay: 0x12, data: 0x3456 };
+        let expected = Action { command: Command::Sample, delay: 0x12, data: 0x3456 };
         assert_eq!(actual, expected);
 
         let bytes: &[u8] = &[0x04, 0x12, 0x34, 0x56];
