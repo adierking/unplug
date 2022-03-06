@@ -147,9 +147,9 @@ const SOUND_EVENTS_FILE_NAME: &str = "sound_events.inc.rs";
 const SOUND_EVENTS_HEADER: &str = "declare_sound_events! {\n";
 const SOUND_EVENTS_FOOTER: &str = "}\n";
 
-const SOUNDS_FILE_NAME: &str = "sounds.inc.rs";
-const SOUNDS_HEADER: &str = "declare_sounds! {\n";
-const SOUNDS_FOOTER: &str = "}\n";
+const SOUNDS_FILE_NAME: &str = "sfx_samples.inc.rs";
+const SFX_SAMPLES_HEADER: &str = "declare_sfx_samples! {\n";
+const SFX_SAMPLES_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -859,24 +859,24 @@ fn build_sound_events(
 }
 
 /// Representation of a sound which is written to the generated source.
-struct SoundDefinition {
+struct SfxSampleDefinition {
     id: u32,
     label: Label,
     name: String,
 }
 
-/// Builds the sound list by matching effect names.
-fn build_sounds(
+/// Builds the sample list by matching effect names.
+fn build_sfx_samples(
     playlist: &SfxPlaylist,
     event_defs: &[SoundEventDefinition],
-) -> Vec<SoundDefinition> {
-    let mut defs: Vec<SoundDefinition> = Vec::with_capacity(event_defs.len());
+) -> Vec<SfxSampleDefinition> {
+    let mut defs: Vec<SfxSampleDefinition> = Vec::with_capacity(event_defs.len());
     for (event, def) in playlist.sounds.iter().zip(event_defs) {
         if DUPLICATE_SOUND_DISCARDS.is_match(&def.name) {
             continue;
         }
         if let Some(id) = event.sample_id() {
-            defs.push(SoundDefinition { id, label: def.label.clone(), name: def.name.clone() });
+            defs.push(SfxSampleDefinition { id, label: def.label.clone(), name: def.name.clone() });
         }
     }
     debug!("Found {} sound names", defs.len());
@@ -986,12 +986,12 @@ fn write_sound_events(mut writer: impl Write, events: &[SoundEventDefinition]) -
 }
 
 /// Writes the list of sounds to the generated file.
-fn write_sounds(mut writer: impl Write, sounds: &[SoundDefinition]) -> Result<()> {
-    write!(writer, "{}{}", GEN_HEADER_BRSAR, SOUNDS_HEADER)?;
-    for sound in sounds {
+fn write_sfx_samples(mut writer: impl Write, samples: &[SfxSampleDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER_BRSAR, SFX_SAMPLES_HEADER)?;
+    for sound in samples {
         writeln!(writer, "    {} => {} {{ \"{}\" }},", sound.id, sound.label.0, sound.name)?;
     }
-    write!(writer, "{}", SOUNDS_FOOTER)?;
+    write!(writer, "{}", SFX_SAMPLES_FOOTER)?;
     writer.flush()?;
     Ok(())
 }
@@ -1036,7 +1036,7 @@ fn run_app() -> Result<()> {
         let brsar = Brsar::read_from(&mut brsar_reader)?;
         info!("Matching sound event names");
         sound_events = build_sound_events(&playlist, &brsar, &banks);
-        sounds = build_sounds(&playlist, &sound_events);
+        sounds = build_sfx_samples(&playlist, &sound_events);
     }
 
     let metadata = {
@@ -1129,7 +1129,7 @@ fn run_app() -> Result<()> {
         let sounds_path = out_dir.join(SOUNDS_FILE_NAME);
         info!("Writing {}", sounds_path.display());
         let sounds_writer = BufWriter::new(File::create(sounds_path)?);
-        write_sounds(sounds_writer, &sounds)?;
+        write_sfx_samples(sounds_writer, &sounds)?;
     }
 
     Ok(())

@@ -18,7 +18,7 @@ use unplug::audio::ReadSamples;
 use unplug::common::{ReadFrom, ReadSeek};
 use unplug::data::music::MUSIC;
 use unplug::data::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
-use unplug::data::sound::{Sound, SoundDefinition};
+use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
 use unplug::data::sound_event::{EVENT_BANK_PATH, SOUND_EVENTS};
 use unplug::dvd::OpenFile;
 
@@ -102,7 +102,7 @@ fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SfxGroup, usize)> {
     };
     let index = def.id.index();
     let sample = match playlist.sounds[index].sample_id() {
-        Some(id) => Sound::try_from(id).unwrap(),
+        Some(id) => SfxSample::try_from(id).unwrap(),
         None => bail!("sound effect \"{}\" does not have an associated sample", def.name),
     };
     let group = SfxGroupDefinition::get(def.id.group());
@@ -190,8 +190,8 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
 fn make_sound_filename(bank: &SfxBank, index: usize, have_names: bool) -> String {
     let id = bank.base_index() + (index as u32);
     if have_names {
-        if let Ok(sound) = Sound::try_from(id) {
-            return format!("{}.wav", SoundDefinition::get(sound).name);
+        if let Ok(sound) = SfxSample::try_from(id) {
+            return format!("{}.wav", SfxSampleDefinition::get(sound).name);
         }
     }
     format!("{:>04}.wav", id)

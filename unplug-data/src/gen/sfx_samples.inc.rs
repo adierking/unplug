@@ -1,7 +1,7 @@
 // Generated with unplug-datagen. DO NOT EDIT.
 // To regenerate: cargo run -p unplug-datagen -- <iso path> --brsar <cb_robo.brsar path>
 
-declare_sounds! {
+declare_sfx_samples! {
     0 => RoboMotor { "robo_motor" },
     1 => RoboDown { "robo_down" },
     2 => RoboEyeEnd { "robo_eye_end" },
