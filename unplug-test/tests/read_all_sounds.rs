@@ -4,7 +4,7 @@ use seahash::SeaHasher;
 use std::hash::Hasher;
 use std::io::BufReader;
 use unplug::audio::format::{PcmS16Le, ReadWriteBytes};
-use unplug::audio::transport::SoundBank;
+use unplug::audio::transport::SfxBank;
 use unplug::dvd::OpenFile;
 use unplug_test as common;
 
@@ -21,7 +21,7 @@ fn test_read_all_sounds() -> Result<()> {
     for &(path, expected) in BANK_CHECKSUMS {
         info!("Reading {}", path);
         let mut reader = BufReader::new(iso.open_file_at(path)?);
-        let ssm = SoundBank::open(&mut reader, path)?;
+        let ssm = SfxBank::open(&mut reader, path)?;
         let mut hasher = SeaHasher::new();
         for i in 0..ssm.len() {
             let mut decoder = ssm.decoder(i);

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::{info, warn};
 use std::io::Cursor;
-use unplug::audio::transport::SoundBank;
+use unplug::audio::transport::SfxBank;
 use unplug::common::WriteTo;
 use unplug::data::sound_bank::{SoundBank as SoundBankId, SOUND_BANKS};
 use unplug::dvd::OpenFile;
@@ -34,7 +34,7 @@ fn test_rebuild_all_sounds() -> Result<()> {
         let mut original_bytes = vec![];
         reader.read_to_end(&mut original_bytes)?;
 
-        let ssm = SoundBank::open(&mut Cursor::new(&original_bytes), path.as_ref())?;
+        let ssm = SfxBank::open(&mut Cursor::new(&original_bytes), path.as_ref())?;
         info!("Rebuilding sound bank");
         let mut cursor = Cursor::new(vec![]);
         ssm.write_to(&mut cursor)?;

@@ -13,7 +13,7 @@ use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
 use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
-use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SoundBank, WavReader, WavWriter};
+use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SfxBank, WavReader, WavWriter};
 use unplug::audio::ReadSamples;
 use unplug::common::{ReadFrom, ReadSeek};
 use unplug::data::music::MUSIC;
@@ -187,7 +187,7 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
     Ok(())
 }
 
-fn make_sound_filename(bank: &SoundBank, index: usize, have_names: bool) -> String {
+fn make_sound_filename(bank: &SfxBank, index: usize, have_names: bool) -> String {
     let id = bank.base_index() + (index as u32);
     if have_names {
         if let Ok(sound) = Sound::try_from(id) {
@@ -219,12 +219,12 @@ fn export_bank_impl<'r>(
 ) -> Result<()> {
     info!("Exporting from {}", name);
     let mut reader = BufReader::new(reader);
-    let bank = SoundBank::open(&mut reader, name)?;
+    let bank = SfxBank::open(&mut reader, name)?;
     // Omit names for unusable banks (sfx_hori.ssm)
     let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index());
     fs::create_dir_all(&dir)?;
     let progress = progress_bar(bank.len() as u64);
-    for (i, _) in bank.sounds().enumerate() {
+    for (i, _) in bank.samples().enumerate() {
         let filename = make_sound_filename(&bank, i, have_names);
         if progress.is_hidden() {
             info!("Writing {}{}", display_prefix, filename);
@@ -306,7 +306,7 @@ pub fn play_sound(opt: PlaySoundOpt) -> Result<()> {
     let bank_def = SoundBankDefinition::get(bank_id);
     let bank = {
         let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), bank_def.path())?);
-        SoundBank::open(&mut reader, bank_def.name)?
+        SfxBank::open(&mut reader, bank_def.name)?
     };
     play_audio(bank.decoder(index), opt.playback)?;
     Ok(())

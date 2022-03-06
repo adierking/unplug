@@ -27,13 +27,13 @@ type SsmDecoder = Box<dyn ReadSamples<'static, Format = PcmS16Le>>;
 /// SSM file header.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 struct FileHeader {
-    /// Size of the sound header data in bytes.
+    /// Size of the sample header data in bytes.
     index_size: u32,
-    /// Size of the sample data in bytes.
+    /// Size of the audio data in bytes.
     data_size: u32,
-    /// The number of sounds stored in the bank.
-    num_sounds: u32,
-    /// The global index of the first sound in the bank.
+    /// The number of sample files stored in the bank.
+    num_samples: u32,
+    /// The global index of the first sample file in the bank.
     base_index: u32,
 }
 
@@ -43,7 +43,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for FileHeader {
         Ok(Self {
             index_size: reader.read_u32::<BE>()?,
             data_size: reader.read_u32::<BE>()?,
-            num_sounds: reader.read_u32::<BE>()?,
+            num_samples: reader.read_u32::<BE>()?,
             base_index: reader.read_u32::<BE>()?,
         })
     }
@@ -54,16 +54,16 @@ impl<W: Write + ?Sized> WriteTo<W> for FileHeader {
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<BE>(self.index_size)?;
         writer.write_u32::<BE>(self.data_size)?;
-        writer.write_u32::<BE>(self.num_sounds)?;
+        writer.write_u32::<BE>(self.num_samples)?;
         writer.write_u32::<BE>(self.base_index)?;
         Ok(())
     }
 }
 
-/// Header for sound channel data.
+/// Header for audio channel data.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 struct ChannelHeader {
-    /// The pointer to the sound data.
+    /// The pointer to the audio data.
     address: AudioAddress,
     /// ADPCM decoder info.
     adpcm: Info,
@@ -95,33 +95,33 @@ impl<W: Write + ?Sized> WriteTo<W> for ChannelHeader {
     }
 }
 
-/// Header for sound data (stored in the sound list at the beginning).
+/// Header for sample data (stored in the sample list at the beginning).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct SoundHeader {
-    /// The sound's sample rate.
-    sample_rate: u32,
+struct SampleHeader {
+    /// The audio sample rate.
+    rate: u32,
     /// The headers for each channel.
     channels: ArrayVec<[ChannelHeader; 2]>,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for SoundHeader {
+impl<R: Read + ?Sized> ReadFrom<R> for SampleHeader {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         let num_channels = reader.read_u32::<BE>()?;
-        let sample_rate = reader.read_u32::<BE>()?;
+        let rate = reader.read_u32::<BE>()?;
         let mut channels: ArrayVec<[ChannelHeader; 2]> = ArrayVec::new();
         for _ in 0..num_channels {
             channels.push(ChannelHeader::read_from(reader)?);
         }
-        Ok(Self { sample_rate, channels })
+        Ok(Self { rate, channels })
     }
 }
 
-impl<W: Write + ?Sized> WriteTo<W> for SoundHeader {
+impl<W: Write + ?Sized> WriteTo<W> for SampleHeader {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         writer.write_u32::<BE>(self.channels.len() as u32)?;
-        writer.write_u32::<BE>(self.sample_rate)?;
+        writer.write_u32::<BE>(self.rate)?;
         for channel in &self.channels {
             channel.write_to(writer)?;
         }
@@ -129,7 +129,7 @@ impl<W: Write + ?Sized> WriteTo<W> for SoundHeader {
     }
 }
 
-/// Contains complete data for a channel in a sound.
+/// Contains complete data for a channel in a sample file.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Channel {
     pub address: AudioAddress,
@@ -201,17 +201,17 @@ impl Debug for Channel {
     }
 }
 
-/// Contains the complete data for a sound.
+/// Contains the complete data for an audio sample file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Sound {
-    /// The sound's sample rate.
-    pub sample_rate: u32,
-    /// The data for each channel in the sound.
+pub struct BankSample {
+    /// The audio sample rate.
+    pub rate: u32,
+    /// The data for each audio channel.
     pub channels: ArrayVec<[Channel; 2]>,
 }
 
-impl Sound {
+impl BankSample {
     /// Creates a decoder which decodes all channels into PCM16 format and joins them.
     pub fn decoder(self: &Arc<Self>, tag: SourceTag) -> SsmDecoder {
         if self.channels.len() == 1 {
@@ -223,20 +223,18 @@ impl Sound {
         }
     }
 
-    /// Creates a `SoundReader` over the raw sample data in a channel.
-    pub fn channel_reader(self: &Arc<Sound>, channel: usize, tag: SourceTag) -> SoundReader {
+    /// Creates a `BankSampleReader` over the raw sample data in a channel.
+    pub fn channel_reader(
+        self: &Arc<BankSample>,
+        channel: usize,
+        tag: SourceTag,
+    ) -> BankSampleReader {
         let format = self.channels[channel].address.format;
-        SoundReader {
-            sound: Some(Arc::clone(self)),
-            channel,
-            format,
-            sample_rate: self.sample_rate,
-            tag,
-        }
+        BankSampleReader { sample: Some(Arc::clone(self)), channel, format, rate: self.rate, tag }
     }
 
     /// Creates a decoder which decodes a single channel into PCM16 format.
-    pub fn channel_decoder(self: &Arc<Sound>, channel: usize, tag: SourceTag) -> SsmDecoder {
+    pub fn channel_decoder(self: &Arc<BankSample>, channel: usize, tag: SourceTag) -> SsmDecoder {
         let reader = self.channel_reader(channel, tag);
         let format = self.channels[channel].address.format;
         match format {
@@ -245,7 +243,7 @@ impl Sound {
         }
     }
 
-    /// Creates a new `Sound` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
+    /// Creates a new `BankSample` by encoding mono/stereo PCMS16LE sample data to ADPCM format.
     #[instrument(level = "trace", skip_all)]
     pub fn from_pcm(reader: &mut dyn ReadSamples<'_, Format = PcmS16Le>) -> Result<Self> {
         let (mut left, right) = EncoderBuilder::simple(reader)?;
@@ -255,22 +253,22 @@ impl Sound {
         }
     }
 
-    /// Creates a new `Sound` from mono ADPCM sample data.
+    /// Creates a new `BankSample` from mono ADPCM sample data.
     #[instrument(level = "trace", skip_all)]
     pub fn from_adpcm_mono(reader: &mut dyn ReadSamples<'_, Format = GcAdpcm>) -> Result<Self> {
         // Pull the sample rate from the first samples in the stream
         let mut reader = reader.peekable();
-        let sample_rate = match reader.peek_samples()? {
+        let rate = match reader.peek_samples()? {
             Some(s) => s.rate,
             None => return Err(Error::EmptyStream),
         };
 
         let mut channels = ArrayVec::new();
         channels.push(Channel::from_adpcm(&mut reader)?);
-        Ok(Self { sample_rate, channels })
+        Ok(Self { rate, channels })
     }
 
-    /// Creates a new `Sound` from stereo ADPCM sample data.
+    /// Creates a new `BankSample` from stereo ADPCM sample data.
     #[instrument(level = "trace", skip_all)]
     pub fn from_adpcm_stereo(
         left: &mut dyn ReadSamples<'_, Format = GcAdpcm>,
@@ -291,31 +289,34 @@ impl Sound {
         let mut channels = ArrayVec::new();
         channels.push(Channel::from_adpcm(&mut left)?);
         channels.push(Channel::from_adpcm(&mut right)?);
-        Ok(Self { sample_rate: lrate, channels })
+        Ok(Self { rate: lrate, channels })
     }
 
-    fn from_bank(header: &SoundHeader, bank_data: &[u8]) -> Self {
+    fn from_bank(header: &SampleHeader, bank_data: &[u8]) -> Self {
         let channels: ArrayVec<_> =
             header.channels.iter().map(|channel| Channel::from_bank(channel, bank_data)).collect();
-        Self { sample_rate: header.sample_rate, channels }
+        Self { rate: header.rate, channels }
     }
 }
 
-/// A SSM sound bank made up of multiple sounds.
+/// A sysdolphin sound sample bank (.ssm) which stores audio sample files that can be played back
+/// via sound materials defined in a playlist (.sem).
+///
+/// (SSM = Sound Sample Materials?)
 #[derive(Clone)]
 #[non_exhaustive]
-pub struct SoundBank {
-    /// The global index of the first sound in the bank.
+pub struct SfxBank {
+    /// The global index of the first sample in the bank.
     base_index: u32,
-    /// The sounds in the bank.
-    sounds: Vec<Arc<Sound>>,
+    /// The sample files in the bank.
+    samples: Vec<Arc<BankSample>>,
     /// The audio source tag for debugging purposes.
     tag: SourceTag,
 }
 
-impl SoundBank {
-    /// Opens an SSM sound bank read from `reader`. `tag` is a string or tag to identify sound
-    /// streams for debugging purposes.
+impl SfxBank {
+    /// Opens a sample bank read from `reader`. `tag` is a string or tag to identify audio streams
+    /// for debugging purposes.
     pub fn open(reader: &mut dyn ReadSeek, tag: impl Into<SourceTag>) -> Result<Self> {
         Self::open_impl(reader, tag.into())
     }
@@ -324,79 +325,81 @@ impl SoundBank {
     fn open_impl(reader: &mut dyn ReadSeek, tag: SourceTag) -> Result<Self> {
         let header = FileHeader::read_from(reader)?;
 
-        // Sound headers follow the main header
-        let mut sound_headers = vec![];
-        for _ in 0..header.num_sounds {
-            sound_headers.push(SoundHeader::read_from(reader)?);
+        // Sample headers follow the main header
+        let mut sample_headers = vec![];
+        for _ in 0..header.num_samples {
+            sample_headers.push(SampleHeader::read_from(reader)?);
         }
 
-        // The sample data follows the sound headers, aligned to the next 64-byte boundary
+        // The sample data follows the headers, aligned to the next 64-byte boundary
         let data_offset = align(HEADER_SIZE + header.index_size as u64, DATA_ALIGN);
         reader.seek(SeekFrom::Start(data_offset))?;
         let mut data = vec![];
         reader.take(header.data_size as u64).read_to_end(&mut data)?;
         if data.len() != header.data_size as usize {
-            error!("Sound bank data is too small (expected {:#x})", header.data_size);
+            error!("Sample bank data is too small (expected {:#x})", header.data_size);
             return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
         }
 
         // Split the data up across all the different sounds
-        let sounds: Vec<_> =
-            sound_headers.into_iter().map(|s| Arc::new(Sound::from_bank(&s, &data))).collect();
+        let samples: Vec<_> = sample_headers
+            .into_iter()
+            .map(|s| Arc::new(BankSample::from_bank(&s, &data)))
+            .collect();
 
-        debug!("Loaded sound bank {:?} with {} sounds", tag, sounds.len());
-        Ok(Self { base_index: header.base_index, sounds, tag })
+        debug!("Loaded sample bank {:?} with {} sounds", tag, samples.len());
+        Ok(Self { base_index: header.base_index, samples, tag })
     }
 
-    /// Returns the global index of the first sound in the bank.
+    /// Returns the global index of the first sample in the bank.
     pub fn base_index(&self) -> u32 {
         self.base_index
     }
 
-    /// Returns the number of sounds in the bank.
+    /// Returns the number of sample files in the bank.
     pub fn len(&self) -> usize {
-        self.sounds.len()
+        self.samples.len()
     }
 
-    /// Returns `true` if the bank has no sounds.
+    /// Returns `true` if the bank has no data.
     pub fn is_empty(&self) -> bool {
-        self.sounds.is_empty()
+        self.samples.is_empty()
     }
 
-    /// Returns a reference to the sound at `index`, relative to the start of this sound bank.
-    pub fn sound(&self, index: usize) -> &Arc<Sound> {
-        &self.sounds[index]
+    /// Returns a reference to the sample at `index`, relative to the start of this bank.
+    pub fn sample(&self, index: usize) -> &Arc<BankSample> {
+        &self.samples[index]
     }
 
-    /// Replaces the sound at `index` (relative to the start of this sound bank) with `sound`.
-    pub fn replace_sound(&mut self, index: usize, sound: Sound) {
-        self.sounds[index] = Arc::new(sound);
+    /// Replaces the sample file at `index` (relative to the start of this bank) with `new_sample`.
+    pub fn replace_sample(&mut self, index: usize, new_sample: BankSample) {
+        self.samples[index] = Arc::new(new_sample);
     }
 
-    /// Returns an iterator over references to sounds in the bank.
-    pub fn sounds(&self) -> impl Iterator<Item = &Arc<Sound>> {
-        self.sounds.iter()
+    /// Returns an iterator over references to sample files in the bank.
+    pub fn samples(&self) -> impl Iterator<Item = &Arc<BankSample>> {
+        self.samples.iter()
     }
 
-    /// Returns a reader over the raw sample data for a channel in a sound.
-    pub fn reader(&self, index: usize, channel: usize) -> SoundReader {
-        let sound = &self.sounds[index];
-        sound.channel_reader(channel, self.sound_tag(index))
+    /// Returns a reader over the raw sample data for a channel in a sample file.
+    pub fn reader(&self, index: usize, channel: usize) -> BankSampleReader {
+        let sample = &self.samples[index];
+        sample.channel_reader(channel, self.sample_tag(index))
     }
 
-    /// Returns a decoder which decodes a sound into PCM16 format.
+    /// Returns a decoder which decodes a sample file into PCM16 format.
     pub fn decoder(&self, index: usize) -> SsmDecoder {
-        let sound = &self.sounds[index];
-        sound.decoder(self.sound_tag(index))
+        let sample = &self.samples[index];
+        sample.decoder(self.sample_tag(index))
     }
 
-    /// Creates a `SourceTag` for a sound in the bank.
-    fn sound_tag(&self, index: usize) -> SourceTag {
+    /// Creates a `SourceTag` for a sample file in the bank.
+    fn sample_tag(&self, index: usize) -> SourceTag {
         SourceTag::new(format!("{}[{}]", self.tag.name, index))
     }
 }
 
-impl<W: Write + Seek + ?Sized> WriteTo<W> for SoundBank {
+impl<W: Write + Seek + ?Sized> WriteTo<W> for SfxBank {
     type Error = Error;
 
     #[instrument(level = "trace", skip_all)]
@@ -407,35 +410,35 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for SoundBank {
         let mut header = FileHeader {
             index_size: 0,
             data_size: 0,
-            num_sounds: self.sounds.len() as u32,
+            num_samples: self.samples.len() as u32,
             base_index: self.base_index,
         };
         header.write_to(writer)?;
 
-        // Write all the sound headers and keep track of what the current channel's data offset
+        // Write all the sample headers and keep track of what the current channel's data offset
         // should be so that we can write everything in one pass
         let mut data_offset = 0;
-        for sound in &self.sounds {
+        for sample in &self.samples {
             let mut channels = ArrayVec::new();
-            for channel in &sound.channels {
+            for channel in &sample.channels {
                 channels.push(channel.make_header(data_offset));
                 // Audio data must be aligned on a frame boundary
                 data_offset = align(data_offset + channel.data.len() as u64, FRAME_ALIGN);
             }
-            let sound_header = SoundHeader { sample_rate: sound.sample_rate, channels };
-            sound_header.write_to(writer)?;
+            let header = SampleHeader { rate: sample.rate, channels };
+            header.write_to(writer)?;
         }
         header.index_size = (writer.seek(SeekFrom::Current(0))? - HEADER_SIZE) as u32;
         header.data_size = align(data_offset, DATA_ALIGN) as u32;
         pad(&mut *writer, DATA_ALIGN, 0)?;
 
-        for sound in &self.sounds {
-            for channel in &sound.channels {
+        for sample in &self.samples {
+            for channel in &sample.channels {
                 writer.write_all(&channel.data)?;
                 pad(&mut *writer, FRAME_ALIGN, 0)?;
             }
         }
-        // The data section size is aligned in the official SSM files
+        // The data section size is aligned in official SSM files
         pad(&mut *writer, DATA_ALIGN, 0)?;
 
         let end_offset = writer.seek(SeekFrom::Current(0))?;
@@ -446,30 +449,30 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for SoundBank {
     }
 }
 
-impl Debug for SoundBank {
+impl Debug for SfxBank {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SoundBank")
             .field("base_index", &self.base_index)
-            .field("sounds", &self.sounds)
+            .field("samples", &self.samples)
             .finish()
     }
 }
 
 /// Reads sample data from a sound channel.
-pub struct SoundReader {
-    sound: Option<Arc<Sound>>,
+pub struct BankSampleReader {
+    sample: Option<Arc<BankSample>>,
     channel: usize,
     format: DspFormat,
-    sample_rate: u32,
+    rate: u32,
     tag: SourceTag,
 }
 
-impl ReadSamples<'static> for SoundReader {
+impl ReadSamples<'static> for BankSampleReader {
     type Format = AnyFormat;
 
     #[instrument(level = "trace", name = "SoundReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
-        let sound = match self.sound.take() {
+        let sound = match self.sample.take() {
             Some(s) => s,
             None => return Ok(None),
         };
@@ -480,7 +483,7 @@ impl ReadSamples<'static> for SoundReader {
             DspFormat::Adpcm => Ok(Some(
                 Samples::<GcAdpcm> {
                     channels: 1,
-                    rate: self.sample_rate,
+                    rate: self.rate,
                     len,
                     data: data.clone().into(),
                     params: channel.adpcm,
@@ -489,11 +492,11 @@ impl ReadSamples<'static> for SoundReader {
             )),
             DspFormat::Pcm16 => {
                 let samples = PcmS16Be::read_bytes(&data[..(len * 2)])?;
-                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1, self.sample_rate).cast()))
+                Ok(Some(Samples::<PcmS16Be>::from_pcm(samples, 1, self.rate).cast()))
             }
             DspFormat::Pcm8 => {
                 let samples = PcmS8::read_bytes(&data[..len])?;
-                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1, self.sample_rate).cast()))
+                Ok(Some(Samples::<PcmS8>::from_pcm(samples, 1, self.rate).cast()))
             }
         }
     }
@@ -507,12 +510,12 @@ impl ReadSamples<'static> for SoundReader {
     }
 
     fn progress(&self) -> Option<ProgressHint> {
-        let current = if self.sound.is_some() { 0 } else { 1 };
+        let current = if self.sample.is_some() { 0 } else { 1 };
         ProgressHint::new(current, 1)
     }
 
     fn data_remaining(&self) -> Option<u64> {
-        match &self.sound {
+        match &self.sample {
             Some(sound) => Some((sound.channels[self.channel].address.end_address as u64) + 1),
             None => Some(0),
         }
@@ -534,21 +537,21 @@ mod tests {
     const SSM_BYTES: &[u8] = &[
         0x00, 0x00, 0x00, 0xd0, // index_size
         0x00, 0x00, 0x00, 0x40, // data_size
-        0x00, 0x00, 0x00, 0x02, // num_sounds
+        0x00, 0x00, 0x00, 0x02, // num_samples
         0x00, 0x00, 0x01, 0x23, // base_index
 
-        // sounds[0]
+        // samples[0]
         0x00, 0x00, 0x00, 0x01, // num_channels
-        0x00, 0x00, 0x3e, 0x80, // sample_rate
+        0x00, 0x00, 0x3e, 0x80, // rate
 
-        // sounds[0].channels[0].address
+        // samples[0].channels[0].address
         0x00, 0x00, // looping
         0x00, 0x00, // format
         0x00, 0x00, 0x00, 0x02, // loop_address
         0x00, 0x00, 0x00, 0x1f, // end_address
         0x00, 0x00, 0x00, 0x02, // current_address
 
-        // sounds[0].channels[0].info
+        // samples[0].channels[0].info
         0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, // coefficients[0..4]
         0x00, 0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, // coefficients[4..8]
         0x00, 0x08, 0x00, 0x09, 0x00, 0x0a, 0x00, 0x0b, // coefficients[8..12]
@@ -558,18 +561,18 @@ mod tests {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // loop_context
         0x00, 0x00, // padding
 
-        // sounds[1]
+        // samples[1]
         0x00, 0x00, 0x00, 0x02, // num_channels
-        0x00, 0x00, 0x3e, 0x80, // sample_rate
+        0x00, 0x00, 0x3e, 0x80, // rate
 
-        // sounds[1].channels[0].address
+        // samples[1].channels[0].address
         0x00, 0x00, // looping
         0x00, 0x00, // format
         0x00, 0x00, 0x00, 0x22, // loop_address
         0x00, 0x00, 0x00, 0x3f, // end_address
         0x00, 0x00, 0x00, 0x22, // current_address
 
-        // sounds[1].channels[0].info
+        // samples[1].channels[0].info
         0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, // coefficients[0..4]
         0x00, 0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, // coefficients[4..8]
         0x00, 0x08, 0x00, 0x09, 0x00, 0x0a, 0x00, 0x0b, // coefficients[8..12]
@@ -579,14 +582,14 @@ mod tests {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // loop_context
         0x00, 0x00, // padding
 
-        // sounds[1].channels[1].address
+        // samples[1].channels[1].address
         0x00, 0x00, // looping
         0x00, 0x00, // format
         0x00, 0x00, 0x00, 0x42, // loop_address
         0x00, 0x00, 0x00, 0x5f, // end_address
         0x00, 0x00, 0x00, 0x42, // current_address
 
-        // sounds[1].channels[1].info
+        // samples[1].channels[1].info
         0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, // coefficients[0..4]
         0x00, 0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, // coefficients[4..8]
         0x00, 0x08, 0x00, 0x09, 0x00, 0x0a, 0x00, 0x0b, // coefficients[8..12]
@@ -596,15 +599,15 @@ mod tests {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // loop_context
         0x00, 0x00, // padding
 
-        // sound 0 channel 0
+        // sample 0 channel 0
         0x17, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c, 0x0e,
         0x17, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e,
 
-        // sound 1 channel 0
+        // sample 1 channel 0
         0x17, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x2c, 0x2e,
         0x17, 0x32, 0x34, 0x36, 0x38, 0x3a, 0x3c, 0x3e,
 
-        // sound 1 channel 1
+        // sample 1 channel 1
         0x17, 0x42, 0x44, 0x46, 0x48, 0x4a, 0x4c, 0x4e,
         0x17, 0x52, 0x54, 0x56, 0x58, 0x5a, 0x5c, 0x5e,
 
@@ -614,10 +617,10 @@ mod tests {
     ];
 
     #[test]
-    fn test_read_sound_bank() -> Result<()> {
-        let ssm = SoundBank::open(&mut Cursor::new(SSM_BYTES), "SSM_BYTES")?;
+    fn test_read_sample_bank() -> Result<()> {
+        let ssm = SfxBank::open(&mut Cursor::new(SSM_BYTES), "SSM_BYTES")?;
         assert_eq!(ssm.base_index, 0x123);
-        assert_eq!(ssm.sounds.len(), 2);
+        assert_eq!(ssm.samples.len(), 2);
 
         let samples0_0 = ssm.reader(0, 0).read_samples()?.unwrap();
         let samples0_0: Samples<'_, GcAdpcm> = samples0_0.cast();
@@ -643,8 +646,8 @@ mod tests {
     }
 
     #[test]
-    fn test_read_and_write_sound_bank() -> Result<()> {
-        let ssm = SoundBank::open(&mut Cursor::new(SSM_BYTES), "SSM_BYTES")?;
+    fn test_read_and_write_sample_bank() -> Result<()> {
+        let ssm = SfxBank::open(&mut Cursor::new(SSM_BYTES), "SSM_BYTES")?;
         let mut writer = Cursor::new(vec![]);
         ssm.write_to(&mut writer)?;
         assert_eq!(writer.into_inner(), SSM_BYTES);
@@ -656,7 +659,7 @@ mod tests {
         assert_write_and_read!(FileHeader {
             index_size: 1,
             data_size: 2,
-            num_sounds: 3,
+            num_samples: 3,
             base_index: 4,
         });
     }
@@ -671,9 +674,9 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_sound_header() {
-        assert_write_and_read!(SoundHeader {
-            sample_rate: 44100,
+    fn test_write_and_read_sample_header() {
+        assert_write_and_read!(SampleHeader {
+            rate: 44100,
             channels: ArrayVec::from([ChannelHeader::default(); 2]),
         });
     }
@@ -711,8 +714,8 @@ mod tests {
                 context: FrameContext::default(),
             },
         };
-        let sound = Sound::from_adpcm_mono(&mut samples.into_reader("test"))?;
-        assert_eq!(sound.sample_rate, 44100);
+        let sound = BankSample::from_adpcm_mono(&mut samples.into_reader("test"))?;
+        assert_eq!(sound.rate, 44100);
         assert_eq!(sound.channels.len(), 1);
         assert_left_channel(&sound.channels[0]);
         Ok(())
@@ -742,11 +745,11 @@ mod tests {
                 context: FrameContext::default(),
             },
         };
-        let sound = Sound::from_adpcm_stereo(
+        let sound = BankSample::from_adpcm_stereo(
             &mut lsamples.into_reader("test"),
             &mut rsamples.into_reader("test"),
         )?;
-        assert_eq!(sound.sample_rate, 44100);
+        assert_eq!(sound.rate, 44100);
         assert_eq!(sound.channels.len(), 2);
         assert_left_channel(&sound.channels[0]);
         assert_right_channel(&sound.channels[1]);
@@ -757,8 +760,8 @@ mod tests {
     fn test_sound_from_pcm() -> Result<()> {
         let data = test::open_test_wav();
         let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
-        let sound = Sound::from_pcm(&mut samples.into_reader("test"))?;
-        assert_eq!(sound.sample_rate, 44100);
+        let sound = BankSample::from_pcm(&mut samples.into_reader("test"))?;
+        assert_eq!(sound.rate, 44100);
         assert_eq!(sound.channels.len(), 2);
         assert_left_channel(&sound.channels[0]);
         assert_right_channel(&sound.channels[1]);

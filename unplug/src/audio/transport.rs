@@ -13,5 +13,5 @@ pub use hps::{HpsReader, HpsWriter, PcmHpsWriter};
 pub use mp3::Mp3Reader;
 pub use ogg::OggReader;
 pub use rwav::Rwav;
-pub use ssm::SoundBank;
+pub use ssm::SfxBank;
 pub use wav::{WavReader, WavWriter};
