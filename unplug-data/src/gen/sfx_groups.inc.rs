@@ -1,7 +1,7 @@
 // Generated with unplug-datagen. DO NOT EDIT.
 // To regenerate: cargo run -p unplug-datagen -- <iso path>
 
-declare_sound_banks! {
+declare_sfx_groups! {
     0 => Sample { 0x0000, 0x0000, "sfx_sample" },
     1 => Stage07 { 0x01b5, 0x01ba, "sfx_stage07" },
     2 => Stage02 { 0x01e3, 0x01e8, "sfx_stage02" },

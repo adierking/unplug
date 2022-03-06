@@ -71,7 +71,7 @@ const STRIP_ITEM_LABEL: &str = "Item";
 
 /// Names of sound banks within the ISO and their corresponding BRSAR groups. This does not include
 /// `sfx_hori` because it has a bad base index and cannot be loaded.
-const SOUND_BANKS: &[(&str, &str)] = &[
+const SFX_GROUPS: &[(&str, &str)] = &[
     ("sfx_army", "GROUP_ARMY"),
     ("sfx_bb", "GROUP_BB"),
     ("sfx_concert", "GROUP_CONCERT"),
@@ -139,9 +139,9 @@ const MUSIC_FILE_NAME: &str = "music.inc.rs";
 const MUSIC_HEADER: &str = "declare_music! {\n";
 const MUSIC_FOOTER: &str = "}\n";
 
-const SOUND_BANKS_FILE_NAME: &str = "sound_banks.inc.rs";
-const SOUND_BANKS_HEADER: &str = "declare_sound_banks! {\n";
-const SOUND_BANKS_FOOTER: &str = "}\n";
+const SFX_GROUPS_FILE_NAME: &str = "sfx_groups.inc.rs";
+const SFX_GROUPS_HEADER: &str = "declare_sfx_groups! {\n";
+const SFX_GROUPS_FOOTER: &str = "}\n";
 
 const SOUND_EVENTS_FILE_NAME: &str = "sound_events.inc.rs";
 const SOUND_EVENTS_HEADER: &str = "declare_sound_events! {\n";
@@ -739,44 +739,44 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
     Ok(definitions)
 }
 
-/// Representation of a sound bank which is written to the generated source.
-struct SoundBankDefinition {
+/// Representation of an SFX group which is written to the generated source.
+struct SfxGroupDefinition {
     id: i16,
     label: Label,
-    sound_base: u32,
-    playlist_base: u32,
+    first_sample: u32,
+    first_material: u32,
     name: String,
 }
 
-/// Reads sound bank information from the ISO.
-fn read_sound_banks(
+/// Reads SFX group information from the ISO.
+fn read_sfx_groups(
     disc: &mut DiscStream<impl ReadSeek>,
     playlist: &SfxPlaylist,
-) -> Result<Vec<SoundBankDefinition>> {
-    let mut bank_bases: Vec<(&'static str, u32)> = vec![];
-    for &(name, _) in SOUND_BANKS {
+) -> Result<Vec<SfxGroupDefinition>> {
+    let mut group_indexes: Vec<(&'static str, u32)> = vec![];
+    for &(name, _) in SFX_GROUPS {
         let path = format!("{}/{}{}", SOUND_BANK_DIR, name, SOUND_BANK_EXT);
         let mut reader = disc.open_file_at(&path)?;
         reader.seek(SeekFrom::Start(0xc))?;
         let base_index = reader.read_u32::<BE>()?;
-        bank_bases.push((name, base_index));
+        group_indexes.push((name, base_index));
     }
-    bank_bases.sort_unstable_by_key(|(_, b)| *b);
+    group_indexes.sort_unstable_by_key(|(_, b)| *b);
 
-    let mut banks = vec![];
-    for (id, ((name, sound_base), &playlist_base)) in
-        bank_bases.into_iter().zip(&playlist.group_indexes).enumerate()
+    let mut groups = vec![];
+    for (id, ((name, sample_index), &material_index)) in
+        group_indexes.into_iter().zip(&playlist.group_indexes).enumerate()
     {
         let label = Label::from_string_lossy(name.strip_prefix(SOUND_BANK_PREFIX).unwrap());
-        banks.push(SoundBankDefinition {
+        groups.push(SfxGroupDefinition {
             id: id as i16,
             label,
-            sound_base,
-            playlist_base,
+            first_sample: sample_index,
+            first_material: material_index,
             name: name.to_owned(),
         })
     }
-    Ok(banks)
+    Ok(groups)
 }
 
 /// Representation of a sound event which is written to the generated source.
@@ -790,7 +790,7 @@ struct SoundEventDefinition {
 fn build_sound_events(
     playlist: &SfxPlaylist,
     brsar: &Brsar,
-    banks: &[SoundBankDefinition],
+    groups: &[SfxGroupDefinition],
 ) -> Vec<SoundEventDefinition> {
     #[derive(Default, Copy, Clone)]
     struct BankState {
@@ -800,7 +800,7 @@ fn build_sound_events(
 
     // Compute each bank's starting ID and ending ID. NPC has sounds that the GCN version doesn't,
     // so we have to make sure not to emit definitions for extra sounds.
-    let mut states = vec![BankState::default(); banks.len()];
+    let mut states = vec![BankState::default(); groups.len()];
     let mut end_event = playlist.sounds.len() as u32;
     for (id, &base) in playlist.group_indexes.iter().enumerate().rev() {
         states[id].next_id = (id as u32) << 16;
@@ -815,9 +815,9 @@ fn build_sound_events(
             let group_index = collection.groups[0].index;
             let group = &brsar.groups[group_index as usize];
             let group_name = brsar.symbol(group.name_index);
-            let bank_name = SOUND_BANKS.iter().find(|&&(_, g)| g == group_name);
+            let bank_name = SFX_GROUPS.iter().find(|&&(_, g)| g == group_name);
             if let Some(&(name, _)) = bank_name {
-                let bank_def = banks.iter().find(|b| b.name == name).unwrap();
+                let bank_def = groups.iter().find(|b| b.name == name).unwrap();
                 let bank_index = bank_def.id as usize;
                 collection_to_bank.insert(i as u32, bank_index);
             } else {
@@ -959,17 +959,17 @@ fn write_music(mut writer: impl Write, music: &[MusicDefinition]) -> Result<()> 
     Ok(())
 }
 
-/// Writes the list of sound banks to the generated file.
-fn write_sound_banks(mut writer: impl Write, banks: &[SoundBankDefinition]) -> Result<()> {
-    write!(writer, "{}{}", GEN_HEADER, SOUND_BANKS_HEADER)?;
-    for bank in banks {
+/// Writes the list of SFX groups to the generated file.
+fn write_sfx_groups(mut writer: impl Write, groups: &[SfxGroupDefinition]) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, SFX_GROUPS_HEADER)?;
+    for group in groups {
         writeln!(
             writer,
             "    {} => {} {{ 0x{:>04x}, 0x{:>04x}, \"{}\" }},",
-            bank.id, bank.label.0, bank.sound_base, bank.playlist_base, bank.name
+            group.id, group.label.0, group.first_sample, group.first_material, group.name
         )?;
     }
-    write!(writer, "{}", SOUND_BANKS_FOOTER)?;
+    write!(writer, "{}", SFX_GROUPS_FOOTER)?;
     writer.flush()?;
     Ok(())
 }
@@ -1019,14 +1019,14 @@ fn run_app() -> Result<()> {
     info!("Opening ISO");
     let mut iso = DiscStream::open(File::open(&options.iso)?)?;
 
-    info!("Reading sound playlist");
+    info!("Reading SFX playlist");
     let playlist = {
         let mut reader = BufReader::new(iso.open_file_at(SOUND_PLAYLIST_PATH)?);
         SfxPlaylist::read_from(&mut reader)?
     };
 
-    info!("Reading sound banks");
-    let banks = read_sound_banks(&mut iso, &playlist)?;
+    info!("Reading SFX groups");
+    let banks = read_sfx_groups(&mut iso, &playlist)?;
 
     let mut sound_events = vec![];
     let mut sounds = vec![];
@@ -1113,10 +1113,10 @@ fn run_app() -> Result<()> {
     let music_writer = BufWriter::new(File::create(music_path)?);
     write_music(music_writer, &music)?;
 
-    let sound_banks_path = out_dir.join(SOUND_BANKS_FILE_NAME);
+    let sound_banks_path = out_dir.join(SFX_GROUPS_FILE_NAME);
     info!("Writing {}", sound_banks_path.display());
     let sound_banks_writer = BufWriter::new(File::create(sound_banks_path)?);
-    write_sound_banks(sound_banks_writer, &banks)?;
+    write_sfx_groups(sound_banks_writer, &banks)?;
 
     if !sound_events.is_empty() {
         let sound_events_path = out_dir.join(SOUND_EVENTS_FILE_NAME);

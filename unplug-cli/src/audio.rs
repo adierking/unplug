@@ -17,8 +17,8 @@ use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SfxBank, WavRea
 use unplug::audio::ReadSamples;
 use unplug::common::{ReadFrom, ReadSeek};
 use unplug::data::music::MUSIC;
+use unplug::data::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sound::{Sound, SoundDefinition};
-use unplug::data::sound_bank::{SoundBank as SoundBankId, SoundBankDefinition, SOUND_BANKS};
 use unplug::data::sound_event::{EVENT_BANK_PATH, SOUND_EVENTS};
 use unplug::dvd::OpenFile;
 
@@ -94,21 +94,21 @@ fn find_music(name: &str) -> Result<String> {
     Ok(path)
 }
 
-/// Finds a sound effect by name and returns a `(bank, index)` pair for its sound.
-fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SoundBankId, usize)> {
+/// Finds a sound effect by name and returns a `(group, index)` pair for its sound.
+fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SfxGroup, usize)> {
     let def = match SOUND_EVENTS.iter().find(|e| unicase::eq(e.name, name)) {
         Some(def) => def,
         None => bail!("unknown sound effect: \"{}\"", name),
     };
     let index = def.id.index();
-    let sound = match playlist.sounds[index].sample_id() {
+    let sample = match playlist.sounds[index].sample_id() {
         Some(id) => Sound::try_from(id).unwrap(),
         None => bail!("sound effect \"{}\" does not have an associated sample", def.name),
     };
-    let bank = SoundBankDefinition::get(def.id.bank());
-    let bank_index = u32::from(sound) - bank.sound_base;
-    debug!("Resolved sound \"{}\": bank={}, index={}", name, bank.name, bank_index);
-    Ok((bank.id, bank_index as usize))
+    let group = SfxGroupDefinition::get(def.id.group());
+    let bank_index = u32::from(sample) - group.first_sample;
+    debug!("Resolved sound \"{}\": group={}, index={}", name, group.name, bank_index);
+    Ok((group.id, bank_index as usize))
 }
 
 pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
@@ -221,7 +221,7 @@ fn export_bank_impl<'r>(
     let mut reader = BufReader::new(reader);
     let bank = SfxBank::open(&mut reader, name)?;
     // Omit names for unusable banks (sfx_hori.ssm)
-    let have_names = SOUND_BANKS.iter().any(|b| b.sound_base == bank.base_index());
+    let have_names = SFX_GROUPS.iter().any(|g| g.first_sample == bank.base_index());
     fs::create_dir_all(&dir)?;
     let progress = progress_bar(bank.len() as u64);
     for (i, _) in bank.samples().enumerate() {
@@ -252,9 +252,9 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
     } else {
         // Export registered banks
         let mut iso = iso.expect("no iso path or bank path");
-        for bank_def in SOUND_BANKS {
-            let reader = iso.open_file_at(&bank_def.path())?;
-            let name = format!("{}.ssm", bank_def.name);
+        for group in SFX_GROUPS {
+            let reader = iso.open_file_at(&group.bank_path())?;
+            let name = format!("{}.ssm", group.name);
             export_bank_subdir(reader, &name, &opt.output)?;
         }
         // Export sfx_hori, which is not a registered bank because it has bogus sound IDs
@@ -302,11 +302,11 @@ pub fn play_sound(opt: PlaySoundOpt) -> Result<()> {
         let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), EVENT_BANK_PATH)?);
         SfxPlaylist::read_from(&mut reader)?
     };
-    let (bank_id, index) = find_sound(&playlist, &opt.sound)?;
-    let bank_def = SoundBankDefinition::get(bank_id);
+    let (group, index) = find_sound(&playlist, &opt.sound)?;
+    let group = SfxGroupDefinition::get(group);
     let bank = {
-        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), bank_def.path())?);
-        SfxBank::open(&mut reader, bank_def.name)?
+        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), group.bank_path())?);
+        SfxBank::open(&mut reader, group.name)?
     };
     play_audio(bank.decoder(index), opt.playback)?;
     Ok(())

@@ -1,4 +1,4 @@
-use super::sound_bank::{SoundBank, SoundBankDefinition, SOUND_BANKS};
+use super::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug};
 
@@ -46,17 +46,17 @@ macro_rules! declare_sound_events {
 }
 
 impl SoundEvent {
-    /// Returns the `SoundBank` which contains this event's sound.
-    pub fn bank(&self) -> SoundBank {
+    /// Returns the event's `SfxGroup`.
+    pub fn group(&self) -> SfxGroup {
         let id = u32::from(*self);
-        SOUND_BANKS[(id >> 16) as usize].id
+        SFX_GROUPS[(id >> 16) as usize].id
     }
 
     /// Calculates the event's global index.
     pub fn index(&self) -> usize {
-        let bank = SoundBankDefinition::get(self.bank());
+        let group = SfxGroupDefinition::get(self.group());
         let id = u32::from(*self);
-        (bank.event_base + (id & 0xffff)) as usize
+        (group.first_material + (id & 0xffff)) as usize
     }
 }
 
@@ -82,8 +82,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get_sound_event_bank() {
-        assert_eq!(SoundEvent::VoiceHelpMe.bank(), SoundBank::Sample);
-        assert_eq!(SoundEvent::KitchenOil.bank(), SoundBank::Kitchen);
+    fn test_get_sound_event_group() {
+        assert_eq!(SoundEvent::VoiceHelpMe.group(), SfxGroup::Sample);
+        assert_eq!(SoundEvent::KitchenOil.group(), SfxGroup::Kitchen);
     }
 }
