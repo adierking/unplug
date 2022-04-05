@@ -1,16 +1,14 @@
+use crate::audio::cue::{Cue, LOOP_PREFIX};
 use crate::audio::format::adpcm::{Decoder, EncoderBuilder, FrameContext, GcAdpcm, Info};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
-use crate::audio::{
-    Cue, Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag,
-};
+use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
 use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::iter;
 use std::sync::Arc;
 use tracing::{debug, error, instrument};
 
@@ -229,8 +227,7 @@ impl BankSample {
         channel: usize,
         tag: SourceTag,
     ) -> BankSampleReader {
-        let format = self.channels[channel].address.format;
-        BankSampleReader { sample: Some(Arc::clone(self)), channel, format, rate: self.rate, tag }
+        BankSampleReader::new(Arc::clone(self), channel, tag)
     }
 
     /// Creates a decoder which decodes a single channel into PCM16 format.
@@ -465,6 +462,23 @@ pub struct BankSampleReader {
     format: DspFormat,
     rate: u32,
     tag: SourceTag,
+    loop_cue: Option<Cue>,
+}
+
+impl BankSampleReader {
+    fn new(sample: Arc<BankSample>, channel: usize, tag: SourceTag) -> Self {
+        let address = &sample.channels[channel].address;
+        let loop_cue = if address.looping {
+            let start_sample = GcAdpcm::address_to_sample(address.current_address as usize);
+            let loop_sample = GcAdpcm::address_to_sample(address.loop_address as usize);
+            Some(Cue::new_loop(LOOP_PREFIX, (loop_sample - start_sample) as u64))
+        } else {
+            None
+        };
+        let format = address.format;
+        let rate = sample.rate;
+        Self { sample: Some(sample), channel, format, rate, tag, loop_cue }
+    }
 }
 
 impl ReadSamples<'static> for BankSampleReader {
@@ -522,7 +536,7 @@ impl ReadSamples<'static> for BankSampleReader {
     }
 
     fn cues(&self) -> Box<dyn Iterator<Item = Cue> + '_> {
-        Box::from(iter::empty())
+        Box::from(self.loop_cue.iter().cloned())
     }
 }
 
@@ -566,9 +580,9 @@ mod tests {
         0x00, 0x00, 0x3e, 0x80, // rate
 
         // samples[1].channels[0].address
-        0x00, 0x00, // looping
+        0x00, 0x01, // looping
         0x00, 0x00, // format
-        0x00, 0x00, 0x00, 0x22, // loop_address
+        0x00, 0x00, 0x00, 0x32, // loop_address
         0x00, 0x00, 0x00, 0x3f, // end_address
         0x00, 0x00, 0x00, 0x22, // current_address
 
@@ -583,9 +597,9 @@ mod tests {
         0x00, 0x00, // padding
 
         // samples[1].channels[1].address
-        0x00, 0x00, // looping
+        0x00, 0x01, // looping
         0x00, 0x00, // format
-        0x00, 0x00, 0x00, 0x42, // loop_address
+        0x00, 0x00, 0x00, 0x52, // loop_address
         0x00, 0x00, 0x00, 0x5f, // end_address
         0x00, 0x00, 0x00, 0x42, // current_address
 
@@ -642,6 +656,12 @@ mod tests {
         assert_eq!(samples1_1.len, 32);
         assert_eq!(samples1_1.channels, 1);
         assert_eq!(samples1_1.data, &SSM_BYTES[0x100..0x110]);
+
+        assert!(ssm.reader(0, 0).cues().next().is_none());
+        let cues1_0 = ssm.reader(1, 0).cues().collect::<Vec<_>>();
+        assert_eq!(cues1_0, &[Cue::new_loop("loop", 14)]);
+        let cues1_1 = ssm.reader(1, 1).cues().collect::<Vec<_>>();
+        assert_eq!(cues1_1, &[Cue::new_loop("loop", 14)]);
         Ok(())
     }
 
