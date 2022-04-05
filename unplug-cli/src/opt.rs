@@ -390,15 +390,21 @@ pub struct ImportShopOpt {
 }
 
 #[derive(StructOpt)]
+pub struct SoundExportOpt {
+    /// If an audio file has cue points, exports a .labels.txt file alongside it which defines the
+    /// cues using Audacity's label track format.
+    #[structopt(long)]
+    pub labels: bool,
+}
+
+#[derive(StructOpt)]
 pub struct ExportMusicOpt {
     /// Run within a Chibi-Robo! ISO
     #[structopt(long, value_name("PATH"), parse(from_os_str))]
     pub iso: Option<PathBuf>,
 
-    /// If the music has cue points, exports a .labels.txt file alongside the output file which
-    /// defines the cues using Audacity's label track format.
-    #[structopt(long)]
-    pub labels: bool,
+    #[structopt(flatten)]
+    pub settings: SoundExportOpt,
 
     /// Path to the HPS file to export
     #[structopt(parse(from_os_str))]
@@ -434,6 +440,9 @@ pub struct ExportSoundsOpt {
     /// Run within a Chibi-Robo! ISO
     #[structopt(long, value_name("PATH"), parse(from_os_str))]
     pub iso: Option<PathBuf>,
+
+    #[structopt(flatten)]
+    pub settings: SoundExportOpt,
 
     /// Path to the SSM file to export. If --iso is provided, this can be omitted to export all sounds.
     #[structopt(value_name("SSM"), parse(from_os_str), required_unless("iso"))]

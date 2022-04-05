@@ -14,7 +14,7 @@ use unplug::audio::metadata::audacity;
 use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SfxBank, WavReader, WavWriter};
-use unplug::audio::ReadSamples;
+use unplug::audio::{Cue, ReadSamples};
 use unplug::common::{ReadFrom, ReadSeek};
 use unplug::data::music::MUSIC;
 use unplug::data::sfx::{PLAYLIST_PATH, SFX};
@@ -111,6 +111,17 @@ fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SfxGroup, usize)> {
     Ok((group.id, sample_index as usize))
 }
 
+/// Exports Audacity labels alongside a sound file.
+fn export_labels(cues: Vec<Cue>, sample_rate: u32, sound_path: &Path) -> Result<()> {
+    if !cues.is_empty() {
+        let label_path = sound_path.with_extension(LABELS_EXTENSION);
+        debug!("Writing label track to {}", label_path.display());
+        let labels = BufWriter::new(File::create(label_path)?);
+        audacity::write_labels(labels, cues, sample_rate)?;
+    }
+    Ok(())
+}
+
 pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
@@ -132,14 +143,8 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
         .write_to(out)?;
     progress.finish_using_style();
 
-    if opt.labels {
-        let cues = hps.cues().collect::<Vec<_>>();
-        if !cues.is_empty() {
-            let label_path = opt.output.with_extension(LABELS_EXTENSION);
-            info!("Writing label track to {}", label_path.display());
-            let labels = BufWriter::new(File::create(label_path)?);
-            audacity::write_labels(labels, cues, hps.sample_rate())?;
-        }
+    if opt.settings.labels {
+        export_labels(hps.cues().collect(), hps.sample_rate(), &opt.output)?;
     }
 
     info!("Export finished in {:?}", start_time.elapsed());
@@ -198,20 +203,31 @@ fn make_sound_filename(bank: &SfxBank, index: usize, have_names: bool) -> String
 }
 
 /// Reads a sound bank from `reader` named `name` and exports WAV files to `dir`.
-fn export_bank<'r>(reader: Box<dyn ReadSeek + 'r>, name: &str, dir: &Path) -> Result<()> {
-    export_bank_impl(reader, name, dir, "")
+fn export_bank<'r>(
+    settings: &SoundExportOpt,
+    reader: Box<dyn ReadSeek + 'r>,
+    name: &str,
+    dir: &Path,
+) -> Result<()> {
+    export_bank_impl(settings, reader, name, dir, "")
 }
 
 /// Reads a sound bank from `reader` named `name` and exports WAV files to a subdirectory of `dir`
 /// named after the bank.
-fn export_bank_subdir<'r>(reader: Box<dyn ReadSeek + 'r>, name: &str, dir: &Path) -> Result<()> {
+fn export_bank_subdir<'r>(
+    settings: &SoundExportOpt,
+    reader: Box<dyn ReadSeek + 'r>,
+    name: &str,
+    dir: &Path,
+) -> Result<()> {
     let name_prefix = name.split('.').next().unwrap_or(name); // Strip extension
     let dir = dir.join(name_prefix);
     let display_prefix = format!("{}/", name_prefix);
-    export_bank_impl(reader, name, &dir, &display_prefix)
+    export_bank_impl(settings, reader, name, &dir, &display_prefix)
 }
 
 fn export_bank_impl<'r>(
+    settings: &SoundExportOpt,
     reader: Box<dyn ReadSeek + 'r>,
     name: &str,
     dir: &Path,
@@ -233,7 +249,12 @@ fn export_bank_impl<'r>(
         }
         let out_path = dir.join(filename);
         let out = BufWriter::new(File::create(&out_path)?);
-        WavWriter::new(bank.decoder(i)).write_to(out)?;
+        let decoder = bank.decoder(i);
+        let cues: Vec<_> = decoder.cues().collect();
+        WavWriter::new(decoder).write_to(out)?;
+        if settings.labels {
+            export_labels(cues, bank.sample(i).rate, &out_path)?;
+        }
         progress.inc(1);
     }
     progress.finish_using_style();
@@ -248,18 +269,18 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
         // Export single bank
         let reader = open_iso_entry_or_file(iso.as_mut(), &bank_path)?;
         let name = bank_path.file_name().unwrap().to_string_lossy();
-        export_bank(reader, &name, &opt.output)?;
+        export_bank(&opt.settings, reader, &name, &opt.output)?;
     } else {
         // Export registered banks
         let mut iso = iso.expect("no iso path or bank path");
         for group in SFX_GROUPS {
             let reader = iso.open_file_at(&group.bank_path())?;
             let name = format!("{}.ssm", group.name);
-            export_bank_subdir(reader, &name, &opt.output)?;
+            export_bank_subdir(&opt.settings, reader, &name, &opt.output)?;
         }
         // Export sfx_hori, which is not a registered bank because it has bogus sound IDs
         let reader = iso.open_file_at(SFX_HORI_PATH)?;
-        export_bank_subdir(reader, SFX_HORI_NAME, &opt.output)?;
+        export_bank_subdir(&opt.settings, reader, SFX_HORI_NAME, &opt.output)?;
     }
 
     info!("Export finished in {:?}", start_time.elapsed());
