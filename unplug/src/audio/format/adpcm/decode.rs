@@ -1,4 +1,4 @@
-use super::{GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
+use super::{FrameContext, GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Cue, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::clamp_i16;
@@ -7,12 +7,18 @@ use tracing::{instrument, trace};
 /// Decodes GameCube ADPCM samples into PCM.
 pub struct Decoder<'r, 's> {
     source: Box<dyn ReadSamples<'s, Format = GcAdpcm> + 'r>,
+    context: FrameContext,
 }
 
 impl<'r, 's> Decoder<'r, 's> {
     /// Creates a new `Decoder` which reads samples from `source`.
     pub fn new(source: impl ReadSamples<'s, Format = GcAdpcm> + 'r) -> Self {
-        Self { source: Box::from(source) }
+        Self { source: Box::from(source), context: FrameContext::default() }
+    }
+
+    /// Gets the current decoding context.
+    pub fn context(&self) -> FrameContext {
+        self.context
     }
 }
 
@@ -30,14 +36,14 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
 
         let data = &*encoded.data; // This makes debug builds faster...
         let info = encoded.params;
-        let mut context = info.context;
+        self.context = info.context;
         trace!(
             "Decoding ADPCM block from {:?}: len={:#x} ps={:#x} s0={:#x} s1={:#x}",
             self.tag(),
             data.len(),
-            context.predictor_and_scale,
-            context.last_samples[0],
-            context.last_samples[1],
+            self.context.predictor_and_scale,
+            self.context.last_samples[0],
+            self.context.last_samples[1],
         );
 
         // Estimate the final sample count based on how many bytes there are
@@ -51,7 +57,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
             if address & 0xf == 0 {
                 // Frames are aligned on 16-byte boundaries and each begins with a new
                 // predictor_and_scale byte
-                context.predictor_and_scale = data[address / 2] as u16;
+                self.context.predictor_and_scale = data[address / 2] as u16;
                 address += 2;
                 continue;
             }
@@ -67,16 +73,16 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
             }
             address += 1;
 
-            let predictor = context.predictor();
+            let predictor = self.context.predictor();
             let c0 = info.coefficients[predictor * 2] as i32;
             let c1 = info.coefficients[predictor * 2 + 1] as i32;
-            let s0 = context.last_samples[0] as i32;
-            let s1 = context.last_samples[1] as i32;
+            let s0 = self.context.last_samples[0] as i32;
+            let s1 = self.context.last_samples[1] as i32;
             let predicted = (c0 * s0 + c1 * s1 + 0x400) >> 11;
-            let pcm = clamp_i16(predicted + val * context.scale());
+            let pcm = clamp_i16(predicted + val * self.context.scale());
 
             decoded.push(pcm);
-            context.push_sample(pcm);
+            self.context.push_sample(pcm);
         }
         debug_assert!(estimated >= decoded.len());
         Ok(Some(Samples::from_pcm(decoded, 1, encoded.rate)))

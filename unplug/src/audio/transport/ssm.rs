@@ -7,10 +7,11 @@ use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, warn};
 
 /// The size of the file header.
 const HEADER_SIZE: u64 = 0x10;
@@ -143,18 +144,35 @@ impl Channel {
         if samples.channels != 1 {
             return Err(Error::StreamNotMono);
         }
+
+        let mut loop_address = None;
+        let mut loop_context = FrameContext::default();
+        for cue in reader.cues() {
+            if cue.is_loop() {
+                if loop_address.is_none() {
+                    let address = GcAdpcm::sample_to_address(cue.start as usize) as u32;
+                    loop_address = Some(address);
+                    loop_context = Self::calc_loop_context(&samples, address);
+                } else {
+                    warn!("Discarding extra loop point \"{}\"", cue.name);
+                }
+            } else {
+                warn!("Discarding non-loop cue \"{}\"", cue.name);
+            }
+        }
+
         let mut data = vec![];
         GcAdpcm::write_bytes(&mut data, &samples.data)?;
         Ok(Self {
             address: AudioAddress {
-                looping: false, // TODO
+                looping: loop_address.is_some(),
                 format: DspFormat::Adpcm,
-                loop_address: 0x2,
+                loop_address: loop_address.unwrap_or(0x2),
                 end_address: (samples.len - 1) as u32,
                 current_address: 0x2,
             },
             adpcm: samples.params,
-            loop_context: FrameContext::default(), // TODO
+            loop_context,
             data,
         })
     }
@@ -186,6 +204,21 @@ impl Channel {
         address.end_address += start_address;
         address.current_address += start_address;
         ChannelHeader { address, adpcm: self.adpcm, loop_context: self.loop_context }
+    }
+
+    #[instrument(level = "trace", skip(samples))]
+    fn calc_loop_context(samples: &Samples<'_, GcAdpcm>, loop_address: u32) -> FrameContext {
+        // This sucks and wastes memory, but it's simple
+        let prelude_samples = Samples::<'_, GcAdpcm> {
+            channels: samples.channels,
+            rate: samples.rate,
+            len: loop_address as usize,
+            data: Cow::from(&*samples.data),
+            params: samples.params,
+        };
+        let mut decoder = Decoder::new(prelude_samples.into_reader(""));
+        decoder.read_samples().expect("ADPCM decoding failed");
+        decoder.context()
     }
 }
 
@@ -376,6 +409,11 @@ impl SfxBank {
     /// Returns an iterator over references to sample files in the bank.
     pub fn samples(&self) -> impl Iterator<Item = &Arc<BankSample>> {
         self.samples.iter()
+    }
+
+    /// Returns a mutable iterator over references to sample files in the bank.
+    pub fn samples_mut(&mut self) -> impl Iterator<Item = &mut Arc<BankSample>> {
+        self.samples.iter_mut()
     }
 
     /// Returns a reader over the raw sample data for a channel in a sample file.
@@ -785,6 +823,29 @@ mod tests {
         assert_eq!(sound.channels.len(), 2);
         assert_left_channel(&sound.channels[0]);
         assert_right_channel(&sound.channels[1]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_sound_from_pcm_looping() -> Result<()> {
+        let data = test::open_test_wav();
+        let samples = Samples::<PcmS16Le>::from_pcm(data, 2, 44100);
+        let cues = vec![Cue::new_loop("loop", 57344)];
+        let sound = BankSample::from_pcm(&mut samples.into_reader("test").with_cues(cues))?;
+
+        let left = &sound.channels[0];
+        assert!(left.address.looping);
+        assert_eq!(
+            left.loop_context,
+            FrameContext { predictor_and_scale: 0x57, last_samples: [-5232, -5240] }
+        );
+
+        let right = &sound.channels[1];
+        assert!(right.address.looping);
+        assert_eq!(
+            right.loop_context,
+            FrameContext { predictor_and_scale: 0x16, last_samples: [730, 618] }
+        );
         Ok(())
     }
 }
