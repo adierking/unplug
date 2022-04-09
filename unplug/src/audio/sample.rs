@@ -41,6 +41,20 @@ impl<'a, F: FormatTag> Samples<'a, F> {
             params: self.params,
         }
     }
+
+    /// Creates a new `Samples` struct which borrows the data from this struct.
+    pub fn borrowed(&self) -> Samples<'_, F>
+    where
+        F::Params: Copy,
+    {
+        Samples {
+            channels: self.channels,
+            rate: self.rate,
+            len: self.len,
+            data: Cow::Borrowed(&*self.data),
+            params: self.params,
+        }
+    }
 }
 
 impl<'a, F: DynamicFormat> Samples<'a, F> {

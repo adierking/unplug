@@ -7,7 +7,6 @@ use crate::common::io::pad;
 use crate::common::{align, ReadFrom, ReadSeek, WriteTo};
 use arrayvec::ArrayVec;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
-use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
@@ -209,13 +208,8 @@ impl Channel {
     #[instrument(level = "trace", skip(samples))]
     fn calc_loop_context(samples: &Samples<'_, GcAdpcm>, loop_address: u32) -> FrameContext {
         // This sucks and wastes memory, but it's simple
-        let prelude_samples = Samples::<'_, GcAdpcm> {
-            channels: samples.channels,
-            rate: samples.rate,
-            len: loop_address as usize,
-            data: Cow::from(&*samples.data),
-            params: samples.params,
-        };
+        let mut prelude_samples = samples.borrowed();
+        prelude_samples.len = loop_address as usize;
         let mut decoder = Decoder::new(prelude_samples.into_reader(""));
         decoder.read_samples().expect("ADPCM decoding failed");
         decoder.context()
