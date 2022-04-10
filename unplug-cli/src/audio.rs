@@ -307,10 +307,17 @@ pub fn import_sound(opt: ImportSoundOpt) -> Result<()> {
 
     let mut audio = open_sound_file(&opt.path, opt.labels.as_deref(), MAX_SFX_SAMPLE_RATE)?;
     info!("Encoding audio to GameCube format");
-    let sample = BankSample::from_pcm(&mut audio)?;
+    let mut new_sample = BankSample::from_pcm(&mut audio)?;
+    let old_sample = bank.sample(index);
+    if old_sample.channels[0].address.looping && !new_sample.channels[0].address.looping {
+        warn!("Setting loop point at the start because none was defined");
+        for channel in &mut new_sample.channels {
+            channel.address.looping = true;
+        }
+    }
 
     info!("Rebuilding {}.ssm", group.name);
-    bank.replace_sample(index, sample);
+    bank.replace_sample(index, new_sample);
     let mut writer = Cursor::new(vec![]);
     bank.write_to(&mut writer)?;
 
