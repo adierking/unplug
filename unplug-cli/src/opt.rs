@@ -94,6 +94,9 @@ pub enum Subcommand {
     /// Exports sound effects to WAV files
     ExportSounds(ExportSoundsOpt),
 
+    /// Imports a sound effect from an audio file
+    ImportSound(ImportSoundOpt),
+
     /// Plays a sound effect
     PlaySound(PlaySoundOpt),
 }
@@ -451,6 +454,26 @@ pub struct ExportSoundsOpt {
     /// Path to the output directory
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: PathBuf,
+}
+
+#[derive(StructOpt)]
+pub struct ImportSoundOpt {
+    /// Path to the Chibi-Robo! ISO
+    #[structopt(long, value_name("PATH"), parse(from_os_str))]
+    pub iso: PathBuf,
+
+    /// Imports an Audacity label track from a file and uses it in place of the audio file's
+    /// original cues.
+    #[structopt(long)]
+    pub labels: Option<PathBuf>,
+
+    /// Name of the sound effect to replace
+    #[structopt(value_name("NAME"))]
+    pub sound: String,
+
+    /// Path to the audio file (WAV, FLAC, MP3, OGG)
+    #[structopt(parse(from_os_str))]
+    pub path: PathBuf,
 }
 
 /// `try_from_str` parser for parsing a playback volume

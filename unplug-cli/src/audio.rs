@@ -13,9 +13,10 @@ use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
 use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
+use unplug::audio::transport::ssm::BankSample;
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SfxBank, WavReader, WavWriter};
 use unplug::audio::{Cue, ReadSamples};
-use unplug::common::{ReadFrom, ReadSeek};
+use unplug::common::{ReadFrom, ReadSeek, WriteTo};
 use unplug::data::music::MUSIC;
 use unplug::data::sfx::{PLAYLIST_PATH, SFX};
 use unplug::data::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
@@ -25,6 +26,8 @@ use unplug::dvd::OpenFile;
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
 const MAX_MUSIC_SAMPLE_RATE: u32 = 44100;
+/// The highest sample rate that imported sound effects can have.
+const MAX_SFX_SAMPLE_RATE: u32 = 48000;
 
 const SFX_HORI_NAME: &str = "sfx_hori.ssm";
 const SFX_HORI_PATH: &str = "qp/sfx_hori.ssm";
@@ -284,6 +287,38 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
     }
 
     info!("Export finished in {:?}", start_time.elapsed());
+    Ok(())
+}
+
+pub fn import_sound(opt: ImportSoundOpt) -> Result<()> {
+    let start_time = Instant::now();
+
+    let mut iso = edit_iso_optional(Some(opt.iso))?.unwrap();
+    let playlist = {
+        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), PLAYLIST_PATH)?);
+        SfxPlaylist::read_from(&mut reader)?
+    };
+    let (group, index) = find_sound(&playlist, &opt.sound)?;
+    let group = SfxGroupDefinition::get(group);
+    let mut bank = {
+        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), group.bank_path())?);
+        SfxBank::open(&mut reader, group.name)?
+    };
+
+    let mut audio = open_sound_file(&opt.path, opt.labels.as_deref(), MAX_SFX_SAMPLE_RATE)?;
+    info!("Encoding audio to GameCube format");
+    let sample = BankSample::from_pcm(&mut audio)?;
+
+    info!("Rebuilding {}.ssm", group.name);
+    bank.replace_sample(index, sample);
+    let mut writer = Cursor::new(vec![]);
+    bank.write_to(&mut writer)?;
+
+    info!("Updating ISO");
+    writer.seek(SeekFrom::Start(0))?;
+    iso.replace_file_at(&group.bank_path(), writer)?;
+
+    info!("Import finished in {:?}", start_time.elapsed());
     Ok(())
 }
 
