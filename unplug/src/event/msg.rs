@@ -614,6 +614,7 @@ bitflags! {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum Voice {
+    None = 255,
     Telly = 0,
     Frog = 1,
     Jenny = 2,
@@ -914,5 +915,10 @@ mod tests {
             commands: vec![MsgCommand::Size(36), MsgCommand::Text(text("bunger")),],
             extra_data: vec![0u8, 1u8, 2u8, 3u8],
         });
+    }
+
+    #[test]
+    fn test_write_and_read_none_voice() {
+        assert_write_and_read!(msg(MsgCommand::Voice(Voice::None)));
     }
 }

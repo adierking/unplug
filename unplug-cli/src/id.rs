@@ -285,6 +285,7 @@ id_strings! {
     }
 
     Voice {
+        None = "none",
         Telly = "telly",
         Frog = "frog",
         Jenny = "jenny",
