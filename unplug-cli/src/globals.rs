@@ -1,18 +1,12 @@
-use crate::common::{
-    edit_iso_optional, open_iso_optional, open_qp_optional, read_globals_qp_or_file, QP_PATH,
-};
+use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::opt::{ExportGlobalsOpt, ImportGlobalsOpt};
 use anyhow::{bail, Result};
-use log::{debug, info};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Cursor, Seek, SeekFrom, Write};
-use std::path::Path;
-use tempfile::NamedTempFile;
+use std::io::{BufReader, BufWriter};
 use unplug::common::Text;
-use unplug::data::stage::GLOBALS_PATH;
-use unplug::dvd::ArchiveBuilder;
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
 
@@ -347,17 +341,12 @@ impl From<Metadata> for MetadataDef {
     }
 }
 
-pub fn export_globals(opt: ExportGlobalsOpt) -> Result<()> {
+pub fn export_globals(ctx: Context, opt: ExportGlobalsOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
 
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
-
-    info!("Reading global metadata");
-    let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path)?;
-    let metadata = globals.read_metadata()?;
-
-    info!("Writing to JSON");
+    info!("Dumping global metadata");
+    let metadata = ctx.read_globals()?.read_metadata()?;
     let root = MetadataDef::from(metadata);
     if opt.compact {
         serde_json::to_writer(out, &root)?;
@@ -367,20 +356,17 @@ pub fn export_globals(opt: ExportGlobalsOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn import_globals(opt: ImportGlobalsOpt) -> Result<()> {
+pub fn import_globals(ctx: Context, opt: ImportGlobalsOpt) -> Result<()> {
+    let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);
     let root: MetadataDef = serde_json::from_reader(json)?;
 
-    let mut iso = edit_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
-
     info!("Reading global metadata");
-    let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path.as_ref())?;
+    let mut globals = ctx.read_globals()?;
     let mut metadata = globals.read_metadata()?;
 
     info!("Rebuilding globals.bin");
-
     metadata.battery_globals = root.battery_globals;
     metadata.popper_globals = root.popper_globals;
     metadata.copter_globals = root.copter_globals;
@@ -404,35 +390,8 @@ pub fn import_globals(opt: ImportGlobalsOpt) -> Result<()> {
     LetickerWrapper::update_metadata(root.letickers, &mut metadata.letickers)?;
     StickerWrapper::update_metadata(root.stickers, &mut metadata.stickers)?;
     StatWrapper::update_metadata(root.stats, &mut metadata.stats)?;
-
-    let mut writer = Cursor::new(vec![]);
-    GlobalsBuilder::new().base(&mut globals).metadata(&metadata).write_to(&mut writer)?;
-    let bytes = writer.into_inner().into_boxed_slice();
-
-    let mut qp_temp = if let Some(qp) = &mut qp {
-        info!("Rebuilding qp.bin");
-        let mut qp_temp = match &opt.container.qp {
-            Some(path) => NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?,
-            None => NamedTempFile::new()?,
-        };
-        let mut qp_builder = ArchiveBuilder::with_archive(qp);
-        qp_builder.replace_at(GLOBALS_PATH, || Cursor::new(bytes))?;
-        debug!("Writing new qp.bin to {}", qp_temp.path().to_string_lossy());
-        qp_builder.write_to(&mut qp_temp)?;
-        qp_temp
-    } else {
-        let mut globals_file = File::create(opt.globals.path.unwrap())?;
-        globals_file.write_all(&bytes)?;
-        return Ok(());
-    };
-    drop(qp);
-
-    if let Some(iso) = &mut iso {
-        info!("Updating ISO");
-        qp_temp.seek(SeekFrom::Start(0))?;
-        iso.replace_file_at(QP_PATH, qp_temp)?;
-    } else {
-        qp_temp.persist(opt.container.qp.unwrap())?;
-    }
+    ctx.begin_update()
+        .write_globals(GlobalsBuilder::new().base(&mut globals).metadata(&metadata))?
+        .commit()?;
     Ok(())
 }

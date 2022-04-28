@@ -1,4 +1,4 @@
-use crate::common::*;
+use crate::context::Context;
 use crate::id::IdString;
 use crate::io::OutputRedirect;
 use crate::opt::*;
@@ -16,7 +16,7 @@ use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
 use unplug::data::stage::STAGES;
-use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree, OpenFile};
+use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
@@ -46,13 +46,15 @@ fn list_files(tree: &FileTree, opt: ListOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn list_archive(opt: ListArchiveOpt) -> Result<()> {
-    let file = File::open(opt.path)?;
+pub fn list_archive(ctx: Context, opt: ListArchiveOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    info!("Reading {}", opt.path);
+    let file = ctx.open_file_at(&opt.path)?;
     let archive = ArchiveReader::open(file)?;
     list_files(&archive.files, opt.settings)
 }
 
-pub fn list_iso(opt: ListIsoOpt) -> Result<()> {
+pub fn list_iso(_ctx: Context, opt: ListIsoOpt) -> Result<()> {
     let file = File::open(opt.path)?;
     let iso = DiscStream::open(file)?;
     println!("Game ID: {}", iso.game_id());
@@ -70,7 +72,7 @@ fn sort_ids<I: IdString + Ord>(ids: &mut [I], settings: &ListIdsOpt) {
     }
 }
 
-pub fn list_items(opt: ListItemsOpt) -> Result<()> {
+pub fn list_items(_ctx: Context, opt: ListItemsOpt) -> Result<()> {
     let mut items: Vec<_> = if opt.show_unknown {
         ITEMS.iter().map(|i| i.id).collect()
     } else {
@@ -83,7 +85,7 @@ pub fn list_items(opt: ListItemsOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn list_equipment(opt: ListEquipmentOpt) -> Result<()> {
+pub fn list_equipment(_ctx: Context, opt: ListEquipmentOpt) -> Result<()> {
     let mut atcs: Vec<_> = ATCS.iter().map(|a| a.id).collect();
     sort_ids(&mut atcs, &opt.settings);
     for atc in atcs {
@@ -95,7 +97,7 @@ pub fn list_equipment(opt: ListEquipmentOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn list_stages(opt: ListStagesOpt) -> Result<()> {
+pub fn list_stages(_ctx: Context, opt: ListStagesOpt) -> Result<()> {
     let mut stages: Vec<_> = STAGES.iter().map(|s| s.id).collect();
     sort_ids(&mut stages, &opt.settings);
     for stage in stages {
@@ -129,12 +131,11 @@ fn extract_files(
     Ok(())
 }
 
-pub fn extract_archive(opt: ExtractArchiveOpt) -> Result<()> {
-    let mut iso = open_iso_optional(opt.iso.as_ref())?;
-    let mut qp = ArchiveReader::open(match &mut iso {
-        Some(iso) => iso.open_file_at(opt.path.to_str().unwrap())?,
-        None => Box::new(File::open(opt.path)?),
-    })?;
+pub fn extract_archive(ctx: Context, opt: ExtractArchiveOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    info!("Reading {}", opt.path);
+    let file = ctx.open_file_at(&opt.path)?;
+    let mut qp = ArchiveReader::open(file)?;
 
     let mut buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
     let start_time = Instant::now();
@@ -144,7 +145,7 @@ pub fn extract_archive(opt: ExtractArchiveOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn extract_iso(opt: ExtractIsoOpt) -> Result<()> {
+pub fn extract_iso(_ctx: Context, opt: ExtractIsoOpt) -> Result<()> {
     let file = File::open(opt.path)?;
     let mut iso = DiscStream::open(file)?;
 
@@ -163,8 +164,6 @@ pub fn extract_iso(opt: ExtractIsoOpt) -> Result<()> {
 }
 
 fn dump_script(mut out: impl Write, script: &Script) -> Result<()> {
-    info!("Dumping script");
-
     write!(out, "\nDATA\n\n")?;
     writeln!(out, "off   id   value")?;
     for (location, block) in script.blocks_ordered() {
@@ -216,20 +215,14 @@ fn do_dump_stage(stage: &Stage, flags: &DumpStageFlags, mut out: impl Write) -> 
     Ok(())
 }
 
-pub fn dump_stage(opt: DumpStageOpt) -> Result<()> {
+pub fn dump_stage(ctx: Context, opt: DumpStageOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
-
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
-
+    let file = ctx.find_stage(&opt.stage.name)?;
     info!("Reading script globals");
-    let libs = {
-        let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path)?;
-        globals.read_libs()?
-    };
-
-    info!("Reading stage file");
-    let stage = read_stage_qp_or_file(qp.as_mut(), opt.stage.name, &libs)?;
+    let libs = ctx.read_globals()?.read_libs()?;
+    info!("Dumping {}", ctx.query_file(&file)?.name);
+    let stage = ctx.read_stage_file(&libs, &file)?;
     do_dump_stage(&stage, &opt.flags, out)?;
     Ok(())
 }
@@ -242,35 +235,27 @@ fn do_dump_libs(libs: &Libs, mut out: impl Write) -> Result<()> {
     Ok(())
 }
 
-pub fn dump_libs(opt: DumpLibsOpt) -> Result<()> {
+pub fn dump_libs(ctx: Context, opt: DumpLibsOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
-
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
-
-    info!("Reading script globals");
-    let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path)?;
-    let libs = globals.read_libs()?;
+    info!("Dumping script globals");
+    let libs = ctx.read_globals()?.read_libs()?;
     do_dump_libs(&libs, out)
 }
 
-pub fn dump_all_stages(opt: DumpAllStagesOpt) -> Result<()> {
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_required(iso.as_mut(), &opt.container)?;
-
+pub fn dump_all_stages(ctx: Context, opt: DumpAllStagesOpt) -> Result<()> {
     let start_time = Instant::now();
-    info!("Reading script globals");
-    let libs = {
-        let mut globals = read_globals_qp(&mut qp)?;
-        globals.read_libs()?
-    };
+    let mut ctx = ctx.open_read()?;
+
+    info!("Dumping script globals");
     fs::create_dir_all(&opt.output)?;
+    let libs = ctx.read_globals()?.read_libs()?;
     let libs_out = File::create(Path::join(&opt.output, "globals.txt"))?;
     do_dump_libs(&libs, BufWriter::new(libs_out))?;
 
     for stage_def in STAGES {
-        info!("Reading {}.bin", stage_def.name);
-        let stage = read_stage_qp(&mut qp, stage_def.name, &libs)?;
+        info!("Dumping {}.bin", stage_def.name);
+        let stage = ctx.read_stage(&libs, stage_def.id)?;
         let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", stage_def.name)))?;
         do_dump_stage(&stage, &opt.flags, BufWriter::new(stage_out))?;
     }
@@ -279,19 +264,11 @@ pub fn dump_all_stages(opt: DumpAllStagesOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn dump_colliders(opt: DumpCollidersOpt) -> Result<()> {
+pub fn dump_colliders(ctx: Context, opt: DumpCollidersOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
     let mut out = BufWriter::new(OutputRedirect::new(opt.output)?);
-
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_optional(iso.as_mut(), &opt.container)?;
-
-    info!("Reading collider globals");
-    let colliders = {
-        let mut globals = read_globals_qp_or_file(qp.as_mut(), opt.globals.path)?;
-        globals.read_colliders()?
-    };
-
-    info!("Dumping colliders");
+    info!("Dumping collider globals");
+    let colliders = ctx.read_globals()?.read_colliders()?;
     for (obj, list) in colliders.objects.iter().enumerate() {
         writeln!(out, "Object {:?} ({}):", Object::try_from(obj as i32)?, obj)?;
         for (i, collider) in list.iter().enumerate() {
@@ -299,6 +276,5 @@ pub fn dump_colliders(opt: DumpCollidersOpt) -> Result<()> {
         }
         writeln!(out)?;
     }
-
     Ok(())
 }

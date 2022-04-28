@@ -4,8 +4,9 @@ use std::fs::File;
 use tempfile::NamedTempFile;
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
+use unplug_cli::context::Context;
 use unplug_cli::globals;
-use unplug_cli::opt::{ExportGlobalsOpt, GlobalsOpt, ImportGlobalsOpt, OptionalContainerOpt};
+use unplug_cli::opt::{ExportGlobalsOpt, ImportGlobalsOpt};
 use unplug_test as common;
 
 #[test]
@@ -13,18 +14,13 @@ fn test_reimport_metadata() -> Result<()> {
     common::init_logging();
 
     let copy_path = common::copy_iso()?;
+    let ctx = Context::Iso(copy_path.to_path_buf());
     let json_path = NamedTempFile::new()?.into_temp_path();
-    globals::export_globals(ExportGlobalsOpt {
-        container: OptionalContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
-        globals: GlobalsOpt { path: None },
-        compact: false,
-        output: Some(json_path.to_owned()),
-    })?;
-    globals::import_globals(ImportGlobalsOpt {
-        container: OptionalContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
-        globals: GlobalsOpt { path: None },
-        input: json_path.to_owned(),
-    })?;
+    globals::export_globals(
+        ctx.clone(),
+        ExportGlobalsOpt { compact: false, output: Some(json_path.to_owned()) },
+    )?;
+    globals::import_globals(ctx, ImportGlobalsOpt { input: json_path.to_owned() })?;
 
     info!("Opening original ISO");
     let mut original_iso = common::open_iso()?;

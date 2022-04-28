@@ -2,7 +2,6 @@
 
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
-use structopt::clap::ArgGroup;
 use structopt::StructOpt;
 
 /// The minimum accepted volume level for playback.
@@ -25,8 +24,17 @@ pub struct Opt {
     #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
     pub trace: Option<PathBuf>,
 
+    #[structopt(flatten)]
+    pub context: ContextOpt,
+
     #[structopt(subcommand)]
     pub command: Subcommand,
+}
+
+#[derive(StructOpt)]
+pub struct ContextOpt {
+    #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
+    pub iso: Option<PathBuf>,
 }
 
 #[derive(StructOpt)]
@@ -102,45 +110,13 @@ pub enum Subcommand {
 }
 
 #[derive(StructOpt)]
-#[structopt(group = ArgGroup::with_name("container"))]
-pub struct OptionalContainerOpt {
-    /// Run within a Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str), group = "container")]
-    pub iso: Option<PathBuf>,
-
-    /// Run within a qp.bin archive
-    #[structopt(long, value_name("PATH"), parse(from_os_str), group = "container")]
-    pub qp: Option<PathBuf>,
-}
-
-#[derive(StructOpt)]
-#[structopt(group = ArgGroup::with_name("container").required(true))]
-pub struct RequiredContainerOpt {
-    /// Run within a Chibi-Robo! ISO (required if no --qp)
-    #[structopt(long, value_name("PATH"), parse(from_os_str), group = "container")]
-    pub iso: Option<PathBuf>,
-
-    /// Run within a qp.bin archive (required if no --iso)
-    #[structopt(long, value_name("PATH"), parse(from_os_str), group = "container")]
-    pub qp: Option<PathBuf>,
-}
-
-#[derive(StructOpt)]
 pub struct StageOpt {
     /// The stage name/path
     ///
     /// If the stage is being opened from an ISO or qp.bin, this is the stage
     /// name without any directory or extension, e.g. "stage01". If the stage is
     /// being opened from the local filesystem, this is the path to the file.
-    #[structopt(parse(from_os_str))]
-    pub name: PathBuf,
-}
-
-#[derive(StructOpt)]
-pub struct GlobalsOpt {
-    /// Path to globals.bin (only if no ISO or qp.bin is provided)
-    #[structopt(long("globals"), value_name("PATH"), parse(from_os_str), required_unless_one(&["archive", "iso"]))]
-    pub path: Option<PathBuf>,
+    pub name: String,
 }
 
 #[derive(StructOpt)]
@@ -172,8 +148,7 @@ pub struct ListArchiveOpt {
     pub settings: ListOpt,
 
     /// Path to the archive to read
-    #[structopt(parse(from_os_str))]
-    pub path: PathBuf,
+    pub path: String,
 }
 
 #[derive(StructOpt)]
@@ -229,13 +204,8 @@ pub struct ListStagesOpt {
 
 #[derive(StructOpt)]
 pub struct ExtractArchiveOpt {
-    /// Run within a Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str))]
-    pub iso: Option<PathBuf>,
-
     /// Path to the archive to read
-    #[structopt(parse(from_os_str))]
-    pub path: PathBuf,
+    pub path: String,
 
     /// Directory to extract files to (will be created if necessary)
     #[structopt(short, long("out"), value_name("PATH"))]
@@ -263,12 +233,6 @@ pub struct DumpStageFlags {
 #[derive(StructOpt)]
 pub struct DumpStageOpt {
     #[structopt(flatten)]
-    pub container: OptionalContainerOpt,
-
-    #[structopt(flatten)]
-    pub globals: GlobalsOpt,
-
-    #[structopt(flatten)]
     pub stage: StageOpt,
 
     /// Redirects output to a file instead of stdout
@@ -281,12 +245,6 @@ pub struct DumpStageOpt {
 
 #[derive(StructOpt)]
 pub struct DumpLibsOpt {
-    #[structopt(flatten)]
-    pub container: OptionalContainerOpt,
-
-    #[structopt(flatten)]
-    pub globals: GlobalsOpt,
-
     /// Redirects output to a file instead of stdout
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: Option<PathBuf>,
@@ -294,9 +252,6 @@ pub struct DumpLibsOpt {
 
 #[derive(StructOpt)]
 pub struct DumpAllStagesOpt {
-    #[structopt(flatten)]
-    pub container: RequiredContainerOpt,
-
     /// Path to the output directory
     #[structopt(short, value_name("PATH"))]
     pub output: PathBuf,
@@ -307,9 +262,6 @@ pub struct DumpAllStagesOpt {
 
 #[derive(StructOpt)]
 pub struct ExportMessagesOpt {
-    #[structopt(flatten)]
-    pub container: RequiredContainerOpt,
-
     /// Path to the output XML file
     #[structopt(short, value_name("PATH"))]
     pub output: PathBuf,
@@ -317,12 +269,6 @@ pub struct ExportMessagesOpt {
 
 #[derive(StructOpt)]
 pub struct DumpCollidersOpt {
-    #[structopt(flatten)]
-    pub container: OptionalContainerOpt,
-
-    #[structopt(flatten)]
-    pub globals: GlobalsOpt,
-
     /// Redirects output to a file instead of stdout
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: Option<PathBuf>,
@@ -330,9 +276,6 @@ pub struct DumpCollidersOpt {
 
 #[derive(StructOpt)]
 pub struct ImportMessagesOpt {
-    #[structopt(flatten)]
-    pub container: RequiredContainerOpt,
-
     /// Path to the input XML file
     #[structopt(value_name("PATH"))]
     pub input: PathBuf,
@@ -340,12 +283,6 @@ pub struct ImportMessagesOpt {
 
 #[derive(StructOpt)]
 pub struct ExportGlobalsOpt {
-    #[structopt(flatten)]
-    pub container: OptionalContainerOpt,
-
-    #[structopt(flatten)]
-    pub globals: GlobalsOpt,
-
     /// Don't output unnecessary whitespace
     #[structopt(short, long)]
     pub compact: bool,
@@ -357,12 +294,6 @@ pub struct ExportGlobalsOpt {
 
 #[derive(StructOpt)]
 pub struct ImportGlobalsOpt {
-    #[structopt(flatten)]
-    pub container: OptionalContainerOpt,
-
-    #[structopt(flatten)]
-    pub globals: GlobalsOpt,
-
     /// Path to the input JSON file
     #[structopt(value_name("PATH"))]
     pub input: PathBuf,
@@ -370,9 +301,6 @@ pub struct ImportGlobalsOpt {
 
 #[derive(StructOpt)]
 pub struct ExportShopOpt {
-    #[structopt(flatten)]
-    pub container: RequiredContainerOpt,
-
     /// Don't output unnecessary whitespace
     #[structopt(short, long)]
     pub compact: bool,
@@ -384,9 +312,6 @@ pub struct ExportShopOpt {
 
 #[derive(StructOpt)]
 pub struct ImportShopOpt {
-    #[structopt(flatten)]
-    pub container: RequiredContainerOpt,
-
     /// Path to the input JSON file
     #[structopt(value_name("PATH"))]
     pub input: PathBuf,
@@ -402,16 +327,11 @@ pub struct SoundExportOpt {
 
 #[derive(StructOpt)]
 pub struct ExportMusicOpt {
-    /// Run within a Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str))]
-    pub iso: Option<PathBuf>,
-
     #[structopt(flatten)]
     pub settings: SoundExportOpt,
 
-    /// Path to the HPS file to export
-    #[structopt(parse(from_os_str))]
-    pub path: PathBuf,
+    /// Name or path of the music to export
+    pub name: String,
 
     /// Path to the output WAV file
     #[structopt(short, long("out"), value_name("PATH"))]
@@ -420,18 +340,13 @@ pub struct ExportMusicOpt {
 
 #[derive(StructOpt)]
 pub struct ImportMusicOpt {
-    /// Path to the Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str))]
-    pub iso: PathBuf,
-
     /// Imports an Audacity label track from a file and uses it in place of the audio file's
     /// original cues.
     #[structopt(long)]
     pub labels: Option<PathBuf>,
 
-    /// Path to the HPS file to replace
-    #[structopt(value_name("PATH"), parse(from_os_str))]
-    pub hps: PathBuf,
+    /// Name or path of the music to replace
+    pub name: String,
 
     /// Path to the audio file (WAV, FLAC, MP3, OGG)
     #[structopt(parse(from_os_str))]
@@ -440,16 +355,12 @@ pub struct ImportMusicOpt {
 
 #[derive(StructOpt)]
 pub struct ExportSoundsOpt {
-    /// Run within a Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str))]
-    pub iso: Option<PathBuf>,
-
     #[structopt(flatten)]
     pub settings: SoundExportOpt,
 
-    /// Path to the SSM file to export. If --iso is provided, this can be omitted to export all sounds.
-    #[structopt(value_name("SSM"), parse(from_os_str), required_unless("iso"))]
-    pub path: Option<PathBuf>,
+    /// Path to the SSM file to export. Omitting this will export all sounds.
+    #[structopt(value_name("SSM"))]
+    pub path: Option<String>,
 
     /// Path to the output directory
     #[structopt(short, long("out"), value_name("PATH"))]
@@ -458,10 +369,6 @@ pub struct ExportSoundsOpt {
 
 #[derive(StructOpt)]
 pub struct ImportSoundOpt {
-    /// Path to the Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str))]
-    pub iso: PathBuf,
-
     /// Imports an Audacity label track from a file and uses it in place of the audio file's
     /// original cues.
     #[structopt(long)]
@@ -495,13 +402,9 @@ pub struct PlaybackOpt {
 
 #[derive(StructOpt)]
 pub struct PlayMusicOpt {
-    /// Run within a Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str))]
-    pub iso: Option<PathBuf>,
-
     /// Name or path of the music to play
-    #[structopt(value_name("NAME"), parse(from_os_str))]
-    pub name: PathBuf,
+    #[structopt(value_name("NAME"))]
+    pub name: String,
 
     #[structopt(flatten)]
     pub playback: PlaybackOpt,
@@ -509,10 +412,6 @@ pub struct PlayMusicOpt {
 
 #[derive(StructOpt)]
 pub struct PlaySoundOpt {
-    /// Path to the Chibi-Robo! ISO
-    #[structopt(long, value_name("PATH"), parse(from_os_str))]
-    pub iso: PathBuf,
-
     /// Name of the sound effect to play
     #[structopt(value_name("NAME"))]
     pub sound: String,

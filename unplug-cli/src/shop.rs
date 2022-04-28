@@ -1,23 +1,19 @@
-use crate::common::*;
+use crate::context::Context;
 use crate::id::IdString;
 use crate::io::OutputRedirect;
 use crate::opt::{ExportShopOpt, ImportShopOpt};
 use anyhow::{bail, Error, Result};
 use lazy_static::lazy_static;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::ser::{Formatter, Serializer};
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Cursor, Seek, SeekFrom};
-use std::path::Path;
-use tempfile::NamedTempFile;
-use unplug::common::WriteTo;
-use unplug::data::stage::{Stage, StageDefinition, GLOBALS_PATH};
+use std::io::{self, BufReader, BufWriter};
+use unplug::data::stage::{Stage, StageDefinition};
 use unplug::data::{Atc, Item};
-use unplug::dvd::ArchiveBuilder;
 use unplug::globals::{GlobalsBuilder, Metadata};
 use unplug::shop::{Requirement, Shop, Slot, NUM_SLOTS};
 
@@ -190,14 +186,12 @@ impl TryFrom<&SlotModel> for Slot {
     }
 }
 
-pub fn export_shop(opt: ExportShopOpt) -> Result<()> {
+pub fn export_shop(ctx: Context, opt: ExportShopOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
 
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_required(iso.as_mut(), &opt.container)?;
-
     info!("Reading global metadata");
-    let mut globals = read_globals_qp(&mut qp)?;
+    let mut globals = ctx.read_globals()?;
     let metadata = globals.read_metadata()?;
 
     info!("Reading script globals");
@@ -205,7 +199,7 @@ pub fn export_shop(opt: ExportShopOpt) -> Result<()> {
 
     let chibi_house = StageDefinition::get(Stage::ChibiHouse);
     info!("Reading {}.bin", chibi_house.name);
-    let stage = read_stage_qp(&mut qp, chibi_house.name, &libs)?;
+    let stage = ctx.read_stage(&libs, Stage::ChibiHouse)?;
 
     info!("Parsing shop code");
     let shop = Shop::parse(&stage.script)?;
@@ -223,7 +217,8 @@ pub fn export_shop(opt: ExportShopOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
+pub fn import_shop(ctx: Context, opt: ImportShopOpt) -> Result<()> {
+    let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);
     let models: Vec<SlotModel> = serde_json::from_reader(json)?;
@@ -254,19 +249,16 @@ pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
         slots.truncate(NUM_SLOTS);
     }
 
-    let mut iso = edit_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_required(iso.as_mut(), &opt.container)?;
-
     info!("Reading global metadata");
-    let mut globals = read_globals_qp(&mut qp)?;
+    let mut globals = ctx.read_globals()?;
     let mut metadata = globals.read_metadata()?;
 
     info!("Reading script globals");
     let libs = globals.read_libs()?;
 
-    info!("Reading stage file");
     let chibi_house = StageDefinition::get(Stage::ChibiHouse);
-    let mut stage = read_stage_qp(&mut qp, chibi_house.name, &libs)?;
+    info!("Reading {}.bin", chibi_house.name);
+    let mut stage = ctx.read_stage(&libs, Stage::ChibiHouse)?;
 
     info!("Compiling new shop code");
     for (slot, model) in slots.iter().zip(&models) {
@@ -278,35 +270,11 @@ pub fn import_shop(opt: ImportShopOpt) -> Result<()> {
     let shop = Shop::with_slots(slots);
     shop.compile(&mut stage.script)?;
 
-    info!("Rebuilding globals.bin");
-    let mut globals_data = Cursor::new(vec![]);
-    GlobalsBuilder::new().base(&mut globals).metadata(&metadata).write_to(&mut globals_data)?;
-    globals_data.seek(SeekFrom::Start(0))?;
-
-    info!("Rebuilding {}.bin", chibi_house.name);
-    let mut stage_data = Cursor::new(vec![]);
-    stage.write_to(&mut stage_data)?;
-    stage_data.seek(SeekFrom::Start(0))?;
-
-    info!("Rebuilding qp.bin");
-    let mut qp_temp = match &opt.container.qp {
-        Some(path) => NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?,
-        None => NamedTempFile::new()?,
-    };
-    debug!("Writing new qp.bin to {}", qp_temp.path().to_string_lossy());
-    ArchiveBuilder::with_archive(&mut { qp })
-        .replace_at(GLOBALS_PATH, || globals_data)?
-        .replace_at(&chibi_house.path(), || stage_data)?
-        .write_to(&mut qp_temp)?;
-
-    if let Some(mut iso) = iso {
-        info!("Updating ISO");
-        qp_temp.seek(SeekFrom::Start(0))?;
-        iso.replace_file_at(QP_PATH, qp_temp)?;
-    } else {
-        qp_temp.persist(opt.container.qp.unwrap())?;
-    }
-
+    info!("Updating game files");
+    ctx.begin_update()
+        .write_globals(GlobalsBuilder::new().base(&mut globals).metadata(&metadata))?
+        .write_stage(Stage::ChibiHouse, stage)?
+        .commit()?;
     Ok(())
 }
 

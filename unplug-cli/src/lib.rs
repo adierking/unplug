@@ -16,7 +16,7 @@
 
 pub mod audio;
 pub mod commands;
-pub mod common;
+pub mod context;
 pub mod globals;
 pub mod id;
 pub mod io;

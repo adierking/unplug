@@ -8,7 +8,8 @@ use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::shop::Shop;
 use unplug::stage::Stage;
-use unplug_cli::opt::{ExportShopOpt, ImportShopOpt, RequiredContainerOpt};
+use unplug_cli::context::Context;
+use unplug_cli::opt::{ExportShopOpt, ImportShopOpt};
 use unplug_cli::shop;
 use unplug_test as common;
 
@@ -17,16 +18,13 @@ fn test_reimport_shop() -> Result<()> {
     common::init_logging();
 
     let copy_path = common::copy_iso()?;
+    let ctx = Context::Iso(copy_path.to_path_buf());
     let json_path = NamedTempFile::new()?.into_temp_path();
-    shop::export_shop(ExportShopOpt {
-        container: RequiredContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
-        compact: false,
-        output: Some(json_path.to_owned()),
-    })?;
-    shop::import_shop(ImportShopOpt {
-        container: RequiredContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
-        input: json_path.to_owned(),
-    })?;
+    shop::export_shop(
+        ctx.clone(),
+        ExportShopOpt { compact: false, output: Some(json_path.to_owned()) },
+    )?;
+    shop::import_shop(ctx, ImportShopOpt { input: json_path.to_owned() })?;
 
     info!("Opening original ISO");
     let mut original_iso = common::open_iso()?;

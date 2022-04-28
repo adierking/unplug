@@ -1,25 +1,22 @@
 use super::common::*;
-use crate::common::{edit_iso_optional, open_qp_required, read_globals_qp, read_stage_qp, QP_PATH};
+use crate::context::Context;
 use crate::id::IdString;
 use crate::opt::ImportMessagesOpt;
 use anyhow::{anyhow, bail, ensure, Result};
-use log::{debug, info, warn};
+use log::{info, warn};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Cursor, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Cursor};
 use std::mem;
-use std::path::Path;
 use std::str;
-use tempfile::NamedTempFile;
 use unplug::common::{SfxId, Text, WriteTo};
 use unplug::data::music::MUSIC;
 use unplug::data::sfx::SFX;
 use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
-use unplug::dvd::ArchiveBuilder;
 use unplug::event::msg::*;
 use unplug::event::Script;
 use unplug::globals::GlobalsBuilder;
@@ -564,7 +561,8 @@ fn apply_messages(
     }
 }
 
-pub fn import_messages(opt: ImportMessagesOpt) -> Result<()> {
+pub fn import_messages(ctx: Context, opt: ImportMessagesOpt) -> Result<()> {
+    let mut ctx = ctx.open_read_write()?;
     info!("Reading messages from {}", opt.input.to_str().unwrap());
     let file = BufReader::new(File::open(opt.input)?);
     let mut reader = MessageReader::new(file);
@@ -584,11 +582,8 @@ pub fn import_messages(opt: ImportMessagesOpt) -> Result<()> {
     let mut sources: Vec<_> = sources.into_iter().collect();
     sources.sort_unstable();
 
-    let mut iso = edit_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_required(iso.as_mut(), &opt.container)?;
-
     info!("Reading script globals");
-    let mut globals = read_globals_qp(&mut qp)?;
+    let mut globals = ctx.read_globals()?;
     let mut rebuilt_files = vec![];
     let mut libs = globals.read_libs()?;
     if sources[0] == MessageSource::Globals {
@@ -608,7 +603,7 @@ pub fn import_messages(opt: ImportMessagesOpt) -> Result<()> {
         };
         let stage_def = StageDefinition::get(stage_id);
         info!("Rebuilding {}.bin", stage_def.name);
-        let mut stage = read_stage_qp(&mut qp, stage_def.name, &libs)?;
+        let mut stage = ctx.read_stage(&libs, stage_id)?;
         apply_messages(source, &mut stage.script, &mut messages);
         let mut writer = Cursor::new(vec![]);
         stage.write_to(&mut writer)?;
@@ -624,28 +619,12 @@ pub fn import_messages(opt: ImportMessagesOpt) -> Result<()> {
         }
     }
 
-    info!("Rebuilding qp.bin");
-    let mut qp_temp = match &opt.container.qp {
-        Some(path) => NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?,
-        None => NamedTempFile::new()?,
-    };
-    let mut qp_builder = ArchiveBuilder::with_archive(&mut qp);
+    info!("Updating game files");
+    let mut writer = ctx.begin_update();
     for (path, bytes) in rebuilt_files {
-        qp_builder.replace_at(&path, || Cursor::new(bytes))?;
+        writer = writer.write_qp_file_at(&path, Cursor::new(bytes))?;
     }
-    debug!("Writing new qp.bin to {}", qp_temp.path().to_string_lossy());
-    qp_builder.write_to(&mut qp_temp)?;
-    drop(qp_builder);
-    drop(qp);
-
-    if let Some(mut iso) = iso {
-        info!("Updating ISO");
-        qp_temp.seek(SeekFrom::Start(0))?;
-        iso.replace_file_at(QP_PATH, qp_temp)?;
-    } else {
-        qp_temp.persist(opt.container.qp.unwrap())?;
-    }
-
+    writer.commit()?;
     Ok(())
 }
 

@@ -1,5 +1,5 @@
 use super::common::*;
-use crate::common::{open_iso_optional, open_qp_required, read_globals_qp, read_stage_qp};
+use crate::context::Context;
 use crate::id::IdString;
 use crate::opt::ExportMessagesOpt;
 use anyhow::Result;
@@ -370,15 +370,10 @@ impl<W: Write> MessageWriter<W> {
     }
 }
 
-pub fn export_messages(opt: ExportMessagesOpt) -> Result<()> {
-    let mut iso = open_iso_optional(opt.container.iso.as_ref())?;
-    let mut qp = open_qp_required(iso.as_mut(), &opt.container)?;
-
+pub fn export_messages(ctx: Context, opt: ExportMessagesOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
     info!("Reading script globals");
-    let libs = {
-        let mut globals = read_globals_qp(&mut qp)?;
-        globals.read_libs()?
-    };
+    let libs = ctx.read_globals()?.read_libs()?;
 
     let out_file = BufWriter::new(File::create(opt.output)?);
     let mut writer = MessageWriter::new(out_file);
@@ -387,7 +382,7 @@ pub fn export_messages(opt: ExportMessagesOpt) -> Result<()> {
 
     for def in STAGES {
         info!("Reading {}.bin", def.name);
-        let stage = read_stage_qp(&mut qp, def.name, &libs)?;
+        let stage = ctx.read_stage(&libs, def.id)?;
         writer.write_script(MessageSource::Stage(def.id), &stage.script)?;
     }
 

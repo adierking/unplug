@@ -8,9 +8,10 @@ use unplug::event::msg::MsgArgs;
 use unplug::event::Script;
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
+use unplug_cli::context::Context;
 use unplug_cli::msg;
 use unplug_cli::msg::common::{iter_messages, MessageId, MessageSource};
-use unplug_cli::opt::{ExportMessagesOpt, ImportMessagesOpt, RequiredContainerOpt};
+use unplug_cli::opt::{ExportMessagesOpt, ImportMessagesOpt};
 use unplug_test as common;
 
 fn collect_messages(source: MessageSource, script: &Script) -> Vec<(MessageId, &MsgArgs)> {
@@ -33,15 +34,10 @@ fn test_reimport_messages() -> Result<()> {
     common::init_logging();
 
     let copy_path = common::copy_iso()?;
+    let ctx = Context::Iso(copy_path.to_path_buf());
     let xml_path = NamedTempFile::new()?.into_temp_path();
-    msg::export_messages(ExportMessagesOpt {
-        container: RequiredContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
-        output: xml_path.to_owned(),
-    })?;
-    msg::import_messages(ImportMessagesOpt {
-        container: RequiredContainerOpt { iso: Some(copy_path.to_owned()), qp: None },
-        input: xml_path.to_owned(),
-    })?;
+    msg::export_messages(ctx.clone(), ExportMessagesOpt { output: xml_path.to_owned() })?;
+    msg::import_messages(ctx, ImportMessagesOpt { input: xml_path.to_owned() })?;
 
     info!("Opening original ISO");
     let mut original_iso = common::open_iso()?;

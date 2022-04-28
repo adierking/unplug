@@ -4,6 +4,9 @@ use std::fs::File;
 use std::io::{self, Cursor, Read, Seek, SeekFrom, Stdout, Write};
 use std::path::Path;
 
+/// A cursor around a byte slice.
+pub type MemoryCursor = Cursor<Box<[u8]>>;
+
 /// A writer which forwards output to either stdout or a file.
 /// This is more useful than shell redirection on Windows because it supports Unicode better.
 pub enum OutputRedirect {
@@ -38,7 +41,7 @@ impl Write for OutputRedirect {
 }
 
 /// Copies an entire reader into memory and then returns a `Cursor` over the bytes.
-pub fn copy_into_memory(mut reader: (impl Read + Seek)) -> io::Result<Cursor<Box<[u8]>>> {
+pub fn copy_into_memory(mut reader: (impl Read + Seek)) -> io::Result<MemoryCursor> {
     let size = reader.seek(SeekFrom::End(0))?.try_into().expect("File size overflow");
     reader.seek(SeekFrom::Start(0))?;
     let mut buf = Vec::with_capacity(size);

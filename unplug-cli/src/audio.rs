@@ -1,8 +1,8 @@
-use crate::common::*;
+use crate::context::Context;
 use crate::opt::*;
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use log::{debug, info, warn};
 use std::convert::TryFrom;
 use std::fs::{self, File};
@@ -12,16 +12,14 @@ use std::time::Instant;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
 use unplug::audio::metadata::SfxPlaylist;
-use unplug::audio::transport::hps::{HpsReader, Looping, PcmHpsWriter};
+use unplug::audio::transport::hps::{Looping, PcmHpsWriter};
 use unplug::audio::transport::ssm::BankSample;
 use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SfxBank, WavReader, WavWriter};
 use unplug::audio::{Cue, ReadSamples};
-use unplug::common::{ReadFrom, ReadSeek, WriteTo};
-use unplug::data::music::MUSIC;
-use unplug::data::sfx::{PLAYLIST_PATH, SFX};
+use unplug::common::{ReadSeek, WriteTo};
+use unplug::data::sfx::SFX;
 use unplug::data::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
-use unplug::dvd::OpenFile;
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
@@ -86,17 +84,6 @@ fn open_sound_file(
     Ok(audio)
 }
 
-/// Finds a music file by name and returns its path in the ISO.
-fn find_music(name: &str) -> Result<String> {
-    let path = MUSIC
-        .iter()
-        .find(|m| unicase::eq(m.name, name))
-        .map(|m| m.path())
-        .ok_or_else(|| anyhow!("unknown music: \"{}\"", name))?;
-    debug!("Resolved music \"{}\": {}", name, path);
-    Ok(path)
-}
-
 /// Finds a sound effect by name and returns a `(group, index)` pair.
 fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SfxGroup, usize)> {
     let def = match SFX.iter().find(|e| unicase::eq(e.name, name)) {
@@ -125,13 +112,14 @@ fn export_labels(cues: Vec<Cue>, sample_rate: u32, sound_path: &Path) -> Result<
     Ok(())
 }
 
-pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
+pub fn export_music(ctx: Context, opt: ExportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
-    let mut iso = open_iso_optional(opt.iso.as_ref())?;
-    let reader = BufReader::new(open_iso_entry_or_file(iso.as_mut(), &opt.path)?);
-    let name = opt.path.file_name().unwrap().to_string_lossy();
-    let hps = HpsReader::new(reader, name)?;
+    let mut ctx = ctx.open_read()?;
+    let file = ctx.find_music(&opt.name)?;
+    let info = ctx.query_file(&file)?;
+    info!("Opening {}", info.name);
+    let hps = ctx.open_music_file(&file)?;
 
     info!("Writing {}", opt.output.display());
     let progress = progress_bar(1);
@@ -154,18 +142,14 @@ pub fn export_music(opt: ExportMusicOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
+pub fn import_music(ctx: Context, opt: ImportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
-    let mut iso = edit_iso_optional(Some(opt.iso))?.unwrap();
-    let hps_path = opt.hps;
-    info!("Checking {}", hps_path.display());
-    let entry = iso.files.at(hps_path.to_str().unwrap())?;
-    let hps_name = iso.files[entry].name().to_owned();
-    let original_loop = {
-        let reader = BufReader::new(iso.open_file(entry)?);
-        HpsReader::new(reader, hps_name)?.loop_start()
-    };
+    let mut ctx = ctx.open_read_write()?;
+    let file = ctx.find_music(&opt.name)?;
+    let info = ctx.query_file(&file)?;
+    info!("Opening {}", info.name);
+    let original_loop = ctx.open_music_file(&file)?.loop_start();
 
     let audio = open_sound_file(&opt.path, opt.labels.as_deref(), MAX_MUSIC_SAMPLE_RATE)?;
     info!("Analyzing audio waveform");
@@ -177,7 +161,7 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
 
     info!("Encoding audio to GameCube format");
     let progress = progress_bar(1);
-    progress.set_message(iso.files[entry].name().to_owned());
+    progress.set_message(info.name);
     // Copy the loop setting from the original HPS
     let looping = if original_loop.is_some() { Looping::Enabled } else { Looping::Disabled };
     let mut writer = Cursor::new(vec![]);
@@ -187,9 +171,9 @@ pub fn import_music(opt: ImportMusicOpt) -> Result<()> {
         .write_to(&mut writer)?;
     progress.finish_using_style();
 
-    info!("Updating ISO");
+    info!("Updating game files");
     writer.seek(SeekFrom::Start(0))?;
-    iso.replace_file(entry, writer)?;
+    ctx.begin_update().write_file(&file, writer).commit()?;
 
     info!("Import finished in {:?}", start_time.elapsed());
     Ok(())
@@ -264,25 +248,24 @@ fn export_bank_impl<'r>(
     Ok(())
 }
 
-pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
+pub fn export_sounds(ctx: Context, opt: ExportSoundsOpt) -> Result<()> {
     let start_time = Instant::now();
 
-    let mut iso = open_iso_optional(opt.iso.as_ref())?;
+    let mut ctx = ctx.open_read()?;
     if let Some(bank_path) = opt.path {
         // Export single bank
-        let reader = open_iso_entry_or_file(iso.as_mut(), &bank_path)?;
-        let name = bank_path.file_name().unwrap().to_string_lossy();
+        let reader = ctx.open_file_at(&bank_path)?;
+        let name = Path::new(&bank_path).file_name().unwrap().to_string_lossy();
         export_bank(&opt.settings, reader, &name, &opt.output)?;
     } else {
         // Export registered banks
-        let mut iso = iso.expect("no iso path or bank path");
         for group in SFX_GROUPS {
-            let reader = iso.open_file_at(&group.bank_path())?;
+            let reader = ctx.open_disc_file_at(&group.bank_path())?;
             let name = format!("{}.ssm", group.name);
             export_bank_subdir(&opt.settings, reader, &name, &opt.output)?;
         }
         // Export sfx_hori, which is not a registered bank because it has bogus sound IDs
-        let reader = iso.open_file_at(SFX_HORI_PATH)?;
+        let reader = ctx.open_disc_file_at(SFX_HORI_PATH)?;
         export_bank_subdir(&opt.settings, reader, SFX_HORI_NAME, &opt.output)?;
     }
 
@@ -290,18 +273,16 @@ pub fn export_sounds(opt: ExportSoundsOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn import_sound(opt: ImportSoundOpt) -> Result<()> {
+pub fn import_sound(ctx: Context, opt: ImportSoundOpt) -> Result<()> {
     let start_time = Instant::now();
 
-    let mut iso = edit_iso_optional(Some(opt.iso))?.unwrap();
-    let playlist = {
-        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), PLAYLIST_PATH)?);
-        SfxPlaylist::read_from(&mut reader)?
-    };
+    let mut ctx = ctx.open_read_write()?;
+    let playlist = ctx.read_playlist()?;
     let (group, index) = find_sound(&playlist, &opt.sound)?;
     let group = SfxGroupDefinition::get(group);
     let mut bank = {
-        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), group.bank_path())?);
+        info!("Opening {}.ssm", group.name);
+        let mut reader = BufReader::new(ctx.open_disc_file_at(&group.bank_path())?);
         SfxBank::open(&mut reader, group.name)?
     };
 
@@ -321,9 +302,9 @@ pub fn import_sound(opt: ImportSoundOpt) -> Result<()> {
     let mut writer = Cursor::new(vec![]);
     bank.write_to(&mut writer)?;
 
-    info!("Updating ISO");
+    info!("Updating game files");
     writer.seek(SeekFrom::Start(0))?;
-    iso.replace_file_at(&group.bank_path(), writer)?;
+    ctx.begin_update().write_disc_file_at(&group.bank_path(), writer)?.commit()?;
 
     info!("Import finished in {:?}", start_time.elapsed());
     Ok(())
@@ -345,32 +326,23 @@ fn play_audio(
     Ok(())
 }
 
-pub fn play_music(opt: PlayMusicOpt) -> Result<()> {
-    let iso = open_iso_optional(opt.iso.as_ref())?;
-    let path = if iso.is_some() {
-        find_music(opt.name.to_str().unwrap())?
-    } else {
-        opt.name.to_str().unwrap().to_owned()
-    };
-    let name = Path::new(&path).file_name().unwrap().to_string_lossy();
-    let reader = BufReader::new(iso_into_entry_or_file(iso, &path)?);
-    let hps = HpsReader::new(reader, name)?;
+pub fn play_music(ctx: Context, opt: PlayMusicOpt) -> Result<()> {
+    let ctx = Box::leak(Box::new(ctx.open_read()?));
+    let file = ctx.find_music(&opt.name)?;
+    info!("Opening {}", ctx.query_file(&file)?.name);
+    let hps = ctx.open_music_file(&file)?;
     play_audio(hps.decoder(), opt.playback)?;
     Ok(())
 }
 
-pub fn play_sound(opt: PlaySoundOpt) -> Result<()> {
-    let mut iso = open_iso_optional(Some(opt.iso))?.unwrap();
-    let playlist = {
-        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), PLAYLIST_PATH)?);
-        SfxPlaylist::read_from(&mut reader)?
-    };
+pub fn play_sound(ctx: Context, opt: PlaySoundOpt) -> Result<()> {
+    let ctx = Box::leak(Box::new(ctx.open_read()?));
+    let playlist = ctx.read_playlist()?;
     let (group, index) = find_sound(&playlist, &opt.sound)?;
     let group = SfxGroupDefinition::get(group);
-    let bank = {
-        let mut reader = BufReader::new(open_iso_entry_or_file(Some(&mut iso), group.bank_path())?);
-        SfxBank::open(&mut reader, group.name)?
-    };
+    info!("Opening {}.ssm", group.name);
+    let mut reader = BufReader::new(ctx.open_disc_file_at(&group.bank_path())?);
+    let bank = SfxBank::open(&mut reader, group.name)?;
     play_audio(bank.decoder(index), opt.playback)?;
     Ok(())
 }

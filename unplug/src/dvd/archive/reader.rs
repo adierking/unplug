@@ -12,6 +12,11 @@ pub struct ArchiveReader<R: ReadSeek> {
 }
 
 impl<R: ReadSeek> ArchiveReader<R> {
+    /// Constructs a new `ArchiveReader` from a stream and a file tree.
+    pub fn new(reader: R, files: FileTree) -> Self {
+        Self { reader, files }
+    }
+
     /// Constructs a new `ArchiveReader` which reads existing data from `reader`.
     /// `ArchiveReader` does its own buffering, so `stream` should not be buffered.
     pub fn open(reader: R) -> Result<Self> {
