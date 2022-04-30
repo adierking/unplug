@@ -132,8 +132,7 @@ pub enum ConfigCommand {
     Clear,
     /// Prints the absolute path to the config file.
     Path,
-    /// Gets or sets a path to an ISO to load if none is specified. As a safety measure, Unplug
-    /// will never let you edit this ISO.
+    /// Gets or sets a path to an ISO to load by default.
     DefaultIso {
         #[structopt(value_name("PATH"))]
         value: Option<String>,

@@ -1,7 +1,7 @@
 use crate::io::{copy_into_memory, MemoryCursor};
 use anyhow::{anyhow, bail, Error, Result};
 use lazy_static::lazy_static;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
@@ -123,7 +123,8 @@ impl Context {
                 open_iso_read_write(&path)?
             }
             Self::DefaultIso(_) => {
-                bail!("The default ISO cannot be edited. Open a project or use --iso.")
+                warn!("Editing commands do not load the default ISO, as a precaution");
+                DiscSource::None
             }
         };
         Ok(OpenContext::new(disc))
