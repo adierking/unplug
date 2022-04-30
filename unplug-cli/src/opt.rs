@@ -25,10 +25,24 @@ pub struct Opt {
     pub trace: Option<PathBuf>,
 
     #[structopt(flatten)]
+    pub config: ConfigOpt,
+
+    #[structopt(flatten)]
     pub context: ContextOpt,
 
     #[structopt(subcommand)]
     pub command: Subcommand,
+}
+
+#[derive(StructOpt)]
+pub struct ConfigOpt {
+    /// Path to the config file to use. If it does not exist, it will be created.
+    #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
+    pub config: Option<PathBuf>,
+
+    /// Do not load or create a config file and use default settings instead.
+    #[structopt(long, global(true), conflicts_with("config"))]
+    pub no_config: bool,
 }
 
 #[derive(StructOpt)]
@@ -39,6 +53,9 @@ pub struct ContextOpt {
 
 #[derive(StructOpt)]
 pub enum Subcommand {
+    /// Get or set an Unplug configuration option
+    Config(ConfigCommand),
+
     /// Lists files in a U8 archive (e.g. qp.bin)
     ListArchive(ListArchiveOpt),
 
@@ -107,6 +124,20 @@ pub enum Subcommand {
 
     /// Plays a sound effect
     PlaySound(PlaySoundOpt),
+}
+
+#[derive(StructOpt)]
+pub enum ConfigCommand {
+    /// Resets all configuration options to their default values.
+    Clear,
+    /// Prints the absolute path to the config file.
+    Path,
+    /// Gets or sets a path to an ISO to load if none is specified. As a safety measure, Unplug
+    /// will never let you edit this ISO.
+    DefaultIso {
+        #[structopt(value_name("PATH"))]
+        value: Option<String>,
+    },
 }
 
 #[derive(StructOpt)]

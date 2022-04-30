@@ -1,12 +1,12 @@
 use crate::io::{copy_into_memory, MemoryCursor};
 use anyhow::{anyhow, bail, Error, Result};
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::{debug, error, info};
 use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Cursor, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 use unplug::audio::metadata::SfxPlaylist;
@@ -31,7 +31,7 @@ lazy_static! {
 }
 
 fn no_disc_error() -> Error {
-    anyhow!("No disc is loaded. Open a project or use --iso")
+    anyhow!("No disc is loaded. Open a project or use --iso.")
 }
 
 fn dir_error(path: &str) -> Error {
@@ -66,6 +66,19 @@ impl<'a> ContextPath<'a> {
     }
 }
 
+/// Opens the iso at `path` for read access.
+fn open_iso_read(path: &Path) -> Result<DiscSource<Box<dyn ReadSeek>>> {
+    let file: Box<dyn ReadSeek> = Box::from(File::open(path)?);
+    Ok(DiscSource::Iso(DiscStream::open(file)?.into()))
+}
+
+/// Opens the iso at `path` for read and write access.
+fn open_iso_read_write(path: &Path) -> Result<DiscSource<Box<dyn ReadWriteSeek>>> {
+    let file: Box<dyn ReadWriteSeek> =
+        Box::from(OpenOptions::new().read(true).write(true).open(path)?);
+    Ok(DiscSource::Iso(DiscStream::open(file)?.into()))
+}
+
 /// The context which a command is run in.
 #[non_exhaustive]
 #[derive(Clone)]
@@ -74,6 +87,8 @@ pub enum Context {
     Local,
     /// The command has access to files inside a .iso.
     Iso(PathBuf),
+    /// The command has access to files inside the default ISO, but it is read-only.
+    DefaultIso(PathBuf),
 }
 
 impl Context {
@@ -83,8 +98,17 @@ impl Context {
             Self::Local => DiscSource::None,
             Self::Iso(path) => {
                 info!("Opening ISO: {}", path.display());
-                let file: Box<dyn ReadSeek> = Box::from(File::open(path)?);
-                DiscSource::Iso(DiscStream::open(file)?.into())
+                open_iso_read(&path)?
+            }
+            Self::DefaultIso(path) => {
+                info!("Opening default ISO: {}", path.display());
+                match open_iso_read(&path) {
+                    Ok(disc) => disc,
+                    Err(e) => {
+                        error!("Could not load the default ISO: {:#}", e);
+                        DiscSource::None
+                    }
+                }
             }
         };
         Ok(OpenContext::new(disc))
@@ -96,9 +120,10 @@ impl Context {
             Self::Local => DiscSource::None,
             Self::Iso(path) => {
                 info!("Opening ISO: {}", path.display());
-                let file: Box<dyn ReadWriteSeek> =
-                    Box::from(OpenOptions::new().read(true).write(true).open(path)?);
-                DiscSource::Iso(DiscStream::open(file)?.into())
+                open_iso_read_write(&path)?
+            }
+            Self::DefaultIso(_) => {
+                bail!("The default ISO cannot be edited. Open a project or use --iso.")
             }
         };
         Ok(OpenContext::new(disc))

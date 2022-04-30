@@ -1,9 +1,11 @@
 use anyhow::Result;
 use log::error;
+use std::path::Path;
 use std::process;
 use structopt::StructOpt;
+use unplug_cli::config::{self, Config};
 use unplug_cli::context::Context;
-use unplug_cli::opt::{ContextOpt, Opt, Subcommand};
+use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt, Subcommand};
 use unplug_cli::{audio, commands, globals, msg, shop, terminal};
 
 #[cfg(feature = "trace")]
@@ -24,16 +26,36 @@ fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
     Ok(_guard)
 }
 
+fn load_config(opt: ConfigOpt) {
+    if opt.no_config {
+        return;
+    }
+    let result = match opt.config {
+        Some(path) => Config::get().load_from(path),
+        None => Config::get().load(),
+    };
+    if let Err(e) = result {
+        error!("Failed to load the config file: {:#}", e);
+    }
+}
+
 fn get_context(opt: ContextOpt) -> Result<Context> {
-    match opt.iso {
-        Some(path) => Ok(Context::Iso(path)),
-        None => Ok(Context::Local),
+    if let Some(path) = opt.iso {
+        return Ok(Context::Iso(path));
+    }
+    // Try to load the default ISO as a last resort
+    let config = Config::get();
+    if !config.default_iso.is_empty() {
+        Ok(Context::DefaultIso(Path::new(&config.default_iso).to_owned()))
+    } else {
+        Ok(Context::Local)
     }
 }
 
 fn run_app() -> Result<()> {
     let opt = Opt::from_args();
     terminal::init_logging(opt.verbose);
+    load_config(opt.config);
 
     #[cfg(feature = "trace")]
     let mut _trace_guard = None;
@@ -44,6 +66,7 @@ fn run_app() -> Result<()> {
 
     let ctx = get_context(opt.context)?;
     match opt.command {
+        Subcommand::Config(opt) => config::command(ctx, opt),
         Subcommand::ListArchive(opt) => commands::list_archive(ctx, opt),
         Subcommand::ListIso(opt) => commands::list_iso(ctx, opt),
         Subcommand::ListItems(opt) => commands::list_items(ctx, opt),
