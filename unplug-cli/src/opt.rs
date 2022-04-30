@@ -426,8 +426,8 @@ fn parse_volume(s: &str) -> Result<f64> {
 
 #[derive(StructOpt)]
 pub struct PlaybackOpt {
-    /// Volume level as a percentage (0-100, default 90)
-    #[structopt(long, default_value = "90", parse(try_from_str = parse_volume))]
+    /// Volume level as a percentage (0-100, default 80)
+    #[structopt(long, default_value = "80", parse(try_from_str = parse_volume))]
     pub volume: f64,
 }
 
