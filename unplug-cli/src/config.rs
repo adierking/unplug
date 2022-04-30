@@ -35,20 +35,20 @@ fn user_config_path() -> PathBuf {
 
 /// The global Unplug configuration.
 #[non_exhaustive]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
 pub struct Config {
     /// The path to save the configuration back to. This is set on load and not stored in the file.
     #[serde(skip)]
     pub path: PathBuf,
 
-    /// A path to an ISO to load if none is specified. As a safety measure, Unplug will never let
-    /// you edit this ISO.
-    pub default_iso: String,
+    /// Settings which affect program behavior.
+    pub settings: Settings,
 }
 
 impl Config {
     fn new() -> Self {
-        Self { path: PathBuf::new(), default_iso: String::new() }
+        Self::default()
     }
 
     fn with_path(path: PathBuf) -> Self {
@@ -97,6 +97,16 @@ impl Config {
     }
 }
 
+/// Settings which affect program behavior.
+#[non_exhaustive]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct Settings {
+    /// A path to an ISO to load if none is specified. As a safety measure, Unplug will never let
+    /// you edit this ISO.
+    pub default_iso: String,
+}
+
 /// The `config` CLI command.
 pub fn command(_ctx: Context, opt: ConfigCommand) -> Result<()> {
     match opt {
@@ -143,11 +153,11 @@ fn command_default_iso(value: Option<String>) -> Result<()> {
             bail!("Invalid ISO path: {:#}", e);
         }
         let mut config = Config::get();
-        config.default_iso = path;
+        config.settings.default_iso = path;
         config.save()?;
-        info!("Default ISO set to {}", config.default_iso);
+        info!("Default ISO set to {}", config.settings.default_iso);
     } else {
-        println!("{}", Config::get().default_iso);
+        println!("{}", Config::get().settings.default_iso);
     }
     Ok(())
 }

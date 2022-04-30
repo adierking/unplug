@@ -45,8 +45,9 @@ fn get_context(opt: ContextOpt) -> Result<Context> {
     }
     // Try to load the default ISO as a last resort
     let config = Config::get();
-    if !config.default_iso.is_empty() {
-        Ok(Context::DefaultIso(Path::new(&config.default_iso).to_owned()))
+    let default_iso = &config.settings.default_iso;
+    if !default_iso.is_empty() {
+        Ok(Context::DefaultIso(Path::new(default_iso).to_owned()))
     } else {
         Ok(Context::Local)
     }
