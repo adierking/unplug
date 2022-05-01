@@ -16,6 +16,7 @@
 
 pub mod audio;
 pub mod commands;
+pub mod common;
 pub mod config;
 pub mod context;
 pub mod globals;
@@ -24,5 +25,6 @@ pub mod io;
 pub mod msg;
 pub mod opt;
 pub mod playback;
+pub mod project;
 pub mod shop;
 pub mod terminal;

@@ -89,6 +89,8 @@ pub enum Context {
     Iso(PathBuf),
     /// The command has access to files inside the default ISO, but it is read-only.
     DefaultIso(PathBuf),
+    /// The command has access to files inside a project ISO.
+    ProjectIso { name: String, path: PathBuf },
 }
 
 impl Context {
@@ -110,6 +112,10 @@ impl Context {
                     }
                 }
             }
+            Self::ProjectIso { name, path } => {
+                info!("Opening ISO: {} ({})", name, path.display());
+                open_iso_read(&path)?
+            }
         };
         Ok(OpenContext::new(disc))
     }
@@ -125,6 +131,10 @@ impl Context {
             Self::DefaultIso(_) => {
                 warn!("Editing commands do not load the default ISO, as a precaution");
                 DiscSource::None
+            }
+            Self::ProjectIso { name, path } => {
+                info!("Opening ISO: {} ({})", name, path.display());
+                open_iso_read_write(&path)?
             }
         };
         Ok(OpenContext::new(disc))

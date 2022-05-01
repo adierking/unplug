@@ -49,12 +49,23 @@ pub struct ConfigOpt {
 pub struct ContextOpt {
     #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
     pub iso: Option<PathBuf>,
+
+    /// Opens a project instead of the current one.
+    #[structopt(long, value_name("NAME"), global(true))]
+    pub project: Option<String>,
+
+    /// Do not open any project.
+    #[structopt(long, global(true), conflicts_with("project"))]
+    pub no_project: bool,
 }
 
 #[derive(StructOpt)]
 pub enum Subcommand {
     /// Get or set an Unplug configuration option
     Config(ConfigCommand),
+
+    /// Manage Unplug projects
+    Project(ProjectCommand),
 
     /// Lists files in a U8 archive (e.g. qp.bin)
     ListArchive(ListArchiveOpt),
@@ -137,6 +148,28 @@ pub enum ConfigCommand {
         #[structopt(value_name("PATH"))]
         value: Option<String>,
     },
+}
+
+#[derive(StructOpt)]
+pub enum ProjectCommand {
+    /// Displays info about a project (or the current one).
+    Info { name: Option<String> },
+    /// Lists defined projects.
+    List,
+    /// Registers an existing project.
+    Add {
+        /// Path to the project file(s).
+        path: PathBuf,
+        /// Sets the project name (defaults to the filename)
+        #[structopt(short, long)]
+        name: Option<String>,
+    },
+    /// Unregisters a project without deleting any of its files.
+    Forget { name: String },
+    /// Opens a project to be automatically used for future Unplug commands.
+    Open { name: String },
+    /// Closes the currently-open project.
+    Close,
 }
 
 #[derive(StructOpt)]

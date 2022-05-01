@@ -1,10 +1,13 @@
+use crate::common::IString;
 use crate::context::Context;
 use crate::opt::ConfigCommand;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use dirs::config_dir;
 use lazy_static::lazy_static;
 use log::{debug, info, trace};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::fmt::{self, Display, Formatter};
 use std::fs::{self, File};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -44,6 +47,9 @@ pub struct Config {
 
     /// Settings which affect program behavior.
     pub settings: Settings,
+
+    /// Project definitions.
+    pub projects: BTreeMap<IString, Project>,
 }
 
 impl Config {
@@ -95,6 +101,14 @@ impl Config {
         debug!("Configuration saved to {}", self.path.display());
         Ok(())
     }
+
+    /// Finds a project by name (case-insensitive).
+    pub fn find_project(&self, name: &str) -> Result<(&str, &Project)> {
+        self.projects
+            .get_key_value(&name.into())
+            .map(|(name, project)| (name.as_str(), project))
+            .ok_or_else(|| anyhow!("Unknown project \"{}\"", name))
+    }
 }
 
 /// Settings which affect program behavior.
@@ -105,6 +119,41 @@ pub struct Settings {
     /// A path to an ISO to load if none is specified. As a safety measure, Unplug will never let
     /// you edit this ISO.
     pub default_iso: String,
+
+    /// The currently-open project.
+    pub project: String,
+}
+
+/// A type of project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectKind {
+    /// The project is a .iso file.
+    Iso,
+}
+
+impl Default for ProjectKind {
+    fn default() -> Self {
+        Self::Iso
+    }
+}
+
+impl Display for ProjectKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Iso => f.write_str("ISO"),
+        }
+    }
+}
+
+/// A named link to a data source to run commands within.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct Project {
+    /// The project kind.
+    pub kind: ProjectKind,
+    /// The path to the project file(s).
+    pub path: String,
 }
 
 /// The `config` CLI command.

@@ -6,7 +6,7 @@ use structopt::StructOpt;
 use unplug_cli::config::{self, Config};
 use unplug_cli::context::Context;
 use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt, Subcommand};
-use unplug_cli::{audio, commands, globals, msg, shop, terminal};
+use unplug_cli::{audio, commands, globals, msg, project, shop, terminal};
 
 #[cfg(feature = "trace")]
 fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
@@ -40,11 +40,20 @@ fn load_config(opt: ConfigOpt) {
 }
 
 fn get_context(opt: ContextOpt) -> Result<Context> {
+    // Command-line args take precedence
     if let Some(path) = opt.iso {
         return Ok(Context::Iso(path));
     }
-    // Try to load the default ISO as a last resort
+
+    // Try loading a project
     let config = Config::get();
+    if !opt.no_project {
+        if let Some(context) = project::try_get_context(&config, opt.project.as_deref())? {
+            return Ok(context);
+        }
+    }
+
+    // Try loading the default ISO if nothing else is available
     let default_iso = &config.settings.default_iso;
     if !default_iso.is_empty() {
         Ok(Context::DefaultIso(Path::new(default_iso).to_owned()))
@@ -68,6 +77,7 @@ fn run_app() -> Result<()> {
     let ctx = get_context(opt.context)?;
     match opt.command {
         Subcommand::Config(opt) => config::command(ctx, opt),
+        Subcommand::Project(opt) => project::command(ctx, opt),
         Subcommand::ListArchive(opt) => commands::list_archive(ctx, opt),
         Subcommand::ListIso(opt) => commands::list_iso(ctx, opt),
         Subcommand::ListItems(opt) => commands::list_items(ctx, opt),
