@@ -21,3 +21,6 @@ debug = true
 codegen-units = 1
 lto = "thin"
 panic = "abort"
+
+[patch.crates-io]
+toml = { git = "https://github.com/adierking/toml-rs" }

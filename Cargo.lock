@@ -1647,9 +1647,8 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "toml"
-version = "0.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a31142970826733df8241ef35dc040ef98c679ab14d7c3e54d827099b3acecaa"
+version = "0.5.9"
+source = "git+https://github.com/adierking/toml-rs#0be3a00d58099a217e06d99972e73d7665108d37"
 dependencies = [
  "serde",
 ]
