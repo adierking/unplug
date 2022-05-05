@@ -2,7 +2,7 @@
 name = "unplug"
 version = "0.3.0"
 authors = ["Derpky"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 arrayvec = "0.5"
