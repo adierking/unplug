@@ -1,6 +1,6 @@
 use crate::common::IString;
 use crate::context::Context;
-use crate::opt::ConfigCommand;
+use crate::opt::{ConfigCommand, GetSetting, SetSetting};
 use anyhow::{anyhow, bail, Result};
 use dirs::config_dir;
 use lazy_static::lazy_static;
@@ -8,7 +8,7 @@ use log::{debug, info, trace};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::{self, Display, Formatter};
-use std::fs::{self, File};
+use std::fs;
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -161,7 +161,8 @@ pub fn command(_ctx: Context, opt: ConfigCommand) -> Result<()> {
     match opt {
         ConfigCommand::Clear => command_clear(),
         ConfigCommand::Path => command_path(),
-        ConfigCommand::DefaultIso { value } => command_default_iso(value),
+        ConfigCommand::Get(setting) => command_get(setting),
+        ConfigCommand::Set(setting) => command_set(setting),
     }
 }
 
@@ -195,18 +196,31 @@ fn command_path() -> Result<()> {
     Ok(())
 }
 
-/// The `config default-iso` CLI command.
-fn command_default_iso(value: Option<String>) -> Result<()> {
-    if let Some(path) = value {
-        if let Err(e) = File::open(&path) {
-            bail!("Invalid ISO path: {:#}", e);
-        }
-        let mut config = Config::get();
-        config.settings.default_iso = path;
-        config.save()?;
-        info!("Default ISO set to {}", config.settings.default_iso);
+/// The `config get` CLI command.
+fn command_get(setting: GetSetting) -> Result<()> {
+    let settings = &Config::get().settings;
+    match setting {
+        GetSetting::DefaultIso => println!("{}", settings.default_iso),
+    }
+    Ok(())
+}
+
+/// The `config set` CLI command.
+fn command_set(setting: SetSetting) -> Result<()> {
+    match setting {
+        SetSetting::DefaultIso { path } => command_set_default_iso(path),
+    }
+}
+
+/// The `config set default-iso` CLI command.
+fn command_set_default_iso(path: Option<String>) -> Result<()> {
+    let mut config = Config::get();
+    config.settings.default_iso = path.unwrap_or_default();
+    config.save()?;
+    if config.settings.default_iso.is_empty() {
+        info!("Default ISO cleared");
     } else {
-        println!("{}", Config::get().settings.default_iso);
+        info!("Default ISO set to {}", config.settings.default_iso);
     }
     Ok(())
 }

@@ -61,7 +61,7 @@ pub struct ContextOpt {
 
 #[derive(StructOpt)]
 pub enum Subcommand {
-    /// Get or set an Unplug configuration option
+    /// Manage Unplug configuration options
     Config(ConfigCommand),
 
     /// Manage Unplug projects
@@ -143,11 +143,22 @@ pub enum ConfigCommand {
     Clear,
     /// Prints the absolute path to the config file.
     Path,
-    /// Gets or sets a path to an ISO to load by default.
-    DefaultIso {
-        #[structopt(value_name("PATH"))]
-        value: Option<String>,
-    },
+    /// Prints the value of a setting.
+    Get(GetSetting),
+    /// Sets the value of a setting.
+    Set(SetSetting),
+}
+
+#[derive(StructOpt)]
+pub enum GetSetting {
+    /// A path to an ISO to load by default.
+    DefaultIso,
+}
+
+#[derive(StructOpt)]
+pub enum SetSetting {
+    /// A path to an ISO to load by default.
+    DefaultIso { path: Option<String> },
 }
 
 #[derive(StructOpt)]
