@@ -19,6 +19,7 @@ pub mod commands;
 pub mod common;
 pub mod config;
 pub mod context;
+pub mod dolphin;
 pub mod globals;
 pub mod id;
 pub mod io;

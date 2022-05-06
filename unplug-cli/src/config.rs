@@ -120,6 +120,9 @@ pub struct Settings {
     /// you edit this ISO.
     pub default_iso: String,
 
+    /// The path to the Dolphin executable (or macOS app bundle) to run projects with.
+    pub dolphin_path: String,
+
     /// The currently-open project.
     pub project: String,
 }
@@ -201,6 +204,7 @@ fn command_get(setting: GetSetting) -> Result<()> {
     let settings = &Config::get().settings;
     match setting {
         GetSetting::DefaultIso => println!("{}", settings.default_iso),
+        GetSetting::DolphinPath => println!("{}", settings.dolphin_path),
     }
     Ok(())
 }
@@ -208,19 +212,26 @@ fn command_get(setting: GetSetting) -> Result<()> {
 /// The `config set` CLI command.
 fn command_set(setting: SetSetting) -> Result<()> {
     match setting {
-        SetSetting::DefaultIso { path } => command_set_default_iso(path),
+        SetSetting::DefaultIso { path } => set("Default ISO", path, |s| &mut s.default_iso),
+        SetSetting::DolphinPath { path } => set("Dolphin path", path, |s| &mut s.dolphin_path),
     }
 }
 
-/// The `config set default-iso` CLI command.
-fn command_set_default_iso(path: Option<String>) -> Result<()> {
+/// Generic implementation of `config set`.
+fn set<T, F>(name: &str, value: Option<T>, get_mut: F) -> Result<()>
+where
+    T: Clone + Default + Display,
+    F: FnOnce(&mut Settings) -> &mut T,
+{
     let mut config = Config::get();
-    config.settings.default_iso = path.unwrap_or_default();
+    let cleared = value.is_none();
+    let value = value.unwrap_or_default();
+    *get_mut(&mut config.settings) = value.clone();
     config.save()?;
-    if config.settings.default_iso.is_empty() {
-        info!("Default ISO cleared");
+    if cleared {
+        info!("{} cleared", name);
     } else {
-        info!("Default ISO set to {}", config.settings.default_iso);
+        info!("{} set to {}", name, value);
     }
     Ok(())
 }

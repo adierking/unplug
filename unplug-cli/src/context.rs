@@ -140,6 +140,25 @@ impl Context {
         Ok(OpenContext::new(disc))
     }
 
+    /// Requires the context to be an ISO and returns its path.
+    pub fn into_iso_path(self) -> Result<PathBuf> {
+        match self {
+            Context::Local => Err(no_disc_error()),
+            Context::Iso(path) => {
+                info!("Using ISO: {}", path.display());
+                Ok(path)
+            }
+            Context::DefaultIso(path) => {
+                info!("Using default ISO: {}", path.display());
+                Ok(path)
+            }
+            Context::ProjectIso { name, path } => {
+                info!("Using ISO: {} ({})", name, path.display());
+                Ok(path)
+            }
+        }
+    }
+
     /// Finds a music file by name and returns its definition.
     pub fn find_music(name: &str) -> Result<&MusicDefinition> {
         let def = MUSIC

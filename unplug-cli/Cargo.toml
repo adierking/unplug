@@ -13,6 +13,7 @@ path = "src/main.rs"
 anyhow = "1.0"
 arrayvec = "0.5"
 byteorder = "1"
+cfg-if = "1.0"
 console = { version = "0.15.0", default-features = false }
 cpal = "0.13.4"
 crossterm = "0.22"

@@ -1,4 +1,4 @@
-#![allow(trivial_numeric_casts)]
+#![allow(trivial_numeric_casts, variant_size_differences)]
 
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
@@ -135,6 +135,9 @@ pub enum Subcommand {
 
     /// Plays a sound effect
     PlaySound(PlaySoundOpt),
+
+    /// Runs Dolphin with the current project/ISO.
+    Dolphin(DolphinOpt),
 }
 
 #[derive(StructOpt)]
@@ -153,12 +156,16 @@ pub enum ConfigCommand {
 pub enum GetSetting {
     /// A path to an ISO to load by default.
     DefaultIso,
+    /// The path to the Dolphin executable (or macOS app bundle) to run projects with.
+    DolphinPath,
 }
 
 #[derive(StructOpt)]
 pub enum SetSetting {
     /// A path to an ISO to load by default.
     DefaultIso { path: Option<String> },
+    /// The path to the Dolphin executable (or macOS app bundle) to run projects with.
+    DolphinPath { path: Option<String> },
 }
 
 #[derive(StructOpt)]
@@ -492,4 +499,19 @@ pub struct PlaySoundOpt {
 
     #[structopt(flatten)]
     pub playback: PlaybackOpt,
+}
+
+#[derive(StructOpt)]
+pub struct DolphinOpt {
+    /// Do not wait for Dolphin to exit
+    #[structopt(short, long)]
+    pub no_wait: bool,
+
+    /// Do not capture Dolphin's console output
+    #[structopt(long)]
+    pub no_capture: bool,
+
+    /// Show Dolphin's UI
+    #[structopt(long)]
+    pub ui: bool,
 }

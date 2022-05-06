@@ -6,7 +6,7 @@ use structopt::StructOpt;
 use unplug_cli::config::{self, Config};
 use unplug_cli::context::Context;
 use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt, Subcommand};
-use unplug_cli::{audio, commands, globals, msg, project, shop, terminal};
+use unplug_cli::{audio, commands, dolphin, globals, msg, project, shop, terminal};
 
 #[cfg(feature = "trace")]
 fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
@@ -101,6 +101,7 @@ fn run_app() -> Result<()> {
         Subcommand::ExportSounds(opt) => audio::export_sounds(ctx, opt),
         Subcommand::ImportSound(opt) => audio::import_sound(ctx, opt),
         Subcommand::PlaySound(opt) => audio::play_sound(ctx, opt),
+        Subcommand::Dolphin(opt) => dolphin::command(ctx, opt),
     }
 }
 

@@ -1760,6 +1760,7 @@ dependencies = [
  "anyhow",
  "arrayvec",
  "byteorder",
+ "cfg-if",
  "console",
  "cpal",
  "crossterm",
