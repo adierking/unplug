@@ -249,7 +249,7 @@ impl<S: ReadSeek> DiscStream<S> {
         let mut used_regions: Vec<_> = fst
             .entries
             .iter()
-            .filter(|e| e.kind == FstEntryKind::File)
+            .filter(|e| e.kind == FstEntryKind::File && e.size_or_next > 0)
             .map(|e| DiscRegion::new(e.offset_or_parent, e.size_or_next))
             .collect();
 
