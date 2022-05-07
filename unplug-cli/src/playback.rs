@@ -3,7 +3,7 @@ use crate::terminal::Visibility;
 use anyhow::{bail, Result};
 use arrayvec::ArrayVec;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Device, OutputCallbackInfo, SupportedStreamConfig};
+use cpal::{Device, OutputCallbackInfo, SampleRate, SupportedStreamConfig};
 use log::{debug, error, info, log_enabled, trace, Level};
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -56,6 +56,11 @@ impl PlaybackSource {
     pub fn with_volume(mut self, volume: f64) -> Self {
         self.volume = volume;
         self
+    }
+
+    /// Gets the audio's sample rate.
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
     }
 
     /// Returns the total duration of the audio source.
@@ -599,8 +604,8 @@ pub struct PlaybackDevice {
 }
 
 impl PlaybackDevice {
-    /// Opens the system default playback device.
-    pub fn open_default() -> Result<Self> {
+    /// Opens the system default playback device, targeting (but not guaranteeing) a sample rate of `target_rate`.
+    pub fn open_default(target_rate: u32) -> Result<Self> {
         let host = cpal::default_host();
         let device = match host.default_output_device() {
             Some(device) => device,
@@ -608,10 +613,20 @@ impl PlaybackDevice {
         };
         info!("Using audio output device: {}", device.name().unwrap_or_default());
 
-        let config = match device.default_output_config() {
-            Ok(config) => config,
-            Err(_) => bail!("no audio output configuration available"),
+        // Use the default config with a clamped sample rate
+        // TODO: Sort configs by closest sample rate instead of using the cpal heuristics?
+        let mut configs = match device.supported_output_configs() {
+            Ok(c) => c.collect(),
+            Err(_) => vec![],
         };
+        if configs.is_empty() {
+            bail!("no audio output configuration available");
+        }
+        configs.sort_unstable_by(|a, b| a.cmp_default_heuristics(b));
+        let config = configs.pop().unwrap();
+        let sample_rate = target_rate.clamp(config.min_sample_rate().0, config.max_sample_rate().0);
+        let config = config.with_sample_rate(SampleRate(sample_rate));
+
         if config.channels() != 2 {
             bail!("only stereo audio devices are supported right now");
         }

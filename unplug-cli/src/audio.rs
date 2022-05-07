@@ -314,12 +314,13 @@ fn play_audio(
     audio: impl ReadSamples<'static, Format = PcmS16Le> + 'static,
     opt: PlaybackOpt,
 ) -> Result<()> {
-    info!("Checking system audio configuration");
-    let mut device = PlaybackDevice::open_default()?;
-
-    info!("Starting playback");
     let name = audio.tag().name.clone();
     let source = PlaybackSource::new(audio)?.with_volume(opt.volume);
+
+    info!("Checking system audio configuration");
+    let mut device = PlaybackDevice::open_default(source.sample_rate())?;
+
+    info!("Starting playback");
     playback::play(&mut device, source, name);
 
     info!("Playback finished");
