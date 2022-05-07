@@ -1,5 +1,5 @@
 use crate::io::{copy_into_memory, MemoryCursor};
-use anyhow::{anyhow, bail, Error, Result};
+use anyhow::{anyhow, Error, Result};
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use regex::Regex;
@@ -13,7 +13,7 @@ use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::HpsReader;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::{ReadFrom, ReadSeek, ReadWriteSeek, WriteTo};
-use unplug::data::music::{MusicDefinition, MUSIC};
+use unplug::data::music::MusicDefinition;
 use unplug::data::sfx::PLAYLIST_PATH;
 use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
 use unplug::data::{self, Music};
@@ -158,16 +158,6 @@ impl Context {
             }
         }
     }
-
-    /// Finds a music file by name and returns its definition.
-    pub fn find_music(name: &str) -> Result<&MusicDefinition> {
-        let def = MUSIC
-            .iter()
-            .find(|m| unicase::eq(m.name, name))
-            .ok_or_else(|| anyhow!("unknown music: \"{}\"", name))?;
-        debug!("Resolved music \"{}\": {}", name, def.path());
-        Ok(def)
-    }
 }
 
 /// A source for game disc data.
@@ -275,6 +265,15 @@ impl<T: ReadSeek> OpenContext<T> {
         self.get_file_impl(ContextPath::parse(path.as_ref()))
     }
 
+    /// Gets the ID of a file located using a context path, but returns `None` for paths which do
+    /// not explicitly name a file.
+    pub fn explicit_file_at(&mut self, path: impl AsRef<str>) -> Result<Option<FileId>> {
+        match ContextPath::parse(path.as_ref()) {
+            ContextPath::Other(_) => Ok(None),
+            path => Ok(Some(self.get_file_impl(path)?)),
+        }
+    }
+
     /// Gets the ID of a file on the disc.
     pub fn disc_file_at(&mut self, path: impl AsRef<str>) -> Result<FileId> {
         self.get_file_impl(ContextPath::Dvd(path.as_ref()))
@@ -371,23 +370,6 @@ impl<T: ReadSeek> OpenContext<T> {
         self.read_stage_file(libs, &file)
     }
 
-    /// Finds the `FileId` of a stage using a name or context path.
-    pub fn find_stage(&mut self, name: &str) -> Result<FileId> {
-        match ContextPath::parse(name) {
-            ContextPath::Other(name) => match StageDefinition::find(name) {
-                Some(def) => self.qp_file_at(&def.path()),
-                None => bail!("Unrecognized stage \"{}\"", name),
-            },
-            path => self.get_file_impl(path),
-        }
-    }
-
-    /// Reads a stage file located using a name or context path.
-    pub fn read_stage_at(&mut self, libs: &Libs, name: &str) -> Result<Stage> {
-        let file = self.find_stage(name)?;
-        self.read_stage_file(libs, &file)
-    }
-
     /// Reads `file` as a stage file.
     pub fn read_stage_file(&mut self, libs: &Libs, file: &FileId) -> Result<Stage> {
         let reader = self.open_file(file)?;
@@ -399,23 +381,6 @@ impl<T: ReadSeek> OpenContext<T> {
     pub fn open_music(&mut self, id: Music) -> Result<HpsReader<'_>> {
         let def = MusicDefinition::get(id);
         let file = self.disc_file_at(&def.path())?;
-        self.open_music_file(&file)
-    }
-
-    /// Finds the `FileId` of a music file using a name or context path.
-    pub fn find_music(&mut self, name: &str) -> Result<FileId> {
-        match ContextPath::parse(name) {
-            ContextPath::Other(name) => {
-                let def = Context::find_music(name)?;
-                self.disc_file_at(&def.path())
-            }
-            path => self.get_file_impl(path),
-        }
-    }
-
-    /// Opens a music file located using a name or context path.
-    pub fn open_music_at(&mut self, name: &str) -> Result<HpsReader<'_>> {
-        let file = self.find_music(name)?;
         self.open_music_file(&file)
     }
 

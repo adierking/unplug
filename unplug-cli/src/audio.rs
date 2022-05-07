@@ -1,8 +1,8 @@
-use crate::context::Context;
+use crate::context::{Context, FileId, OpenContext};
 use crate::opt::*;
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use log::{debug, info, warn};
 use std::convert::TryFrom;
 use std::fs::{self, File};
@@ -20,6 +20,7 @@ use unplug::common::{ReadSeek, WriteTo};
 use unplug::data::sfx::SFX;
 use unplug::data::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
+use unplug::data::music::{MUSIC, MusicDefinition};
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
@@ -84,6 +85,24 @@ fn open_sound_file(
     Ok(audio)
 }
 
+/// Finds a music file by name and returns its definition.
+fn find_music(name: &str) -> Result<&MusicDefinition> {
+    let def = MUSIC
+        .iter()
+        .find(|m| unicase::eq(m.name, name))
+        .ok_or_else(|| anyhow!("unknown music: \"{}\"", name))?;
+    debug!("Resolved music \"{}\": {}", name, def.path());
+    Ok(def)
+}
+
+/// Finds a music file by name or path and returns its `FileId`.
+fn find_music_file<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId> {
+    match ctx.explicit_file_at(name)? {
+        Some(id) => Ok(id),
+        None => ctx.disc_file_at(find_music(name)?.path()),
+    }
+}
+
 /// Finds a sound effect by name and returns a `(group, index)` pair.
 fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SfxGroup, usize)> {
     let def = match SFX.iter().find(|e| unicase::eq(e.name, name)) {
@@ -116,7 +135,7 @@ pub fn export_music(ctx: Context, opt: ExportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
     let mut ctx = ctx.open_read()?;
-    let file = ctx.find_music(&opt.name)?;
+    let file = find_music_file(&mut ctx, &opt.name)?;
     let info = ctx.query_file(&file)?;
     info!("Opening {}", info.name);
     let hps = ctx.open_music_file(&file)?;
@@ -146,7 +165,7 @@ pub fn import_music(ctx: Context, opt: ImportMusicOpt) -> Result<()> {
     let start_time = Instant::now();
 
     let mut ctx = ctx.open_read_write()?;
-    let file = ctx.find_music(&opt.name)?;
+    let file = find_music_file(&mut ctx, &opt.name)?;
     let info = ctx.query_file(&file)?;
     info!("Opening {}", info.name);
     let original_loop = ctx.open_music_file(&file)?.loop_start();
@@ -329,7 +348,7 @@ fn play_audio(
 
 pub fn play_music(ctx: Context, opt: PlayMusicOpt) -> Result<()> {
     let ctx = Box::leak(Box::new(ctx.open_read()?));
-    let file = ctx.find_music(&opt.name)?;
+    let file = find_music_file(ctx, &opt.name)?;
     info!("Opening {}", ctx.query_file(&file)?.name);
     let hps = ctx.open_music_file(&file)?;
     play_audio(hps.decoder(), opt.playback)?;

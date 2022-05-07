@@ -1,8 +1,8 @@
-use crate::context::Context;
+use crate::context::{Context, FileId, OpenContext};
 use crate::id::IdString;
 use crate::io::OutputRedirect;
 use crate::opt::*;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use log::{debug, info};
 use std::convert::TryFrom;
 use std::fs::{self, File};
@@ -15,7 +15,7 @@ use unplug::common::ReadSeek;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
-use unplug::data::stage::STAGES;
+use unplug::data::stage::{StageDefinition, STAGES};
 use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileEntry, FileTree};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
@@ -44,6 +44,16 @@ fn list_files(tree: &FileTree, opt: ListOpt) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn find_stage_file<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId> {
+    match ctx.explicit_file_at(name)? {
+        Some(id) => Ok(id),
+        None => match StageDefinition::find(name) {
+            Some(def) => ctx.qp_file_at(def.path()),
+            None => bail!("Unrecognized stage \"{}\"", name),
+        },
+    }
 }
 
 pub fn list_archive(ctx: Context, opt: ListArchiveOpt) -> Result<()> {
@@ -218,7 +228,7 @@ fn do_dump_stage(stage: &Stage, flags: &DumpStageFlags, mut out: impl Write) -> 
 pub fn dump_stage(ctx: Context, opt: DumpStageOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
-    let file = ctx.find_stage(&opt.stage.name)?;
+    let file = find_stage_file(&mut ctx, &opt.stage.name)?;
     info!("Reading script globals");
     let libs = ctx.read_globals()?.read_libs()?;
     info!("Dumping {}", ctx.query_file(&file)?.name);
