@@ -78,6 +78,7 @@ fn run_app() -> Result<()> {
     match opt.command {
         Subcommand::Config(opt) => config::command(ctx, opt),
         Subcommand::Project(opt) => project::command(ctx, opt),
+        Subcommand::Audio(opt) => audio::command(ctx, opt),
         Subcommand::ListArchive(opt) => commands::list_archive(ctx, opt),
         Subcommand::ListIso(opt) => commands::list_iso(ctx, opt),
         Subcommand::ListItems(opt) => commands::list_items(ctx, opt),
@@ -95,12 +96,6 @@ fn run_app() -> Result<()> {
         Subcommand::ImportGlobals(opt) => globals::import_globals(ctx, opt),
         Subcommand::ExportShop(opt) => shop::export_shop(ctx, opt),
         Subcommand::ImportShop(opt) => shop::import_shop(ctx, opt),
-        Subcommand::ExportMusic(opt) => audio::export_music(ctx, opt),
-        Subcommand::ImportMusic(opt) => audio::import_music(ctx, opt),
-        Subcommand::PlayMusic(opt) => audio::play_music(ctx, opt),
-        Subcommand::ExportSounds(opt) => audio::export_sounds(ctx, opt),
-        Subcommand::ImportSound(opt) => audio::import_sound(ctx, opt),
-        Subcommand::PlaySound(opt) => audio::play_sound(ctx, opt),
         Subcommand::Dolphin(opt) => dolphin::command(ctx, opt),
     }
 }

@@ -1,5 +1,6 @@
 #![allow(clippy::mutex_atomic)]
 
+use crate::common::format_duration;
 use console::Term;
 use crossterm::cursor::{Hide, MoveToColumn, MoveToPreviousLine, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
@@ -205,15 +206,6 @@ pub fn progress_spinner(message: String) -> ProgressBar {
         bar.enable_steady_tick(1000 / PROGRESS_UPDATE_RATE);
     }
     bar
-}
-
-/// Formats a duration using `MM:SS.mmm`.
-fn format_duration(duration: Duration) -> String {
-    let total_secs = duration.as_secs();
-    let minutes = total_secs / 60;
-    let secs = total_secs % 60;
-    let millis = duration.subsec_millis();
-    format!("{:>02}:{:>02}.{:>03}", minutes, secs, millis)
 }
 
 /// Creates a progress bar which shows audio playback progress.

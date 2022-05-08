@@ -67,6 +67,9 @@ pub enum Subcommand {
     /// Manage Unplug projects
     Project(ProjectCommand),
 
+    /// Commands for working with audio resources
+    Audio(AudioCommand),
+
     /// Lists files in a U8 archive (e.g. qp.bin)
     ListArchive(ListArchiveOpt),
 
@@ -117,24 +120,6 @@ pub enum Subcommand {
 
     /// Imports shop data from a JSON file
     ImportShop(ImportShopOpt),
-
-    /// Exports a HPS music file to a WAV file
-    ExportMusic(ExportMusicOpt),
-
-    /// Imports an audio file, replacing an existing HPS music file
-    ImportMusic(ImportMusicOpt),
-
-    /// Plays an HPS music file
-    PlayMusic(PlayMusicOpt),
-
-    /// Exports sound effects to WAV files
-    ExportSounds(ExportSoundsOpt),
-
-    /// Imports a sound effect from an audio file
-    ImportSound(ImportSoundOpt),
-
-    /// Plays a sound effect
-    PlaySound(PlaySoundOpt),
 
     /// Runs Dolphin with the current project/ISO.
     Dolphin(DolphinOpt),
@@ -399,68 +384,89 @@ pub struct ImportShopOpt {
 }
 
 #[derive(StructOpt)]
-pub struct SoundExportOpt {
-    /// If an audio file has cue points, exports a .labels.txt file alongside it which defines the
-    /// cues using Audacity's label track format.
+pub enum AudioCommand {
+    /// Displays info about an audio resource
+    Info(AudioInfoOpt),
+    /// Exports one or more audio resources to wav files
+    Export(AudioExportOpt),
+    /// Exports an entire sample bank to a directory
+    ExportBank(AudioExportBankOpt),
+    /// Exports all audio resources to a directory
+    ExportAll(AudioExportAllOpt),
+    /// Imports an audio resource from an audio file
+    Import(AudioImportOpt),
+    /// Plays an audio resource
+    Play(AudioPlayOpt),
+}
+
+#[derive(StructOpt)]
+pub struct AudioExportSettings {
+    /// If an audio file has cue points, exports a .labels.txt file which defines the cues using
+    /// Audacity's label track format
     #[structopt(long)]
     pub labels: bool,
 }
 
 #[derive(StructOpt)]
-pub struct ExportMusicOpt {
-    #[structopt(flatten)]
-    pub settings: SoundExportOpt,
+pub struct AudioImportSettings {
+    /// If an audio file has a .labels.txt file alongside it, import Audacity labels from it.
+    #[structopt(long)]
+    pub labels: bool,
+}
 
-    /// Name or path of the music to export
+#[derive(StructOpt)]
+pub struct AudioInfoOpt {
+    /// The name or path of the audio resource.
     pub name: String,
+}
 
-    /// Path to the output WAV file
+#[derive(StructOpt)]
+pub struct AudioExportOpt {
+    /// If extracting one audio resource, the path of the .wav file to write, otherwise the
+    /// directory to write the audio files to
+    #[structopt(short, long("out"), value_name("PATH"))]
+    pub output: Option<PathBuf>,
+
+    #[structopt(flatten)]
+    pub settings: AudioExportSettings,
+
+    /// Names or paths of the audio resources to export
+    pub names: Vec<String>,
+}
+
+#[derive(StructOpt)]
+pub struct AudioExportBankOpt {
+    /// The directory to write the bank's .wav files to (defaults to the bank name)
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: PathBuf,
-}
 
-#[derive(StructOpt)]
-pub struct ImportMusicOpt {
-    /// Imports an Audacity label track from a file and uses it in place of the audio file's
-    /// original cues.
-    #[structopt(long)]
-    pub labels: Option<PathBuf>,
-
-    /// Name or path of the music to replace
-    pub name: String,
-
-    /// Path to the audio file (WAV, FLAC, MP3, OGG)
-    #[structopt(parse(from_os_str))]
-    pub path: PathBuf,
-}
-
-#[derive(StructOpt)]
-pub struct ExportSoundsOpt {
     #[structopt(flatten)]
-    pub settings: SoundExportOpt,
+    pub settings: AudioExportSettings,
 
-    /// Path to the SSM file to export. Omitting this will export all sounds.
-    #[structopt(value_name("SSM"))]
-    pub path: Option<String>,
+    /// Name or path of the sample bank to export
+    pub name: String,
+}
 
-    /// Path to the output directory
+#[derive(StructOpt)]
+pub struct AudioExportAllOpt {
+    /// The directory to write files to
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: PathBuf,
+
+    #[structopt(flatten)]
+    pub settings: AudioExportSettings,
 }
 
 #[derive(StructOpt)]
-pub struct ImportSoundOpt {
-    /// Imports an Audacity label track from a file and uses it in place of the audio file's
-    /// original cues.
-    #[structopt(long)]
-    pub labels: Option<PathBuf>,
+pub struct AudioImportOpt {
+    /// Name or path of the sound resource to import
+    pub name: String,
 
-    /// Name of the sound effect to replace
-    #[structopt(value_name("NAME"))]
-    pub sound: String,
+    #[structopt(flatten)]
+    pub settings: AudioImportSettings,
 
-    /// Path to the audio file (WAV, FLAC, MP3, OGG)
-    #[structopt(parse(from_os_str))]
+    /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
+    #[structopt(value_name("PATH"))]
     pub path: PathBuf,
 }
 
@@ -475,30 +481,13 @@ fn parse_volume(s: &str) -> Result<f64> {
 }
 
 #[derive(StructOpt)]
-pub struct PlaybackOpt {
+pub struct AudioPlayOpt {
+    /// Name or path of the audio resource to play
+    pub name: String,
+
     /// Volume level as a percentage (0-100, default 80)
     #[structopt(long, default_value = "80", parse(try_from_str = parse_volume))]
     pub volume: f64,
-}
-
-#[derive(StructOpt)]
-pub struct PlayMusicOpt {
-    /// Name or path of the music to play
-    #[structopt(value_name("NAME"))]
-    pub name: String,
-
-    #[structopt(flatten)]
-    pub playback: PlaybackOpt,
-}
-
-#[derive(StructOpt)]
-pub struct PlaySoundOpt {
-    /// Name of the sound effect to play
-    #[structopt(value_name("NAME"))]
-    pub sound: String,
-
-    #[structopt(flatten)]
-    pub playback: PlaybackOpt,
 }
 
 #[derive(StructOpt)]

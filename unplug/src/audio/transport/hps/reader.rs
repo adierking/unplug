@@ -118,6 +118,11 @@ impl<'r> HpsReader<'r> {
         self.state.loop_start
     }
 
+    /// Returns the audio source tag.
+    pub fn tag(&self) -> &SourceTag {
+        &self.tag
+    }
+
     /// Creates a `ChannelReader` over a channel in the stream.
     /// ***Panics*** if the channel index is out-of-bounds.
     pub fn channel_reader(&self, channel: usize) -> ChannelReader<'r> {

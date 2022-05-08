@@ -1,6 +1,16 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Display};
+use std::time::Duration;
 use unicase::UniCase;
+
+/// Formats a duration using `MM:SS.mmm`.
+pub fn format_duration(duration: Duration) -> String {
+    let total_secs = duration.as_secs();
+    let minutes = total_secs / 60;
+    let secs = total_secs % 60;
+    let millis = duration.subsec_millis();
+    format!("{:>02}:{:>02}.{:>03}", minutes, secs, millis)
+}
 
 /// A case-insensitive string wrapper with support for serde.
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

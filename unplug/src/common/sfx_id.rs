@@ -22,6 +22,14 @@ impl SfxId {
             Self::Music(music) => MusicDefinition::get(music).name,
         }
     }
+
+    /// Gets the 32-bit ID value.
+    pub fn value(&self) -> u32 {
+        match *self {
+            SfxId::Sound(sound) => u32::from(sound),
+            SfxId::Music(music) => (MUSIC_GROUP << 16) | (u8::from(music) as u32),
+        }
+    }
 }
 
 impl From<Sfx> for SfxId {
@@ -38,10 +46,7 @@ impl From<Music> for SfxId {
 
 impl From<SfxId> for u32 {
     fn from(id: SfxId) -> Self {
-        match id {
-            SfxId::Sound(sound) => u32::from(sound),
-            SfxId::Music(music) => (MUSIC_GROUP << 16) | (u8::from(music) as u32),
-        }
+        id.value()
     }
 }
 

@@ -21,6 +21,11 @@ impl MusicDefinition {
         &MUSIC[u8::from(id) as usize - 1]
     }
 
+    /// Gets the name of the music file within the ISO.
+    pub fn file_name(&self) -> String {
+        format!("{}{}", self.name, MUSIC_EXT)
+    }
+
     /// Gets the path to the music file within the ISO.
     pub fn path(&self) -> String {
         format!("{}/{}{}", MUSIC_DIR, self.name, MUSIC_EXT)
@@ -71,6 +76,7 @@ mod tests {
         assert_eq!(music.id, Music::BgmNight);
         assert_eq!(music.volume, 180);
         assert_eq!(music.name, "bgm_night");
+        assert_eq!(music.file_name(), "bgm_night.hps");
         assert_eq!(music.path(), "qp/streaming/bgm_night.hps");
     }
 }

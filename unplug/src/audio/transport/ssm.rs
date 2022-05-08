@@ -390,6 +390,11 @@ impl SfxBank {
         self.samples.is_empty()
     }
 
+    /// Returns the source tag for the bank.
+    pub fn tag(&self) -> &SourceTag {
+        &self.tag
+    }
+
     /// Returns a reference to the sample at `index`, relative to the start of this bank.
     pub fn sample(&self, index: usize) -> &Arc<BankSample> {
         &self.samples[index]

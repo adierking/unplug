@@ -1,26 +1,33 @@
+use crate::common::format_duration;
 use crate::context::{Context, FileId, OpenContext};
 use crate::opt::*;
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
-use anyhow::{anyhow, bail, Result};
-use log::{debug, info, warn};
+use anyhow::{bail, Result};
+use log::{debug, info, log_enabled, warn, Level};
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Cursor, Seek, SeekFrom};
 use std::path::Path;
-use std::time::Instant;
+use std::rc::Rc;
+use std::time::Duration;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::metadata::audacity;
 use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::hps::{Looping, PcmHpsWriter};
 use unplug::audio::transport::ssm::BankSample;
-use unplug::audio::transport::{FlacReader, Mp3Reader, OggReader, SfxBank, WavReader, WavWriter};
+use unplug::audio::transport::{
+    FlacReader, HpsReader, Mp3Reader, OggReader, SfxBank, WavReader, WavWriter,
+};
 use unplug::audio::{Cue, ReadSamples};
-use unplug::common::{ReadSeek, WriteTo};
-use unplug::data::sfx::SFX;
-use unplug::data::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
+use unplug::common::{ReadSeek, ReadWriteSeek, SfxId, WriteTo};
+use unplug::data::music::{MusicDefinition, MUSIC};
+use unplug::data::sfx::{SfxDefinition, SFX};
+use unplug::data::sfx_group::{SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
-use unplug::data::music::{MUSIC, MusicDefinition};
+use unplug::data::{Music, Sfx};
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
@@ -28,17 +35,17 @@ const MAX_MUSIC_SAMPLE_RATE: u32 = 44100;
 /// The highest sample rate that imported sound effects can have.
 const MAX_SFX_SAMPLE_RATE: u32 = 48000;
 
-const SFX_HORI_NAME: &str = "sfx_hori.ssm";
+/// Path to sfx_hori.ssm, a sample bank never used by the game.
 const SFX_HORI_PATH: &str = "qp/sfx_hori.ssm";
 
 /// Extension to use for Audacity label output
-const LABELS_EXTENSION: &str = "labels.txt";
+const LABELS_EXT: &str = "labels.txt";
 
 /// Opens the sound file at `path`, optionally reads Audacity labels from `labels`, and enqueues it
 /// for resampling if the sample rate is higher than `max_sample_rate`.
 fn open_sound_file(
     path: &Path,
-    labels: Option<&Path>,
+    settings: &AudioImportSettings,
     max_sample_rate: u32,
 ) -> Result<Box<dyn ReadSamples<'static, Format = PcmS16Le>>> {
     let name = path.file_name().map(|p| p.to_str().unwrap()).unwrap_or_default().to_owned();
@@ -71,9 +78,10 @@ fn open_sound_file(
     };
 
     // Labels should be loaded last to ensure they don't get discarded/ignored by an adapter
-    if let Some(labels) = labels {
-        info!("Reading label track: {}", labels.display());
-        let reader = BufReader::new(File::open(labels)?);
+    if settings.labels {
+        let labels_path = path.with_extension(LABELS_EXT);
+        info!("Reading label track: {}", labels_path.display());
+        let reader = BufReader::new(File::open(labels_path)?);
         let cues = audacity::read_labels(reader, rate)?;
         audio = Box::from(audio.with_cues(cues));
     }
@@ -85,45 +93,232 @@ fn open_sound_file(
     Ok(audio)
 }
 
-/// Finds a music file by name and returns its definition.
-fn find_music(name: &str) -> Result<&MusicDefinition> {
-    let def = MUSIC
-        .iter()
-        .find(|m| unicase::eq(m.name, name))
-        .ok_or_else(|| anyhow!("unknown music: \"{}\"", name))?;
-    debug!("Resolved music \"{}\": {}", name, def.path());
-    Ok(def)
+/// Checks whether we have sample name information for a bank.
+fn have_sample_names(bank: &SfxBank) -> bool {
+    SFX_GROUPS.iter().any(|g| g.first_sample == bank.base_index())
 }
 
-/// Finds a music file by name or path and returns its `FileId`.
-fn find_music_file<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId> {
-    match ctx.explicit_file_at(name)? {
-        Some(id) => Ok(id),
-        None => ctx.disc_file_at(find_music(name)?.path()),
+/// Gets the name of a sound sample.
+fn sfx_name(bank: &SfxBank, index: usize, have_names: bool) -> Cow<'static, str> {
+    let id = bank.base_index() + (index as u32);
+    if have_names {
+        if let Ok(sound) = SfxSample::try_from(id) {
+            return SfxSampleDefinition::get(sound).name.into();
+        }
+    }
+    format!("{:>04}", id).into()
+}
+
+/// Locates a sample bank by name or path.
+fn find_bank<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId> {
+    if let Some(file) = ctx.explicit_file_at(name)? {
+        return Ok(file);
+    }
+    let group = SFX_GROUPS.iter().find(|m| unicase::eq(m.name, name));
+    match group {
+        Some(group) => {
+            debug!("Resolved bank \"{}\": {:?}", name, group);
+            Ok(ctx.disc_file_at(group.bank_path())?)
+        }
+        None => bail!("Unknown sample bank: {}", name),
     }
 }
 
-/// Finds a sound effect by name and returns a `(group, index)` pair.
-fn find_sound(playlist: &SfxPlaylist, name: &str) -> Result<(SfxGroup, usize)> {
-    let def = match SFX.iter().find(|e| unicase::eq(e.name, name)) {
-        Some(def) => def,
-        None => bail!("unknown sound effect: \"{}\"", name),
-    };
-    let index = def.id.material_index();
-    let sample = match playlist.sounds[index].sample_id() {
-        Some(id) => SfxSample::try_from(id).unwrap(),
-        None => bail!("sound effect \"{}\" does not have an associated sample", def.name),
-    };
-    let group = SfxGroupDefinition::get(def.id.group());
-    let sample_index = u32::from(sample) - group.first_sample;
-    debug!("Resolved sound \"{}\": group={}, index={}", name, group.name, sample_index);
-    Ok((group.id, sample_index as usize))
+/// Caches playlist and sample bank data so it doesn't get double-loaded.
+#[derive(Default)]
+struct AudioCache {
+    playlist: Option<Rc<SfxPlaylist>>,
+    banks: HashMap<FileId, Rc<SfxBank>>,
+}
+
+impl AudioCache {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// Reads the playlist file if necessary and returns its data.
+    fn open_playlist<T: ReadSeek>(&mut self, ctx: &mut OpenContext<T>) -> Result<Rc<SfxPlaylist>> {
+        if self.playlist.is_none() {
+            debug!("Reading sfx_sample.sem");
+            self.playlist = Some(Rc::new(ctx.read_playlist()?));
+        }
+        Ok(Rc::clone(self.playlist.as_ref().unwrap()))
+    }
+
+    /// Reads a sample bank if necessary and returns its data.
+    fn open_bank<T: ReadSeek>(
+        &mut self,
+        ctx: &mut OpenContext<T>,
+        file: &FileId,
+    ) -> Result<Rc<SfxBank>> {
+        if let Some(bank) = self.banks.get(file) {
+            return Ok(Rc::clone(bank));
+        }
+        if log_enabled!(Level::Debug) {
+            let name = ctx.query_file(file)?.name;
+            debug!("Opening {}", name);
+        }
+        let bank = Rc::new(ctx.read_bank_file(file)?);
+        self.banks.insert(file.clone(), Rc::clone(&bank));
+        Ok(bank)
+    }
+}
+
+/// Holds a pointer to an audio resource.
+#[allow(variant_size_differences)]
+#[derive(Clone, Hash, PartialEq, Eq)]
+enum AudioResource {
+    Music(Music),
+    MusicFile { file: FileId, name: String },
+    Sfx(Sfx),
+}
+
+impl AudioResource {
+    /// Finds an audio resource by name or path.
+    fn find<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<Self> {
+        if let Some(file) = ctx.explicit_file_at(name)? {
+            let filename = ctx.query_file(&file)?.name;
+            let name = filename.rsplit_once('.').unwrap_or((&filename, "")).0.to_owned();
+            return Ok(Self::MusicFile { file, name });
+        }
+
+        let music = MUSIC.iter().find(|m| unicase::eq(m.name, name));
+        if let Some(music) = music {
+            debug!("Resolved music \"{}\": {:?}", name, music.id);
+            return Ok(Self::Music(music.id));
+        }
+
+        let sfx = match SFX.iter().find(|e| unicase::eq(e.name, name)) {
+            Some(sfx) => sfx,
+            None => bail!("Unknown audio resource: {}", name),
+        };
+        debug!("Resolved SFX \"{}\": {:?}", name, sfx.id);
+        Ok(Self::Sfx(sfx.id))
+    }
+
+    /// Gets the name of the audio resource without any extension.
+    fn name(&self) -> &str {
+        match self {
+            Self::Music(music) => MusicDefinition::get(*music).name,
+            Self::MusicFile { name, .. } => name,
+            Self::Sfx(sfx) => SfxDefinition::get(*sfx).name,
+        }
+    }
+
+    /// Gets the corresponding `SfxId` if known.
+    fn id(&self) -> Option<SfxId> {
+        match *self {
+            Self::Music(music) => Some(SfxId::from(music)),
+            Self::MusicFile { .. } => None,
+            Self::Sfx(sfx) => Some(SfxId::from(sfx)),
+        }
+    }
+}
+
+/// Wraps a file ID for an audio resource.
+enum AudioFileId {
+    Music(FileId),
+    Sfx { file: FileId, index: usize },
+}
+
+impl AudioFileId {
+    /// Locates the file for `resource`.
+    fn get<T: ReadSeek>(
+        ctx: &mut OpenContext<T>,
+        cache: &mut AudioCache,
+        resource: &AudioResource,
+    ) -> Result<Self> {
+        match resource {
+            AudioResource::Music(id) => {
+                let file = ctx.disc_file_at(MusicDefinition::get(*id).path())?;
+                Ok(Self::Music(file))
+            }
+            AudioResource::MusicFile { file, .. } => Ok(Self::Music(file.clone())),
+            AudioResource::Sfx(id) => {
+                let def = SfxDefinition::get(*id);
+                let playlist = cache.open_playlist(ctx)?;
+                let group = SfxGroupDefinition::get(id.group());
+                let material = id.material_index();
+                let sample = match playlist.sounds[material].sample_id() {
+                    Some(id) => SfxSample::try_from(id).unwrap(),
+                    None => {
+                        bail!("Sound effect \"{}\" does not have an associated sample", def.name)
+                    }
+                };
+                let index = (u32::from(sample) - group.first_sample) as usize;
+                debug!("Resolved sound \"{}\": group={}, index={}", def.name, group.name, index);
+                let file = ctx.disc_file_at(group.bank_path())?;
+                Ok(Self::Sfx { file, index })
+            }
+        }
+    }
+}
+
+/// Provides a unified interface for reading from an audio source.
+enum AudioReader<'r> {
+    Music(HpsReader<'r>),
+    Sfx { bank: Rc<SfxBank>, index: usize },
+}
+
+impl<'r> AudioReader<'r> {
+    /// Opens a reader for `id`.
+    fn open<T: ReadSeek>(
+        ctx: &'r mut OpenContext<T>,
+        cache: &mut AudioCache,
+        id: &AudioFileId,
+    ) -> Result<Self> {
+        match id {
+            AudioFileId::Music(file) => {
+                if log_enabled!(Level::Debug) {
+                    let name = ctx.query_file(file)?.name;
+                    debug!("Opening {}", name);
+                }
+                let hps = ctx.open_music_file(file)?;
+                Ok(Self::Music(hps))
+            }
+            AudioFileId::Sfx { file, index } => {
+                let bank = cache.open_bank(ctx, file)?;
+                Ok(Self::Sfx { bank, index: *index })
+            }
+        }
+    }
+
+    /// Gets the number of channels in the audio.
+    fn channels(&self) -> usize {
+        match self {
+            Self::Music(hps) => hps.channels(),
+            Self::Sfx { bank, index } => bank.sample(*index).channels.len(),
+        }
+    }
+
+    /// Gets the audio sample rate.
+    fn sample_rate(&self) -> u32 {
+        match self {
+            Self::Music(hps) => hps.sample_rate(),
+            Self::Sfx { bank, index } => bank.sample(*index).rate,
+        }
+    }
+
+    /// Calculates the audio duration.
+    fn duration(&self) -> Duration {
+        let decoder = self.decoder();
+        let total_frames = decoder.data_remaining().unwrap() / (self.channels() as u64);
+        Duration::from_secs_f64((total_frames as f64) / (self.sample_rate() as f64))
+    }
+
+    /// Creates a decoder for the audio data.
+    fn decoder(&self) -> Box<dyn ReadSamples<'static, Format = PcmS16Le> + '_> {
+        match self {
+            Self::Music(hps) => hps.decoder(),
+            Self::Sfx { bank, index } => bank.decoder(*index),
+        }
+    }
 }
 
 /// Exports Audacity labels alongside a sound file.
 fn export_labels(cues: Vec<Cue>, sample_rate: u32, sound_path: &Path) -> Result<()> {
     if !cues.is_empty() {
-        let label_path = sound_path.with_extension(LABELS_EXTENSION);
+        let label_path = sound_path.with_extension(LABELS_EXT);
         debug!("Writing label track to {}", label_path.display());
         let labels = BufWriter::new(File::create(label_path)?);
         audacity::write_labels(labels, cues, sample_rate)?;
@@ -131,129 +326,174 @@ fn export_labels(cues: Vec<Cue>, sample_rate: u32, sound_path: &Path) -> Result<
     Ok(())
 }
 
-pub fn export_music(ctx: Context, opt: ExportMusicOpt) -> Result<()> {
-    let start_time = Instant::now();
+/// The `audio` CLI command.
+pub fn command(ctx: Context, opt: AudioCommand) -> Result<()> {
+    match opt {
+        AudioCommand::Info(opt) => command_info(ctx, opt),
+        AudioCommand::Export(opt) => command_export(ctx, opt),
+        AudioCommand::ExportBank(opt) => command_export_bank(ctx, opt),
+        AudioCommand::ExportAll(opt) => command_export_all(ctx, opt),
+        AudioCommand::Import(opt) => command_import(ctx, opt),
+        AudioCommand::Play(opt) => command_play(ctx, opt),
+    }
+}
 
+/// The `audio info` CLI command.
+fn command_info(ctx: Context, opt: AudioInfoOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let file = find_music_file(&mut ctx, &opt.name)?;
-    let info = ctx.query_file(&file)?;
-    info!("Opening {}", info.name);
-    let hps = ctx.open_music_file(&file)?;
+    let mut cache = AudioCache::new();
+    let resource = AudioResource::find(&mut ctx, &opt.name)?;
+    let name = resource.name();
+    let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
+    let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
+    let duration = audio.duration();
+    let cues = audio.decoder().cues().collect::<Vec<_>>();
+    let looping = cues.iter().any(|c| c.is_loop());
+    let num_cues = cues.iter().filter(|c| !c.is_loop()).count();
+    match &audio {
+        AudioReader::Music(_) => print!("{}: Program stream", name),
+        AudioReader::Sfx { bank, index } => {
+            print!("{}: Sound sample {} in {}", name, index, bank.tag().name);
+        }
+    }
+    match resource.id() {
+        Some(id) => println!(" (ID 0x{:08x})", id.value()),
+        None => println!(),
+    }
+    println!("Duration: {}", format_duration(duration));
+    println!("Channels: {}", audio.channels());
+    println!("Sample Rate: {} Hz", audio.sample_rate());
+    println!("Looping: {}", if looping { "Yes" } else { "No" });
+    println!("Cues: {}", num_cues);
+    Ok(())
+}
 
-    info!("Writing {}", opt.output.display());
+/// The `audio export` CLI command.
+fn command_export(ctx: Context, opt: AudioExportOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let mut cache = AudioCache::new();
+    if opt.names.is_empty() {
+        bail!("Nothing to export");
+    }
+    let (out_dir, out_name) = match &opt.output {
+        Some(output) => {
+            // The output is always treated as a directory if more than one file is given
+            if opt.names.len() > 1 || output.is_dir() {
+                (output.as_ref(), None)
+            } else {
+                let dir = output.parent().unwrap_or_else(|| Path::new("."));
+                let name = output.file_name().map(|n| n.to_string_lossy().into_owned());
+                (dir, name)
+            }
+        }
+        None => (Path::new("."), None),
+    };
+    fs::create_dir_all(out_dir)?;
+    for name in &opt.names {
+        let resource = AudioResource::find(&mut ctx, name)?;
+        let default_name = format!("{}.wav", resource.name());
+        let filename = out_name.as_ref().unwrap_or(&default_name);
+        info!("Exporting {}", filename);
+        let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
+        let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
+        let output = out_dir.join(filename);
+        export(&audio, &opt.settings, &output)?;
+    }
+    Ok(())
+}
+
+/// The `audio export-bank` CLI command.
+fn command_export_bank(ctx: Context, opt: AudioExportBankOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let file = find_bank(&mut ctx, &opt.name)?;
+    export_bank_impl(&mut ctx, &opt.settings, &file, &opt.output, "")?;
+    Ok(())
+}
+
+/// The `audio export-all` CLI command.
+fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+
+    // Export registered banks
+    for group in SFX_GROUPS {
+        let file = ctx.disc_file_at(&group.bank_path())?;
+        export_bank_subdir(&mut ctx, &opt.settings, &file, &opt.output)?;
+    }
+
+    // Export sfx_hori, which is not a registered bank because it has bogus sound IDs
+    let hori = ctx.disc_file_at(SFX_HORI_PATH)?;
+    export_bank_subdir(&mut ctx, &opt.settings, &hori, &opt.output)?;
+
+    // Export music
+    let mut cache = AudioCache::new();
+    for music in MUSIC {
+        info!("Exporting {}.wav", music.name);
+        let resource = AudioResource::Music(music.id);
+        let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
+        let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
+        let output = opt.output.join(format!("{}.wav", music.name));
+        export(&audio, &opt.settings, &output)?;
+    }
+    Ok(())
+}
+
+fn export(audio: &AudioReader<'_>, settings: &AudioExportSettings, path: &Path) -> Result<()> {
     let progress = progress_bar(1);
     if !progress.is_hidden() {
-        let out_name = opt.output.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        let out_name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
         progress.set_message(out_name);
     }
 
-    let out = BufWriter::new(File::create(&opt.output)?);
-    WavWriter::new(hps.decoder())
-        .on_progress(|p| update_audio_progress(&progress, p))
-        .write_to(out)?;
+    let out = BufWriter::new(File::create(path)?);
+    let decoder = audio.decoder();
+    let cues = decoder.cues().collect::<Vec<_>>();
+    WavWriter::new(decoder).on_progress(|p| update_audio_progress(&progress, p)).write_to(out)?;
     progress.finish_using_style();
 
-    if opt.settings.labels {
-        export_labels(hps.cues().collect(), hps.sample_rate(), &opt.output)?;
+    if settings.labels {
+        export_labels(cues, audio.sample_rate(), path)?;
     }
-
-    info!("Export finished in {:?}", start_time.elapsed());
     Ok(())
-}
-
-pub fn import_music(ctx: Context, opt: ImportMusicOpt) -> Result<()> {
-    let start_time = Instant::now();
-
-    let mut ctx = ctx.open_read_write()?;
-    let file = find_music_file(&mut ctx, &opt.name)?;
-    let info = ctx.query_file(&file)?;
-    info!("Opening {}", info.name);
-    let original_loop = ctx.open_music_file(&file)?.loop_start();
-
-    let audio = open_sound_file(&opt.path, opt.labels.as_deref(), MAX_MUSIC_SAMPLE_RATE)?;
-    info!("Analyzing audio waveform");
-    let progress = progress_bar(1);
-    progress.set_message(audio.tag().name.clone());
-    let encoder =
-        PcmHpsWriter::new(audio).on_progress(|p| update_audio_progress(&progress, p)).prepare()?;
-    progress.finish_using_style();
-
-    info!("Encoding audio to GameCube format");
-    let progress = progress_bar(1);
-    progress.set_message(info.name);
-    // Copy the loop setting from the original HPS
-    let looping = if original_loop.is_some() { Looping::Enabled } else { Looping::Disabled };
-    let mut writer = Cursor::new(vec![]);
-    encoder
-        .looping(looping)
-        .on_progress(|p| update_audio_progress(&progress, p))
-        .write_to(&mut writer)?;
-    progress.finish_using_style();
-
-    info!("Updating game files");
-    writer.seek(SeekFrom::Start(0))?;
-    ctx.begin_update().write_file(&file, writer).commit()?;
-
-    info!("Import finished in {:?}", start_time.elapsed());
-    Ok(())
-}
-
-fn make_sound_filename(bank: &SfxBank, index: usize, have_names: bool) -> String {
-    let id = bank.base_index() + (index as u32);
-    if have_names {
-        if let Ok(sound) = SfxSample::try_from(id) {
-            return format!("{}.wav", SfxSampleDefinition::get(sound).name);
-        }
-    }
-    format!("{:>04}.wav", id)
-}
-
-/// Reads a sound bank from `reader` named `name` and exports WAV files to `dir`.
-fn export_bank<'r>(
-    settings: &SoundExportOpt,
-    reader: Box<dyn ReadSeek + 'r>,
-    name: &str,
-    dir: &Path,
-) -> Result<()> {
-    export_bank_impl(settings, reader, name, dir, "")
 }
 
 /// Reads a sound bank from `reader` named `name` and exports WAV files to a subdirectory of `dir`
 /// named after the bank.
-fn export_bank_subdir<'r>(
-    settings: &SoundExportOpt,
-    reader: Box<dyn ReadSeek + 'r>,
-    name: &str,
+fn export_bank_subdir<T: ReadSeek>(
+    ctx: &mut OpenContext<T>,
+    settings: &AudioExportSettings,
+    file: &FileId,
     dir: &Path,
 ) -> Result<()> {
-    let name_prefix = name.split('.').next().unwrap_or(name); // Strip extension
+    let name = ctx.query_file(file)?.name;
+    let name_prefix = name.split('.').next().unwrap_or(&name); // Strip extension
     let dir = dir.join(name_prefix);
     let display_prefix = format!("{}/", name_prefix);
-    export_bank_impl(settings, reader, name, &dir, &display_prefix)
+    export_bank_impl(ctx, settings, file, &dir, &display_prefix)
 }
 
-fn export_bank_impl<'r>(
-    settings: &SoundExportOpt,
-    reader: Box<dyn ReadSeek + 'r>,
-    name: &str,
+fn export_bank_impl<T: ReadSeek>(
+    ctx: &mut OpenContext<T>,
+    settings: &AudioExportSettings,
+    file: &FileId,
     dir: &Path,
     display_prefix: &str,
 ) -> Result<()> {
+    let name = ctx.query_file(file)?.name;
     info!("Exporting from {}", name);
-    let mut reader = BufReader::new(reader);
-    let bank = SfxBank::open(&mut reader, name)?;
+    let bank = ctx.read_bank_file(file)?;
     // Omit names for unusable banks (sfx_hori.ssm)
-    let have_names = SFX_GROUPS.iter().any(|g| g.first_sample == bank.base_index());
+    let have_names = have_sample_names(&bank);
     fs::create_dir_all(&dir)?;
     let progress = progress_bar(bank.len() as u64);
     for (i, _) in bank.samples().enumerate() {
-        let filename = make_sound_filename(&bank, i, have_names);
+        let name = sfx_name(&bank, i, have_names);
+        let filename = format!("{}.wav", name);
         if progress.is_hidden() {
             info!("Writing {}{}", display_prefix, filename);
         } else {
             progress.set_message(format!("{}{}", display_prefix, filename));
         }
-        let out_path = dir.join(filename);
+        let out_path = dir.join(&filename);
         let out = BufWriter::new(File::create(&out_path)?);
         let decoder = bank.decoder(i);
         let cues: Vec<_> = decoder.cues().collect();
@@ -267,45 +507,63 @@ fn export_bank_impl<'r>(
     Ok(())
 }
 
-pub fn export_sounds(ctx: Context, opt: ExportSoundsOpt) -> Result<()> {
-    let start_time = Instant::now();
-
-    let mut ctx = ctx.open_read()?;
-    if let Some(bank_path) = opt.path {
-        // Export single bank
-        let reader = ctx.open_file_at(&bank_path)?;
-        let name = Path::new(&bank_path).file_name().unwrap().to_string_lossy();
-        export_bank(&opt.settings, reader, &name, &opt.output)?;
-    } else {
-        // Export registered banks
-        for group in SFX_GROUPS {
-            let reader = ctx.open_disc_file_at(&group.bank_path())?;
-            let name = format!("{}.ssm", group.name);
-            export_bank_subdir(&opt.settings, reader, &name, &opt.output)?;
-        }
-        // Export sfx_hori, which is not a registered bank because it has bogus sound IDs
-        let reader = ctx.open_disc_file_at(SFX_HORI_PATH)?;
-        export_bank_subdir(&opt.settings, reader, SFX_HORI_NAME, &opt.output)?;
+/// The `audio import` CLI command.
+fn command_import(ctx: Context, opt: AudioImportOpt) -> Result<()> {
+    let mut ctx = ctx.open_read_write()?;
+    let resource = AudioResource::find(&mut ctx, &opt.name)?;
+    info!("Opening {}", resource.name());
+    let mut cache = AudioCache::new();
+    let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
+    match file {
+        AudioFileId::Music(file) => import_music(&mut ctx, opt, file),
+        AudioFileId::Sfx { file, index } => import_sfx(&mut ctx, opt, file, index),
     }
+}
 
-    info!("Export finished in {:?}", start_time.elapsed());
+fn import_music<T: ReadWriteSeek>(
+    ctx: &mut OpenContext<T>,
+    opt: AudioImportOpt,
+    file: FileId,
+) -> Result<()> {
+    let name = ctx.query_file(&file)?.name;
+    let original_loop = ctx.open_music_file(&file)?.loop_start();
+
+    let audio = open_sound_file(&opt.path, &opt.settings, MAX_MUSIC_SAMPLE_RATE)?;
+    info!("Analyzing audio waveform");
+    let progress = progress_bar(1);
+    progress.set_message(audio.tag().name.clone());
+    let encoder =
+        PcmHpsWriter::new(audio).on_progress(|p| update_audio_progress(&progress, p)).prepare()?;
+    progress.finish_using_style();
+
+    info!("Encoding audio to GameCube format");
+    let progress = progress_bar(1);
+    progress.set_message(name);
+    // Copy the loop setting from the original HPS
+    let looping = if original_loop.is_some() { Looping::Enabled } else { Looping::Disabled };
+    let mut writer = Cursor::new(vec![]);
+    encoder
+        .looping(looping)
+        .on_progress(|p| update_audio_progress(&progress, p))
+        .write_to(&mut writer)?;
+    progress.finish_using_style();
+
+    info!("Updating game files");
+    writer.seek(SeekFrom::Start(0))?;
+    ctx.begin_update().write_file(&file, writer).commit()?;
     Ok(())
 }
 
-pub fn import_sound(ctx: Context, opt: ImportSoundOpt) -> Result<()> {
-    let start_time = Instant::now();
+fn import_sfx<T: ReadWriteSeek>(
+    ctx: &mut OpenContext<T>,
+    opt: AudioImportOpt,
+    file: FileId,
+    index: usize,
+) -> Result<()> {
+    let name = ctx.query_file(&file)?.name;
+    let mut bank = ctx.read_bank_file(&file)?;
 
-    let mut ctx = ctx.open_read_write()?;
-    let playlist = ctx.read_playlist()?;
-    let (group, index) = find_sound(&playlist, &opt.sound)?;
-    let group = SfxGroupDefinition::get(group);
-    let mut bank = {
-        info!("Opening {}.ssm", group.name);
-        let mut reader = BufReader::new(ctx.open_disc_file_at(&group.bank_path())?);
-        SfxBank::open(&mut reader, group.name)?
-    };
-
-    let mut audio = open_sound_file(&opt.path, opt.labels.as_deref(), MAX_SFX_SAMPLE_RATE)?;
+    let mut audio = open_sound_file(&opt.path, &opt.settings, MAX_SFX_SAMPLE_RATE)?;
     info!("Encoding audio to GameCube format");
     let mut new_sample = BankSample::from_pcm(&mut audio)?;
     let old_sample = bank.sample(index);
@@ -316,53 +574,33 @@ pub fn import_sound(ctx: Context, opt: ImportSoundOpt) -> Result<()> {
         }
     }
 
-    info!("Rebuilding {}.ssm", group.name);
+    info!("Rebuilding {}", name);
     bank.replace_sample(index, new_sample);
     let mut writer = Cursor::new(vec![]);
     bank.write_to(&mut writer)?;
 
     info!("Updating game files");
     writer.seek(SeekFrom::Start(0))?;
-    ctx.begin_update().write_disc_file_at(&group.bank_path(), writer)?.commit()?;
-
-    info!("Import finished in {:?}", start_time.elapsed());
+    ctx.begin_update().write_file(&file, writer).commit()?;
     Ok(())
 }
 
-fn play_audio(
-    audio: impl ReadSamples<'static, Format = PcmS16Le> + 'static,
-    opt: PlaybackOpt,
-) -> Result<()> {
-    let name = audio.tag().name.clone();
-    let source = PlaybackSource::new(audio)?.with_volume(opt.volume);
+/// The `audio play` subcommand.
+fn command_play(ctx: Context, opt: AudioPlayOpt) -> Result<()> {
+    let ctx = Box::leak(Box::new(ctx.open_read()?));
+    let mut cache = AudioCache::new();
+    let resource = AudioResource::find(ctx, &opt.name)?;
+    let file = AudioFileId::get(ctx, &mut cache, &resource)?;
+    let audio = Box::leak(Box::new(AudioReader::open(ctx, &mut cache, &file)?));
+    let decoder = audio.decoder();
+    let source = PlaybackSource::new(decoder)?.with_volume(opt.volume);
 
     info!("Checking system audio configuration");
     let mut device = PlaybackDevice::open_default(source.sample_rate())?;
 
     info!("Starting playback");
-    playback::play(&mut device, source, name);
+    playback::play(&mut device, source, resource.name().to_owned());
 
     info!("Playback finished");
-    Ok(())
-}
-
-pub fn play_music(ctx: Context, opt: PlayMusicOpt) -> Result<()> {
-    let ctx = Box::leak(Box::new(ctx.open_read()?));
-    let file = find_music_file(ctx, &opt.name)?;
-    info!("Opening {}", ctx.query_file(&file)?.name);
-    let hps = ctx.open_music_file(&file)?;
-    play_audio(hps.decoder(), opt.playback)?;
-    Ok(())
-}
-
-pub fn play_sound(ctx: Context, opt: PlaySoundOpt) -> Result<()> {
-    let ctx = Box::leak(Box::new(ctx.open_read()?));
-    let playlist = ctx.read_playlist()?;
-    let (group, index) = find_sound(&playlist, &opt.sound)?;
-    let group = SfxGroupDefinition::get(group);
-    info!("Opening {}.ssm", group.name);
-    let mut reader = BufReader::new(ctx.open_disc_file_at(&group.bank_path())?);
-    let bank = SfxBank::open(&mut reader, group.name)?;
-    play_audio(bank.decoder(index), opt.playback)?;
     Ok(())
 }

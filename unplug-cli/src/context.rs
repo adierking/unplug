@@ -10,13 +10,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 use unplug::audio::metadata::SfxPlaylist;
-use unplug::audio::transport::HpsReader;
+use unplug::audio::transport::{HpsReader, SfxBank};
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::{ReadFrom, ReadSeek, ReadWriteSeek, WriteTo};
 use unplug::data::music::MusicDefinition;
 use unplug::data::sfx::PLAYLIST_PATH;
+use unplug::data::sfx_group::SfxGroupDefinition;
 use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
-use unplug::data::{self, Music};
+use unplug::data::{self, Music, SfxGroup};
 use unplug::dvd::{ArchiveBuilder, ArchiveReader, DiscStream, EntryId, FileTree, OpenFile};
 use unplug::globals::{GlobalsBuilder, GlobalsReader, Libs};
 use unplug::stage::Stage;
@@ -224,7 +225,7 @@ impl<T: ReadWriteSeek> DiscSource<T> {
 
 /// An identifier for a file which resides in a .iso, qp.bin, or the local filesystem.
 #[non_exhaustive]
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum FileId {
     Iso(EntryId),
     Qp(EntryId),
@@ -380,7 +381,7 @@ impl<T: ReadSeek> OpenContext<T> {
     /// Opens the music file corresponding to `id`.
     pub fn open_music(&mut self, id: Music) -> Result<HpsReader<'_>> {
         let def = MusicDefinition::get(id);
-        let file = self.disc_file_at(&def.path())?;
+        let file = self.disc_file_at(def.path())?;
         self.open_music_file(&file)
     }
 
@@ -395,6 +396,21 @@ impl<T: ReadSeek> OpenContext<T> {
     pub fn read_playlist(&mut self) -> Result<SfxPlaylist> {
         let mut reader = self.open_disc_file_at(PLAYLIST_PATH)?;
         Ok(SfxPlaylist::read_from(&mut reader)?)
+    }
+
+    /// Reads the sample bank corresponding to `bank`.
+    pub fn read_bank(&mut self, bank: SfxGroup) -> Result<SfxBank> {
+        let def = SfxGroupDefinition::get(bank);
+        let file = self.disc_file_at(def.bank_path())?;
+        self.read_bank_file(&file)
+    }
+
+    /// Reads `file` as a sample bank file.
+    pub fn read_bank_file(&mut self, file: &FileId) -> Result<SfxBank> {
+        let info = self.query_file(file)?;
+        let reader = self.open_file(file)?;
+        let mut cursor = copy_into_memory(reader)?;
+        Ok(SfxBank::open(&mut cursor, info.name)?)
     }
 
     /// Loads and caches qp.bin if it is not available.
