@@ -1,3 +1,4 @@
+use super::block::WriteIp;
 use super::opcodes::*;
 use crate::common::text::{self, Text};
 use crate::common::{ReadFrom, SfxId, WriteTo};
@@ -276,7 +277,7 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
     }
 }
 
-impl<W: Write + Seek + ?Sized> WriteTo<W> for MsgArgs {
+impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for MsgArgs {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         // Write a end offset of 0 for now
@@ -414,7 +415,7 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for MsgArgs {
         // Now go back and fill in the end offset
         let end_offset = writer.seek(SeekFrom::Current(0))?;
         writer.seek(SeekFrom::Start(start_offset))?;
-        writer.write_i32::<LE>(i32::try_from(end_offset).expect("Message offset overflow"))?;
+        writer.write_rel_offset((end_offset - start_offset).try_into().unwrap())?;
         writer.seek(SeekFrom::Start(end_offset))?;
         Ok(())
     }

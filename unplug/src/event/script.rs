@@ -2,7 +2,7 @@ mod reader;
 mod writer;
 
 pub use reader::ScriptReader;
-pub use writer::ScriptWriter;
+pub use writer::{BlockOffsetMap, ScriptWriter};
 
 use super::analysis::SubroutineEffectsMap;
 use super::block::{Block, BlockId, CodeBlock, Ip};
@@ -78,13 +78,13 @@ pub struct ScriptLayout {
     block_offsets: Vec<BlockLocation>,
 
     /// The side-effects of each subroutine as determined by a `ScriptAnalyzer`.
-    subroutine_effects: SubroutineEffectsMap,
+    subroutines: SubroutineEffectsMap,
 }
 
 impl ScriptLayout {
     /// Constructs a new `ScriptLayout`. `block_offsets` is a list of each block's offset in order by
     /// block ID.
-    pub fn new(block_offsets: Vec<u32>, subroutine_effects: SubroutineEffectsMap) -> Self {
+    pub fn new(block_offsets: Vec<u32>, subroutines: SubroutineEffectsMap) -> Self {
         // Representing block_offsets in this fashion lets us guarantee that each block will appear
         // in the list exactly once. This is an important constraint for safe mutable iteration.
         let mut block_offsets: Vec<_> = block_offsets
@@ -93,12 +93,17 @@ impl ScriptLayout {
             .map(|(i, o)| BlockLocation::new(i.try_into().unwrap(), o))
             .collect();
         block_offsets.sort_unstable_by_key(|loc| loc.offset);
-        Self { block_offsets, subroutine_effects }
+        Self { block_offsets, subroutines }
+    }
+
+    /// Returns a reference to the script's block offset list, sorted by offset.
+    pub fn block_offsets(&self) -> &[BlockLocation] {
+        &self.block_offsets
     }
 
     /// Returns a reference to the script's subroutine side-effects map.
-    pub fn subroutine_effects(&self) -> &SubroutineEffectsMap {
-        &self.subroutine_effects
+    pub fn subroutines(&self) -> &SubroutineEffectsMap {
+        &self.subroutines
     }
 
     /// Looks up the ID of the block at `offset`.

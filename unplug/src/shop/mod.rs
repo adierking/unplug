@@ -43,7 +43,7 @@ fn find_shop_setup(script: &Script) -> Result<BlockId> {
     debug!("Searching for shop setup routine");
     let layout = script.layout().expect("missing script layout");
     let mut candidates: Vec<_> = layout
-        .subroutine_effects()
+        .subroutines()
         .iter()
         .filter(|(_, e)| e.killed.contains(&Label::Variable(SHOP_ITEM_FIRST as i16)))
         .map(|(block, e)| (*block, e))

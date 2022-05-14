@@ -65,13 +65,16 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Libs {
         table.write_to(writer)?;
 
         // Write out the script data
-        let mut script_writer = ScriptWriter::new(&self.script, &mut writer);
-        for (&id, offset) in self.entry_points.iter().zip(table.entry_points.iter_mut()) {
-            *offset = script_writer.write_subroutine(id)?;
+        let mut script = ScriptWriter::new(&self.script);
+        for &id in &*self.entry_points {
+            script.add_block(id)?;
         }
-        script_writer.finish()?;
+        let offsets = script.write_to(&mut writer)?;
 
         // Go back and fill in the entry point table
+        for (&id, offset) in self.entry_points.iter().zip(&mut *table.entry_points) {
+            *offset = offsets.get(id);
+        }
         let end_offset = writer.seek(SeekFrom::Current(0))?;
         writer.seek(SeekFrom::Start(table_offset))?;
         table.write_to(writer)?;

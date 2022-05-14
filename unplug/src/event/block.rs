@@ -130,7 +130,11 @@ impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Ip {
 /// A trait for an object that can write an `Ip`.
 /// This permits the writer to write a placeholder and then fill the actual IP in later.
 pub trait WriteIp {
+    /// Writes an IP to the writer which will be fixed up later.
     fn write_ip(&mut self, ip: Ip) -> io::Result<()>;
+
+    /// Writes an offset computed relative to the current offset.
+    fn write_rel_offset(&mut self, offset: i32) -> io::Result<()>;
 }
 
 /// A block of data in a script.

@@ -106,10 +106,15 @@ where
 impl WriteIp for Cursor<Vec<u8>> {
     fn write_ip(&mut self, ip: Ip) -> io::Result<()> {
         if let Ip::Offset(offset) = ip {
-            Ok(self.write_u32::<LE>(offset)?)
+            self.write_u32::<LE>(offset)
         } else {
             panic!("IP is not an offset: {:?}", ip);
         }
+    }
+
+    fn write_rel_offset(&mut self, offset: i32) -> io::Result<()> {
+        let base_offset = u32::try_from(self.seek(SeekFrom::Current(0))?).unwrap();
+        self.write_u32::<LE>(base_offset.wrapping_add(offset as u32))
     }
 }
 

@@ -122,7 +122,7 @@ impl<'r> ScriptReader<'r> {
         lib_blocks: &[BlockId],
     ) -> Self {
         let layout = lib_script.layout().expect("Missing script layout information");
-        let effects = layout.subroutine_effects();
+        let effects = layout.subroutines();
         Self::with_analyzer(reader, ScriptAnalyzer::with_libs(effects, lib_blocks))
     }
 

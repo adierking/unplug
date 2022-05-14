@@ -422,36 +422,51 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Stage {
             NonNoneList(self.unk_30.as_slice().into()).write_to(writer)?;
         }
 
-        let mut script_writer = ScriptWriter::new(&self.script, &mut writer);
+        let mut script = ScriptWriter::new(&self.script);
         if let Some(prologue) = self.on_prologue {
-            header.on_prologue = NonZeroU32::new(script_writer.write_subroutine(prologue)?);
+            script.add_block(prologue)?;
         }
         if let Some(startup) = self.on_startup {
-            header.on_startup = NonZeroU32::new(script_writer.write_subroutine(startup)?);
+            script.add_block(startup)?;
         }
         if let Some(dead) = self.on_dead {
-            header.on_dead = NonZeroU32::new(script_writer.write_subroutine(dead)?);
+            script.add_block(dead)?;
         }
         if let Some(pose) = self.on_pose {
-            header.on_pose = NonZeroU32::new(script_writer.write_subroutine(pose)?);
+            script.add_block(pose)?;
         }
         if let Some(time_cycle) = self.on_time_cycle {
-            header.on_time_cycle = NonZeroU32::new(script_writer.write_subroutine(time_cycle)?);
+            script.add_block(time_cycle)?;
         }
         if let Some(time_up) = self.on_time_up {
-            header.on_time_up = NonZeroU32::new(script_writer.write_subroutine(time_up)?);
+            script.add_block(time_up)?;
         }
-        for (i, obj) in self.objects.iter().enumerate() {
+        for obj in &self.objects {
             if let Some(event) = obj.script {
-                events.entry_points[i] = script_writer.write_subroutine(event)?;
+                script.add_block(event)?;
             }
         }
-        script_writer.finish()?;
+        let offsets = script.write_to(&mut writer)?;
+        let end_offset = writer.seek(SeekFrom::Current(0))?;
+
+        let resolve_event = |b| NonZeroU32::new(offsets.get(b));
+        header.on_prologue = self.on_prologue.and_then(resolve_event);
+        header.on_startup = self.on_startup.and_then(resolve_event);
+        header.on_dead = self.on_dead.and_then(resolve_event);
+        header.on_pose = self.on_pose.and_then(resolve_event);
+        header.on_time_cycle = self.on_time_cycle.and_then(resolve_event);
+        header.on_time_up = self.on_time_up.and_then(resolve_event);
+        for (obj, offset) in self.objects.iter().zip(&mut events.entry_points) {
+            if let Some(block) = obj.script {
+                *offset = offsets.get(block);
+            }
+        }
 
         writer.seek(SeekFrom::Start(0))?;
         header.write_to(writer)?;
         writer.seek(SeekFrom::Start(header.events_offset as u64))?;
         events.write_to(writer)?;
+        writer.seek(SeekFrom::Start(end_offset))?;
         Ok(())
     }
 }
