@@ -173,20 +173,36 @@ pub fn extract_iso(_ctx: Context, opt: ExtractIsoOpt) -> Result<()> {
     Ok(())
 }
 
-fn dump_script(mut out: impl Write, script: &Script) -> Result<()> {
+fn dump_script(script: &Script, flags: &DumpStageFlags, mut out: impl Write) -> Result<()> {
     write!(out, "\nDATA\n\n")?;
-    writeln!(out, "off   id   value")?;
+    if flags.no_offsets {
+        writeln!(out, "id   value")?;
+    } else {
+        writeln!(out, "off   id   value")?;
+    }
     for (location, block) in script.blocks_ordered() {
         if let Block::Data(data) = block {
-            writeln!(out, "{:<5x} {:<4} {:?}", location.offset, location.id.index(), data)?;
+            if flags.no_offsets {
+                writeln!(out, "{:<4} {:?}", location.id.index(), data)?;
+            } else {
+                writeln!(out, "{:<5x} {:<4} {:?}", location.offset, location.id.index(), data)?;
+            }
         }
     }
 
     write!(out, "\nCODE\n\n")?;
-    writeln!(out, "off   id   command")?;
+    if flags.no_offsets {
+        writeln!(out, "id   command")?;
+    } else {
+        writeln!(out, "off   id   command")?;
+    }
     for (location, command) in script.commands_ordered() {
         let block = location.block;
-        writeln!(out, "{:<5x} {:<4} {:?}", block.offset, block.id.index(), command)?;
+        if flags.no_offsets {
+            writeln!(out, "{:<4} {:?}", block.id.index(), command)?;
+        } else {
+            writeln!(out, "{:<5x} {:<4} {:?}", block.offset, block.id.index(), command)?;
+        }
     }
     Ok(())
 }
@@ -221,7 +237,7 @@ fn do_dump_stage(stage: &Stage, flags: &DumpStageFlags, mut out: impl Write) -> 
     writeln!(out, "on_time_cycle: {:?}", stage.on_time_cycle)?;
     writeln!(out, "on_time_up: {:?}", stage.on_time_up)?;
 
-    dump_script(out, &stage.script)?;
+    dump_script(&stage.script, flags, out)?;
     Ok(())
 }
 
@@ -237,11 +253,11 @@ pub fn dump_stage(ctx: Context, opt: DumpStageOpt) -> Result<()> {
     Ok(())
 }
 
-fn do_dump_libs(libs: &Libs, mut out: impl Write) -> Result<()> {
+fn do_dump_libs(libs: &Libs, flags: &DumpStageFlags, mut out: impl Write) -> Result<()> {
     for (i, id) in libs.entry_points.iter().enumerate() {
         writeln!(out, "lib[{}]: {:?}", i, id)?;
     }
-    dump_script(out, &libs.script)?;
+    dump_script(&libs.script, flags, out)?;
     Ok(())
 }
 
@@ -250,7 +266,7 @@ pub fn dump_libs(ctx: Context, opt: DumpLibsOpt) -> Result<()> {
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
     info!("Dumping script globals");
     let libs = ctx.read_globals()?.read_libs()?;
-    do_dump_libs(&libs, out)
+    do_dump_libs(&libs, &opt.flags, out)
 }
 
 pub fn dump_all_stages(ctx: Context, opt: DumpAllStagesOpt) -> Result<()> {
@@ -261,7 +277,7 @@ pub fn dump_all_stages(ctx: Context, opt: DumpAllStagesOpt) -> Result<()> {
     fs::create_dir_all(&opt.output)?;
     let libs = ctx.read_globals()?.read_libs()?;
     let libs_out = File::create(Path::join(&opt.output, "globals.txt"))?;
-    do_dump_libs(&libs, BufWriter::new(libs_out))?;
+    do_dump_libs(&libs, &opt.flags, BufWriter::new(libs_out))?;
 
     for stage_def in STAGES {
         info!("Dumping {}.bin", stage_def.name);

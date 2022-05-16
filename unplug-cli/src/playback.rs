@@ -10,7 +10,6 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use tracing::instrument;
 use unplug::audio::format::pcm::Scalable;
 use unplug::audio::format::{AnyFormat, Cast, Convert, PcmF32Le, PcmFormat, PcmS16Le, PcmU16Le};
 use unplug::audio::volume::{ScaleAmplitude, Volume};
@@ -328,7 +327,6 @@ impl BufferThread {
         self.state.lock().unwrap().stop();
     }
 
-    #[instrument(level = "trace", skip(self))]
     fn fill_buffer(&mut self) {
         if self.eof {
             return;

@@ -29,3 +29,6 @@ pub mod playback;
 pub mod project;
 pub mod shop;
 pub mod terminal;
+
+#[cfg(feature = "debug")]
+pub mod debug;

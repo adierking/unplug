@@ -40,6 +40,7 @@ unplug = { path = "../unplug" }
 unplug-test = { path = "../unplug-test" }
 
 [features]
-default = ["trace"]
+default = ["debug", "trace"]
+debug = []
 distribution = ["log/release_max_level_debug", "tracing/release_max_level_debug"]
 trace = ["tracing", "tracing-appender", "tracing-flame", "tracing-subscriber"]

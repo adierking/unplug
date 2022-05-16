@@ -123,6 +123,10 @@ pub enum Subcommand {
 
     /// Runs Dolphin with the current project/ISO.
     Dolphin(DolphinOpt),
+
+    /// Debugging commands (development builds only)
+    #[cfg(feature = "debug")]
+    Debug(DebugCommand),
 }
 
 #[derive(StructOpt)]
@@ -294,6 +298,10 @@ pub struct DumpStageFlags {
     /// Dumps unknown structs
     #[structopt(long)]
     pub dump_unknown: bool,
+
+    /// Do not show file offsets
+    #[structopt(long)]
+    pub no_offsets: bool,
 }
 
 #[derive(StructOpt)]
@@ -314,6 +322,9 @@ pub struct DumpLibsOpt {
     /// Redirects output to a file instead of stdout
     #[structopt(short, long("out"), value_name("PATH"))]
     pub output: Option<PathBuf>,
+
+    #[structopt(flatten)]
+    pub flags: DumpStageFlags,
 }
 
 #[derive(StructOpt)]
@@ -503,4 +514,11 @@ pub struct DolphinOpt {
     /// Show Dolphin's UI
     #[structopt(long)]
     pub ui: bool,
+}
+
+#[cfg(feature = "debug")]
+#[derive(StructOpt)]
+pub enum DebugCommand {
+    /// Read and rewrite script data
+    RebuildScripts,
 }

@@ -97,6 +97,8 @@ fn run_app() -> Result<()> {
         Subcommand::ExportShop(opt) => shop::export_shop(ctx, opt),
         Subcommand::ImportShop(opt) => shop::import_shop(ctx, opt),
         Subcommand::Dolphin(opt) => dolphin::command(ctx, opt),
+        #[cfg(feature = "debug")]
+        Subcommand::Debug(opt) => unplug_cli::debug::command(ctx, opt),
     }
 }
 
