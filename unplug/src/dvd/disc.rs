@@ -12,7 +12,8 @@ use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
 use tracing::{debug, trace};
 
-const DVD_MAGIC: u32 = 0xc2339f3d;
+const GCN_MAGIC: u32 = 0xc2339f3d;
+const WII_MAGIC: u32 = 0x5d1c9ea3;
 
 // Optimal alignment is on 32KB boundaries (cluster size)
 // PiA doesn't actually use this but some other games (e.g. Melee) do
@@ -34,6 +35,9 @@ pub enum Error {
 
     #[error("not enough space available in disc (need {0:#x} bytes)")]
     NotEnoughSpace(u32),
+
+    #[error("Wii DVDs are not supported")]
+    WiiNotSupported,
 
     #[error(transparent)]
     Fst(Box<fst::Error>),
@@ -57,8 +61,9 @@ struct DiscHeader {
     version: u8,
     audio_streaming: u8,
     stream_buffer_size: u8,
-    unused_00a: [u8; 0x12],
-    magic: u32,
+    unused_00a: [u8; 0x0e],
+    wii_magic: u32,
+    gcn_magic: u32,
     game_name: CString,
     debug_monitor_offset: u32,
     debug_monitor_addr: u32,
@@ -91,8 +96,12 @@ impl<R: Read + ?Sized> ReadFrom<R> for DiscHeader {
         header.audio_streaming = reader.read_u8()?;
         header.stream_buffer_size = reader.read_u8()?;
         reader.read_exact(&mut header.unused_00a)?;
-        header.magic = reader.read_u32::<BE>()?;
-        if header.magic != DVD_MAGIC {
+        header.wii_magic = reader.read_u32::<BE>()?;
+        if header.wii_magic == WII_MAGIC {
+            return Err(Error::WiiNotSupported);
+        }
+        header.gcn_magic = reader.read_u32::<BE>()?;
+        if header.gcn_magic != GCN_MAGIC {
             return Err(Error::InvalidMagic);
         }
         header.game_name = read_fixed_string(&mut *reader, 0x3e0)?;
@@ -121,7 +130,8 @@ impl<W: Write + ?Sized> WriteTo<W> for DiscHeader {
         writer.write_u8(self.audio_streaming)?;
         writer.write_u8(self.stream_buffer_size)?;
         writer.write_all(&self.unused_00a)?;
-        writer.write_u32::<BE>(self.magic)?;
+        writer.write_u32::<BE>(self.wii_magic)?;
+        writer.write_u32::<BE>(self.gcn_magic)?;
         write_fixed_string(&mut *writer, &self.game_name, 0x3e0)?;
         writer.write_u32::<BE>(self.debug_monitor_offset)?;
         writer.write_u32::<BE>(self.debug_monitor_addr)?;
@@ -497,8 +507,9 @@ mod tests {
             version: 3,
             audio_streaming: 4,
             stream_buffer_size: 5,
-            unused_00a: [6; 0x12],
-            magic: DVD_MAGIC,
+            unused_00a: [6; 0x0e],
+            wii_magic: 0,
+            gcn_magic: GCN_MAGIC,
             game_name: CString::new("test").unwrap(),
             debug_monitor_offset: 8,
             debug_monitor_addr: 9,
