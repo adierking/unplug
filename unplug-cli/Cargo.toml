@@ -18,6 +18,7 @@ console = { version = "0.15.0", default-features = false }
 cpal = "0.13.4"
 crossterm = "0.22"
 dirs = "4.0"
+humansize = "1.1.1"
 indicatif = "0.16.2"
 lazy_static = "1.4.0"
 log = { version = "0.4" }

@@ -3,6 +3,7 @@ use crate::id::IdString;
 use crate::io::OutputRedirect;
 use crate::opt::*;
 use anyhow::{bail, Result};
+use humansize::{file_size_opts, FileSize};
 use log::{debug, info};
 use std::convert::TryFrom;
 use std::fs::{self, File};
@@ -302,5 +303,47 @@ pub fn dump_colliders(ctx: Context, opt: DumpCollidersOpt) -> Result<()> {
         }
         writeln!(out)?;
     }
+    Ok(())
+}
+
+pub fn command_iso(ctx: Context, opt: IsoCommand) -> Result<()> {
+    match opt {
+        IsoCommand::Info => command_iso_info(ctx),
+        IsoCommand::List(_) => todo!(),
+        IsoCommand::Extract(_) => todo!(),
+        IsoCommand::ExtractAll(_) => todo!(),
+        IsoCommand::Replace(_) => todo!(),
+    }
+}
+
+fn command_iso_info(ctx: Context) -> Result<()> {
+    let path = ctx.into_iso_path()?;
+    let mut disc = DiscStream::open(File::open(&path)?)?;
+    let banner = disc.read_banner()?;
+    let name = path.file_name().unwrap().to_string_lossy();
+    println!("{}: [{}] {}", name, disc.game_id(), disc.game_name());
+
+    let info = &banner.languages[0];
+    println!("Name: {}", info.name_long.decode().unwrap());
+    println!("Maker: {}", info.maker_long.decode().unwrap());
+
+    let description = info.description.decode().unwrap();
+    let mut lines = description.split('\n');
+    println!("Description: {}", lines.next().unwrap_or(""));
+    for line in lines {
+        println!("             {}", line);
+    }
+
+    let used = disc.used_size() as u64;
+    let total = disc.total_size() as u64;
+    println!(
+        "Disc Usage: {} / {} ({}%)",
+        used.file_size(file_size_opts::CONVENTIONAL).unwrap(),
+        total.file_size(file_size_opts::CONVENTIONAL).unwrap(),
+        used * 100 / total
+    );
+
+    println!("File Entries: {}", disc.files.len());
+    // TODO: Other useful info?
     Ok(())
 }

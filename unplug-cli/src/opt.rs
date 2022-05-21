@@ -70,6 +70,9 @@ pub enum Subcommand {
     /// Commands for working with audio resources
     Audio(AudioCommand),
 
+    /// Commands for working with ISO files
+    Iso(IsoCommand),
+
     /// Lists files in a U8 archive (e.g. qp.bin)
     ListArchive(ListArchiveOpt),
 
@@ -514,6 +517,56 @@ pub struct DolphinOpt {
     /// Show Dolphin's UI
     #[structopt(long)]
     pub ui: bool,
+}
+
+#[derive(StructOpt)]
+pub enum IsoCommand {
+    /// Shows information about the ISO.
+    Info,
+    /// Lists files in the ISO.
+    List(IsoListOpt),
+    /// Extracts files from the ISO.
+    Extract(IsoExtractOpt),
+    /// Extracts all files from the ISO.
+    ExtractAll(IsoExtractAllOpt),
+    /// Replaces a file in the ISO.
+    Replace(IsoReplaceOpt),
+}
+
+#[derive(StructOpt)]
+pub struct IsoListOpt {
+    #[structopt(flatten)]
+    pub settings: ListOpt,
+
+    pub paths: Vec<String>,
+}
+
+#[derive(StructOpt)]
+pub struct IsoExtractOpt {
+    /// If extracting one file, the path of the output file, otherwise the
+    /// directory to extract files to
+    #[structopt(short, long("out"), value_name("PATH"))]
+    pub output: PathBuf,
+
+    pub paths: Vec<String>,
+}
+
+#[derive(StructOpt)]
+pub struct IsoExtractAllOpt {
+    /// The directory to extract files to
+    #[structopt(short, long("out"), value_name("PATH"))]
+    pub output: PathBuf,
+}
+
+#[derive(StructOpt)]
+pub struct IsoReplaceOpt {
+    /// Path of the file in the ISO to replace
+    #[structopt(value_name("PATH"))]
+    pub dest_path: String,
+
+    /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
+    #[structopt(value_name("PATH"))]
+    pub src_path: PathBuf,
 }
 
 #[cfg(feature = "debug")]

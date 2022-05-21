@@ -476,6 +476,12 @@ impl FileTree {
         Ok(Self { entries: entry_map, root: root_id })
     }
 
+    /// Returns the total number of entries.
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
     /// Returns the ID of the root directory.
     pub fn root(&self) -> EntryId {
         self.root

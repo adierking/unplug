@@ -79,6 +79,7 @@ fn run_app() -> Result<()> {
         Subcommand::Config(opt) => config::command(ctx, opt),
         Subcommand::Project(opt) => project::command(ctx, opt),
         Subcommand::Audio(opt) => audio::command(ctx, opt),
+        Subcommand::Iso(opt) => commands::command_iso(ctx, opt),
         Subcommand::ListArchive(opt) => commands::list_archive(ctx, opt),
         Subcommand::ListIso(opt) => commands::list_iso(ctx, opt),
         Subcommand::ListItems(opt) => commands::list_items(ctx, opt),

@@ -4,7 +4,7 @@ use super::fst::{self, EditFile, EntryId, FileStringTable, FileTree, FstEntryKin
 use crate::common::io::{copy_within, fill, read_fixed_string, write_fixed_string};
 use crate::common::{self, ReadFrom, ReadSeek, ReadWriteSeek, Region, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
-use encoding_rs::mem;
+use encoding_rs::{mem, SHIFT_JIS};
 use std::cmp;
 use std::convert::TryFrom;
 use std::ffi::CString;
@@ -187,6 +187,15 @@ impl<S: ReadSeek> DiscStream<S> {
         mem::decode_latin1(&game_id).into()
     }
 
+    /// Returns the disc's game name.
+    pub fn game_name(&self) -> String {
+        let bytes = self.header.game_name.as_bytes();
+        match SHIFT_JIS.decode_without_bom_handling_and_without_replacement(bytes) {
+            Some(s) => s.into_owned(),
+            None => mem::decode_latin1(bytes).into_owned(),
+        }
+    }
+
     /// Returns the DOL header and a stream that can be used to read the main.dol file.
     pub fn open_dol(&mut self) -> Result<(DolHeader, Box<dyn ReadSeek + '_>)> {
         let start = self.header.dol_offset as u64;
@@ -200,6 +209,16 @@ impl<S: ReadSeek> DiscStream<S> {
     /// Returns a list of unused areas in the disc sorted by offset.
     pub fn free_regions(&self) -> &[DiscRegion] {
         &self.free_regions
+    }
+
+    /// Returns the number of used bytes on the disc.
+    pub fn used_size(&self) -> u32 {
+        self.total_size() - self.free_regions.iter().map(|r| r.size).sum::<u32>()
+    }
+
+    /// Returns the total size of the disc in bytes.
+    pub fn total_size(&self) -> u32 {
+        self.header.user_size + self.header.disc_size
     }
 
     /// Reads the disc's banner file.
