@@ -47,6 +47,16 @@ impl Text {
         &mut self.bytes
     }
 
+    /// Consumes the text and returns the inner bytes.
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    /// Consumes the text and converts it to a `CString`.
+    pub fn into_c_string(self) -> CString {
+        CString::new(self.into_bytes()).unwrap()
+    }
+
     /// Returns whether the text is an empty string.
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
@@ -95,5 +105,11 @@ impl fmt::Debug for Text {
 impl From<CString> for Text {
     fn from(string: CString) -> Self {
         Self::with_bytes(string.into_bytes())
+    }
+}
+
+impl From<Text> for CString {
+    fn from(text: Text) -> Self {
+        text.into_c_string()
     }
 }

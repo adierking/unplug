@@ -1,3 +1,4 @@
+use super::banner::{self, Banner};
 use super::dol::{self, DolHeader};
 use super::fst::{self, EditFile, EntryId, FileStringTable, FileTree, FstEntryKind, OpenFile};
 use crate::common::io::{copy_within, fill, read_fixed_string, write_fixed_string};
@@ -20,6 +21,9 @@ const WII_MAGIC: u32 = 0x5d1c9ea3;
 // Aligning files also leaves some room for adjacent files to grow
 const DVD_OPTIMAL_ALIGN: u32 = 0x8000;
 
+/// Path to the banner file that the GameCube looks for.
+const BANNER_PATH: &str = "opening.bnr";
+
 /// The result type for disc operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -40,6 +44,9 @@ pub enum Error {
     WiiNotSupported,
 
     #[error(transparent)]
+    Banner(Box<banner::Error>),
+
+    #[error(transparent)]
     Fst(Box<fst::Error>),
 
     #[error(transparent)]
@@ -49,6 +56,7 @@ pub enum Error {
     Io(Box<io::Error>),
 }
 
+from_error_boxed!(Error::Banner, banner::Error);
 from_error_boxed!(Error::Fst, fst::Error);
 from_error_boxed!(Error::Dol, dol::Error);
 from_error_boxed!(Error::Io, io::Error);
@@ -192,6 +200,12 @@ impl<S: ReadSeek> DiscStream<S> {
     /// Returns a list of unused areas in the disc sorted by offset.
     pub fn free_regions(&self) -> &[DiscRegion] {
         &self.free_regions
+    }
+
+    /// Reads the disc's banner file.
+    pub fn read_banner(&mut self) -> Result<Banner> {
+        let mut reader = BufReader::new(self.open_file_at(BANNER_PATH)?);
+        Ok(Banner::read_from(&mut reader)?)
     }
 
     /// Returns the maximum amount of space that a file can be grown to occupy without overwriting

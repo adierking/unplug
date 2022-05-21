@@ -52,6 +52,9 @@ pub(crate) const TEST_OGG: &[u8] = include_bytes!("test/ionpack.ogg");
 /// `ionpack.wav` encoded to Ogg Vorbis and back to WAV
 pub(crate) const TEST_OGG_WAV: &[u8] = include_bytes!("test/ionpack-ogg.wav");
 
+/// Dummy banner file
+pub(crate) const TEST_BANNER: &[u8] = include_bytes!("test/opening.bnr");
+
 /// Asserts that writing a value to a byte array and reading it back produces the same value.
 #[macro_export]
 macro_rules! assert_write_and_read {
