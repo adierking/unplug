@@ -3,6 +3,11 @@ name: Rust
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '.gitignore'
+      - '**.md'
+      - '**.txt'
+      - 'docs/**'
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,68 +18,68 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - name: windows-x64
-          os: windows-latest
-          target: x86_64-pc-windows-msvc
-          exe-name: unplug.exe
-        - name: macos-arm64
-          os: macos-latest
-          target: aarch64-apple-darwin
-          exe-name: unplug
-        - name: macos-x64
-          os: macos-latest
-          target: x86_64-apple-darwin
-          exe-name: unplug
-        - name: linux-x64
-          os: ubuntu-latest
-          target: x86_64-unknown-linux-gnu
-          exe-name: unplug
+          - name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            exe-name: unplug.exe
+          - name: macos-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            exe-name: unplug
+          - name: macos-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            exe-name: unplug
+          - name: linux-x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            exe-name: unplug
     runs-on: ${{ matrix.os }}
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    - if: ${{ contains(matrix.os, 'ubuntu') }}
-      name: Install Dependencies (Ubuntu)
-      run: |
-        sudo apt-get update
-        sudo apt-get install libasound2-dev
-    - name: Install Toolchain
-      run: |
-        rustup toolchain install 1.56 --component clippy
-        rustup toolchain install 1.61 --component llvm-tools-preview
-        rustup default 1.61
-        rustup target add ${{ matrix.target }}
-    - name: Install cargo-llvm-cov
-      uses: taiki-e/install-action@cargo-llvm-cov
-    - name: Clippy
-      run: cargo +1.56 clippy --all-targets
-    - if: ${{ contains(matrix.target, 'x86_64') }}
-      name: Test (x64)
-      run: cargo llvm-cov -vv --workspace --lib --target ${{ matrix.target }} --lcov --output-path lcov.info
-    - name: Build CLI
-      run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v3
-      with:
-       name: unplug-${{ github.ref_name }}-${{ matrix.name }}
-       path:
-         target/${{ matrix.target }}/release/${{ matrix.exe-name }}
-       if-no-files-found: error
-    - if: ${{ contains(matrix.target, 'x86_64') }}
-      name: Upload Code Coverage (x64)
-      uses: coverallsapp/github-action@master
-      with:
-        github-token: ${{ secrets.github_token }}
-        flag-name: run-${{ matrix.name }}
-        path-to-lcov: lcov.info
-        parallel: true
+      - name: Checkout
+        uses: actions/checkout@v3
+      - if: ${{ contains(matrix.os, 'ubuntu') }}
+        name: Install Dependencies (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install libasound2-dev
+      - name: Install Toolchain
+        run: |
+          rustup toolchain install 1.56 --component clippy
+          rustup toolchain install 1.61 --component llvm-tools-preview
+          rustup default 1.61
+          rustup target add ${{ matrix.target }}
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Clippy
+        run: cargo +1.56 clippy --workspace --all-targets --target ${{ matrix.target }}
+      - if: ${{ contains(matrix.target, 'x86_64') }}
+        name: Test (x64)
+        run: cargo llvm-cov -vv --workspace --lib --target ${{ matrix.target }} --lcov --output-path lcov.info
+      - name: Build CLI
+        run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+        name: unplug-${{ github.ref_name }}-${{ matrix.name }}
+        path:
+          target/${{ matrix.target }}/release/${{ matrix.exe-name }}
+        if-no-files-found: error
+      - if: ${{ contains(matrix.target, 'x86_64') }}
+        name: Upload Code Coverage (x64)
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.github_token }}
+          flag-name: run-${{ matrix.name }}
+          path-to-lcov: lcov.info
+          parallel: true
 
   finish:
     needs: build
     runs-on: ubuntu-latest
     steps:
-    - name: Finalize Coverage
-      uses: coverallsapp/github-action@master
-      with:
-        github-token: ${{ secrets.github_token }}
-        parallel-finished: true
+      - name: Finalize Coverage
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.github_token }}
+          parallel-finished: true
