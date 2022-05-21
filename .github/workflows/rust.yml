@@ -40,14 +40,17 @@ jobs:
         sudo apt-get install libasound2-dev
     - name: Install Toolchain
       run: |
-        rustup default 1.56
+        rustup toolchain install 1.56
+        rustup toolchain install 1.61 --component llvm-tools-preview
+        rustup default 1.61
         rustup target add ${{ matrix.target }}
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
+    - name: Clippy
+      run: cargo +1.56 clippy --all-targets
     - if: ${{ contains(matrix.target, 'x86_64') }}
-      name: Build Tests (x64)
-      run: cargo test -v --workspace --no-run --target ${{ matrix.target }}
-    - if: ${{ contains(matrix.target, 'x86_64') }}
-      name: Run Tests (x64)
-      run: cargo test -v --workspace --lib --target ${{ matrix.target }}
+      name: Test (x64)
+      run: cargo llvm-cov -vv --workspace --lib --target ${{ matrix.target }} --lcov --output-path lcov.info
     - name: Build CLI
       run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
     - name: Upload Artifacts
@@ -57,3 +60,21 @@ jobs:
        path:
          target/${{ matrix.target }}/release/${{ matrix.exe-name }}
        if-no-files-found: error
+    - if: ${{ contains(matrix.target, 'x86_64') }}
+      name: Upload Code Coverage (x64)
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.github_token }}
+        flag-name: run-${{ matrix.name }}
+        path-to-lcov: lcov.info
+        parallel: true
+
+  finish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Finalize Coverage
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.github_token }}
+        parallel-finished: true
