@@ -1,0 +1,38 @@
+name: Rust
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+        - os: windows-latest
+          os-name: windows
+          exe-name: unplug.exe
+        - os: macos-latest
+          os-name: macos
+          exe-name: unplug
+        - os: ubuntu-latest
+          os-name: linux
+          exe-name: unplug
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose --release --all-targets --no-default-features --features distribution
+    - name: Test
+      run: cargo test --verbose --release --lib
+    - name: Upload
+      uses: actions/upload-artifact@v3
+      with:
+       name: unplug-${{ github.ref_name }}-${{ matrix.os-name }}-x64
+       path:
+         target/release/${{ matrix.exe-name }}
+       if-no-files-found: error
