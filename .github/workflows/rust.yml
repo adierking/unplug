@@ -10,34 +10,37 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
         - os: windows-latest
-          os-name: windows
+          os-name: windows-x64
           exe-name: unplug.exe
         - os: macos-latest
-          os-name: macos
+          os-name: macos-x64
           exe-name: unplug
         - os: ubuntu-latest
-          os-name: linux
+          os-name: linux-x64
           exe-name: unplug
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - if: ${{ matrix.os == 'ubuntu-latest' }}
+    - if: ${{ contains(matrix.os, 'ubuntu') }}
       name: Install Dependencies (Ubuntu)
       run: |
         sudo apt-get update
         sudo apt-get install libasound2-dev
-    - name: Build
-      run: cargo build --verbose --release --all-targets --no-default-features --features distribution
-    - name: Test
-      run: cargo test --verbose --release --lib
-    - name: Upload
+    - name: Build Tests
+      run: cargo test -v --workspace --no-run
+    - name: Run Tests
+      run: cargo test -v --workspace --lib
+    - name: Build CLI
+      run: cargo build -v -p unplug-cli --release --no-default-features --features distribution
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v3
       with:
-       name: unplug-${{ github.ref_name }}-${{ matrix.os-name }}-x64
+       name: unplug-${{ github.ref_name }}-${{ matrix.os-name }}
        path:
          target/release/${{ matrix.exe-name }}
        if-no-files-found: error
