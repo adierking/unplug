@@ -47,8 +47,9 @@ jobs:
         run: |
           rustup toolchain install 1.56 --component clippy
           rustup toolchain install 1.61 --component llvm-tools-preview
+          rustup target add --toolchain 1.56 ${{ matrix.target }}
+          rustup target add --toolchain 1.61 ${{ matrix.target }}
           rustup default 1.61
-          rustup target add ${{ matrix.target }}
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Clippy
