@@ -2,6 +2,11 @@
 
 ![Unplug is a Rust library and command-line interface for working with Chibi-Robo! assets.](docs/images/unplug.gif)
 
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/adierking/unplug)
+![GitHub](https://img.shields.io/github/license/adierking/unplug)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/adierking/unplug/Rust)
+![Coveralls](https://img.shields.io/coveralls/github/adierking/unplug)
+
 :satellite: [Download](#download)<br>
 :star: [Goals](#goals)<br>
 :robot: [Features](#features)<br>
