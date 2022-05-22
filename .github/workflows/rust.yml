@@ -67,6 +67,7 @@ jobs:
           Start-BitsTransfer -Source "$Env:ISO_URL" -Destination chibi.zip 2>$null
           Start-BitsTransfer -Source "$Env:BRSAR_URL" -Destination cb_robo.brsar 2>$null
           Expand-Archive chibi.zip -DestinationPath .
+          Remove-Item chibi.zip
         env:
           ISO_URL: ${{ secrets.iso_url }}
           BRSAR_URL: ${{ secrets.brsar_url }}
@@ -77,6 +78,7 @@ jobs:
           curl -fsS "$ISO_URL" -o chibi.zip
           curl -fsS "$BRSAR_URL" -o cb_robo.brsar
           unzip chibi.zip
+          rm chibi.zip
         env:
           ISO_URL: ${{ secrets.iso_url }}
           BRSAR_URL: ${{ secrets.brsar_url }}
