@@ -34,15 +34,19 @@ jobs:
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             exe-name: unplug
+
     runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+
       - if: ${{ contains(matrix.os, 'ubuntu') }}
         name: Install Dependencies (Ubuntu)
         run: |
           sudo apt-get update
           sudo apt-get install libasound2-dev
+
       - name: Install Toolchain
         run: |
           rustup toolchain install 1.56 --component clippy
@@ -50,15 +54,43 @@ jobs:
           rustup target add --toolchain 1.56 ${{ matrix.target }}
           rustup target add --toolchain 1.61 ${{ matrix.target }}
           rustup default 1.61
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
+
       - name: Clippy
         run: cargo +1.56 clippy --workspace --all-targets --target ${{ matrix.target }}
-      - if: ${{ contains(matrix.target, 'x86_64') }}
+
+      - if: ${{ contains(matrix.name, 'x64') && contains(matrix.name, 'windows') }}
+        name: Download Test Resources (Windows x64)
+        run: |
+          Start-BitsTransfer -Source "$Env:ISO_URL" -Destination chibi.zip 2>$null
+          Start-BitsTransfer -Source "$Env:BRSAR_URL" -Destination cb_robo.brsar 2>$null
+          Expand-Archive chibi.zip -DestinationPath .
+        env:
+          ISO_URL: ${{ secrets.iso_url }}
+          BRSAR_URL: ${{ secrets.brsar_url }}
+
+      - if: ${{ contains(matrix.name, 'x64') && !contains(matrix.name, 'windows') }}
+        name: Download Test Resources (Unix x64)
+        run: |
+          curl -fsS "$ISO_URL" -o chibi.zip
+          curl -fsS "$BRSAR_URL" -o cb_robo.brsar
+          unzip chibi.zip
+        env:
+          ISO_URL: ${{ secrets.iso_url }}
+          BRSAR_URL: ${{ secrets.brsar_url }}
+
+      - if: ${{ contains(matrix.name, 'x64') }}
         name: Test (x64)
-        run: cargo llvm-cov -vv --workspace --lib --target ${{ matrix.target }} --lcov --output-path lcov.info
+        run: cargo llvm-cov -vv --workspace --target ${{ matrix.target }} --lcov --output-path lcov.info
+        env:
+          CHIBI_ISO: ${{ env.GITHUB_WORKSPACE }}/chibi.iso
+          CHIBI_BRSAR: ${{ env.GITHUB_WORKSPACE }}/cb_robo.brsar
+
       - name: Build CLI
         run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -66,7 +98,8 @@ jobs:
           path:
             target/${{ matrix.target }}/release/${{ matrix.exe-name }}
           if-no-files-found: error
-      - if: ${{ contains(matrix.target, 'x86_64') }}
+
+      - if: ${{ contains(matrix.name, 'x64') }}
         name: Upload Code Coverage (x64)
         uses: coverallsapp/github-action@master
         with:
