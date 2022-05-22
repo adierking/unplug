@@ -85,8 +85,8 @@ jobs:
         name: Test (x64)
         run: cargo llvm-cov -vv --workspace --target ${{ matrix.target }} --lcov --output-path lcov.info
         env:
-          CHIBI_ISO: ${{ env.GITHUB_WORKSPACE }}/chibi.iso
-          CHIBI_BRSAR: ${{ env.GITHUB_WORKSPACE }}/cb_robo.brsar
+          CHIBI_ISO: ${{ github.workspace }}/chibi.iso
+          CHIBI_BRSAR: ${{ github.workspace }}/cb_robo.brsar
 
       - name: Build CLI
         run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
