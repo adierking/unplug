@@ -538,6 +538,7 @@ pub struct IsoListOpt {
     #[structopt(flatten)]
     pub settings: ListOpt,
 
+    /// Paths to list (globbing is supported)
     pub paths: Vec<String>,
 }
 

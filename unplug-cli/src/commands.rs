@@ -5,6 +5,7 @@ use crate::opt::*;
 use anyhow::{bail, Result};
 use humansize::{file_size_opts, FileSize};
 use log::{debug, info};
+use regex::RegexSet;
 use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
@@ -24,7 +25,60 @@ use unplug::stage::Stage;
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
-fn list_files(tree: &FileTree, opt: ListOpt) -> Result<()> {
+/// Characters which need to be escaped if they appear in a glob.
+const SPECIAL_REGEX_CHARS: &str = r".+()|[]{}^$";
+
+/// Converts a glob string into a regex that can match paths.
+/// Supports the typical `*`, `**`, and `?` wildcards.
+fn glob_to_regex(glob: &str) -> String {
+    let mut regex = "(?i)^".to_owned(); // Case-insensitive
+    let mut chars = glob.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '*' {
+            if let Some('*') = chars.peek().copied() {
+                // `**` - match any characters including slashes
+                regex.push_str(r".*");
+                chars.next();
+                // Discard separators after `**`
+                while let Some('\\') | Some('/') = chars.peek().copied() {
+                    chars.next();
+                }
+            } else {
+                // `*` - match any characters except slashes
+                regex.push_str(r"[^/]*");
+            }
+        } else if ch == '?' {
+            // Wildcard, match any single character except slashes
+            regex.push_str(r"[^/]");
+        } else if ch == '\\' || ch == '/' {
+            // Normalize path separators
+            regex.push('/');
+            while let Some('\\') | Some('/') = chars.peek().copied() {
+                chars.next();
+            }
+        } else if SPECIAL_REGEX_CHARS.contains(ch) {
+            // Escape special characters
+            regex.push('\\');
+            regex.push(ch);
+        } else {
+            regex.push(ch);
+        }
+    }
+    // End on separator boundary
+    regex.push_str(r"(/|$)");
+    regex
+}
+
+/// Compiles a set of glob expressions into a single `RegexSet`.
+fn compile_globs<I, S>(globs: I) -> RegexSet
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    RegexSet::new(globs.into_iter().map(|g| glob_to_regex(g.as_ref()))).unwrap()
+}
+
+fn list_files(tree: &FileTree, opt: &ListOpt, filter: Option<RegexSet>) -> Result<()> {
     let mut files: Vec<(String, &FileEntry)> =
         tree.recurse().filter_map(|(p, e)| tree[e].file().map(|f| (p, f))).collect();
     if opt.by_offset {
@@ -38,6 +92,11 @@ fn list_files(tree: &FileTree, opt: ListOpt) -> Result<()> {
         files.reverse();
     }
     for (path, file) in files {
+        if let Some(filter) = &filter {
+            if !filter.is_match(&path) {
+                continue;
+            }
+        }
         if opt.long {
             println!("{:<8x} {:<8x} {}", file.offset, file.size, path);
         } else {
@@ -62,14 +121,14 @@ pub fn list_archive(ctx: Context, opt: ListArchiveOpt) -> Result<()> {
     info!("Reading {}", opt.path);
     let file = ctx.open_file_at(&opt.path)?;
     let archive = ArchiveReader::open(file)?;
-    list_files(&archive.files, opt.settings)
+    list_files(&archive.files, &opt.settings, None)
 }
 
 pub fn list_iso(_ctx: Context, opt: ListIsoOpt) -> Result<()> {
     let file = File::open(opt.path)?;
     let iso = DiscStream::open(file)?;
     println!("Game ID: {}", iso.game_id());
-    list_files(&iso.files, opt.settings)
+    list_files(&iso.files, &opt.settings, None)
 }
 
 fn sort_ids<I: IdString + Ord>(ids: &mut [I], settings: &ListIdsOpt) {
@@ -306,16 +365,18 @@ pub fn dump_colliders(ctx: Context, opt: DumpCollidersOpt) -> Result<()> {
     Ok(())
 }
 
+/// The `iso` CLI command.
 pub fn command_iso(ctx: Context, opt: IsoCommand) -> Result<()> {
     match opt {
         IsoCommand::Info => command_iso_info(ctx),
-        IsoCommand::List(_) => todo!(),
+        IsoCommand::List(opt) => command_iso_list(ctx, opt),
         IsoCommand::Extract(_) => todo!(),
         IsoCommand::ExtractAll(_) => todo!(),
         IsoCommand::Replace(_) => todo!(),
     }
 }
 
+/// The `iso info` CLI command.
 fn command_iso_info(ctx: Context) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let mut disc = DiscStream::open(File::open(&path)?)?;
@@ -346,4 +407,69 @@ fn command_iso_info(ctx: Context) -> Result<()> {
     println!("File Entries: {}", disc.files.len());
     // TODO: Other useful info?
     Ok(())
+}
+
+/// The `iso list` CLI command.
+fn command_iso_list(ctx: Context, opt: IsoListOpt) -> Result<()> {
+    let path = ctx.into_iso_path()?;
+    let disc = DiscStream::open(File::open(&path)?)?;
+    let filter = if !opt.paths.is_empty() { Some(compile_globs(&opt.paths)) } else { None };
+    list_files(&disc.files, &opt.settings, filter)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_globbing() {
+        let paths = &[
+            "qp.bin",
+            "qp/sfx_army.ssm",
+            "qp/sfx_bb.ssm",
+            "qp/streaming/bgm.hps",
+            "qp/streaming/menu.hps",
+        ];
+
+        let check = |glob: &str, expected: &[&str]| {
+            let filter = compile_globs(&[glob]);
+            let actual = paths.iter().copied().filter(|p| filter.is_match(p)).collect::<Vec<_>>();
+            assert_eq!(&actual, expected, "glob: {:?}", glob);
+        };
+
+        check("", &[]);
+        check("q", &[]);
+        check(
+            "qp",
+            &["qp/sfx_army.ssm", "qp/sfx_bb.ssm", "qp/streaming/bgm.hps", "qp/streaming/menu.hps"],
+        );
+
+        check("qp?", &[]);
+        check("qp????", &["qp.bin"]);
+        check("qp.bin", &["qp.bin"]);
+        check("QP.bin", &["qp.bin"]);
+
+        check("qp/sfx_army.ssm", &["qp/sfx_army.ssm"]);
+        check("qp\\sfx_army.ssm", &["qp/sfx_army.ssm"]);
+        check("qp/\\/sfx_army.ssm", &["qp/sfx_army.ssm"]);
+
+        check("*in", &["qp.bin"]);
+        check("*.in", &[]);
+        check("*.bin", &["qp.bin"]);
+
+        check("*.hps", &[]);
+        check("**.hps", &["qp/streaming/bgm.hps", "qp/streaming/menu.hps"]);
+        check("**/*.hps", &["qp/streaming/bgm.hps", "qp/streaming/menu.hps"]);
+        check("**/\\/*.hps", &["qp/streaming/bgm.hps", "qp/streaming/menu.hps"]);
+        check("*/*/*", &["qp/streaming/bgm.hps", "qp/streaming/menu.hps"]);
+        check("qp/streaming/*.hps", &["qp/streaming/bgm.hps", "qp/streaming/menu.hps"]);
+
+        check("**/*.bin", &["qp.bin"]);
+        check("**/**/*.bin", &["qp.bin"]);
+
+        check("*", paths);
+        check("**", paths);
+        check("**/*", paths);
+        check("**/**", paths);
+    }
 }
