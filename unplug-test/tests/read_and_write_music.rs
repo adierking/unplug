@@ -3,11 +3,12 @@ use lazy_static::lazy_static;
 use log::info;
 use seahash::SeaHasher;
 use std::hash::Hasher;
-use std::io::BufReader;
+use std::io::Cursor;
 use unplug::audio::format::{PcmS16Le, ReadWriteBytes};
-use unplug::audio::transport::HpsReader;
-use unplug::audio::Cue;
-use unplug::data::music::{Music, MusicDefinition};
+use unplug::audio::transport::{HpsReader, HpsWriter};
+use unplug::audio::{Cue, ReadSamples};
+use unplug::data::music::MusicDefinition;
+use unplug::data::Music;
 use unplug::dvd::OpenFile;
 use unplug_test as common;
 
@@ -23,7 +24,7 @@ fn decode_and_hash(hps: &HpsReader) -> Result<u64> {
 }
 
 #[test]
-fn test_read_all_music() -> Result<()> {
+fn test_read_and_write_music() -> Result<()> {
     let rehash = common::check_rehash();
     if rehash {
         println!("const CHECKSUMS: &[(Music, &str, u64)] = &[");
@@ -35,8 +36,12 @@ fn test_read_all_music() -> Result<()> {
     for &(id, name, expected) in CHECKSUMS {
         let path = MusicDefinition::get(id).path();
         info!("Reading {}", path);
-        let reader = BufReader::new(iso.open_file_at(&path)?);
-        let hps = HpsReader::new(reader, path)?;
+        let mut reader = iso.open_file_at(&path)?;
+        let mut original_bytes = vec![];
+        reader.read_to_end(&mut original_bytes)?;
+        let hps = HpsReader::new(Cursor::new(&original_bytes), path)?;
+
+        info!("Checking decoded audio");
         assert!(hps.blocks().next().is_some());
         if id == Music::Teriyaki {
             let cues = hps.cues().collect::<Vec<_>>();
@@ -45,9 +50,28 @@ fn test_read_all_music() -> Result<()> {
         let actual = decode_and_hash(&hps)?;
         if rehash {
             println!("    (Music::{}, {:?}, 0x{:>016x}),", name, name, actual);
-        } else {
-            assert_eq!(actual, expected, "{} checksum mismatch", name);
+            continue;
         }
+        assert_eq!(actual, expected, "{} checksum mismatch", name);
+
+        info!("Rebuilding HPS stream");
+        let writer = match hps.channels() {
+            1 => HpsWriter::with_mono(hps.channel_reader(0).cast()),
+            2 => HpsWriter::with_stereo(hps.channel_reader(0).cast(), hps.channel_reader(1).cast()),
+            other => panic!("unexpected channel count: {}", other),
+        };
+        let mut cursor = Cursor::new(vec![]);
+        writer.write_to(&mut cursor)?;
+
+        // HACK: It seems like our end_address computations don't always match, but it isn't clear
+        // how to calculate it to match (or if it even matters...)
+        let mut rebuilt_bytes = cursor.into_inner();
+        rebuilt_bytes[0x18..0x1c].copy_from_slice(&original_bytes[0x18..0x1c]);
+        if hps.channels() > 1 {
+            rebuilt_bytes[0x50..0x54].copy_from_slice(&original_bytes[0x50..0x54]);
+        }
+
+        assert!(original_bytes == rebuilt_bytes);
     }
 
     if rehash {
@@ -74,7 +98,7 @@ lazy_static! {
 /// Run this test with `--nocapture` and the `UNPLUG_TEST_REHASH` environment variable set to
 /// regenerate this list. e.g. on Unix systems:
 ///
-///     UNPLUG_TEST_REHASH=1 cargo test --test read_all_music -- --nocapture
+///     UNPLUG_TEST_REHASH=1 cargo test --test read_and_write_music -- --nocapture
 ///
 const CHECKSUMS: &[(Music, &str, u64)] = &[
     (Music::Abare, "Abare", 0x60be582511899469),

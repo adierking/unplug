@@ -10,7 +10,7 @@ use unplug::stage::Stage;
 use unplug_test as common;
 
 #[test]
-fn test_recompile_shop() -> Result<()> {
+fn test_read_and_write_shop() -> Result<()> {
     common::init_logging();
 
     let mut iso = common::open_iso()?;
