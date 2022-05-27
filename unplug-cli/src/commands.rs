@@ -1,3 +1,4 @@
+use crate::common::output_dir_and_name;
 use crate::context::{Context, FileId, OpenContext};
 use crate::id::IdString;
 use crate::io::OutputRedirect;
@@ -17,7 +18,7 @@ use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
 use unplug::data::stage::{StageDefinition, STAGES};
-use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileTree, Glob, GlobMode};
+use unplug::dvd::{ArchiveReader, DiscStream, Entry, EntryId, FileTree, Glob, GlobMode, OpenFile};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
@@ -68,13 +69,6 @@ pub fn list_archive(ctx: Context, opt: ListArchiveOpt) -> Result<()> {
     list_files(&archive.files, &opt.settings, &Glob::all())
 }
 
-pub fn list_iso(_ctx: Context, opt: ListIsoOpt) -> Result<()> {
-    let file = File::open(opt.path)?;
-    let iso = DiscStream::open(file)?;
-    println!("Game ID: {}", iso.game_id());
-    list_files(&iso.files, &opt.settings, &Glob::all())
-}
-
 fn sort_ids<I: IdString + Ord>(ids: &mut [I], settings: &ListIdsOpt) {
     if settings.by_id {
         ids.sort_unstable();
@@ -121,7 +115,7 @@ pub fn list_stages(_ctx: Context, opt: ListStagesOpt) -> Result<()> {
     Ok(())
 }
 
-fn extract_files(
+fn extract_files_deprecated(
     mut reader: impl ReadSeek,
     tree: &FileTree,
     output: &Path,
@@ -153,25 +147,7 @@ pub fn extract_archive(ctx: Context, opt: ExtractArchiveOpt) -> Result<()> {
 
     let mut buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
     let start_time = Instant::now();
-    extract_files(&mut qp.reader, &qp.files, &opt.output, &mut buf)?;
-
-    debug!("Extraction finished in {:?}", start_time.elapsed());
-    Ok(())
-}
-
-pub fn extract_iso(_ctx: Context, opt: ExtractIsoOpt) -> Result<()> {
-    let file = File::open(opt.path)?;
-    let mut iso = DiscStream::open(file)?;
-
-    let mut buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
-    let start_time = Instant::now();
-    extract_files(&mut iso.stream, &iso.files, &opt.output, &mut buf)?;
-
-    info!("Extracting main.dol");
-    let dol_path = Path::new(&opt.output).join("main.dol");
-    let mut dol_writer = File::create(dol_path)?;
-    let (_, mut dol_reader) = iso.open_dol()?;
-    copy_buffered(&mut dol_reader, &mut dol_writer, &mut buf)?;
+    extract_files_deprecated(&mut qp.reader, &qp.files, &opt.output, &mut buf)?;
 
     debug!("Extraction finished in {:?}", start_time.elapsed());
     Ok(())
@@ -314,8 +290,8 @@ pub fn command_iso(ctx: Context, opt: IsoCommand) -> Result<()> {
     match opt {
         IsoCommand::Info => command_iso_info(ctx),
         IsoCommand::List(opt) => command_iso_list(ctx, opt),
-        IsoCommand::Extract(_) => todo!(),
-        IsoCommand::ExtractAll(_) => todo!(),
+        IsoCommand::Extract(opt) => command_iso_extract(ctx, opt),
+        IsoCommand::ExtractAll(opt) => command_iso_extract_all(ctx, opt),
         IsoCommand::Replace(_) => todo!(),
     }
 }
@@ -358,4 +334,64 @@ fn command_iso_list(ctx: Context, opt: IsoListOpt) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let disc = DiscStream::open(File::open(&path)?)?;
     list_files(&disc.files, &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))
+}
+
+/// The `iso extract` CLI command.
+fn command_iso_extract(ctx: Context, opt: IsoExtractOpt) -> Result<()> {
+    let path = ctx.into_iso_path()?;
+    let mut disc = DiscStream::open(File::open(&path)?)?;
+    let files = Glob::new(GlobMode::Exact, opt.paths).find(&disc.files).collect::<Vec<_>>();
+    if files.is_empty() {
+        bail!("Nothing to extract");
+    }
+    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), files.len() > 1);
+    fs::create_dir_all(&out_dir)?;
+    let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+    for (path, entry) in files {
+        extract_file(&mut disc, entry, &path, out_dir, out_name.as_deref(), &mut io_buf)?;
+    }
+    Ok(())
+}
+
+/// The `iso extract-all` CLI command.
+fn command_iso_extract_all(ctx: Context, opt: IsoExtractAllOpt) -> Result<()> {
+    let path = ctx.into_iso_path()?;
+    let mut disc = DiscStream::open(File::open(&path)?)?;
+    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
+    fs::create_dir_all(&out_dir)?;
+    let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+    let root = disc.files.root();
+    extract_file(&mut disc, root, "/", out_dir, out_name.as_deref(), &mut io_buf)?;
+    Ok(())
+}
+
+fn extract_file<R: ReadSeek>(
+    disc: &mut DiscStream<R>,
+    entry: EntryId,
+    entry_path: &str,
+    out_dir: &Path,
+    out_name: Option<&str>,
+    io_buf: &mut [u8],
+) -> Result<()> {
+    let file = &disc.files[entry];
+    let name = out_name.unwrap_or_else(|| file.name());
+    let out_path = if name.is_empty() { out_dir.to_owned() } else { out_dir.join(name) };
+    match &disc.files[entry] {
+        Entry::File(_) => {
+            info!("Extracting {}", entry_path);
+            let mut writer = File::create(&out_path)?;
+            let mut reader = disc.open_file(entry)?;
+            copy_buffered(&mut reader, &mut writer, io_buf)?;
+        }
+        Entry::Directory(dir) => {
+            fs::create_dir_all(&out_path)?;
+            for child in dir.children.clone() {
+                let child_file = &disc.files[child];
+                let child_path =
+                    format!("{}/{}", entry_path.trim_end_matches('/'), child_file.name());
+                extract_file(disc, child, &child_path, &out_path, None, io_buf)?;
+            }
+        }
+    }
+    Ok(())
 }

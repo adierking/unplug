@@ -1,4 +1,4 @@
-use crate::common::format_duration;
+use crate::common::{format_duration, output_dir_and_name};
 use crate::context::{Context, FileId, OpenContext};
 use crate::opt::*;
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
@@ -375,19 +375,7 @@ fn command_export(ctx: Context, opt: AudioExportOpt) -> Result<()> {
     if opt.names.is_empty() {
         bail!("Nothing to export");
     }
-    let (out_dir, out_name) = match &opt.output {
-        Some(output) => {
-            // The output is always treated as a directory if more than one file is given
-            if opt.names.len() > 1 || output.is_dir() {
-                (output.as_ref(), None)
-            } else {
-                let dir = output.parent().unwrap_or_else(|| Path::new("."));
-                let name = output.file_name().map(|n| n.to_string_lossy().into_owned());
-                (dir, name)
-            }
-        }
-        None => (Path::new("."), None),
-    };
+    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), opt.names.len() > 1);
     fs::create_dir_all(out_dir)?;
     for name in &opt.names {
         let resource = AudioResource::find(&mut ctx, name)?;

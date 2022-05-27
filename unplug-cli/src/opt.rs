@@ -76,9 +76,6 @@ pub enum Subcommand {
     /// Lists files in a U8 archive (e.g. qp.bin)
     ListArchive(ListArchiveOpt),
 
-    /// Lists files in an ISO
-    ListIso(ListIsoOpt),
-
     /// Lists known item IDs
     ListItems(ListItemsOpt),
 
@@ -90,9 +87,6 @@ pub enum Subcommand {
 
     /// Extracts a U8 archive (e.g. qp.bin) into a directory
     ExtractArchive(ExtractArchiveOpt),
-
-    /// Extracts a GameCube ISO into a directory
-    ExtractIso(ExtractIsoOpt),
 
     /// Dumps the data from a stage file as text
     DumpStage(DumpStageOpt),
@@ -225,16 +219,6 @@ pub struct ListArchiveOpt {
 }
 
 #[derive(StructOpt)]
-pub struct ListIsoOpt {
-    #[structopt(flatten)]
-    pub settings: ListOpt,
-
-    /// Path to the ISO to read
-    #[structopt(parse(from_os_str))]
-    pub path: PathBuf,
-}
-
-#[derive(StructOpt)]
 pub struct ListIdsOpt {
     /// Sorts by name (default)
     #[structopt(long, overrides_with_all(&["by-id"]))]
@@ -279,17 +263,6 @@ pub struct ListStagesOpt {
 pub struct ExtractArchiveOpt {
     /// Path to the archive to read
     pub path: String,
-
-    /// Directory to extract files to (will be created if necessary)
-    #[structopt(short, long("out"), value_name("PATH"))]
-    pub output: PathBuf,
-}
-
-#[derive(StructOpt)]
-pub struct ExtractIsoOpt {
-    /// Path to the ISO to read
-    #[structopt(parse(from_os_str))]
-    pub path: PathBuf,
 
     /// Directory to extract files to (will be created if necessary)
     #[structopt(short, long("out"), value_name("PATH"))]
@@ -547,7 +520,7 @@ pub struct IsoExtractOpt {
     /// If extracting one file, the path of the output file, otherwise the
     /// directory to extract files to
     #[structopt(short, long("out"), value_name("PATH"))]
-    pub output: PathBuf,
+    pub output: Option<PathBuf>,
 
     pub paths: Vec<String>,
 }
@@ -556,7 +529,7 @@ pub struct IsoExtractOpt {
 pub struct IsoExtractAllOpt {
     /// The directory to extract files to
     #[structopt(short, long("out"), value_name("PATH"))]
-    pub output: PathBuf,
+    pub output: Option<PathBuf>,
 }
 
 #[derive(StructOpt)]

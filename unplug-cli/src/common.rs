@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Display};
+use std::path::Path;
 use std::time::Duration;
 use unicase::UniCase;
 
@@ -11,6 +12,25 @@ pub fn format_duration(duration: Duration) -> String {
     let secs = total_secs % 60;
     let millis = duration.subsec_millis();
     format!("{:>02}:{:>02}.{:>03}", minutes, secs, millis)
+}
+
+/// Takes an output path passed to a command along with whether multiple items need to be written to
+/// the output, and returns a (dir, name) pair of the output directory and filename. The name will
+/// be `None` if the output should be treated as a directory.
+pub fn output_dir_and_name(output: Option<&Path>, multiple_items: bool) -> (&Path, Option<String>) {
+    match output {
+        Some(output) => {
+            // The output is always treated as a directory if there are multiple items to write
+            if multiple_items || output.is_dir() {
+                (output, None)
+            } else {
+                let dir = output.parent().unwrap_or_else(|| Path::new("."));
+                let name = output.file_name().map(|n| n.to_string_lossy().into_owned());
+                (dir, name)
+            }
+        }
+        None => (Path::new("."), None),
+    }
 }
 
 /// A case-insensitive string wrapper with support for serde.
