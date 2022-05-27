@@ -16,6 +16,7 @@ lewton = "0.10.2"
 libsamplerate-sys = "0.1.10"
 minimp3 = "0.5"
 num_enum = "0.5.1"
+regex = "1"
 slotmap = "0.4"
 thiserror = "1.0"
 tracing = { version = "0.1.29", features = ["log"] }

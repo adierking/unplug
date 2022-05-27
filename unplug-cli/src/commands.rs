@@ -1,4 +1,3 @@
-use crate::common::{find_files, PathFilter};
 use crate::context::{Context, FileId, OpenContext};
 use crate::id::IdString;
 use crate::io::OutputRedirect;
@@ -18,18 +17,19 @@ use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
 use unplug::data::stage::{StageDefinition, STAGES};
-use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileTree};
+use unplug::dvd::{ArchiveReader, DiscStream, Entry, FileTree, Glob, GlobMode};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
-fn list_files(tree: &FileTree, opt: &ListOpt, filter: PathFilter) -> Result<()> {
-    let mut files = find_files(tree, filter)?
-        .into_iter()
-        .map(|(p, e)| (p, tree[e].file().unwrap()))
-        .collect::<Vec<_>>();
+fn list_files(tree: &FileTree, opt: &ListOpt, glob: &Glob) -> Result<()> {
+    let get_file = |(p, e)| tree[e].file().map(|f| (p, f));
+    let mut files = glob.find(tree).filter_map(get_file).collect::<Vec<_>>();
+    if files.is_empty() {
+        bail!("No files found");
+    }
     if opt.by_offset {
         files.sort_unstable_by_key(|(_, f)| f.offset);
     } else if opt.by_size {
@@ -65,14 +65,14 @@ pub fn list_archive(ctx: Context, opt: ListArchiveOpt) -> Result<()> {
     info!("Reading {}", opt.path);
     let file = ctx.open_file_at(&opt.path)?;
     let archive = ArchiveReader::open(file)?;
-    list_files(&archive.files, &opt.settings, PathFilter::all())
+    list_files(&archive.files, &opt.settings, &Glob::all())
 }
 
 pub fn list_iso(_ctx: Context, opt: ListIsoOpt) -> Result<()> {
     let file = File::open(opt.path)?;
     let iso = DiscStream::open(file)?;
     println!("Game ID: {}", iso.game_id());
-    list_files(&iso.files, &opt.settings, PathFilter::all())
+    list_files(&iso.files, &opt.settings, &Glob::all())
 }
 
 fn sort_ids<I: IdString + Ord>(ids: &mut [I], settings: &ListIdsOpt) {
@@ -357,5 +357,5 @@ fn command_iso_info(ctx: Context) -> Result<()> {
 fn command_iso_list(ctx: Context, opt: IsoListOpt) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let disc = DiscStream::open(File::open(&path)?)?;
-    list_files(&disc.files, &opt.settings, PathFilter::new(opt.paths))
+    list_files(&disc.files, &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))
 }

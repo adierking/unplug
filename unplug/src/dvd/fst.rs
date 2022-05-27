@@ -9,7 +9,6 @@ use std::convert::TryFrom;
 use std::ffi::CString;
 use std::io::{self, Read, Write};
 use std::iter::FusedIterator;
-use std::mem;
 use std::ops::{Index, IndexMut};
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -389,18 +388,20 @@ impl DirectoryEntry {
 /// An iterator which recurses through descendants of a directory.
 pub struct TreeRecurse<'a> {
     files: &'a FileTree,
+    /// The ID of the root where recursion started.
+    root: EntryId,
     /// The path of the current directory, not ending with a separator.
     path: String,
-    /// The current iterator in the current directory.
-    iter: std::slice::Iter<'a, EntryId>,
+    /// The current iterator in the current directory, or `None` if root should be returned.
+    iter: Option<std::slice::Iter<'a, EntryId>>,
     /// The iterators for parent directories.
     stack: Vec<std::slice::Iter<'a, EntryId>>,
 }
 
 impl<'a> TreeRecurse<'a> {
     /// Constructs a new `FstRecurse` which recurses from `root`.
-    fn new(files: &'a FileTree, root: &'a DirectoryEntry) -> Self {
-        Self { files, path: "".into(), iter: root.children.iter(), stack: Vec::new() }
+    fn new(files: &'a FileTree, root: EntryId) -> Self {
+        Self { files, root, path: "/".into(), iter: None, stack: Vec::new() }
     }
 }
 
@@ -408,24 +409,28 @@ impl Iterator for TreeRecurse<'_> {
     type Item = (String, EntryId);
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Check the next file in this directory
-        let next = self.iter.next();
+        let next = match &mut self.iter {
+            Some(iter) => iter.next(),
+            None => {
+                // Return the root directory itself first
+                let dir = self.files[self.root].dir().unwrap();
+                self.iter = Some(dir.children.iter());
+                return Some((self.path.clone(), self.root));
+            }
+        };
+
         match next {
-            Some(&entry) => {
-                let path = if self.path.is_empty() {
-                    // Entry in the root directory
-                    self.files[entry].name().into()
-                } else {
-                    format!("{}/{}", self.path, self.files[entry].name())
-                };
-                match &self.files[entry] {
-                    Entry::File(_) => Some((path, entry)),
+            Some(&id) => {
+                let entry = &self.files[id];
+                let path = format!("{}{}", self.path, entry.name());
+                match entry {
+                    Entry::File(_) => Some((path, id)),
                     Entry::Directory(dir) => {
                         // Return the directory and descend into it
-                        self.path = path;
-                        let iter = mem::replace(&mut self.iter, dir.children.iter());
-                        self.stack.push(iter);
-                        Some((self.path.clone(), entry))
+                        self.path = path + "/";
+                        self.stack.push(self.iter.take().unwrap());
+                        self.iter = Some(dir.children.iter());
+                        Some((self.path.clone(), id))
                     }
                 }
             }
@@ -433,12 +438,12 @@ impl Iterator for TreeRecurse<'_> {
                 // End of directory
                 if let Some(iter) = self.stack.pop() {
                     // Go up a level and try again
-                    if let Some(index) = self.path.rfind('/') {
-                        self.path.truncate(index);
+                    if let Some(index) = self.path.trim_end_matches('/').rfind('/') {
+                        self.path.truncate(index + 1);
                     } else {
                         self.path.clear();
                     }
-                    self.iter = iter;
+                    self.iter = Some(iter);
                     self.next()
                 } else {
                     // End of file table
@@ -487,9 +492,16 @@ impl FileTree {
         self.root
     }
 
-    /// Returns an iterator that recurses through the tree.
+    /// Returns an iterator that recurses through the entire tree.
     pub fn recurse(&self) -> TreeRecurse<'_> {
-        TreeRecurse::new(self, self[self.root].dir().unwrap())
+        self.recurse_from(self.root)
+    }
+
+    /// Returns an iterator that recurses through the tree starting at the directory referenced by
+    /// `entry`. Paths returned by the iterator will be relative to this directory.
+    pub fn recurse_from(&self, entry: EntryId) -> TreeRecurse<'_> {
+        assert!(self[entry].is_dir(), "entry is not a directory");
+        TreeRecurse::new(self, entry)
     }
 
     /// Returns a reference to the `FileEntry` corresponding to `id`.
@@ -868,18 +880,33 @@ mod tests {
 
     #[test]
     fn test_recurse() -> Result<()> {
-        let recurse: Vec<_> = TEST_TREE.recurse().collect();
+        let actual = TEST_TREE.recurse().collect::<Vec<_>>();
         assert_eq!(
-            recurse,
+            actual,
             [
-                ("abc".to_owned(), TEST_TREE.at("abc")?),
-                ("def".to_owned(), TEST_TREE.at("def")?),
-                ("ghi".to_owned(), TEST_TREE.at("ghi")?),
-                ("ghi/jkl".to_owned(), TEST_TREE.at("ghi/jkl")?),
-                ("ghi/jkl/mno".to_owned(), TEST_TREE.at("ghi/jkl/mno")?),
-                ("ghi/jkl/mno/pqr".to_owned(), TEST_TREE.at("ghi/jkl/mno/pqr")?),
-                ("ghi/stu".to_owned(), TEST_TREE.at("ghi/stu")?),
-                ("vwx".to_owned(), TEST_TREE.at("vwx")?),
+                ("/".to_owned(), TEST_TREE.root()),
+                ("/abc".to_owned(), TEST_TREE.at("abc")?),
+                ("/def".to_owned(), TEST_TREE.at("def")?),
+                ("/ghi/".to_owned(), TEST_TREE.at("ghi")?),
+                ("/ghi/jkl/".to_owned(), TEST_TREE.at("ghi/jkl")?),
+                ("/ghi/jkl/mno/".to_owned(), TEST_TREE.at("ghi/jkl/mno")?),
+                ("/ghi/jkl/mno/pqr/".to_owned(), TEST_TREE.at("ghi/jkl/mno/pqr")?),
+                ("/ghi/stu".to_owned(), TEST_TREE.at("ghi/stu")?),
+                ("/vwx".to_owned(), TEST_TREE.at("vwx")?),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_recurse_from() -> Result<()> {
+        let actual = TEST_TREE.recurse_from(TEST_TREE.at("ghi/jkl")?).collect::<Vec<_>>();
+        assert_eq!(
+            actual,
+            [
+                ("/".to_owned(), TEST_TREE.at("ghi/jkl")?),
+                ("/mno/".to_owned(), TEST_TREE.at("ghi/jkl/mno")?),
+                ("/mno/pqr/".to_owned(), TEST_TREE.at("ghi/jkl/mno/pqr")?),
             ]
         );
         Ok(())

@@ -1752,6 +1752,7 @@ dependencies = [
  "libsamplerate-sys",
  "minimp3",
  "num_enum",
+ "regex",
  "slotmap",
  "thiserror",
  "tracing",
