@@ -9,7 +9,7 @@ use unplug_test as common;
 
 #[test]
 #[serial]
-fn test_rebuild_archive_copy_all() -> Result<()> {
+fn test_read_and_write_archive_copy() -> Result<()> {
     common::init_logging();
 
     let mut iso = common::open_iso()?;
@@ -38,7 +38,7 @@ fn test_rebuild_archive_copy_all() -> Result<()> {
 
 #[test]
 #[serial]
-fn test_rebuild_archive_replace_files() -> Result<()> {
+fn test_read_and_write_archive_replace() -> Result<()> {
     common::init_logging();
 
     let mut iso = common::open_iso()?;
@@ -65,11 +65,11 @@ fn test_rebuild_archive_replace_files() -> Result<()> {
         };
         let mut rebuilt_reader = file.open(&mut rebuilt.reader)?;
         let mut expected: Box<dyn ReadSeek> = match path.as_ref() {
-            "bin/e/stage01.bin" => Box::new(Cursor::new(b"stage01")),
-            "bin/e/stage02.bin" => Box::new(Cursor::new(b"stage02")),
-            "bin/e/stage03.bin" => Box::new(Cursor::new(b"stage03")),
-            "bin/e/stage04.bin" => Box::new(Cursor::new(b"stage04")),
-            "bin/e/stage05.bin" => Box::new(Cursor::new(b"stage05")),
+            "/bin/e/stage01.bin" => Box::new(Cursor::new(b"stage01")),
+            "/bin/e/stage02.bin" => Box::new(Cursor::new(b"stage02")),
+            "/bin/e/stage03.bin" => Box::new(Cursor::new(b"stage03")),
+            "/bin/e/stage04.bin" => Box::new(Cursor::new(b"stage04")),
+            "/bin/e/stage05.bin" => Box::new(Cursor::new(b"stage05")),
             _ => {
                 let original_id = original.files.at(&path)?;
                 original.open_file(original_id)?
