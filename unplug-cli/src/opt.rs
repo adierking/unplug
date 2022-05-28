@@ -89,14 +89,9 @@ pub enum Subcommand {
     #[clap(subcommand)]
     Qp(QpCommand),
 
-    /// Dumps the data from a stage file as text
-    DumpStage(DumpStageOpt),
-
-    /// Dumps the library functions from a globals.bin file
-    DumpLibs(DumpLibsOpt),
-
-    /// Dumps the data from each stage into a directory
-    DumpAllStages(DumpAllStagesOpt),
+    /// Commands for working with event scripts
+    #[clap(subcommand)]
+    Script(ScriptCommand),
 
     /// Dumps the collision data from globals.bin
     DumpColliders(DumpCollidersOpt),
@@ -182,16 +177,6 @@ pub enum ProjectCommand {
 }
 
 #[derive(Args)]
-pub struct StageOpt {
-    /// The stage name/path
-    ///
-    /// If the stage is being opened from an ISO or qp.bin, this is the stage
-    /// name without any directory or extension, e.g. "stage01". If the stage is
-    /// being opened from the local filesystem, this is the path to the file.
-    pub name: String,
-}
-
-#[derive(Args)]
 pub struct ListOpt {
     /// Lists file offsets and sizes
     #[clap(short, long)]
@@ -265,8 +250,16 @@ pub struct ListStagesOpt {
     pub settings: ListIdsOpt,
 }
 
+#[derive(clap::Subcommand)]
+pub enum ScriptCommand {
+    /// Dumps the script data from a single stage
+    Dump(ScriptDumpOpt),
+    /// Dumps all script data
+    DumpAll(ScriptDumpAllOpt),
+}
+
 #[derive(Args)]
-pub struct DumpStageFlags {
+pub struct ScriptDumpFlags {
     /// Dumps unknown structs
     #[clap(long)]
     pub dump_unknown: bool,
@@ -277,36 +270,26 @@ pub struct DumpStageFlags {
 }
 
 #[derive(Args)]
-pub struct DumpStageOpt {
-    #[clap(flatten)]
-    pub stage: StageOpt,
+pub struct ScriptDumpOpt {
+    /// Name of the stage to dump, or "globals" to dump globals
+    pub stage: String,
 
     /// Redirects output to a file instead of stdout
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
     #[clap(flatten)]
-    pub flags: DumpStageFlags,
+    pub flags: ScriptDumpFlags,
 }
 
 #[derive(Args)]
-pub struct DumpLibsOpt {
-    /// Redirects output to a file instead of stdout
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
-    pub output: Option<PathBuf>,
-
-    #[clap(flatten)]
-    pub flags: DumpStageFlags,
-}
-
-#[derive(Args)]
-pub struct DumpAllStagesOpt {
+pub struct ScriptDumpAllOpt {
     /// Path to the output directory
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
 
     #[clap(flatten)]
-    pub flags: DumpStageFlags,
+    pub flags: ScriptDumpFlags,
 }
 
 #[derive(Args)]
