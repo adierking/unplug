@@ -82,6 +82,7 @@ fn run_app() -> Result<()> {
         Subcommand::Audio(opt) => audio::command(ctx, opt),
         Subcommand::Iso(opt) => commands::command_iso(ctx, opt),
         Subcommand::List(opt) => commands::command_list(ctx, opt),
+        Subcommand::Qp(opt) => commands::command_qp(ctx, opt),
         Subcommand::DumpStage(opt) => commands::dump_stage(ctx, opt),
         Subcommand::DumpLibs(opt) => commands::dump_libs(ctx, opt),
         Subcommand::DumpAllStages(opt) => commands::dump_all_stages(ctx, opt),

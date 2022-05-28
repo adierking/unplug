@@ -85,6 +85,10 @@ pub enum Subcommand {
     #[clap(subcommand)]
     List(ListCommand),
 
+    /// Commands for working with qp.bin (alias for `archive dvd:qp.bin`)
+    #[clap(subcommand)]
+    Qp(QpCommand),
+
     /// Dumps the data from a stage file as text
     DumpStage(DumpStageOpt),
 
@@ -537,24 +541,38 @@ pub struct IsoReplaceOpt {
 
 #[derive(clap::Subcommand)]
 pub enum ArchiveCommand {
-    Info(ArchiveInfoOpt),
-    List(ArchiveListOpt),
-    Extract(ArchiveExtractOpt),
-    ExtractAll(ArchiveExtractAllOpt),
-    Replace(ArchiveReplaceOpt),
-}
-
-#[derive(Args)]
-pub struct ArchiveInfoOpt {
-    /// Path to the U8 archive
-    pub archive: String,
+    Info {
+        /// Path to the U8 archive
+        path: String,
+    },
+    List {
+        /// Path to the U8 archive
+        path: String,
+        #[clap(flatten)]
+        opt: ArchiveListOpt,
+    },
+    Extract {
+        /// Path to the U8 archive
+        path: String,
+        #[clap(flatten)]
+        opt: ArchiveExtractOpt,
+    },
+    ExtractAll {
+        /// Path to the U8 archive
+        path: String,
+        #[clap(flatten)]
+        opt: ArchiveExtractAllOpt,
+    },
+    Replace {
+        /// Path to the U8 archive
+        path: String,
+        #[clap(flatten)]
+        opt: ArchiveReplaceOpt,
+    },
 }
 
 #[derive(Args)]
 pub struct ArchiveListOpt {
-    /// Path to the U8 archive
-    pub archive: String,
-
     #[clap(flatten)]
     pub settings: ListOpt,
 
@@ -564,9 +582,6 @@ pub struct ArchiveListOpt {
 
 #[derive(Args)]
 pub struct ArchiveExtractOpt {
-    /// Path to the U8 archive
-    pub archive: String,
-
     /// If extracting one file, the path of the output file, otherwise the
     /// directory to extract files to
     #[clap(short, value_name("PATH"), parse(from_os_str))]
@@ -577,9 +592,6 @@ pub struct ArchiveExtractOpt {
 
 #[derive(Args)]
 pub struct ArchiveExtractAllOpt {
-    /// Path to the U8 archive
-    pub archive: String,
-
     /// The directory to extract files to
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
@@ -587,9 +599,6 @@ pub struct ArchiveExtractAllOpt {
 
 #[derive(Args)]
 pub struct ArchiveReplaceOpt {
-    /// Path to the U8 archive
-    pub archive: String,
-
     /// Path of the file in the archive to replace
     #[clap(value_name("dest"))]
     pub dest_path: String,
@@ -604,4 +613,13 @@ pub struct ArchiveReplaceOpt {
 pub enum DebugCommand {
     /// Read and rewrite script data
     RebuildScripts,
+}
+
+#[derive(clap::Subcommand)]
+pub enum QpCommand {
+    Info,
+    List(ArchiveListOpt),
+    Extract(ArchiveExtractOpt),
+    ExtractAll(ArchiveExtractAllOpt),
+    Replace(ArchiveReplaceOpt),
 }

@@ -28,6 +28,9 @@ use unplug::stage::Stage;
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
+/// The path that `qp` passes to the `archive` commands.
+const QP_ALIAS_PATH: &str = "dvd:qp.bin";
+
 fn list_files(tree: &FileTree, opt: &ListOpt, glob: &Glob) -> Result<()> {
     let get_file = |(p, e)| tree[e].file().map(|f| (p, f));
     let mut files = glob.find(tree).filter_map(get_file).collect::<Vec<_>>();
@@ -379,18 +382,29 @@ fn command_iso_replace(ctx: Context, opt: IsoReplaceOpt) -> Result<()> {
 /// The `archive` CLI command.
 pub fn command_archive(ctx: Context, opt: ArchiveCommand) -> Result<()> {
     match opt {
-        ArchiveCommand::Info(opt) => command_archive_info(ctx, opt),
-        ArchiveCommand::List(opt) => command_archive_list(ctx, opt),
-        ArchiveCommand::Extract(opt) => command_archive_extract(ctx, opt),
-        ArchiveCommand::ExtractAll(opt) => command_archive_extract_all(ctx, opt),
-        ArchiveCommand::Replace(opt) => command_archive_replace(ctx, opt),
+        ArchiveCommand::Info { path } => command_archive_info(ctx, &path),
+        ArchiveCommand::List { path, opt } => command_archive_list(ctx, &path, opt),
+        ArchiveCommand::Extract { path, opt } => command_archive_extract(ctx, &path, opt),
+        ArchiveCommand::ExtractAll { path, opt } => command_archive_extract_all(ctx, &path, opt),
+        ArchiveCommand::Replace { path, opt } => command_archive_replace(ctx, &path, opt),
+    }
+}
+
+/// The `qp` CLI command.
+pub fn command_qp(ctx: Context, opt: QpCommand) -> Result<()> {
+    match opt {
+        QpCommand::Info => command_archive_info(ctx, QP_ALIAS_PATH),
+        QpCommand::List(opt) => command_archive_list(ctx, QP_ALIAS_PATH, opt),
+        QpCommand::Extract(opt) => command_archive_extract(ctx, QP_ALIAS_PATH, opt),
+        QpCommand::ExtractAll(opt) => command_archive_extract_all(ctx, QP_ALIAS_PATH, opt),
+        QpCommand::Replace(opt) => command_archive_replace(ctx, QP_ALIAS_PATH, opt),
     }
 }
 
 /// The `archive info` CLI command.
-fn command_archive_info(ctx: Context, opt: ArchiveInfoOpt) -> Result<()> {
+fn command_archive_info(ctx: Context, path: &str) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let file = ctx.file_at(&opt.archive)?;
+    let file = ctx.file_at(path)?;
     let info = ctx.query_file(&file)?;
     let archive = ArchiveReader::open(ctx.open_file(&file)?)?;
     println!("{}: U8 archive", &info.name);
@@ -400,17 +414,17 @@ fn command_archive_info(ctx: Context, opt: ArchiveInfoOpt) -> Result<()> {
 }
 
 /// The `archive list` CLI command.
-fn command_archive_list(ctx: Context, opt: ArchiveListOpt) -> Result<()> {
+fn command_archive_list(ctx: Context, path: &str, opt: ArchiveListOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let archive = ArchiveReader::open(ctx.open_file_at(&opt.archive)?)?;
+    let archive = ArchiveReader::open(ctx.open_file_at(path)?)?;
     list_files(&archive.files, &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))?;
     Ok(())
 }
 
 /// The `archive extract` CLI command.
-fn command_archive_extract(ctx: Context, opt: ArchiveExtractOpt) -> Result<()> {
+fn command_archive_extract(ctx: Context, path: &str, opt: ArchiveExtractOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let mut archive = ArchiveReader::open(ctx.open_file_at(&opt.archive)?)?;
+    let mut archive = ArchiveReader::open(ctx.open_file_at(path)?)?;
     let files = Glob::new(GlobMode::Exact, opt.paths).find(&archive.files).collect::<Vec<_>>();
     if files.is_empty() {
         bail!("Nothing to extract");
@@ -425,9 +439,9 @@ fn command_archive_extract(ctx: Context, opt: ArchiveExtractOpt) -> Result<()> {
 }
 
 /// The `archive extract-all` CLI command.
-fn command_archive_extract_all(ctx: Context, opt: ArchiveExtractAllOpt) -> Result<()> {
+fn command_archive_extract_all(ctx: Context, path: &str, opt: ArchiveExtractAllOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let mut archive = ArchiveReader::open(ctx.open_file_at(&opt.archive)?)?;
+    let mut archive = ArchiveReader::open(ctx.open_file_at(path)?)?;
     let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
     fs::create_dir_all(&out_dir)?;
     let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
@@ -437,9 +451,9 @@ fn command_archive_extract_all(ctx: Context, opt: ArchiveExtractAllOpt) -> Resul
 }
 
 /// The `archive replace` CLI command.
-fn command_archive_replace(ctx: Context, opt: ArchiveReplaceOpt) -> Result<()> {
+fn command_archive_replace(ctx: Context, path: &str, opt: ArchiveReplaceOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
-    let file = ctx.file_at(&opt.archive)?;
+    let file = ctx.file_at(path)?;
     let info = ctx.query_file(&file)?;
     let mut archive = ArchiveReader::open(ctx.open_file(&file)?)?;
     let entry = archive.files.at(&opt.dest_path)?;
