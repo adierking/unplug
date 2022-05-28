@@ -23,6 +23,10 @@ where
     R: ReadSeek,
     F: FnOnce() -> R,
 {
+    fn query_file(&self, _id: EntryId) -> &fst::Entry {
+        unimplemented!()
+    }
+
     fn open_file(&mut self, _id: EntryId) -> fst::Result<Box<dyn ReadSeek + '_>> {
         let func = self.0.take().unwrap();
         Ok(Box::from(func()))

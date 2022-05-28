@@ -30,6 +30,10 @@ impl<R: ReadSeek> ArchiveReader<R> {
 }
 
 impl<S: ReadSeek> OpenFile for ArchiveReader<S> {
+    fn query_file(&self, id: EntryId) -> &fst::Entry {
+        &self.files[id]
+    }
+
     fn open_file(&mut self, id: EntryId) -> fst::Result<Box<dyn ReadSeek + '_>> {
         self.files.file(id)?.open(&mut self.reader)
     }

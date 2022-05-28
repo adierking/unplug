@@ -672,6 +672,9 @@ impl IndexMut<EntryId> for FileTree {
 
 /// A trait for objects which can provide readable streams for file entries.
 pub trait OpenFile {
+    /// Returns a reference to the file info corresponding to `id`.
+    fn query_file(&self, id: EntryId) -> &Entry;
+
     /// Returns a reader which reads the data inside the file with ID `id`.
     /// ***Panics*** if the ID is invalid.
     fn open_file(&mut self, id: EntryId) -> Result<Box<dyn ReadSeek + '_>>;
@@ -691,6 +694,10 @@ pub trait OpenFile {
 }
 
 impl<T: OpenFile> OpenFile for &mut T {
+    fn query_file(&self, id: EntryId) -> &Entry {
+        (**self).query_file(id)
+    }
+
     fn open_file(&mut self, id: EntryId) -> Result<Box<dyn ReadSeek + '_>> {
         (**self).open_file(id)
     }

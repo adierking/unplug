@@ -1,6 +1,8 @@
 use super::banner::{self, Banner};
 use super::dol::{self, DolHeader};
-use super::fst::{self, EditFile, EntryId, FileStringTable, FileTree, FstEntryKind, OpenFile};
+use super::fst::{
+    self, EditFile, Entry, EntryId, FileStringTable, FileTree, FstEntryKind, OpenFile,
+};
 use crate::common::io::{copy_within, fill, read_fixed_string, write_fixed_string};
 use crate::common::{self, ReadFrom, ReadSeek, ReadWriteSeek, Region, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
@@ -471,6 +473,10 @@ impl<S: ReadWriteSeek> DiscStream<S> {
 }
 
 impl<S: ReadSeek> OpenFile for DiscStream<S> {
+    fn query_file(&self, id: EntryId) -> &Entry {
+        &self.files[id]
+    }
+
     fn open_file(&mut self, id: EntryId) -> fst::Result<Box<dyn ReadSeek + '_>> {
         self.files.file(id)?.open(&mut self.stream)
     }
