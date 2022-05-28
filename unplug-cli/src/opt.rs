@@ -77,6 +77,10 @@ pub enum Subcommand {
     #[clap(subcommand)]
     Audio(AudioCommand),
 
+    /// Commands for working with global metadata
+    #[clap(subcommand)]
+    Globals(GlobalsCommand),
+
     /// Commands for working with ISO files
     #[clap(subcommand)]
     Iso(IsoCommand),
@@ -93,20 +97,11 @@ pub enum Subcommand {
     #[clap(subcommand)]
     Script(ScriptCommand),
 
-    /// Dumps the collision data from globals.bin
-    DumpColliders(DumpCollidersOpt),
-
     /// Exports messages to an XML file
     ExportMessages(ExportMessagesOpt),
 
     /// Imports messages from an XML file
     ImportMessages(ImportMessagesOpt),
-
-    /// Exports global metadata to a JSON file
-    ExportGlobals(ExportGlobalsOpt),
-
-    /// Imports global metadata from a JSON file
-    ImportGlobals(ImportGlobalsOpt),
 
     /// Exports shop data to a JSON file
     ExportShop(ExportShopOpt),
@@ -300,21 +295,24 @@ pub struct ExportMessagesOpt {
 }
 
 #[derive(Args)]
-pub struct DumpCollidersOpt {
-    /// Redirects output to a file instead of stdout
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
-    pub output: Option<PathBuf>,
-}
-
-#[derive(Args)]
 pub struct ImportMessagesOpt {
     /// Path to the input XML file
     #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
+#[derive(clap::Subcommand)]
+pub enum GlobalsCommand {
+    /// Exports global metadata to a JSON file
+    Export(GlobalsExportOpt),
+    /// Imports global metadata from a JSON file
+    Import(GlobalsImportOpt),
+    /// Dumps collision data to a text file
+    DumpColliders(GlobalsDumpCollidersOpt),
+}
+
 #[derive(Args)]
-pub struct ExportGlobalsOpt {
+pub struct GlobalsExportOpt {
     /// Don't output unnecessary whitespace
     #[clap(short, long)]
     pub compact: bool,
@@ -325,10 +323,17 @@ pub struct ExportGlobalsOpt {
 }
 
 #[derive(Args)]
-pub struct ImportGlobalsOpt {
+pub struct GlobalsImportOpt {
     /// Path to the input JSON file
     #[clap(parse(from_os_str))]
     pub input: PathBuf,
+}
+
+#[derive(Args)]
+pub struct GlobalsDumpCollidersOpt {
+    /// Redirects output to a file instead of stdout
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Args)]

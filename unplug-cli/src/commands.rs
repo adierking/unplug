@@ -6,7 +6,6 @@ use crate::opt::*;
 use anyhow::{bail, Result};
 use humansize::{file_size_opts, FileSize};
 use log::{debug, info};
-use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -17,7 +16,6 @@ use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::ReadSeek;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
-use unplug::data::object::Object;
 use unplug::data::stage::{StageDefinition, STAGES};
 use unplug::dvd::{
     ArchiveBuilder, ArchiveReader, DiscStream, Entry, EntryId, FileTree, Glob, GlobMode, OpenFile,
@@ -250,21 +248,6 @@ fn dump_script(script: &Script, flags: &ScriptDumpFlags, mut out: impl Write) ->
         } else {
             writeln!(out, "{:<5x} {:<4} {:?}", block.offset, block.id.index(), command)?;
         }
-    }
-    Ok(())
-}
-
-pub fn dump_colliders(ctx: Context, opt: DumpCollidersOpt) -> Result<()> {
-    let mut ctx = ctx.open_read()?;
-    let mut out = BufWriter::new(OutputRedirect::new(opt.output)?);
-    info!("Dumping collider globals");
-    let colliders = ctx.read_globals()?.read_colliders()?;
-    for (obj, list) in colliders.objects.iter().enumerate() {
-        writeln!(out, "Object {:?} ({}):", Object::try_from(obj as i32)?, obj)?;
-        for (i, collider) in list.iter().enumerate() {
-            writeln!(out, "{:>2} {:?}", i, collider)?;
-        }
-        writeln!(out)?;
     }
     Ok(())
 }

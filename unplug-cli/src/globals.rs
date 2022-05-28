@@ -1,12 +1,13 @@
 use crate::context::Context;
 use crate::io::OutputRedirect;
-use crate::opt::{ExportGlobalsOpt, ImportGlobalsOpt};
+use crate::opt::{GlobalsCommand, GlobalsDumpCollidersOpt, GlobalsExportOpt, GlobalsImportOpt};
 use anyhow::{bail, Result};
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
 use unplug::common::Text;
+use unplug::data::Object;
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
 
@@ -341,7 +342,17 @@ impl From<Metadata> for MetadataDef {
     }
 }
 
-pub fn export_globals(ctx: Context, opt: ExportGlobalsOpt) -> Result<()> {
+/// The `globals` CLI command.
+pub fn command(ctx: Context, opt: GlobalsCommand) -> Result<()> {
+    match opt {
+        GlobalsCommand::Export(opt) => command_export(ctx, opt),
+        GlobalsCommand::Import(opt) => command_import(ctx, opt),
+        GlobalsCommand::DumpColliders(opt) => command_dump_colliders(ctx, opt),
+    }
+}
+
+/// The `globals export` CLI command.
+pub fn command_export(ctx: Context, opt: GlobalsExportOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
 
@@ -356,7 +367,8 @@ pub fn export_globals(ctx: Context, opt: ExportGlobalsOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn import_globals(ctx: Context, opt: ImportGlobalsOpt) -> Result<()> {
+/// The `globals import` CLI command.
+pub fn command_import(ctx: Context, opt: GlobalsImportOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);
@@ -393,5 +405,21 @@ pub fn import_globals(ctx: Context, opt: ImportGlobalsOpt) -> Result<()> {
     ctx.begin_update()
         .write_globals(GlobalsBuilder::new().base(&mut globals).metadata(&metadata))?
         .commit()?;
+    Ok(())
+}
+
+/// The `globals dump-colliders` CLI command.
+fn command_dump_colliders(ctx: Context, opt: GlobalsDumpCollidersOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let mut out = BufWriter::new(OutputRedirect::new(opt.output)?);
+    info!("Dumping collider globals");
+    let colliders = ctx.read_globals()?.read_colliders()?;
+    for (obj, list) in colliders.objects.iter().enumerate() {
+        writeln!(out, "Object {:?} ({}):", Object::try_from(obj as i32)?, obj)?;
+        for (i, collider) in list.iter().enumerate() {
+            writeln!(out, "{:>2} {:?}", i, collider)?;
+        }
+        writeln!(out)?;
+    }
     Ok(())
 }
