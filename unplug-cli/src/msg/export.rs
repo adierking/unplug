@@ -1,7 +1,7 @@
 use super::common::*;
 use crate::context::Context;
 use crate::id::IdString;
-use crate::opt::ExportMessagesOpt;
+use crate::opt::MessagesExportOpt;
 use anyhow::Result;
 use log::{info, trace};
 use quick_xml::events::{BytesDecl, BytesStart, BytesText, Event};
@@ -370,7 +370,8 @@ impl<W: Write> MessageWriter<W> {
     }
 }
 
-pub fn export_messages(ctx: Context, opt: ExportMessagesOpt) -> Result<()> {
+/// The `messages export` CLI command.
+pub fn command(ctx: Context, opt: MessagesExportOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     info!("Reading script globals");
     let libs = ctx.read_globals()?.read_libs()?;

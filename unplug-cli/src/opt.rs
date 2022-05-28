@@ -89,6 +89,10 @@ pub enum Subcommand {
     #[clap(subcommand)]
     List(ListCommand),
 
+    /// Commands for editing cutscene messages
+    #[clap(subcommand)]
+    Messages(MessagesCommand),
+
     /// Commands for working with qp.bin (alias for `archive dvd:qp.bin`)
     #[clap(subcommand)]
     Qp(QpCommand),
@@ -96,12 +100,6 @@ pub enum Subcommand {
     /// Commands for working with event scripts
     #[clap(subcommand)]
     Script(ScriptCommand),
-
-    /// Exports messages to an XML file
-    ExportMessages(ExportMessagesOpt),
-
-    /// Imports messages from an XML file
-    ImportMessages(ImportMessagesOpt),
 
     /// Exports shop data to a JSON file
     ExportShop(ExportShopOpt),
@@ -287,15 +285,23 @@ pub struct ScriptDumpAllOpt {
     pub flags: ScriptDumpFlags,
 }
 
+#[derive(clap::Subcommand)]
+pub enum MessagesCommand {
+    /// Exports messages to an XML file
+    Export(MessagesExportOpt),
+    /// Imports messages from an XML file
+    Import(MessagesImportOpt),
+}
+
 #[derive(Args)]
-pub struct ExportMessagesOpt {
+pub struct MessagesExportOpt {
     /// Path to the output XML file
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
 }
 
 #[derive(Args)]
-pub struct ImportMessagesOpt {
+pub struct MessagesImportOpt {
     /// Path to the input XML file
     #[clap(parse(from_os_str))]
     pub input: PathBuf,

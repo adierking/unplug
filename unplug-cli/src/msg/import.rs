@@ -1,7 +1,7 @@
 use super::common::*;
 use crate::context::Context;
 use crate::id::IdString;
-use crate::opt::ImportMessagesOpt;
+use crate::opt::MessagesImportOpt;
 use anyhow::{anyhow, bail, ensure, Result};
 use log::{info, warn};
 use quick_xml::events::attributes::Attribute;
@@ -561,7 +561,8 @@ fn apply_messages(
     }
 }
 
-pub fn import_messages(ctx: Context, opt: ImportMessagesOpt) -> Result<()> {
+/// The `messages import` CLI command.
+pub fn command(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading messages from {}", opt.input.to_str().unwrap());
     let file = BufReader::new(File::open(opt.input)?);
