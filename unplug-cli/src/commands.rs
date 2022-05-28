@@ -292,7 +292,7 @@ pub fn command_iso(ctx: Context, opt: IsoCommand) -> Result<()> {
         IsoCommand::List(opt) => command_iso_list(ctx, opt),
         IsoCommand::Extract(opt) => command_iso_extract(ctx, opt),
         IsoCommand::ExtractAll(opt) => command_iso_extract_all(ctx, opt),
-        IsoCommand::Replace(_) => todo!(),
+        IsoCommand::Replace(opt) => command_iso_replace(ctx, opt),
     }
 }
 
@@ -393,5 +393,15 @@ fn extract_file<R: ReadSeek>(
             }
         }
     }
+    Ok(())
+}
+
+fn command_iso_replace(ctx: Context, opt: IsoReplaceOpt) -> Result<()> {
+    let mut ctx = ctx.open_read_write()?;
+    let file = ctx.disc_file_at(&opt.dest_path)?;
+    let info = ctx.query_file(&file)?;
+    let reader = File::open(&opt.src_path)?;
+    info!("Writing {}", info.name);
+    ctx.begin_update().write_file(&file, reader).commit()?;
     Ok(())
 }

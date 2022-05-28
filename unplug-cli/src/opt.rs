@@ -535,11 +535,11 @@ pub struct IsoExtractAllOpt {
 #[derive(StructOpt)]
 pub struct IsoReplaceOpt {
     /// Path of the file in the ISO to replace
-    #[structopt(value_name("PATH"))]
+    #[structopt(value_name("DEST"))]
     pub dest_path: String,
 
     /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
-    #[structopt(value_name("PATH"))]
+    #[structopt(value_name("SRC"))]
     pub src_path: PathBuf,
 }
 
