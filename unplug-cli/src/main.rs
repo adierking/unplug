@@ -78,11 +78,10 @@ fn run_app() -> Result<()> {
     match opt.command {
         Subcommand::Config(opt) => config::command(ctx, opt),
         Subcommand::Project(opt) => project::command(ctx, opt),
+        Subcommand::Archive(opt) => commands::command_archive(ctx, opt),
         Subcommand::Audio(opt) => audio::command(ctx, opt),
         Subcommand::Iso(opt) => commands::command_iso(ctx, opt),
         Subcommand::List(opt) => commands::command_list(ctx, opt),
-        Subcommand::ListArchive(opt) => commands::list_archive(ctx, opt),
-        Subcommand::ExtractArchive(opt) => commands::extract_archive(ctx, opt),
         Subcommand::DumpStage(opt) => commands::dump_stage(ctx, opt),
         Subcommand::DumpLibs(opt) => commands::dump_libs(ctx, opt),
         Subcommand::DumpAllStages(opt) => commands::dump_all_stages(ctx, opt),

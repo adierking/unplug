@@ -69,6 +69,10 @@ pub enum Subcommand {
     #[clap(subcommand)]
     Project(ProjectCommand),
 
+    /// Commands for working with U8 archives
+    #[clap(subcommand)]
+    Archive(ArchiveCommand),
+
     /// Commands for working with audio resources
     #[clap(subcommand)]
     Audio(AudioCommand),
@@ -80,12 +84,6 @@ pub enum Subcommand {
     /// Commands for listing known game assets
     #[clap(subcommand)]
     List(ListCommand),
-
-    /// Lists files in a U8 archive (e.g. qp.bin)
-    ListArchive(ListArchiveOpt),
-
-    /// Extracts a U8 archive (e.g. qp.bin) into a directory
-    ExtractArchive(ExtractArchiveOpt),
 
     /// Dumps the data from a stage file as text
     DumpStage(DumpStageOpt),
@@ -213,15 +211,6 @@ pub struct ListOpt {
 }
 
 #[derive(Args)]
-pub struct ListArchiveOpt {
-    #[clap(flatten)]
-    pub settings: ListOpt,
-
-    /// Path to the archive to read
-    pub path: String,
-}
-
-#[derive(Args)]
 pub struct ListIdsOpt {
     /// Sorts by name (default)
     #[clap(long, overrides_with_all(&["by-id"]))]
@@ -270,16 +259,6 @@ pub struct ListEquipmentOpt {
 pub struct ListStagesOpt {
     #[clap(flatten)]
     pub settings: ListIdsOpt,
-}
-
-#[derive(Args)]
-pub struct ExtractArchiveOpt {
-    /// Path to the archive to read
-    pub path: String,
-
-    /// Directory to extract files to (will be created if necessary)
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
-    pub output: PathBuf,
 }
 
 #[derive(Args)]
@@ -548,6 +527,70 @@ pub struct IsoExtractAllOpt {
 #[derive(Args)]
 pub struct IsoReplaceOpt {
     /// Path of the file in the ISO to replace
+    #[clap(value_name("dest"))]
+    pub dest_path: String,
+
+    /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
+    #[clap(value_name("src"), parse(from_os_str))]
+    pub src_path: PathBuf,
+}
+
+#[derive(clap::Subcommand)]
+pub enum ArchiveCommand {
+    Info(ArchiveInfoOpt),
+    List(ArchiveListOpt),
+    Extract(ArchiveExtractOpt),
+    ExtractAll(ArchiveExtractAllOpt),
+    Replace(ArchiveReplaceOpt),
+}
+
+#[derive(Args)]
+pub struct ArchiveInfoOpt {
+    /// Path to the U8 archive
+    pub archive: String,
+}
+
+#[derive(Args)]
+pub struct ArchiveListOpt {
+    /// Path to the U8 archive
+    pub archive: String,
+
+    #[clap(flatten)]
+    pub settings: ListOpt,
+
+    /// Paths to list (globbing is supported)
+    pub paths: Vec<String>,
+}
+
+#[derive(Args)]
+pub struct ArchiveExtractOpt {
+    /// Path to the U8 archive
+    pub archive: String,
+
+    /// If extracting one file, the path of the output file, otherwise the
+    /// directory to extract files to
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: Option<PathBuf>,
+
+    pub paths: Vec<String>,
+}
+
+#[derive(Args)]
+pub struct ArchiveExtractAllOpt {
+    /// Path to the U8 archive
+    pub archive: String,
+
+    /// The directory to extract files to
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Args)]
+pub struct ArchiveReplaceOpt {
+    /// Path to the U8 archive
+    pub archive: String,
+
+    /// Path of the file in the archive to replace
     #[clap(value_name("dest"))]
     pub dest_path: String,
 

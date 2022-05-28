@@ -8,9 +8,10 @@ use humansize::{file_size_opts, FileSize};
 use log::{debug, info};
 use std::convert::TryFrom;
 use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::Instant;
+use tempfile::NamedTempFile;
 use unicase::UniCase;
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::ReadSeek;
@@ -18,7 +19,9 @@ use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::object::Object;
 use unplug::data::stage::{StageDefinition, STAGES};
-use unplug::dvd::{ArchiveReader, DiscStream, Entry, EntryId, FileTree, Glob, GlobMode, OpenFile};
+use unplug::dvd::{
+    ArchiveBuilder, ArchiveReader, DiscStream, Entry, EntryId, FileTree, Glob, GlobMode, OpenFile,
+};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
@@ -59,14 +62,6 @@ fn find_stage_file<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<
             None => bail!("Unrecognized stage \"{}\"", name),
         },
     }
-}
-
-pub fn list_archive(ctx: Context, opt: ListArchiveOpt) -> Result<()> {
-    let mut ctx = ctx.open_read()?;
-    info!("Reading {}", opt.path);
-    let file = ctx.open_file_at(&opt.path)?;
-    let archive = ArchiveReader::open(file)?;
-    list_files(&archive.files, &opt.settings, &Glob::all())
 }
 
 fn sort_ids<I: IdString + Ord>(ids: &mut [I], settings: &ListIdsOpt) {
@@ -124,44 +119,6 @@ fn command_list_stages(opt: ListStagesOpt) -> Result<()> {
         let name = stage.to_id();
         println!("[{:>3}] {}", i32::from(stage), name);
     }
-    Ok(())
-}
-
-fn extract_files_deprecated(
-    mut reader: impl ReadSeek,
-    tree: &FileTree,
-    output: &Path,
-    iobuf: &mut [u8],
-) -> Result<()> {
-    fs::create_dir_all(&output)?;
-    for (path, id) in tree.recurse() {
-        let out_path = Path::new(output).join(&path);
-        match &tree[id] {
-            Entry::File(file) => {
-                info!("Extracting {}", path);
-                let mut file_writer = File::create(out_path)?;
-                let mut file_reader = file.open(&mut reader)?;
-                copy_buffered(&mut file_reader, &mut file_writer, iobuf)?;
-            }
-            Entry::Directory(_) => {
-                fs::create_dir_all(out_path)?;
-            }
-        }
-    }
-    Ok(())
-}
-
-pub fn extract_archive(ctx: Context, opt: ExtractArchiveOpt) -> Result<()> {
-    let mut ctx = ctx.open_read()?;
-    info!("Reading {}", opt.path);
-    let file = ctx.open_file_at(&opt.path)?;
-    let mut qp = ArchiveReader::open(file)?;
-
-    let mut buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
-    let start_time = Instant::now();
-    extract_files_deprecated(&mut qp.reader, &qp.files, &opt.output, &mut buf)?;
-
-    debug!("Extraction finished in {:?}", start_time.elapsed());
     Ok(())
 }
 
@@ -377,37 +334,38 @@ fn command_iso_extract_all(ctx: Context, opt: IsoExtractAllOpt) -> Result<()> {
     Ok(())
 }
 
-fn extract_file<R: ReadSeek>(
-    disc: &mut DiscStream<R>,
+fn extract_file(
+    source: &mut dyn OpenFile,
     entry: EntryId,
     entry_path: &str,
     out_dir: &Path,
     out_name: Option<&str>,
     io_buf: &mut [u8],
 ) -> Result<()> {
-    let file = &disc.files[entry];
+    let file = source.query_file(entry);
     let name = out_name.unwrap_or_else(|| file.name());
     let out_path = if name.is_empty() { out_dir.to_owned() } else { out_dir.join(name) };
-    match &disc.files[entry] {
+    match file {
         Entry::File(_) => {
             info!("Extracting {}", entry_path);
             let mut writer = File::create(&out_path)?;
-            let mut reader = disc.open_file(entry)?;
+            let mut reader = source.open_file(entry)?;
             copy_buffered(&mut reader, &mut writer, io_buf)?;
         }
         Entry::Directory(dir) => {
             fs::create_dir_all(&out_path)?;
             for child in dir.children.clone() {
-                let child_file = &disc.files[child];
+                let child_file = source.query_file(child);
                 let child_path =
                     format!("{}/{}", entry_path.trim_end_matches('/'), child_file.name());
-                extract_file(disc, child, &child_path, &out_path, None, io_buf)?;
+                extract_file(source, child, &child_path, &out_path, None, io_buf)?;
             }
         }
     }
     Ok(())
 }
 
+/// The `iso replace` CLI command.
 fn command_iso_replace(ctx: Context, opt: IsoReplaceOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     let file = ctx.disc_file_at(&opt.dest_path)?;
@@ -415,5 +373,91 @@ fn command_iso_replace(ctx: Context, opt: IsoReplaceOpt) -> Result<()> {
     let reader = File::open(&opt.src_path)?;
     info!("Writing {}", info.name);
     ctx.begin_update().write_file(&file, reader).commit()?;
+    Ok(())
+}
+
+/// The `archive` CLI command.
+pub fn command_archive(ctx: Context, opt: ArchiveCommand) -> Result<()> {
+    match opt {
+        ArchiveCommand::Info(opt) => command_archive_info(ctx, opt),
+        ArchiveCommand::List(opt) => command_archive_list(ctx, opt),
+        ArchiveCommand::Extract(opt) => command_archive_extract(ctx, opt),
+        ArchiveCommand::ExtractAll(opt) => command_archive_extract_all(ctx, opt),
+        ArchiveCommand::Replace(opt) => command_archive_replace(ctx, opt),
+    }
+}
+
+/// The `archive info` CLI command.
+fn command_archive_info(ctx: Context, opt: ArchiveInfoOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let file = ctx.file_at(&opt.archive)?;
+    let info = ctx.query_file(&file)?;
+    let archive = ArchiveReader::open(ctx.open_file(&file)?)?;
+    println!("{}: U8 archive", &info.name);
+    println!("Size: {}", info.size.file_size(file_size_opts::CONVENTIONAL).unwrap());
+    println!("File Entries: {}", archive.files.len());
+    Ok(())
+}
+
+/// The `archive list` CLI command.
+fn command_archive_list(ctx: Context, opt: ArchiveListOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let archive = ArchiveReader::open(ctx.open_file_at(&opt.archive)?)?;
+    list_files(&archive.files, &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))?;
+    Ok(())
+}
+
+/// The `archive extract` CLI command.
+fn command_archive_extract(ctx: Context, opt: ArchiveExtractOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let mut archive = ArchiveReader::open(ctx.open_file_at(&opt.archive)?)?;
+    let files = Glob::new(GlobMode::Exact, opt.paths).find(&archive.files).collect::<Vec<_>>();
+    if files.is_empty() {
+        bail!("Nothing to extract");
+    }
+    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), files.len() > 1);
+    fs::create_dir_all(&out_dir)?;
+    let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+    for (path, entry) in files {
+        extract_file(&mut archive, entry, &path, out_dir, out_name.as_deref(), &mut io_buf)?;
+    }
+    Ok(())
+}
+
+/// The `archive extract-all` CLI command.
+fn command_archive_extract_all(ctx: Context, opt: ArchiveExtractAllOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let mut archive = ArchiveReader::open(ctx.open_file_at(&opt.archive)?)?;
+    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
+    fs::create_dir_all(&out_dir)?;
+    let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+    let root = archive.files.root();
+    extract_file(&mut archive, root, "/", out_dir, out_name.as_deref(), &mut io_buf)?;
+    Ok(())
+}
+
+/// The `archive replace` CLI command.
+fn command_archive_replace(ctx: Context, opt: ArchiveReplaceOpt) -> Result<()> {
+    let mut ctx = ctx.open_read_write()?;
+    let file = ctx.file_at(&opt.archive)?;
+    let info = ctx.query_file(&file)?;
+    let mut archive = ArchiveReader::open(ctx.open_file(&file)?)?;
+    let entry = archive.files.at(&opt.dest_path)?;
+    if archive.files[entry].is_dir() {
+        bail!("{} is a directory", archive.files[entry].name());
+    }
+
+    let reader = File::open(&opt.src_path)?;
+    info!("Rebuilding archive data");
+    let mut temp = NamedTempFile::new()?;
+    debug!("Writing new archive to {}", temp.path().to_string_lossy());
+    let mut builder = ArchiveBuilder::with_archive(&mut archive);
+    builder.replace(entry, || reader).write_to(&mut temp)?;
+    temp.seek(SeekFrom::Start(0))?;
+    drop(builder);
+    drop(archive);
+
+    info!("Writing new {}", info.name);
+    ctx.begin_update().write_file(&file, temp).commit()?;
     Ok(())
 }
