@@ -101,11 +101,9 @@ pub enum Subcommand {
     #[clap(subcommand)]
     Script(ScriptCommand),
 
-    /// Exports shop data to a JSON file
-    ExportShop(ExportShopOpt),
-
-    /// Imports shop data from a JSON file
-    ImportShop(ImportShopOpt),
+    /// Commands for editing the in-game shop
+    #[clap(subcommand)]
+    Shop(ShopCommand),
 
     /// Runs Dolphin with the current project/ISO.
     Dolphin(DolphinOpt),
@@ -342,8 +340,16 @@ pub struct GlobalsDumpCollidersOpt {
     pub output: Option<PathBuf>,
 }
 
+#[derive(clap::Subcommand)]
+pub enum ShopCommand {
+    /// Exports shop data to a JSON file
+    Export(ShopExportOpt),
+    /// Imports shop data from a JSON file
+    Import(ShopImportOpt),
+}
+
 #[derive(Args)]
-pub struct ExportShopOpt {
+pub struct ShopExportOpt {
     /// Don't output unnecessary whitespace
     #[clap(short, long)]
     pub compact: bool,
@@ -354,7 +360,7 @@ pub struct ExportShopOpt {
 }
 
 #[derive(Args)]
-pub struct ImportShopOpt {
+pub struct ShopImportOpt {
     /// Path to the input JSON file
     #[clap(parse(from_os_str))]
     pub input: PathBuf,

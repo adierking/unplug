@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::id::IdString;
 use crate::io::OutputRedirect;
-use crate::opt::{ExportShopOpt, ImportShopOpt};
+use crate::opt::{ShopCommand, ShopExportOpt, ShopImportOpt};
 use anyhow::{bail, Error, Result};
 use lazy_static::lazy_static;
 use log::{error, info, warn};
@@ -186,7 +186,14 @@ impl TryFrom<&SlotModel> for Slot {
     }
 }
 
-pub fn export_shop(ctx: Context, opt: ExportShopOpt) -> Result<()> {
+pub fn command(ctx: Context, opt: ShopCommand) -> Result<()> {
+    match opt {
+        ShopCommand::Export(opt) => command_export(ctx, opt),
+        ShopCommand::Import(opt) => command_import(ctx, opt),
+    }
+}
+
+pub fn command_export(ctx: Context, opt: ShopExportOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
 
@@ -217,7 +224,7 @@ pub fn export_shop(ctx: Context, opt: ExportShopOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn import_shop(ctx: Context, opt: ImportShopOpt) -> Result<()> {
+pub fn command_import(ctx: Context, opt: ShopImportOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);

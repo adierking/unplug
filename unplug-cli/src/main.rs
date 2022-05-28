@@ -86,8 +86,7 @@ fn run_app() -> Result<()> {
         Subcommand::Messages(opt) => msg::command(ctx, opt),
         Subcommand::Qp(opt) => commands::command_qp(ctx, opt),
         Subcommand::Script(opt) => commands::command_script(ctx, opt),
-        Subcommand::ExportShop(opt) => shop::export_shop(ctx, opt),
-        Subcommand::ImportShop(opt) => shop::import_shop(ctx, opt),
+        Subcommand::Shop(opt) => shop::command(ctx, opt),
         Subcommand::Dolphin(opt) => dolphin::command(ctx, opt),
         #[cfg(feature = "debug")]
         Subcommand::Debug(opt) => unplug_cli::debug::command(ctx, opt),
