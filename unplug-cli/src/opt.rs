@@ -73,17 +73,11 @@ pub enum Subcommand {
     /// Commands for working with ISO files
     Iso(IsoCommand),
 
+    /// Commands for listing known game assets
+    List(ListCommand),
+
     /// Lists files in a U8 archive (e.g. qp.bin)
     ListArchive(ListArchiveOpt),
-
-    /// Lists known item IDs
-    ListItems(ListItemsOpt),
-
-    /// Lists known equipment (ATC) IDs
-    ListEquipment(ListEquipmentOpt),
-
-    /// Lists known stages
-    ListStages(ListStagesOpt),
 
     /// Extracts a U8 archive (e.g. qp.bin) into a directory
     ExtractArchive(ExtractArchiveOpt),
@@ -231,6 +225,16 @@ pub struct ListIdsOpt {
     /// Reverses the sorting order
     #[structopt(long)]
     pub reverse: bool,
+}
+
+#[derive(StructOpt)]
+pub enum ListCommand {
+    /// Lists each item.
+    Items(ListItemsOpt),
+    /// Lists each type of equipment.
+    Equipment(ListEquipmentOpt),
+    /// Lists each stage.
+    Stages(ListStagesOpt),
 }
 
 #[derive(StructOpt)]

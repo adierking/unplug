@@ -80,7 +80,17 @@ fn sort_ids<I: IdString + Ord>(ids: &mut [I], settings: &ListIdsOpt) {
     }
 }
 
-pub fn list_items(_ctx: Context, opt: ListItemsOpt) -> Result<()> {
+/// The `list` CLI command.
+pub fn command_list(_ctx: Context, opt: ListCommand) -> Result<()> {
+    match opt {
+        ListCommand::Items(opt) => command_list_items(opt),
+        ListCommand::Equipment(opt) => command_list_equipment(opt),
+        ListCommand::Stages(opt) => command_list_stages(opt),
+    }
+}
+
+/// The `list items` CLI command.
+fn command_list_items(opt: ListItemsOpt) -> Result<()> {
     let mut items: Vec<_> = if opt.show_unknown {
         ITEMS.iter().map(|i| i.id).collect()
     } else {
@@ -93,7 +103,8 @@ pub fn list_items(_ctx: Context, opt: ListItemsOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn list_equipment(_ctx: Context, opt: ListEquipmentOpt) -> Result<()> {
+/// The `list equipment` CLI command.
+fn command_list_equipment(opt: ListEquipmentOpt) -> Result<()> {
     let mut atcs: Vec<_> = ATCS.iter().map(|a| a.id).collect();
     sort_ids(&mut atcs, &opt.settings);
     for atc in atcs {
@@ -105,7 +116,8 @@ pub fn list_equipment(_ctx: Context, opt: ListEquipmentOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn list_stages(_ctx: Context, opt: ListStagesOpt) -> Result<()> {
+/// The `list stages` CLI command.
+fn command_list_stages(opt: ListStagesOpt) -> Result<()> {
     let mut stages: Vec<_> = STAGES.iter().map(|s| s.id).collect();
     sort_ids(&mut stages, &opt.settings);
     for stage in stages {
