@@ -1,79 +1,84 @@
 #![allow(trivial_numeric_casts, variant_size_differences)]
 
 use anyhow::{anyhow, Result};
+use clap::{Args, Parser};
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 /// The minimum accepted volume level for playback.
 const MIN_VOLUME: i32 = 0;
 /// The maximum accepted volume level for playback.
 const MAX_VOLUME: i32 = 100;
 
-#[derive(StructOpt)]
-#[structopt(name = "Unplug")]
-#[structopt(about = "Chibi-Robo! Plug Into Adventure! Modding Toolkit")]
+#[derive(Parser)]
+#[clap(name = "Unplug")]
+#[clap(about = "Chibi-Robo! Plug Into Adventure! Modding Toolkit")]
 pub struct Opt {
     /// Enables debug logging
     ///
     /// Use -vv in non-distribution builds to enable trace logging
-    #[structopt(short, long, parse(from_occurrences), global(true))]
+    #[clap(short, long, parse(from_occurrences), global(true))]
     pub verbose: u64,
 
     /// Capture inferno trace data to a file (for developers)
     #[cfg(feature = "trace")]
-    #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
+    #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
     pub trace: Option<PathBuf>,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub config: ConfigOpt,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub context: ContextOpt,
 
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     pub command: Subcommand,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ConfigOpt {
     /// Path to the config file to use. If it does not exist, it will be created.
-    #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
+    #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
     pub config: Option<PathBuf>,
 
     /// Do not load or create a config file and use default settings instead.
-    #[structopt(long, global(true), conflicts_with("config"))]
+    #[clap(long, global(true), conflicts_with("config"))]
     pub no_config: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ContextOpt {
-    #[structopt(long, value_name("PATH"), parse(from_os_str), global(true))]
+    #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
     pub iso: Option<PathBuf>,
 
     /// Opens a project instead of the current one.
-    #[structopt(long, value_name("NAME"), global(true))]
+    #[clap(long, value_name("NAME"), global(true))]
     pub project: Option<String>,
 
     /// Do not open any project.
-    #[structopt(long, global(true), conflicts_with("project"))]
+    #[clap(long, global(true), conflicts_with("project"))]
     pub no_project: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum Subcommand {
     /// Manage Unplug configuration options
+    #[clap(subcommand)]
     Config(ConfigCommand),
 
     /// Manage Unplug projects
+    #[clap(subcommand)]
     Project(ProjectCommand),
 
     /// Commands for working with audio resources
+    #[clap(subcommand)]
     Audio(AudioCommand),
 
     /// Commands for working with ISO files
+    #[clap(subcommand)]
     Iso(IsoCommand),
 
     /// Commands for listing known game assets
+    #[clap(subcommand)]
     List(ListCommand),
 
     /// Lists files in a U8 archive (e.g. qp.bin)
@@ -117,22 +122,25 @@ pub enum Subcommand {
 
     /// Debugging commands (development builds only)
     #[cfg(feature = "debug")]
+    #[clap(subcommand)]
     Debug(DebugCommand),
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum ConfigCommand {
     /// Resets all configuration options to their default values.
     Clear,
     /// Prints the absolute path to the config file.
     Path,
     /// Prints the value of a setting.
+    #[clap(subcommand)]
     Get(GetSetting),
     /// Sets the value of a setting.
+    #[clap(subcommand)]
     Set(SetSetting),
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum GetSetting {
     /// A path to an ISO to load by default.
     DefaultIso,
@@ -140,7 +148,7 @@ pub enum GetSetting {
     DolphinPath,
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum SetSetting {
     /// A path to an ISO to load by default.
     DefaultIso { path: Option<String> },
@@ -148,7 +156,7 @@ pub enum SetSetting {
     DolphinPath { path: Option<String> },
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum ProjectCommand {
     /// Displays info about a project (or the current one).
     Info { name: Option<String> },
@@ -157,9 +165,10 @@ pub enum ProjectCommand {
     /// Registers an existing project.
     Add {
         /// Path to the project file(s).
+        #[clap(parse(from_os_str))]
         path: PathBuf,
         /// Sets the project name (defaults to the filename)
-        #[structopt(short, long)]
+        #[clap(short, long)]
         name: Option<String>,
     },
     /// Unregisters a project without deleting any of its files.
@@ -170,7 +179,7 @@ pub enum ProjectCommand {
     Close,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct StageOpt {
     /// The stage name/path
     ///
@@ -180,54 +189,54 @@ pub struct StageOpt {
     pub name: String,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ListOpt {
     /// Lists file offsets and sizes
-    #[structopt(short, long)]
+    #[clap(short, long)]
     pub long: bool,
 
     /// Sorts files by name (default)
-    #[structopt(long, overrides_with_all(&["by-offset", "by-size"]))]
+    #[clap(long, overrides_with_all(&["by-offset", "by-size"]))]
     pub by_name: bool,
 
     /// Sorts files by offset
-    #[structopt(long, overrides_with_all(&["by-name", "by-size"]))]
+    #[clap(long, overrides_with_all(&["by-name", "by-size"]))]
     pub by_offset: bool,
 
     /// Sorts files by size
-    #[structopt(long, overrides_with_all(&["by-name", "by-offset"]))]
+    #[clap(long, overrides_with_all(&["by-name", "by-offset"]))]
     pub by_size: bool,
 
     /// Reverses the sorting order
-    #[structopt(long)]
+    #[clap(long)]
     pub reverse: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ListArchiveOpt {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: ListOpt,
 
     /// Path to the archive to read
     pub path: String,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ListIdsOpt {
     /// Sorts by name (default)
-    #[structopt(long, overrides_with_all(&["by-id"]))]
+    #[clap(long, overrides_with_all(&["by-id"]))]
     pub by_name: bool,
 
     /// Sorts by ID number
-    #[structopt(long, overrides_with_all(&["by-name"]))]
+    #[clap(long, overrides_with_all(&["by-name"]))]
     pub by_id: bool,
 
     /// Reverses the sorting order
-    #[structopt(long)]
+    #[clap(long)]
     pub reverse: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum ListCommand {
     /// Lists each item.
     Items(ListItemsOpt),
@@ -237,144 +246,144 @@ pub enum ListCommand {
     Stages(ListStagesOpt),
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ListItemsOpt {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: ListIdsOpt,
 
     /// Includes items without names
-    #[structopt(long)]
+    #[clap(long)]
     pub show_unknown: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ListEquipmentOpt {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: ListIdsOpt,
 
     /// Includes equipment without names
-    #[structopt(long)]
+    #[clap(long)]
     pub show_unknown: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ListStagesOpt {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: ListIdsOpt,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ExtractArchiveOpt {
     /// Path to the archive to read
     pub path: String,
 
     /// Directory to extract files to (will be created if necessary)
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct DumpStageFlags {
     /// Dumps unknown structs
-    #[structopt(long)]
+    #[clap(long)]
     pub dump_unknown: bool,
 
     /// Do not show file offsets
-    #[structopt(long)]
+    #[clap(long)]
     pub no_offsets: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct DumpStageOpt {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub stage: StageOpt,
 
     /// Redirects output to a file instead of stdout
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub flags: DumpStageFlags,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct DumpLibsOpt {
     /// Redirects output to a file instead of stdout
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub flags: DumpStageFlags,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct DumpAllStagesOpt {
     /// Path to the output directory
-    #[structopt(short, value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub flags: DumpStageFlags,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ExportMessagesOpt {
     /// Path to the output XML file
-    #[structopt(short, value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct DumpCollidersOpt {
     /// Redirects output to a file instead of stdout
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ImportMessagesOpt {
     /// Path to the input XML file
-    #[structopt(value_name("PATH"))]
+    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ExportGlobalsOpt {
     /// Don't output unnecessary whitespace
-    #[structopt(short, long)]
+    #[clap(short, long)]
     pub compact: bool,
 
     /// Redirects output to a file instead of stdout
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ImportGlobalsOpt {
     /// Path to the input JSON file
-    #[structopt(value_name("PATH"))]
+    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ExportShopOpt {
     /// Don't output unnecessary whitespace
-    #[structopt(short, long)]
+    #[clap(short, long)]
     pub compact: bool,
 
     /// Redirects output to a file instead of stdout
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct ImportShopOpt {
     /// Path to the input JSON file
-    #[structopt(value_name("PATH"))]
+    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum AudioCommand {
     /// Displays info about an audio resource
     Info(AudioInfoOpt),
@@ -390,74 +399,74 @@ pub enum AudioCommand {
     Play(AudioPlayOpt),
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioExportSettings {
     /// If an audio file has cue points, exports a .labels.txt file which defines the cues using
     /// Audacity's label track format
-    #[structopt(long)]
+    #[clap(long)]
     pub labels: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioImportSettings {
     /// If an audio file has a .labels.txt file alongside it, import Audacity labels from it.
-    #[structopt(long)]
+    #[clap(long)]
     pub labels: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioInfoOpt {
     /// The name or path of the audio resource.
     pub name: String,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioExportOpt {
     /// If extracting one audio resource, the path of the .wav file to write, otherwise the
     /// directory to write the audio files to
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: AudioExportSettings,
 
     /// Names or paths of the audio resources to export
     pub names: Vec<String>,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioExportBankOpt {
     /// The directory to write the bank's .wav files to (defaults to the bank name)
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: AudioExportSettings,
 
     /// Name or path of the sample bank to export
     pub name: String,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioExportAllOpt {
     /// The directory to write files to
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: AudioExportSettings,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioImportOpt {
     /// Name or path of the sound resource to import
     pub name: String,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: AudioImportSettings,
 
     /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
-    #[structopt(value_name("PATH"))]
+    #[clap(parse(from_os_str))]
     pub path: PathBuf,
 }
 
@@ -471,32 +480,32 @@ fn parse_volume(s: &str) -> Result<f64> {
     }
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct AudioPlayOpt {
     /// Name or path of the audio resource to play
     pub name: String,
 
     /// Volume level as a percentage (0-100, default 80)
-    #[structopt(long, default_value = "80", parse(try_from_str = parse_volume))]
+    #[clap(long, default_value = "80", parse(try_from_str = parse_volume))]
     pub volume: f64,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct DolphinOpt {
     /// Do not wait for Dolphin to exit
-    #[structopt(short, long)]
+    #[clap(short, long)]
     pub no_wait: bool,
 
     /// Do not capture Dolphin's console output
-    #[structopt(long)]
+    #[clap(long)]
     pub no_capture: bool,
 
     /// Show Dolphin's UI
-    #[structopt(long)]
+    #[clap(long)]
     pub ui: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum IsoCommand {
     /// Shows information about the ISO.
     Info,
@@ -510,45 +519,45 @@ pub enum IsoCommand {
     Replace(IsoReplaceOpt),
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct IsoListOpt {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub settings: ListOpt,
 
     /// Paths to list (globbing is supported)
     pub paths: Vec<String>,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct IsoExtractOpt {
     /// If extracting one file, the path of the output file, otherwise the
     /// directory to extract files to
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
     pub paths: Vec<String>,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct IsoExtractAllOpt {
     /// The directory to extract files to
-    #[structopt(short, long("out"), value_name("PATH"))]
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
 pub struct IsoReplaceOpt {
     /// Path of the file in the ISO to replace
-    #[structopt(value_name("DEST"))]
+    #[clap(value_name("dest"))]
     pub dest_path: String,
 
     /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
-    #[structopt(value_name("SRC"))]
+    #[clap(value_name("src"), parse(from_os_str))]
     pub src_path: PathBuf,
 }
 
 #[cfg(feature = "debug")]
-#[derive(StructOpt)]
+#[derive(clap::Subcommand)]
 pub enum DebugCommand {
     /// Read and rewrite script data
     RebuildScripts,

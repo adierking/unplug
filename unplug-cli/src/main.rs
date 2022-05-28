@@ -1,8 +1,8 @@
 use anyhow::Result;
+use clap::Parser;
 use log::error;
 use std::path::Path;
 use std::process;
-use structopt::StructOpt;
 use unplug_cli::config::{self, Config};
 use unplug_cli::context::Context;
 use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt, Subcommand};
@@ -63,7 +63,7 @@ fn get_context(opt: ContextOpt) -> Result<Context> {
 }
 
 fn run_app() -> Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     terminal::init_logging(opt.verbose);
     load_config(opt.config);
 
