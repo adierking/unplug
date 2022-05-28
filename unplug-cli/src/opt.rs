@@ -534,35 +534,40 @@ pub struct IsoReplaceOpt {
     #[clap(value_name("dest"))]
     pub dest_path: String,
 
-    /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
+    /// Path to the file to replace it with
     #[clap(value_name("src"), parse(from_os_str))]
     pub src_path: PathBuf,
 }
 
 #[derive(clap::Subcommand)]
 pub enum ArchiveCommand {
+    /// Shows information about the archive.
     Info {
         /// Path to the U8 archive
         path: String,
     },
+    /// Lists files in the archive.
     List {
         /// Path to the U8 archive
         path: String,
         #[clap(flatten)]
         opt: ArchiveListOpt,
     },
+    /// Extracts files from the archive.
     Extract {
         /// Path to the U8 archive
         path: String,
         #[clap(flatten)]
         opt: ArchiveExtractOpt,
     },
+    /// Extracts all files from the archive.
     ExtractAll {
         /// Path to the U8 archive
         path: String,
         #[clap(flatten)]
         opt: ArchiveExtractAllOpt,
     },
+    /// Replaces a file in the archive.
     Replace {
         /// Path to the U8 archive
         path: String,
@@ -603,7 +608,7 @@ pub struct ArchiveReplaceOpt {
     #[clap(value_name("dest"))]
     pub dest_path: String,
 
-    /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
+    /// Path to the file to replace it with
     #[clap(value_name("src"), parse(from_os_str))]
     pub src_path: PathBuf,
 }
@@ -617,9 +622,14 @@ pub enum DebugCommand {
 
 #[derive(clap::Subcommand)]
 pub enum QpCommand {
+    /// Shows information about qp.bin.
     Info,
+    /// Lists files in qp.bin.
     List(ArchiveListOpt),
+    /// Extracts files from qp.bin.
     Extract(ArchiveExtractOpt),
+    /// Extracts all files from qp.bin.
     ExtractAll(ArchiveExtractAllOpt),
+    /// Replaces a file in qp.bin.
     Replace(ArchiveReplaceOpt),
 }
