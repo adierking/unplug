@@ -2,41 +2,9 @@ use crate::config::{Config, Project, ProjectKind};
 use crate::context::Context;
 use crate::opt::ProjectCommand;
 use anyhow::{anyhow, bail, Result};
-use log::{error, info};
-use std::path::{Path, PathBuf};
+use log::info;
+use std::path::PathBuf;
 use std::{fs, mem};
-
-/// Attempts to load the `Context` for a project, returning `Ok(None)` if no project is open.
-pub fn try_get_context(config: &Config, name: Option<&str>) -> Result<Option<Context>> {
-    let project_name = name.unwrap_or(&config.settings.project);
-    if project_name.is_empty() {
-        return Ok(None);
-    }
-    match config.find_project(project_name) {
-        Ok((name, project)) => Ok(Some(Context::ProjectIso {
-            name: name.to_owned(),
-            path: Path::new(&project.path).to_owned(),
-        })),
-        Err(e) if name.is_some() => Err(e),
-        _ => {
-            error!("Project \"{}\" is open but has a missing config entry!", project_name);
-            error!("To fix this, add it back or use `project close`.");
-            Ok(Some(Context::Local))
-        }
-    }
-}
-
-/// The `project` CLI command.
-pub fn command(_ctx: Context, opt: ProjectCommand) -> Result<()> {
-    match opt {
-        ProjectCommand::Info { name } => command_info(name),
-        ProjectCommand::List => command_list(),
-        ProjectCommand::Add { path, name } => command_add(path, name),
-        ProjectCommand::Forget { name } => command_forget(name),
-        ProjectCommand::Open { name } => command_open(name),
-        ProjectCommand::Close => command_close(),
-    }
-}
 
 /// The `project info` CLI command.
 fn command_info(name: Option<String>) -> Result<()> {
@@ -133,4 +101,16 @@ fn command_close() -> Result<()> {
     config.save()?;
     info!("Closed project: {}", old);
     Ok(())
+}
+
+/// The `project` CLI command.
+pub fn command(_ctx: Context, opt: ProjectCommand) -> Result<()> {
+    match opt {
+        ProjectCommand::Info { name } => command_info(name),
+        ProjectCommand::List => command_list(),
+        ProjectCommand::Add { path, name } => command_add(path, name),
+        ProjectCommand::Forget { name } => command_forget(name),
+        ProjectCommand::Open { name } => command_open(name),
+        ProjectCommand::Close => command_close(),
+    }
 }

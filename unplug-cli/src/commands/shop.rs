@@ -186,13 +186,7 @@ impl TryFrom<&SlotModel> for Slot {
     }
 }
 
-pub fn command(ctx: Context, opt: ShopCommand) -> Result<()> {
-    match opt {
-        ShopCommand::Export(opt) => command_export(ctx, opt),
-        ShopCommand::Import(opt) => command_import(ctx, opt),
-    }
-}
-
+/// The `shop export` CLI command.
 pub fn command_export(ctx: Context, opt: ShopExportOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
@@ -224,6 +218,7 @@ pub fn command_export(ctx: Context, opt: ShopExportOpt) -> Result<()> {
     Ok(())
 }
 
+/// The `shop import` CLI command.
 pub fn command_import(ctx: Context, opt: ShopImportOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
@@ -283,6 +278,14 @@ pub fn command_import(ctx: Context, opt: ShopImportOpt) -> Result<()> {
         .write_stage(Stage::ChibiHouse, stage)?
         .commit()?;
     Ok(())
+}
+
+/// The `shop` CLI command.
+pub fn command(ctx: Context, opt: ShopCommand) -> Result<()> {
+    match opt {
+        ShopCommand::Export(opt) => command_export(ctx, opt),
+        ShopCommand::Import(opt) => command_import(ctx, opt),
+    }
 }
 
 #[cfg(test)]

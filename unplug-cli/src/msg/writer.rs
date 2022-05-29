@@ -1,16 +1,13 @@
-use super::common::*;
-use crate::context::Context;
+use super::constants::*;
+use super::{iter_messages, MessageId, MessageSource};
 use crate::id::IdString;
-use crate::opt::MessagesExportOpt;
 use anyhow::Result;
-use log::{info, trace};
+use log::trace;
 use quick_xml::events::{BytesDecl, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::borrow::Cow;
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::Write;
 use unplug::common::Text;
-use unplug::data::stage::STAGES;
 use unplug::event::msg::{
     DefaultFlags, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags,
 };
@@ -43,7 +40,7 @@ fn text_to_xml(text: &Text) -> Result<Cow<'_, str>> {
     Ok(escaped.into())
 }
 
-struct MessageWriter<W: Write> {
+pub struct MessageWriter<W: Write> {
     writer: Writer<W>,
     root: BytesStart<'static>,
     first_message: bool,
@@ -52,7 +49,7 @@ struct MessageWriter<W: Write> {
 }
 
 impl<W: Write> MessageWriter<W> {
-    fn new(writer: W) -> Self {
+    pub fn new(writer: W) -> Self {
         Self {
             writer: Writer::new(writer),
             root: BytesStart::owned_name(ELEM_MESSAGES),
@@ -62,7 +59,7 @@ impl<W: Write> MessageWriter<W> {
         }
     }
 
-    fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> Result<()> {
         self.writer.write_event(Event::Decl(BytesDecl::new(
             XML_VERSION,
             Some(XML_ENCODING),
@@ -74,7 +71,7 @@ impl<W: Write> MessageWriter<W> {
         Ok(())
     }
 
-    fn write_script(&mut self, source: MessageSource, script: &Script) -> Result<()> {
+    pub fn write_script(&mut self, source: MessageSource, script: &Script) -> Result<()> {
         for (id, msg) in iter_messages(source, script) {
             self.write_message(id, msg)?;
         }
@@ -101,7 +98,7 @@ impl<W: Write> MessageWriter<W> {
         Ok(())
     }
 
-    fn finish(&mut self) -> Result<()> {
+    pub fn finish(&mut self) -> Result<()> {
         self.writer.write_event(Event::End(self.root.to_end()))?;
         self.writer.write(b"\n")?;
         self.writer.inner().flush()?;
@@ -368,27 +365,6 @@ impl<W: Write> MessageWriter<W> {
         }
         Ok(())
     }
-}
-
-/// The `messages export` CLI command.
-pub fn command(ctx: Context, opt: MessagesExportOpt) -> Result<()> {
-    let mut ctx = ctx.open_read()?;
-    info!("Reading script globals");
-    let libs = ctx.read_globals()?.read_libs()?;
-
-    let out_file = BufWriter::new(File::create(opt.output)?);
-    let mut writer = MessageWriter::new(out_file);
-    writer.start()?;
-    writer.write_script(MessageSource::Globals, &libs.script)?;
-
-    for def in STAGES {
-        info!("Reading {}.bin", def.name);
-        let stage = ctx.read_stage(&libs, def.id)?;
-        writer.write_script(MessageSource::Stage(def.id), &stage.script)?;
-    }
-
-    writer.finish()?;
-    Ok(())
 }
 
 #[cfg(test)]

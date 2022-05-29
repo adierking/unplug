@@ -1,6 +1,9 @@
 use crate::common::{format_duration, output_dir_and_name};
 use crate::context::{Context, FileId, OpenContext};
-use crate::opt::*;
+use crate::opt::{
+    AudioCommand, AudioExportAllOpt, AudioExportBankOpt, AudioExportOpt, AudioExportSettings,
+    AudioImportOpt, AudioImportSettings, AudioInfoOpt, AudioPlayOpt,
+};
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
 use anyhow::{bail, Result};
@@ -326,18 +329,6 @@ fn export_labels(cues: Vec<Cue>, sample_rate: u32, sound_path: &Path) -> Result<
     Ok(())
 }
 
-/// The `audio` CLI command.
-pub fn command(ctx: Context, opt: AudioCommand) -> Result<()> {
-    match opt {
-        AudioCommand::Info(opt) => command_info(ctx, opt),
-        AudioCommand::Export(opt) => command_export(ctx, opt),
-        AudioCommand::ExportBank(opt) => command_export_bank(ctx, opt),
-        AudioCommand::ExportAll(opt) => command_export_all(ctx, opt),
-        AudioCommand::Import(opt) => command_import(ctx, opt),
-        AudioCommand::Play(opt) => command_play(ctx, opt),
-    }
-}
-
 /// The `audio info` CLI command.
 fn command_info(ctx: Context, opt: AudioInfoOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
@@ -591,4 +582,16 @@ fn command_play(ctx: Context, opt: AudioPlayOpt) -> Result<()> {
 
     info!("Playback finished");
     Ok(())
+}
+
+/// The `audio` CLI command.
+pub fn command(ctx: Context, opt: AudioCommand) -> Result<()> {
+    match opt {
+        AudioCommand::Info(opt) => command_info(ctx, opt),
+        AudioCommand::Export(opt) => command_export(ctx, opt),
+        AudioCommand::ExportBank(opt) => command_export_bank(ctx, opt),
+        AudioCommand::ExportAll(opt) => command_export_all(ctx, opt),
+        AudioCommand::Import(opt) => command_import(ctx, opt),
+        AudioCommand::Play(opt) => command_play(ctx, opt),
+    }
 }

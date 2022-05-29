@@ -5,8 +5,8 @@ use std::path::Path;
 use std::process;
 use unplug_cli::config::{self, Config};
 use unplug_cli::context::Context;
-use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt, Subcommand};
-use unplug_cli::{audio, commands, dolphin, globals, msg, project, shop, terminal};
+use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt};
+use unplug_cli::{commands, terminal};
 
 #[cfg(feature = "trace")]
 fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
@@ -48,7 +48,7 @@ fn get_context(opt: ContextOpt) -> Result<Context> {
     // Try loading a project
     let config = Config::get();
     if !opt.no_project {
-        if let Some(context) = project::try_get_context(&config, opt.project.as_deref())? {
+        if let Some(context) = config::load_project(&config, opt.project.as_deref())? {
             return Ok(context);
         }
     }
@@ -75,22 +75,7 @@ fn run_app() -> Result<()> {
     }
 
     let ctx = get_context(opt.context)?;
-    match opt.command {
-        Subcommand::Config(opt) => config::command(ctx, opt),
-        Subcommand::Project(opt) => project::command(ctx, opt),
-        Subcommand::Archive(opt) => commands::command_archive(ctx, opt),
-        Subcommand::Audio(opt) => audio::command(ctx, opt),
-        Subcommand::Globals(opt) => globals::command(ctx, opt),
-        Subcommand::Iso(opt) => commands::command_iso(ctx, opt),
-        Subcommand::List(opt) => commands::command_list(ctx, opt),
-        Subcommand::Messages(opt) => msg::command(ctx, opt),
-        Subcommand::Qp(opt) => commands::command_qp(ctx, opt),
-        Subcommand::Script(opt) => commands::command_script(ctx, opt),
-        Subcommand::Shop(opt) => shop::command(ctx, opt),
-        Subcommand::Dolphin(opt) => dolphin::command(ctx, opt),
-        #[cfg(feature = "debug")]
-        Subcommand::Debug(opt) => unplug_cli::debug::command(ctx, opt),
-    }
+    commands::execute(ctx, opt.command)
 }
 
 fn main() {

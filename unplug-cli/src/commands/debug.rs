@@ -5,13 +5,6 @@ use log::info;
 use unplug::data::stage::{StageDefinition, STAGES};
 use unplug::globals::GlobalsBuilder;
 
-/// The `debug` CLI command.
-pub fn command(ctx: Context, opt: DebugCommand) -> Result<()> {
-    match opt {
-        DebugCommand::RebuildScripts => command_rebuild_scripts(ctx),
-    }
-}
-
 /// The `debug rebuild-scripts` CLI command.
 fn command_rebuild_scripts(ctx: Context) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
@@ -38,4 +31,11 @@ fn command_rebuild_scripts(ctx: Context) -> Result<()> {
     info!("Updating game files");
     update.commit()?;
     Ok(())
+}
+
+/// The `debug` CLI command.
+pub fn command(ctx: Context, opt: DebugCommand) -> Result<()> {
+    match opt {
+        DebugCommand::RebuildScripts => command_rebuild_scripts(ctx),
+    }
 }

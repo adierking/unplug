@@ -14,21 +14,14 @@
     variant_size_differences
 )]
 
-pub mod audio;
 pub mod commands;
 pub mod common;
 pub mod config;
 pub mod context;
-pub mod dolphin;
-pub mod globals;
+pub mod fst;
 pub mod id;
 pub mod io;
 pub mod msg;
 pub mod opt;
 pub mod playback;
-pub mod project;
-pub mod shop;
 pub mod terminal;
-
-#[cfg(feature = "debug")]
-pub mod debug;

@@ -342,15 +342,6 @@ impl From<Metadata> for MetadataDef {
     }
 }
 
-/// The `globals` CLI command.
-pub fn command(ctx: Context, opt: GlobalsCommand) -> Result<()> {
-    match opt {
-        GlobalsCommand::Export(opt) => command_export(ctx, opt),
-        GlobalsCommand::Import(opt) => command_import(ctx, opt),
-        GlobalsCommand::DumpColliders(opt) => command_dump_colliders(ctx, opt),
-    }
-}
-
 /// The `globals export` CLI command.
 pub fn command_export(ctx: Context, opt: GlobalsExportOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
@@ -422,4 +413,13 @@ fn command_dump_colliders(ctx: Context, opt: GlobalsDumpCollidersOpt) -> Result<
         writeln!(out)?;
     }
     Ok(())
+}
+
+/// The `globals` CLI command.
+pub fn command(ctx: Context, opt: GlobalsCommand) -> Result<()> {
+    match opt {
+        GlobalsCommand::Export(opt) => command_export(ctx, opt),
+        GlobalsCommand::Import(opt) => command_import(ctx, opt),
+        GlobalsCommand::DumpColliders(opt) => command_dump_colliders(ctx, opt),
+    }
 }

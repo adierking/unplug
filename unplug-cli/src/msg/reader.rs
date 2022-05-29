@@ -1,25 +1,18 @@
-use super::common::*;
-use crate::context::Context;
+use super::constants::*;
+use super::MessageId;
 use crate::id::IdString;
-use crate::opt::MessagesImportOpt;
 use anyhow::{anyhow, bail, ensure, Result};
-use log::{info, warn};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
-use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Cursor};
+use std::io::BufRead;
 use std::mem;
 use std::str;
-use unplug::common::{SfxId, Text, WriteTo};
+use unplug::common::{SfxId, Text};
 use unplug::data::music::MUSIC;
 use unplug::data::sfx::SFX;
-use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
 use unplug::event::msg::*;
-use unplug::event::Script;
-use unplug::globals::GlobalsBuilder;
 
 /// Parses a 32-bit integer which may be represented in either hex or decimal.
 fn parse_int(string: &str) -> Result<i32> {
@@ -70,7 +63,7 @@ fn parse_sound(name: &str) -> Result<SfxId> {
 }
 
 /// Reads messages from an XML file.
-struct MessageReader<R: BufRead> {
+pub struct MessageReader<R: BufRead> {
     reader: Reader<R>,
     buf: Vec<u8>,
     command_buf: Vec<u8>,
@@ -80,14 +73,14 @@ struct MessageReader<R: BufRead> {
 
 impl<R: BufRead> MessageReader<R> {
     /// Constructs a new `MessageReader<R>` which reads XML data from `reader`.
-    fn new(reader: R) -> Self {
+    pub fn new(reader: R) -> Self {
         let mut reader = Reader::from_reader(reader);
         reader.trim_text(false).expand_empty_elements(true).check_comments(true);
         Self { reader, buf: vec![], command_buf: vec![], attr_buf: String::new(), in_text: false }
     }
 
     /// Reads the header of the XML file up through the `<messages>` tag.
-    fn read_header(&mut self) -> Result<()> {
+    pub fn read_header(&mut self) -> Result<()> {
         loop {
             match self.read_event()? {
                 Event::Start(e) => {
@@ -102,7 +95,7 @@ impl<R: BufRead> MessageReader<R> {
     }
 
     /// Reads from the `</messages>` tag to the end of the file.
-    fn read_footer(&mut self) -> Result<()> {
+    pub fn read_footer(&mut self) -> Result<()> {
         loop {
             match self.read_event()? {
                 Event::Eof => return Ok(()),
@@ -112,7 +105,7 @@ impl<R: BufRead> MessageReader<R> {
     }
 
     /// Reads a single message from the file. Returns `None` if there are no more messages.
-    fn read_message(&mut self) -> Result<Option<(MessageId, MsgArgs)>> {
+    pub fn read_message(&mut self) -> Result<Option<(MessageId, MsgArgs)>> {
         let mut id = None;
         loop {
             match self.read_event()?.into_owned() {
@@ -545,88 +538,6 @@ impl<R: BufRead> MessageReader<R> {
             Event::Comment(_) => Ok(()),
         }
     }
-}
-
-/// Replaces messages in `script` using `messages`. After a message is replaced, it is removed from
-/// the map.
-fn apply_messages(
-    source: MessageSource,
-    script: &mut Script,
-    messages: &mut HashMap<MessageId, MsgArgs>,
-) {
-    for (id, old_message) in iter_messages_mut(source, script) {
-        if let Some(new_message) = messages.remove(&id) {
-            *old_message = new_message;
-        }
-    }
-}
-
-/// The `messages import` CLI command.
-pub fn command(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
-    let mut ctx = ctx.open_read_write()?;
-    info!("Reading messages from {}", opt.input.to_str().unwrap());
-    let file = BufReader::new(File::open(opt.input)?);
-    let mut reader = MessageReader::new(file);
-    reader.read_header()?;
-    let mut messages = HashMap::new();
-    let mut sources = HashSet::new();
-    while let Some((id, mut msg)) = reader.read_message()? {
-        sources.insert(id.source);
-        msg.extra_data = encode_block_offset(id.block_offset).to_vec();
-        messages.insert(id, msg);
-    }
-    reader.read_footer()?;
-    if messages.is_empty() {
-        info!("No messages read - stopping");
-        return Ok(());
-    }
-    let mut sources: Vec<_> = sources.into_iter().collect();
-    sources.sort_unstable();
-
-    info!("Reading script globals");
-    let mut globals = ctx.read_globals()?;
-    let mut rebuilt_files = vec![];
-    let mut libs = globals.read_libs()?;
-    if sources[0] == MessageSource::Globals {
-        info!("Rebuilding globals.bin");
-        apply_messages(MessageSource::Globals, &mut libs.script, &mut messages);
-        let mut writer = Cursor::new(vec![]);
-        GlobalsBuilder::new().base(&mut globals).libs(&libs).write_to(&mut writer)?;
-        let bytes = writer.into_inner().into_boxed_slice();
-        rebuilt_files.push((GLOBALS_PATH.to_owned(), bytes));
-    }
-    drop(globals);
-
-    for source in sources {
-        let stage_id = match source {
-            MessageSource::Globals => continue,
-            MessageSource::Stage(id) => id,
-        };
-        let stage_def = StageDefinition::get(stage_id);
-        info!("Rebuilding {}.bin", stage_def.name);
-        let mut stage = ctx.read_stage(&libs, stage_id)?;
-        apply_messages(source, &mut stage.script, &mut messages);
-        let mut writer = Cursor::new(vec![]);
-        stage.write_to(&mut writer)?;
-        let bytes = writer.into_inner().into_boxed_slice();
-        rebuilt_files.push((stage_def.path(), bytes));
-    }
-
-    if !messages.is_empty() {
-        let mut unused_ids: Vec<_> = messages.into_iter().map(|(k, _)| k).collect();
-        unused_ids.sort_unstable();
-        for id in unused_ids {
-            warn!("Message was not found: {}", id.to_string());
-        }
-    }
-
-    info!("Updating game files");
-    let mut writer = ctx.begin_update();
-    for (path, bytes) in rebuilt_files {
-        writer = writer.write_qp_file_at(&path, Cursor::new(bytes))?;
-    }
-    writer.commit()?;
-    Ok(())
 }
 
 #[cfg(test)]

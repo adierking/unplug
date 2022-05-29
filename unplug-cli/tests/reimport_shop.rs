@@ -8,9 +8,9 @@ use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::shop::Shop;
 use unplug::stage::Stage;
+use unplug_cli::commands::shop;
 use unplug_cli::context::Context;
 use unplug_cli::opt::{ShopExportOpt, ShopImportOpt};
-use unplug_cli::shop;
 use unplug_test as common;
 
 #[test]
