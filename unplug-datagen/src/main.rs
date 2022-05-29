@@ -494,6 +494,7 @@ fn fixup_labels(objects: &mut [ObjectDefinition]) {
 struct ItemDefinition {
     id: u16,
     label: Label,
+    name: Label,
     object: Option<Label>,
     flags: Vec<String>,
 }
@@ -522,9 +523,11 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
                 if display_name.is_empty() {
                     flags.push(ITEM_FLAG_UNUSED.into());
                 }
+                let name = Label::snake_case(&label.0);
                 Some(ItemDefinition {
                     id: object.subclass,
                     label,
+                    name,
                     object: Some(object.label.clone()),
                     flags,
                 })
@@ -540,8 +543,9 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
         let id = i as u16;
         if items[i].id != id {
             let label = Label(format!("{}{}", UNKNOWN_PREFIX, id));
+            let name = Label::snake_case(&label.0);
             let flags = vec![ITEM_FLAG_UNUSED.into()];
-            items.insert(i, ItemDefinition { id, label, object: None, flags });
+            items.insert(i, ItemDefinition { id, label, name, object: None, flags });
         }
     }
     assert_eq!(items.len(), NUM_ITEMS);
@@ -941,7 +945,11 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
             _ => "None",
         };
         let flags: String = item.flags.iter().map(|f| format!(", {}", f)).collect();
-        writeln!(writer, "    {} => {} {{ {}{} }},", item.id, item.label.0, object, flags)?;
+        writeln!(
+            writer,
+            "    {} => {} {{ \"{}\", {}{} }},",
+            item.id, item.label.0, item.name.0, object, flags
+        )?;
     }
     write!(writer, "{}", ITEMS_FOOTER)?;
     writer.flush()?;
