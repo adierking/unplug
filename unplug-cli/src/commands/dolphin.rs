@@ -77,7 +77,7 @@ pub fn command(ctx: Context, opt: DolphinOpt) -> Result<()> {
         command.arg(DOLPHIN_OPT_NO_UI);
         command.arg(DOLPHIN_OPT_CONFIG).arg(DOLPHIN_CONFIG_NO_CONFIRM_STOP);
     }
-    if opt.no_capture {
+    if opt.wait {
         command.stdin(Stdio::inherit());
         command.stdout(Stdio::inherit());
         command.stderr(Stdio::inherit());
@@ -90,7 +90,7 @@ pub fn command(ctx: Context, opt: DolphinOpt) -> Result<()> {
     info!("Starting Dolphin");
     debug!("Command: {:?}", command);
     let mut child = command.spawn()?;
-    if !opt.no_wait {
+    if opt.wait {
         let status = child.wait()?;
         if !status.success() {
             bail!("Dolphin exited abnormally");

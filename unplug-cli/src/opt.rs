@@ -475,13 +475,9 @@ pub struct AudioPlayOpt {
 
 #[derive(Args)]
 pub struct DolphinOpt {
-    /// Do not wait for Dolphin to exit
+    /// Wait for Dolphin to exit and capture console output
     #[clap(short, long)]
-    pub no_wait: bool,
-
-    /// Do not capture Dolphin's console output
-    #[clap(long)]
-    pub no_capture: bool,
+    pub wait: bool,
 
     /// Show Dolphin's UI
     #[clap(long)]
