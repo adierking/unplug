@@ -38,7 +38,7 @@ fn compare_scripts(script1: &Script, script2: &Script) {
     for (&sub1, &sub2) in subs1.iter().zip(&subs2) {
         compare_subroutines(script1, sub1, script2, sub2, &mut visited);
     }
-    debug!("Compared {} block pairs", visited.len());
+    debug!("Compared {} blocks", visited.len());
 }
 
 fn compare_subroutines(
@@ -46,9 +46,10 @@ fn compare_subroutines(
     sub1: BlockId,
     script2: &Script,
     sub2: BlockId,
-    visited: &mut HashSet<(BlockId, BlockId)>,
+    visited: &mut HashSet<BlockId>,
 ) {
-    if !visited.insert((sub1, sub2)) {
+    assert_eq!(sub1, sub2);
+    if !visited.insert(sub1) {
         return;
     }
     let b1 = script1.block(sub1);
