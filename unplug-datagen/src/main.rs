@@ -293,10 +293,10 @@ struct Label(String);
 impl Label {
     /// Creates a `Label` from a string, changing the capitalization to PascalCase and discarding
     /// unusable characters.
-    fn from_string_lossy(path: &str) -> Self {
+    fn pascal_case(s: &str) -> Self {
         let mut name = String::new();
         let mut capitalize = true;
-        for ch in path.chars() {
+        for ch in s.chars() {
             if ch.is_alphabetic() {
                 let capitalized: String = if capitalize {
                     ch.to_uppercase().collect()
@@ -310,6 +310,31 @@ impl Label {
                 capitalize = true;
             } else if ch != '\'' {
                 capitalize = true;
+            }
+        }
+        Self(name)
+    }
+
+    /// Creates a `Label` from a string, changing the capitalization to snake_case and discarding
+    /// unusable characters.
+    fn snake_case(s: &str) -> Self {
+        let mut name = String::new();
+        let mut chars = s.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch.is_uppercase() {
+                name.extend(ch.to_lowercase());
+            } else if ch.is_alphanumeric() {
+                name.push(ch);
+            } else {
+                continue;
+            }
+            if let Some(next) = chars.peek().copied() {
+                let underscore = next.is_uppercase()
+                    || (ch.is_alphabetic() && !next.is_alphabetic())
+                    || (ch.is_digit(10) && !next.is_digit(10));
+                if underscore {
+                    name.push('_');
+                }
             }
         }
         Self(name)
@@ -366,6 +391,7 @@ enum ObjectClass {
 struct ObjectDefinition {
     id: u32,
     label: Label,
+    name: Label,
     model_path: String,
     class: ObjectClass,
     subclass: u16,
@@ -386,10 +412,11 @@ fn read_objects(
     let mut objects: Vec<ObjectDefinition> = Vec::with_capacity(count);
     for (i, raw) in raw_objects.iter().enumerate() {
         let model_path = read_model_path(dol, reader, raw.model_addr)?;
-        let label = Label::from_string_lossy(&model_path);
+        let label = Label::pascal_case(&model_path);
         objects.push(ObjectDefinition {
             id: i as u32,
             label,
+            name: Label::default(),
             model_path,
             class: ObjectClass::try_from(raw.class)?,
             subclass: raw.subclass,
@@ -458,6 +485,7 @@ fn fixup_labels(objects: &mut [ObjectDefinition]) {
                 break;
             }
         }
+        object.name = Label::snake_case(&label.0);
     }
 }
 
@@ -486,7 +514,7 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
                 let label = if let Some(&label) = ITEM_LABEL_OVERRIDES.get(&object.label.0) {
                     Label(label.into())
                 } else if !display_name.is_empty() {
-                    Label::from_string_lossy(&metadata.name.decode().unwrap())
+                    Label::pascal_case(&metadata.name.decode().unwrap())
                 } else {
                     Label(object.label.0.replace(STRIP_ITEM_LABEL, ""))
                 };
@@ -535,7 +563,7 @@ fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
         .map(|(id, atc)| {
             let display_name = atc.name.decode().unwrap();
             let label = if !display_name.is_empty() {
-                Label::from_string_lossy(&display_name)
+                Label::pascal_case(&display_name)
             } else {
                 Label(format!("{}{}", UNKNOWN_PREFIX, id))
             };
@@ -586,7 +614,7 @@ fn read_suits(
         // Get the display name and label from globals
         let display_name = globals[id as usize].name.decode()?;
         let mut label = if !display_name.is_empty() {
-            Label::from_string_lossy(&display_name)
+            Label::pascal_case(&display_name)
         } else {
             Label(format!("{}{}", UNKNOWN_PREFIX, id))
         };
@@ -668,12 +696,12 @@ fn read_stages(
             let display_name = metadata.name.decode()?;
             let display_desc = metadata.description.decode()?;
             if !display_name.is_empty() || !display_desc.is_empty() {
-                Label::from_string_lossy(&format!("{} {}", display_name, display_desc))
+                Label::pascal_case(&format!("{} {}", display_name, display_desc))
             } else {
-                Label::from_string_lossy(&name)
+                Label::pascal_case(&name)
             }
         } else {
-            Label::from_string_lossy(&name)
+            Label::pascal_case(&name)
         };
 
         definitions.push(StageDefinition { id: stage.index, label, name });
@@ -732,7 +760,7 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
         let name = filename.strip_suffix(MUSIC_EXT).unwrap().to_owned();
         let label = match MUSIC_LABEL_OVERRIDES.get(&name) {
             Some(&label) => Label(label.to_owned()),
-            None => Label::from_string_lossy(&name),
+            None => Label::pascal_case(&name),
         };
         definitions.push(MusicDefinition { id: id as u8, label, name, volume: music.volume });
     }
@@ -767,7 +795,7 @@ fn read_sfx_groups(
     for (id, ((name, sample_index), &material_index)) in
         group_indexes.into_iter().zip(&playlist.group_indexes).enumerate()
     {
-        let label = Label::from_string_lossy(name.strip_prefix(SOUND_BANK_PREFIX).unwrap());
+        let label = Label::pascal_case(name.strip_prefix(SOUND_BANK_PREFIX).unwrap());
         groups.push(SfxGroupDefinition {
             id: id as i16,
             label,
@@ -837,7 +865,7 @@ fn build_sfx(
                 // every file in the GameCube build uses lowercase, so this makes the sound file
                 // names more consistent with everything else.
                 let name = brsar.symbol(sound.name_index).to_lowercase();
-                let label = Label::from_string_lossy(&name);
+                let label = Label::pascal_case(&name);
                 defs.push(SfxDefinition { id: bank.next_id, label, name });
                 bank.next_id += 1;
             }
@@ -849,7 +877,7 @@ fn build_sfx(
     for bank in &mut states {
         while bank.next_id < bank.end_id {
             let name = format!("unk_{:>06x}", bank.next_id);
-            let label = Label::from_string_lossy(&name);
+            let label = Label::pascal_case(&name);
             defs.push(SfxDefinition { id: bank.next_id, label, name });
             bank.next_id += 1;
         }
@@ -890,8 +918,13 @@ fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result
     for object in objects {
         writeln!(
             writer,
-            "    {} => {} {{ {:?}, {}, \"{}\" }},",
-            object.id, object.label.0, object.class, object.subclass, object.model_path
+            "    {} => {} {{ \"{}\", {:?}, {}, \"{}\" }},",
+            object.id,
+            object.label.0,
+            object.name.0,
+            object.class,
+            object.subclass,
+            object.model_path,
         )?;
     }
     write!(writer, "{}", OBJECTS_FOOTER)?;
