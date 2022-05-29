@@ -1,7 +1,7 @@
 #![allow(trivial_numeric_casts, variant_size_differences)]
 
 use anyhow::{anyhow, Result};
-use clap::{Args, Parser};
+use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
 /// The minimum accepted volume level for playback.
@@ -10,12 +10,13 @@ const MIN_VOLUME: i32 = 0;
 const MAX_VOLUME: i32 = 100;
 
 #[derive(Parser)]
-#[clap(name = "Unplug")]
+#[clap(name = "Unplug", author, version)]
 #[clap(about = "Chibi-Robo! Plug Into Adventure! Modding Toolkit")]
+#[clap(help_expected = true, infer_subcommands = true)]
 pub struct Opt {
-    /// Enables debug logging
+    /// Show debug logs
     ///
-    /// Use -vv in non-distribution builds to enable trace logging
+    /// Use -vv in non-distribution builds to show trace logs as well
     #[clap(short, long, parse(from_occurrences), global(true))]
     pub verbose: u64,
 
@@ -31,187 +32,206 @@ pub struct Opt {
     pub context: ContextOpt,
 
     #[clap(subcommand)]
-    pub command: Subcommand,
+    pub command: Command,
 }
 
 #[derive(Args)]
 pub struct ConfigOpt {
-    /// Path to the config file to use. If it does not exist, it will be created.
+    /// Path to the config file to use (will be created if necessary)
     #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
     pub config: Option<PathBuf>,
 
-    /// Do not load or create a config file and use default settings instead.
+    /// Ignore the config file and use default settings instead
     #[clap(long, global(true), conflicts_with("config"))]
     pub no_config: bool,
 }
 
 #[derive(Args)]
 pub struct ContextOpt {
+    /// Run the command on an ISO
     #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
     pub iso: Option<PathBuf>,
 
-    /// Opens a project instead of the current one.
-    #[clap(long, value_name("NAME"), global(true))]
+    /// Use a project instead of the current one
+    #[clap(short, long, value_name("NAME"), global(true))]
     pub project: Option<String>,
 
-    /// Do not open any project.
+    /// Ignore the current project
     #[clap(long, global(true), conflicts_with("project"))]
     pub no_project: bool,
 }
 
-#[derive(clap::Subcommand)]
-pub enum Subcommand {
-    /// Manage Unplug configuration options
-    #[clap(subcommand)]
-    Config(ConfigCommand),
-
-    /// Manage Unplug projects
-    #[clap(subcommand)]
-    Project(ProjectCommand),
-
-    /// Commands for working with U8 archives
+#[derive(Subcommand)]
+pub enum Command {
+    /// View, edit, or extract U8 archives
     #[clap(subcommand)]
     Archive(ArchiveCommand),
 
-    /// Commands for working with audio resources
+    /// Export, import, or play audio resources
     #[clap(subcommand)]
     Audio(AudioCommand),
 
-    /// Commands for working with global metadata
+    /// Edit global metadata
     #[clap(subcommand)]
     Globals(GlobalsCommand),
 
-    /// Commands for working with ISO files
+    /// View, edit, or extract the game ISO
     #[clap(subcommand)]
     Iso(IsoCommand),
 
-    /// Commands for listing known game assets
+    /// List information about game assets
     #[clap(subcommand)]
     List(ListCommand),
 
-    /// Commands for editing cutscene messages
+    /// Edit cutscene messages
     #[clap(subcommand)]
     Messages(MessagesCommand),
 
-    /// Commands for working with qp.bin (alias for `archive dvd:qp.bin`)
+    /// View, edit, or extract qp.bin
+    ///
+    /// This is an alias for `archive dvd:qp.bin`.
     #[clap(subcommand)]
     Qp(QpCommand),
 
-    /// Commands for working with event scripts
+    /// Dump event scripts
     #[clap(subcommand)]
     Script(ScriptCommand),
 
-    /// Commands for editing the in-game shop
+    /// Edit the in-game shop
     #[clap(subcommand)]
     Shop(ShopCommand),
 
-    /// Runs Dolphin with the current project/ISO.
+    /// Edit Unplug configuration options
+    #[clap(subcommand, display_order = 1000)]
+    Config(ConfigCommand),
+
+    #[cfg(feature = "debug")]
+    #[clap(subcommand, display_order = 1001)]
+    /// Debugging commands (development builds only)
+    Debug(DebugCommand),
+
+    /// Run Dolphin with the current project/ISO
+    #[clap(display_order = 1002)]
     Dolphin(DolphinOpt),
 
-    /// Debugging commands (development builds only)
-    #[cfg(feature = "debug")]
-    #[clap(subcommand)]
-    Debug(DebugCommand),
+    /// Manage Unplug projects
+    #[clap(subcommand, display_order = 1003)]
+    Project(ProjectCommand),
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum ConfigCommand {
-    /// Resets all configuration options to their default values.
+    /// Reset all configuration options to their default values
     Clear,
-    /// Prints the absolute path to the config file.
+    /// Print the absolute path to the config file
     Path,
-    /// Prints the value of a setting.
+    /// Print the value of a setting
     #[clap(subcommand)]
     Get(GetSetting),
-    /// Sets the value of a setting.
+    /// Set the value of a setting
     #[clap(subcommand)]
     Set(SetSetting),
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum GetSetting {
-    /// A path to an ISO to load by default.
+    /// A path to an ISO to load by default
     DefaultIso,
-    /// The path to the Dolphin executable (or macOS app bundle) to run projects with.
+    /// The path to the Dolphin executable (or macOS app bundle) to run projects with
     DolphinPath,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum SetSetting {
-    /// A path to an ISO to load by default.
-    DefaultIso { path: Option<String> },
-    /// The path to the Dolphin executable (or macOS app bundle) to run projects with.
-    DolphinPath { path: Option<String> },
+    /// A path to an ISO to load by default
+    DefaultIso {
+        /// The new path
+        path: Option<String>,
+    },
+    /// The path to the Dolphin executable (or macOS app bundle) to run projects with
+    DolphinPath {
+        /// The new path
+        path: Option<String>,
+    },
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Displays info about a project (or the current one).
-    Info { name: Option<String> },
-    /// Lists defined projects.
+    /// Show information about a project (or the current one)
+    Info {
+        /// Name of the project to show
+        name: Option<String>,
+    },
+    /// List defined projects
     List,
-    /// Registers an existing project.
+    /// Register an existing project
     Add {
-        /// Path to the project file(s).
+        /// Path to the project file(s)
         #[clap(parse(from_os_str))]
         path: PathBuf,
-        /// Sets the project name (defaults to the filename)
+        /// The project name (defaults to the filename)
         #[clap(short, long)]
         name: Option<String>,
     },
-    /// Unregisters a project without deleting any of its files.
-    Forget { name: String },
-    /// Opens a project to be automatically used for future Unplug commands.
-    Open { name: String },
-    /// Closes the currently-open project.
+    /// Unregister a project without deleting any of its files
+    Forget {
+        /// Name of the project to forget
+        name: String,
+    },
+    /// Open a project to be automatically used for future Unplug commands
+    Open {
+        /// Name of the project to open
+        name: String,
+    },
+    /// Close the currently-open project
     Close,
 }
 
 #[derive(Args)]
 pub struct ListOpt {
-    /// Lists file offsets and sizes
+    /// List file offsets and sizes
     #[clap(short, long)]
     pub long: bool,
 
-    /// Sorts files by name (default)
+    /// Sort files by name (default)
     #[clap(long, overrides_with_all(&["by-offset", "by-size"]))]
     pub by_name: bool,
 
-    /// Sorts files by offset
+    /// Sort files by offset
     #[clap(long, overrides_with_all(&["by-name", "by-size"]))]
     pub by_offset: bool,
 
-    /// Sorts files by size
+    /// Sort files by size
     #[clap(long, overrides_with_all(&["by-name", "by-offset"]))]
     pub by_size: bool,
 
-    /// Reverses the sorting order
+    /// Sort in reverse order
     #[clap(long)]
     pub reverse: bool,
 }
 
 #[derive(Args)]
 pub struct ListIdsOpt {
-    /// Sorts by name (default)
+    /// Sort by name (default)
     #[clap(long, overrides_with_all(&["by-id"]))]
     pub by_name: bool,
 
-    /// Sorts by ID number
+    /// Sort by ID number
     #[clap(long, overrides_with_all(&["by-name"]))]
     pub by_id: bool,
 
-    /// Reverses the sorting order
+    /// Sort in reverse order
     #[clap(long)]
     pub reverse: bool,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum ListCommand {
-    /// Lists each item.
+    /// List each item
     Items(ListItemsOpt),
-    /// Lists each type of equipment.
+    /// List each type of equipment
     Equipment(ListEquipmentOpt),
-    /// Lists each stage.
+    /// List each stage
     Stages(ListStagesOpt),
 }
 
@@ -220,7 +240,7 @@ pub struct ListItemsOpt {
     #[clap(flatten)]
     pub settings: ListIdsOpt,
 
-    /// Includes items without names
+    /// Include items without names
     #[clap(long)]
     pub show_unknown: bool,
 }
@@ -230,7 +250,7 @@ pub struct ListEquipmentOpt {
     #[clap(flatten)]
     pub settings: ListIdsOpt,
 
-    /// Includes equipment without names
+    /// Include equipment without names
     #[clap(long)]
     pub show_unknown: bool,
 }
@@ -241,17 +261,17 @@ pub struct ListStagesOpt {
     pub settings: ListIdsOpt,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum ScriptCommand {
-    /// Dumps the script data from a single stage
+    /// Dump the script data from a single stage
     Dump(ScriptDumpOpt),
-    /// Dumps all script data
+    /// Dump all script data
     DumpAll(ScriptDumpAllOpt),
 }
 
 #[derive(Args)]
 pub struct ScriptDumpFlags {
-    /// Dumps unknown structs
+    /// Dump unknown structs
     #[clap(long)]
     pub dump_unknown: bool,
 
@@ -265,7 +285,7 @@ pub struct ScriptDumpOpt {
     /// Name of the stage to dump, or "globals" to dump globals
     pub stage: String,
 
-    /// Redirects output to a file instead of stdout
+    /// Redirect output to a file instead of stdout
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
@@ -283,11 +303,11 @@ pub struct ScriptDumpAllOpt {
     pub flags: ScriptDumpFlags,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum MessagesCommand {
-    /// Exports messages to an XML file
+    /// Export messages to an XML file
     Export(MessagesExportOpt),
-    /// Imports messages from an XML file
+    /// Import messages from an XML file
     Import(MessagesImportOpt),
 }
 
@@ -305,13 +325,13 @@ pub struct MessagesImportOpt {
     pub input: PathBuf,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum GlobalsCommand {
-    /// Exports global metadata to a JSON file
+    /// Export global metadata to a JSON file
     Export(GlobalsExportOpt),
-    /// Imports global metadata from a JSON file
+    /// Import global metadata from a JSON file
     Import(GlobalsImportOpt),
-    /// Dumps collision data to a text file
+    /// Dump collision data to a text file
     DumpColliders(GlobalsDumpCollidersOpt),
 }
 
@@ -321,7 +341,7 @@ pub struct GlobalsExportOpt {
     #[clap(short, long)]
     pub compact: bool,
 
-    /// Redirects output to a file instead of stdout
+    /// Redirect output to a file instead of stdout
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 }
@@ -335,16 +355,16 @@ pub struct GlobalsImportOpt {
 
 #[derive(Args)]
 pub struct GlobalsDumpCollidersOpt {
-    /// Redirects output to a file instead of stdout
+    /// Redirect output to a file instead of stdout
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum ShopCommand {
-    /// Exports shop data to a JSON file
+    /// Export shop data to a JSON file
     Export(ShopExportOpt),
-    /// Imports shop data from a JSON file
+    /// Import shop data from a JSON file
     Import(ShopImportOpt),
 }
 
@@ -354,7 +374,7 @@ pub struct ShopExportOpt {
     #[clap(short, long)]
     pub compact: bool,
 
-    /// Redirects output to a file instead of stdout
+    /// Redirect output to a file instead of stdout
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 }
@@ -366,25 +386,25 @@ pub struct ShopImportOpt {
     pub input: PathBuf,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum AudioCommand {
-    /// Displays info about an audio resource
+    /// Show information about an audio resource
     Info(AudioInfoOpt),
-    /// Exports one or more audio resources to wav files
+    /// Export one or more audio resources to wav files
     Export(AudioExportOpt),
-    /// Exports an entire sample bank to a directory
+    /// Export an entire sample bank to a directory
     ExportBank(AudioExportBankOpt),
-    /// Exports all audio resources to a directory
+    /// Export all audio resources to a directory
     ExportAll(AudioExportAllOpt),
-    /// Imports an audio resource from an audio file
+    /// Import an audio resource from an audio file
     Import(AudioImportOpt),
-    /// Plays an audio resource
+    /// Play an audio resource
     Play(AudioPlayOpt),
 }
 
 #[derive(Args)]
 pub struct AudioExportSettings {
-    /// If an audio file has cue points, exports a .labels.txt file which defines the cues using
+    /// If an audio file has cue points, export a .labels.txt file which defines the cues using
     /// Audacity's label track format
     #[clap(long)]
     pub labels: bool,
@@ -392,14 +412,14 @@ pub struct AudioExportSettings {
 
 #[derive(Args)]
 pub struct AudioImportSettings {
-    /// If an audio file has a .labels.txt file alongside it, import Audacity labels from it.
+    /// If an audio file has a .labels.txt file alongside it, import Audacity labels from it
     #[clap(long)]
     pub labels: bool,
 }
 
 #[derive(Args)]
 pub struct AudioInfoOpt {
-    /// The name or path of the audio resource.
+    /// The name or path of the audio resource
     pub name: String,
 }
 
@@ -484,17 +504,17 @@ pub struct DolphinOpt {
     pub ui: bool,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum IsoCommand {
-    /// Shows information about the ISO.
+    /// Show information about the ISO
     Info,
-    /// Lists files in the ISO.
+    /// List files in the ISO
     List(IsoListOpt),
-    /// Extracts files from the ISO.
+    /// Extract files from the ISO
     Extract(IsoExtractOpt),
-    /// Extracts all files from the ISO.
+    /// Extract all files from the ISO
     ExtractAll(IsoExtractAllOpt),
-    /// Replaces a file in the ISO.
+    /// Replace a file in the ISO
     Replace(IsoReplaceOpt),
 }
 
@@ -514,6 +534,7 @@ pub struct IsoExtractOpt {
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
+    /// Paths of files to extract
     pub paths: Vec<String>,
 }
 
@@ -535,35 +556,35 @@ pub struct IsoReplaceOpt {
     pub src_path: PathBuf,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum ArchiveCommand {
-    /// Shows information about the archive.
+    /// Show information about the archive
     Info {
         /// Path to the U8 archive
         path: String,
     },
-    /// Lists files in the archive.
+    /// List files in the archive
     List {
         /// Path to the U8 archive
         path: String,
         #[clap(flatten)]
         opt: ArchiveListOpt,
     },
-    /// Extracts files from the archive.
+    /// Extract files from the archive
     Extract {
         /// Path to the U8 archive
         path: String,
         #[clap(flatten)]
         opt: ArchiveExtractOpt,
     },
-    /// Extracts all files from the archive.
+    /// Extract all files from the archive
     ExtractAll {
         /// Path to the U8 archive
         path: String,
         #[clap(flatten)]
         opt: ArchiveExtractAllOpt,
     },
-    /// Replaces a file in the archive.
+    /// Replace a file in the archive
     Replace {
         /// Path to the U8 archive
         path: String,
@@ -588,6 +609,7 @@ pub struct ArchiveExtractOpt {
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: Option<PathBuf>,
 
+    /// Paths of files to extract
     pub paths: Vec<String>,
 }
 
@@ -610,22 +632,22 @@ pub struct ArchiveReplaceOpt {
 }
 
 #[cfg(feature = "debug")]
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum DebugCommand {
     /// Read and rewrite script data
     RebuildScripts,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum QpCommand {
-    /// Shows information about qp.bin.
+    /// Show information about qp.bin
     Info,
-    /// Lists files in qp.bin.
+    /// List files in qp.bin
     List(ArchiveListOpt),
-    /// Extracts files from qp.bin.
+    /// Extract files from qp.bin
     Extract(ArchiveExtractOpt),
-    /// Extracts all files from qp.bin.
+    /// Extract all files from qp.bin
     ExtractAll(ArchiveExtractAllOpt),
-    /// Replaces a file in qp.bin.
+    /// Replace a file in qp.bin
     Replace(ArchiveReplaceOpt),
 }

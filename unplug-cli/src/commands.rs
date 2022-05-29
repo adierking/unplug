@@ -14,25 +14,25 @@ pub mod shop;
 pub mod debug;
 
 use crate::context::Context;
-use crate::opt::Subcommand;
+use crate::opt::Command;
 use anyhow::Result;
 
 /// Runs a CLI command using `ctx`.
-pub fn execute(ctx: Context, command: Subcommand) -> Result<()> {
+pub fn execute(ctx: Context, command: Command) -> Result<()> {
     match command {
-        Subcommand::Archive(opt) => archive::command(ctx, opt),
-        Subcommand::Audio(opt) => audio::command(ctx, opt),
-        Subcommand::Config(opt) => config::command(ctx, opt),
-        Subcommand::Dolphin(opt) => dolphin::command(ctx, opt),
-        Subcommand::Globals(opt) => globals::command(ctx, opt),
-        Subcommand::Iso(opt) => iso::command(ctx, opt),
-        Subcommand::List(opt) => list::command(ctx, opt),
-        Subcommand::Messages(opt) => messages::command(ctx, opt),
-        Subcommand::Project(opt) => project::command(ctx, opt),
-        Subcommand::Qp(opt) => archive::command_qp(ctx, opt),
-        Subcommand::Script(opt) => script::command(ctx, opt),
-        Subcommand::Shop(opt) => shop::command(ctx, opt),
+        Command::Archive(opt) => archive::command(ctx, opt),
+        Command::Audio(opt) => audio::command(ctx, opt),
+        Command::Config(opt) => config::command(ctx, opt),
+        Command::Dolphin(opt) => dolphin::command(ctx, opt),
+        Command::Globals(opt) => globals::command(ctx, opt),
+        Command::Iso(opt) => iso::command(ctx, opt),
+        Command::List(opt) => list::command(ctx, opt),
+        Command::Messages(opt) => messages::command(ctx, opt),
+        Command::Project(opt) => project::command(ctx, opt),
+        Command::Qp(opt) => archive::command_qp(ctx, opt),
+        Command::Script(opt) => script::command(ctx, opt),
+        Command::Shop(opt) => shop::command(ctx, opt),
         #[cfg(feature = "debug")]
-        Subcommand::Debug(opt) => debug::command(ctx, opt),
+        Command::Debug(opt) => debug::command(ctx, opt),
     }
 }
