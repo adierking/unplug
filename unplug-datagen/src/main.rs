@@ -556,6 +556,7 @@ fn build_items(objects: &[ObjectDefinition], globals: &[Item]) -> Vec<ItemDefini
 struct AtcDefinition {
     id: u16,
     label: Label,
+    name: Label,
 }
 
 /// Builds the ATC list from globals data.
@@ -571,7 +572,8 @@ fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
             } else {
                 Label(format!("{}{}", UNKNOWN_PREFIX, id))
             };
-            AtcDefinition { id: id as u16, label }
+            let name = Label::snake_case(&label.0);
+            AtcDefinition { id: id as u16, label, name }
         })
         .collect()
 }
@@ -960,7 +962,7 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
 fn write_atcs(mut writer: impl Write, atcs: &[AtcDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, ATCS_HEADER)?;
     for atc in atcs {
-        writeln!(writer, "    {} => {},", atc.id, atc.label.0)?;
+        writeln!(writer, "    {} => {} {{ \"{}\" }},", atc.id, atc.label.0, atc.name.0)?;
     }
     write!(writer, "{}", ATCS_FOOTER)?;
     writer.flush()?;
