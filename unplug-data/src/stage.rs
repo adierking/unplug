@@ -1,4 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::fmt::{self, Debug, Formatter};
 
 /// The number of main (non-dev) stages.
 pub const NUM_MAIN_STAGES: usize = 30;
@@ -22,8 +23,10 @@ const STAGE_EXT: &str = ".bin";
 pub struct StageDefinition {
     /// The stage's ID.
     pub id: Stage,
-    /// The the name of the stage file without the filename or extension.
+    /// The name of the stage file without the filename or extension.
     pub name: &'static str,
+    /// The stage's title in the English version of the game.
+    pub title: &'static str,
 }
 
 impl StageDefinition {
@@ -55,10 +58,10 @@ impl StageDefinition {
 
 macro_rules! declare_stages {
     {
-        $($val:literal => $id:ident { $name:literal }),*
+        $($val:literal => $id:ident { $name:literal, $title:literal }),*
         $(,)*
     } => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i32)]
         pub enum Stage {
@@ -70,9 +73,16 @@ macro_rules! declare_stages {
                 StageDefinition {
                     id: Stage::$id,
                     name: $name,
+                    title: $title,
                 }
             ),*
         ];
+    }
+}
+
+impl Debug for Stage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "<{}>", StageDefinition::get(*self).name)
     }
 }
 
@@ -88,8 +98,10 @@ mod tests {
         let stage = StageDefinition::get(Stage::LivingRoom);
         assert_eq!(stage.id, Stage::LivingRoom);
         assert_eq!(stage.name, "stage07");
+        assert_eq!(stage.title, "Living Room");
         assert_eq!(stage.path(), "bin/e/stage07.bin");
         assert!(!stage.is_dev());
+        assert_eq!(format!("{:?}", stage.id), "<stage07>");
     }
 
     #[test]
@@ -99,6 +111,7 @@ mod tests {
         assert_eq!(stage.name, "ahk");
         assert_eq!(stage.path(), "bin/e/ahk.bin");
         assert!(stage.is_dev());
+        assert_eq!(format!("{:?}", stage.id), "<ahk>");
     }
 
     #[test]

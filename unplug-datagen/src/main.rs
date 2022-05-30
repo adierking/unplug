@@ -668,6 +668,7 @@ struct StageDefinition {
     id: i32,
     label: Label,
     name: String,
+    title: String,
 }
 
 /// Reads the stage list from the executable.
@@ -696,21 +697,25 @@ fn read_stages(
         reader.seek(SeekFrom::Start(name_offset))?;
         let name = CString::read_from(reader)?.into_string()?;
 
+        let mut title = String::new();
         let label = if stage.index < FIRST_DEV_STAGE {
             // Try to build the stage name based on the name and description in globals
             let metadata = &globals[stage.index as usize];
             let display_name = metadata.name.decode()?;
             let display_desc = metadata.description.decode()?;
-            if !display_name.is_empty() || !display_desc.is_empty() {
-                Label::pascal_case(&format!("{} {}", display_name, display_desc))
+            title = format!("{} {}", display_name.trim(), display_desc.trim()).trim().to_owned();
+            if !title.is_empty() {
+                Label::pascal_case(&title)
             } else {
                 Label::pascal_case(&name)
             }
         } else {
             Label::pascal_case(&name)
         };
-
-        definitions.push(StageDefinition { id: stage.index, label, name });
+        if title.is_empty() {
+            title = name.clone();
+        }
+        definitions.push(StageDefinition { id: stage.index, label, name, title });
     }
     Ok(definitions)
 }
@@ -984,7 +989,11 @@ fn write_suits(mut writer: impl Write, suits: &[SuitDefinition]) -> Result<()> {
 fn write_stages(mut writer: impl Write, stages: &[StageDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, STAGES_HEADER)?;
     for stage in stages {
-        writeln!(writer, "    {} => {} {{ \"{}\" }},", stage.id, stage.label.0, stage.name)?;
+        writeln!(
+            writer,
+            "    {} => {} {{ \"{}\", \"{}\" }},",
+            stage.id, stage.label.0, stage.name, stage.title
+        )?;
     }
     write!(writer, "{}", STAGES_FOOTER)?;
     writer.flush()?;
