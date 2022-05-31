@@ -123,7 +123,8 @@ bitflags! {
         const UNK_10 = 1 << 10;
         const UNK_11 = 1 << 11;
         const UNK_12 = 1 << 12;
-        const UNK_13 = 1 << 13;
+        /// The object shows in the floor reflection.
+        const REFLECT = 1 << 13;
         const UNK_14 = 1 << 14;
         const UNK_15 = 1 << 15;
         /// The object can be picked up and carried.
@@ -151,7 +152,8 @@ bitflags! {
         /// The object responds to projectiles.
         const PROJECTILE = 1 << 27;
         const UNK_28 = 1 << 28;
-        const UNK_29 = 1 << 29;
+        /// The object shows in the mirrors on the internal_test_wardrobe objects.
+        const MIRROR = 1 << 29;
         const UNK_30 = 1 << 30;
         /// The object is killed.
         const DEAD = 1 << 31;
