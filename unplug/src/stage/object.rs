@@ -21,8 +21,8 @@ pub struct ObjectPlacement {
     pub scale_y: i32,
     pub scale_z: i32,
     pub unk_40: i32,
-    pub flag_index: Option<NonZeroI32>,
-    pub unk_48: i32,
+    pub spawn_flag: Option<NonZeroI32>,
+    pub variant: i32,
     pub flags: ObjectFlags,
     pub script: Option<BlockId>,
 }
@@ -46,8 +46,8 @@ impl<R: Read + ?Sized> ReadOptionFrom<R> for ObjectPlacement {
             scale_y: reader.read_i32::<BE>()?,
             scale_z: reader.read_i32::<BE>()?,
             unk_40: reader.read_i32::<BE>()?,
-            flag_index: NonZeroI32::new(reader.read_i32::<BE>()?),
-            unk_48: reader.read_i32::<BE>()?,
+            spawn_flag: NonZeroI32::new(reader.read_i32::<BE>()?),
+            variant: reader.read_i32::<BE>()?,
             flags: ObjectFlags::from_bits_truncate(reader.read_u32::<BE>()?),
             script: None,
         }))
@@ -68,8 +68,8 @@ impl<W: Write + ?Sized> WriteTo<W> for ObjectPlacement {
         writer.write_i32::<BE>(self.scale_y)?;
         writer.write_i32::<BE>(self.scale_z)?;
         writer.write_i32::<BE>(self.unk_40)?;
-        writer.write_i32::<BE>(self.flag_index.map(|i| i.get()).unwrap_or(0))?;
-        writer.write_i32::<BE>(self.unk_48)?;
+        writer.write_i32::<BE>(self.spawn_flag.map(|i| i.get()).unwrap_or(0))?;
+        writer.write_i32::<BE>(self.variant)?;
         writer.write_u32::<BE>(self.flags.bits())?;
         Ok(())
     }
@@ -87,14 +87,16 @@ impl<W: Write + ?Sized> WriteOptionTo<W> for ObjectPlacement {
 
 bitflags! {
     pub struct ObjectFlags: u32 {
-        const UNK_0 = 1 << 0;
+        /// Spawn the object when the stage loads.
+        const SPAWN = 1 << 0;
         const UNK_1 = 1 << 1;
         const UNK_2 = 1 << 2;
         const UNK_3 = 1 << 3;
         const UNK_4 = 1 << 4;
         const UNK_5 = 1 << 5;
         const UNK_6 = 1 << 6;
-        const UNK_7 = 1 << 7;
+        /// The object is an item.
+        const ITEM = 1 << 7;
         const UNK_8 = 1 << 8;
         const UNK_9 = 1 << 9;
         const UNK_10 = 1 << 10;
@@ -107,19 +109,24 @@ bitflags! {
         const CARRY = 1 << 16;
         /// The player can climb on the object.
         const CLIMB = 1 << 17;
-        const UNK_18 = 1 << 18;
+        /// The player can clamber up to surfaces on the object.
+        const CLAMBER = 1 << 18;
         const UNK_19 = 1 << 19;
         /// The player can climb up the object as a rope.
         const ROPE = 1 << 20;
-        /// The object is a ledge that warns the player when they're about to fall.
-        const LEDGE = 1 << 21;
+        /// The object is a staircase (i.e. it has internal ledges).
+        /// unk_40 indicates the stair height.
+        const STAIRS = 1 << 21;
         const UNK_22 = 1 << 22;
-        const UNK_23 = 1 << 23;
-        const UNK_24 = 1 << 24;
+        /// The player can grab the object and push/pull it.
+        const GRAB = 1 << 23;
+        /// The object can be interacted with by walking up to it and pressing A.
+        const INTERACT = 1 << 24;
         const UNK_25 = 1 << 25;
-        /// The object responds to attachments.
-        const ATC = 1 << 26;
-        const UNK_27 = 1 << 27;
+        /// The object responds to the toothbrush.
+        const TOOTHBRUSH = 1 << 26;
+        /// The object responds to the squirter.
+        const SQUIRTER = 1 << 27;
         const UNK_28 = 1 << 28;
         const UNK_29 = 1 << 29;
         const UNK_30 = 1 << 30;
