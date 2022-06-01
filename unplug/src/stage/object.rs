@@ -109,18 +109,26 @@ bitflags! {
     pub struct ObjectFlags: u32 {
         /// Spawn the object when the stage loads.
         const SPAWN = 1 << 0;
-        const UNK_1 = 1 << 1;
-        const UNK_2 = 1 << 2;
+        /// The object can obscure the player without showing any silhouette.
+        const OPAQUE = 1 << 1;
+        /// Blaster projectiles can pass through the object.
+        const UNBLASTABLE = 1 << 2;
         /// The radar will point to the object if it is nearby.
         const RADAR = 1 << 3;
-        const UNK_4 = 1 << 4;
-        const UNK_5 = 1 << 5;
-        const UNK_6 = 1 << 6;
-        /// The object is an item.
-        const ITEM = 1 << 7;
-        const UNK_8 = 1 << 8;
+        /// The player can pass through the object.
+        const INTANGIBLE = 1 << 4;
+        /// The object is drawn fully transparent. This isn't the same as the object not rendering
+        /// at all because it may still obscure some objects and shadows.
+        const INVISIBLE = 1 << 5;
+        /// The object is lit using a toon effect.
+        const TOON = 1 << 6;
+        /// The object flashes like an item.
+        const FLASH = 1 << 7;
+        /// Possibly not an accurate name, need to look into this more.
+        const UNLIT = 1 << 8;
         const UNK_9 = 1 << 9;
-        const UNK_10 = 1 << 10;
+        /// The object can be destroyed with the blaster.
+        const DESTRUCTIBLE = 1 << 10;
         const UNK_11 = 1 << 11;
         const UNK_12 = 1 << 12;
         /// The object shows in the floor reflection.
@@ -154,6 +162,7 @@ bitflags! {
         const UNK_28 = 1 << 28;
         /// The object shows in the mirrors on the internal_test_wardrobe objects.
         const MIRROR = 1 << 29;
+        /// Unused?
         const UNK_30 = 1 << 30;
         /// The object is killed.
         const DEAD = 1 << 31;
