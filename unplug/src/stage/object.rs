@@ -134,7 +134,8 @@ bitflags! {
         /// The object shows in the floor reflection.
         const REFLECT = 1 << 13;
         const UNK_14 = 1 << 14;
-        const UNK_15 = 1 << 15;
+        /// The object is culled when not being looked at. Doesn't work well with large objects.
+        const CULL = 1 << 15;
         /// The object can be picked up and carried.
         const CARRY = 1 << 16;
         /// The player can climb on the object.
