@@ -112,7 +112,7 @@ bitflags! {
         /// The object can obscure the player without showing any silhouette.
         const OPAQUE = 1 << 1;
         /// Blaster projectiles can pass through the object.
-        const UNBLASTABLE = 1 << 2;
+        const BLASTTHRU = 1 << 2;
         /// The radar will point to the object if it is nearby.
         const RADAR = 1 << 3;
         /// The player can pass through the object.
@@ -129,11 +129,16 @@ bitflags! {
         const UNK_9 = 1 << 9;
         /// The object can be destroyed with the blaster.
         const DESTRUCTIBLE = 1 << 10;
-        const UNK_11 = 1 << 11;
-        const UNK_12 = 1 << 12;
+        /// The object allows other objects to be pushed through it.
+        const PUSHTHRU = 1 << 11;
+        /// The object will not be prioritized in interactions. If this flag is unset and the player
+        /// presses A in the vicinity of the object, they will automatically walk up and interact
+        /// with it.
+        const LOWPRI = 1 << 12;
         /// The object shows in the floor reflection.
         const REFLECT = 1 << 13;
-        const UNK_14 = 1 << 14;
+        /// The object blocks other objects from being pushed through it.
+        const PUSHBLOCK = 1 << 14;
         /// The object is culled when not being looked at. Doesn't work well with large objects.
         const CULL = 1 << 15;
         /// The object can be picked up and carried.
