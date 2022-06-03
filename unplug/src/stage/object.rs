@@ -8,6 +8,7 @@ use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::num::NonZeroI32;
 
+/// Defines the placement of an object in a stage.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectPlacement {
     /// The object being placed.
@@ -35,8 +36,9 @@ pub struct ObjectPlacement {
     /// - Sometimes used with npc_spider_1 and npc_spider_2, unknown how
     /// - Used with house_r_chibi_h_hasi (bridge utilibot), unknown how
     pub data: i32,
-    /// A per-level flag index which is used to control whether the object should spawn. Typically
-    /// the purpose of this is to make it so that items don't respawn after you pick them up.
+    /// A per-level and per-object-type flag index which is used to control whether the object
+    /// should spawn. Typically the purpose of this is to make it so that items don't respawn after
+    /// you pick them up.
     pub spawn_flag: Option<NonZeroI32>,
     /// An object-dependent variant index. For example, soda cans use this to select which texture
     /// to display.
@@ -106,16 +108,17 @@ impl<W: Write + ?Sized> WriteOptionTo<W> for ObjectPlacement {
 }
 
 bitflags! {
+    /// Bitflags which define how an object behaves.
     pub struct ObjectFlags: u32 {
-        /// Spawn the object when the stage loads.
+        /// The object spawns when the stage loads.
         const SPAWN = 1 << 0;
         /// The object can obscure the player without showing any silhouette.
         const OPAQUE = 1 << 1;
-        /// Blaster projectiles can pass through the object.
+        /// The object allows blaster projectiles to pass through it.
         const BLASTTHRU = 1 << 2;
         /// The radar will point to the object if it is nearby.
         const RADAR = 1 << 3;
-        /// The player can pass through the object.
+        /// The object is not solid and other objects can pass through it.
         const INTANGIBLE = 1 << 4;
         /// The object is drawn fully transparent. This isn't the same as the object not rendering
         /// at all because it may still obscure some objects and shadows.
@@ -124,25 +127,27 @@ bitflags! {
         const TOON = 1 << 6;
         /// The object flashes like an item.
         const FLASH = 1 << 7;
-        /// Possibly not an accurate name, need to look into this more.
+        /// Possibly not an accurate name, need to look into this more
         const UNLIT = 1 << 8;
-        const UNK_9 = 1 << 9;
+        /// The object always shows in the utilibot camera window.
+        const BOTCAM = 1 << 9;
         /// The object can be destroyed with the blaster.
-        const DESTRUCTIBLE = 1 << 10;
-        /// The object allows other objects to be pushed through it.
+        const EXPLODE = 1 << 10;
+        /// The object allows other objects to be pushed through it. Some object classes permit this
+        /// by default.
         const PUSHTHRU = 1 << 11;
-        /// The object will not be prioritized in interactions. If this flag is unset and the player
-        /// presses A in the vicinity of the object, they will automatically walk up and interact
-        /// with it.
+        /// The object will not be prioritized in interactions. If this is not set and the player
+        /// presses A close to the object, they will automatically walk up and interact with it.
         const LOWPRI = 1 << 12;
         /// The object shows in the floor reflection.
         const REFLECT = 1 << 13;
-        /// The object blocks other objects from being pushed through it.
+        /// The object blocks other objects from being pushed through it. Some object classes block
+        /// pushing by default.
         const PUSHBLOCK = 1 << 14;
         /// The object is culled when not being looked at. Doesn't work well with large objects.
         const CULL = 1 << 15;
-        /// The object can be picked up and carried.
-        const CARRY = 1 << 16;
+        /// The player can lift the object up.
+        const LIFT = 1 << 16;
         /// The player can climb on the object.
         const CLIMB = 1 << 17;
         /// The player can clamber up to surfaces on the object.
@@ -151,10 +156,11 @@ bitflags! {
         const LADDER = 1 << 19;
         /// The player can climb up the object as a rope.
         const ROPE = 1 << 20;
-        /// The object is a staircase (i.e. it has internal ledges).
+        /// The object is a staircase (i.e. it has internal ledges). The object's data value
+        /// indicates the height of each step.
         const STAIRS = 1 << 21;
-        /// Gravity applies to the object.
-        const GRAVITY = 1 << 22;
+        /// The object will fall if it is pushed off a ledge.
+        const FALL = 1 << 22;
         /// The player can grab the object and push/pull it.
         const GRAB = 1 << 23;
         /// The object can be interacted with by walking up to it and pressing A.
@@ -165,13 +171,14 @@ bitflags! {
         const ATC = 1 << 26;
         /// The object responds to projectiles.
         const PROJECTILE = 1 << 27;
+        /// Unknown, used only by a few objects
         const UNK_28 = 1 << 28;
-        /// The object shows in the mirrors on the internal_test_wardrobe objects.
+        /// The object shows in mirrors.
         const MIRROR = 1 << 29;
-        /// Unused?
+        /// Unknown, not used by any stages
         const UNK_30 = 1 << 30;
-        /// The object is killed.
-        const DEAD = 1 << 31;
+        /// The object is disabled and cannot be spawned.
+        const DISABLED = 1 << 31;
     }
 }
 
