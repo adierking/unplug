@@ -135,17 +135,41 @@ mod script {
     }
 }
 
-/// 3D vector for storing object position/rotation/scale.
-#[derive(Serialize, Deserialize)]
-struct Vec3 {
+/// Serializable 3D vector which stores integers.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Vec3I {
     x: i32,
     y: i32,
     z: i32,
 }
 
-impl Vec3 {
+impl Vec3I {
     fn new(x: i32, y: i32, z: i32) -> Self {
         Self { x, y, z }
+    }
+}
+
+/// Serializable 3D vector which stores floats converted to/from hundredths.
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+struct Vec3F {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+impl From<Vec3I> for Vec3F {
+    fn from(v: Vec3I) -> Self {
+        Self { x: f64::from(v.x) / 100.0, y: f64::from(v.y) / 100.0, z: f64::from(v.z) / 100.0 }
+    }
+}
+
+impl From<Vec3F> for Vec3I {
+    fn from(v: Vec3F) -> Self {
+        Self {
+            x: (v.x * 100.0).round() as _,
+            y: (v.y * 100.0).round() as _,
+            z: (v.z * 100.0).round() as _,
+        }
     }
 }
 
@@ -155,9 +179,9 @@ impl Vec3 {
 struct ObjectPlacementDef {
     #[serde(with = "object")]
     object: Object,
-    position: Vec3,
-    rotation: Vec3,
-    scale: Vec3,
+    position: Vec3F,
+    rotation: Vec3I,
+    scale: Vec3F,
     data: i32,
     spawn_flag: Option<NonZeroI32>,
     variant: i32,
@@ -173,9 +197,9 @@ impl From<ObjectPlacement> for ObjectPlacementDef {
     fn from(obj: ObjectPlacement) -> Self {
         Self {
             object: obj.id,
-            position: Vec3::new(obj.x, obj.y, obj.z),
-            rotation: Vec3::new(obj.rotate_x, obj.rotate_y, obj.rotate_z),
-            scale: Vec3::new(obj.scale_x, obj.scale_y, obj.scale_z),
+            position: Vec3I::new(obj.x, obj.y, obj.z).into(),
+            rotation: Vec3I::new(obj.rotate_x, obj.rotate_y, obj.rotate_z),
+            scale: Vec3I::new(obj.scale_x, obj.scale_y, obj.scale_z).into(),
             data: obj.data,
             spawn_flag: obj.spawn_flag,
             variant: obj.variant,
@@ -187,17 +211,19 @@ impl From<ObjectPlacement> for ObjectPlacementDef {
 
 impl From<ObjectPlacementDef> for ObjectPlacement {
     fn from(obj: ObjectPlacementDef) -> Self {
+        let position = Vec3I::from(obj.position);
+        let scale = Vec3I::from(obj.scale);
         Self {
             id: obj.object,
-            x: obj.position.x,
-            y: obj.position.y,
-            z: obj.position.z,
+            x: position.x,
+            y: position.y,
+            z: position.z,
             rotate_x: obj.rotation.x,
             rotate_y: obj.rotation.y,
             rotate_z: obj.rotation.z,
-            scale_x: obj.scale.x,
-            scale_y: obj.scale.y,
-            scale_z: obj.scale.z,
+            scale_x: scale.x,
+            scale_y: scale.y,
+            scale_z: scale.z,
             data: obj.data,
             spawn_flag: obj.spawn_flag,
             variant: obj.variant,
