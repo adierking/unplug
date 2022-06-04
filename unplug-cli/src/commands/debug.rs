@@ -25,7 +25,7 @@ fn command_rebuild_scripts(ctx: Context) -> Result<()> {
     update = update.write_globals(GlobalsBuilder::new().base(&mut globals).libs(&libs))?;
     for (id, stage) in stages {
         info!("Rebuilding {}.bin", StageDefinition::get(id).name);
-        update = update.write_stage(id, stage)?;
+        update = update.write_stage(id, &stage)?;
     }
 
     info!("Updating game files");

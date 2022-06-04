@@ -478,13 +478,13 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
     }
 
     /// Enqueues the stage file corresponding to `id` to be written from `stage`.
-    pub fn write_stage(self, id: data::Stage, stage: Stage) -> Result<Self> {
+    pub fn write_stage(self, id: data::Stage, stage: &Stage) -> Result<Self> {
         let file = self.ctx.qp_file_at(&StageDefinition::get(id).path())?;
         self.write_stage_file(&file, stage)
     }
 
     /// Enqueues the stage file at `file` to be written from `stage`.
-    pub fn write_stage_file(self, file: &FileId, stage: Stage) -> Result<Self> {
+    pub fn write_stage_file(self, file: &FileId, stage: &Stage) -> Result<Self> {
         let mut writer = Cursor::new(vec![]);
         stage.write_to(&mut writer)?;
         writer.seek(SeekFrom::Start(0))?;

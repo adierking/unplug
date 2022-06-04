@@ -1,6 +1,7 @@
 use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::opt::{GlobalsCommand, GlobalsDumpCollidersOpt, GlobalsExportOpt, GlobalsImportOpt};
+use crate::serde_list_wrapper;
 use anyhow::{bail, Result};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -10,34 +11,6 @@ use unplug::common::Text;
 use unplug::data::Object;
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
-
-/// Generates a serializable wrapper type for list elements.
-macro_rules! wrapper {
-    ($wrapper:ident, $wrapped:ty, $def:literal) => {
-        #[derive(Serialize, Deserialize)]
-        struct $wrapper {
-            id: usize,
-            #[serde(flatten, with = $def)]
-            inner: $wrapped,
-        }
-
-        impl $wrapper {
-            fn wrap_boxed_slice(s: Box<[$wrapped]>) -> Vec<Self> {
-                Vec::from(s).into_iter().enumerate().map(|(id, inner)| Self { id, inner }).collect()
-            }
-
-            fn update_metadata(wrappers: Vec<Self>, metadata: &mut [$wrapped]) -> Result<()> {
-                for wrapper in wrappers {
-                    if wrapper.id >= metadata.len() {
-                        bail!("invalid {} ID: {}", stringify!($wrapped), wrapper.id);
-                    }
-                    metadata[wrapper.id] = wrapper.inner;
-                }
-                Ok(())
-            }
-        }
-    };
-}
 
 /// Serialize/Deserialize implementation for Text
 mod text {
@@ -211,7 +184,7 @@ struct ItemDef {
     collect_sound: i8,
 }
 
-wrapper!(ItemWrapper, Item, "ItemDef");
+serde_list_wrapper!(ItemWrapper, Item, "ItemDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Actor", rename_all = "camelCase")]
@@ -220,7 +193,7 @@ struct ActorDef {
     name: Text,
 }
 
-wrapper!(ActorWrapper, Actor, "ActorDef");
+serde_list_wrapper!(ActorWrapper, Actor, "ActorDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Atc", rename_all = "camelCase")]
@@ -232,7 +205,7 @@ struct AtcDef {
     price: i16,
 }
 
-wrapper!(AtcWrapper, Atc, "AtcDef");
+serde_list_wrapper!(AtcWrapper, Atc, "AtcDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Suit", rename_all = "camelCase")]
@@ -241,7 +214,7 @@ struct SuitDef {
     name: Text,
 }
 
-wrapper!(SuitWrapper, Suit, "SuitDef");
+serde_list_wrapper!(SuitWrapper, Suit, "SuitDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Stage", rename_all = "camelCase")]
@@ -252,7 +225,7 @@ struct StageDef {
     description: Text,
 }
 
-wrapper!(StageWrapper, Stage, "StageDef");
+serde_list_wrapper!(StageWrapper, Stage, "StageDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Leticker", rename_all = "camelCase")]
@@ -264,7 +237,7 @@ struct LetickerDef {
     price: i16,
 }
 
-wrapper!(LetickerWrapper, Leticker, "LetickerDef");
+serde_list_wrapper!(LetickerWrapper, Leticker, "LetickerDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Sticker", rename_all = "camelCase")]
@@ -276,7 +249,7 @@ struct StickerDef {
     flag_index: u32,
 }
 
-wrapper!(StickerWrapper, Sticker, "StickerDef");
+serde_list_wrapper!(StickerWrapper, Sticker, "StickerDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Stat", rename_all = "camelCase")]
@@ -287,7 +260,7 @@ struct StatDef {
     description: Text,
 }
 
-wrapper!(StatWrapper, Stat, "StatDef");
+serde_list_wrapper!(StatWrapper, Stat, "StatDef");
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -330,14 +303,14 @@ impl From<Metadata> for MetadataDef {
             coin_values: metadata.coin_values,
             pickup_sounds: metadata.pickup_sounds.to_vec(),
             collect_sounds: metadata.collect_sounds.to_vec(),
-            items: ItemWrapper::wrap_boxed_slice(metadata.items),
-            actors: ActorWrapper::wrap_boxed_slice(metadata.actors),
-            atcs: AtcWrapper::wrap_boxed_slice(metadata.atcs),
-            suits: SuitWrapper::wrap_boxed_slice(metadata.suits),
-            stages: StageWrapper::wrap_boxed_slice(metadata.stages),
-            letickers: LetickerWrapper::wrap_boxed_slice(metadata.letickers),
-            stickers: StickerWrapper::wrap_boxed_slice(metadata.stickers),
-            stats: StatWrapper::wrap_boxed_slice(metadata.stats),
+            items: ItemWrapper::wrap(Vec::from(metadata.items)),
+            actors: ActorWrapper::wrap(Vec::from(metadata.actors)),
+            atcs: AtcWrapper::wrap(Vec::from(metadata.atcs)),
+            suits: SuitWrapper::wrap(Vec::from(metadata.suits)),
+            stages: StageWrapper::wrap(Vec::from(metadata.stages)),
+            letickers: LetickerWrapper::wrap(Vec::from(metadata.letickers)),
+            stickers: StickerWrapper::wrap(Vec::from(metadata.stickers)),
+            stats: StatWrapper::wrap(Vec::from(metadata.stats)),
         }
     }
 }
@@ -385,14 +358,14 @@ pub fn command_import(ctx: Context, opt: GlobalsImportOpt) -> Result<()> {
     }
     metadata.pickup_sounds.copy_from_slice(&root.pickup_sounds);
     metadata.collect_sounds.copy_from_slice(&root.collect_sounds);
-    ItemWrapper::update_metadata(root.items, &mut metadata.items)?;
-    ActorWrapper::update_metadata(root.actors, &mut metadata.actors)?;
-    AtcWrapper::update_metadata(root.atcs, &mut metadata.atcs)?;
-    SuitWrapper::update_metadata(root.suits, &mut metadata.suits)?;
-    StageWrapper::update_metadata(root.stages, &mut metadata.stages)?;
-    LetickerWrapper::update_metadata(root.letickers, &mut metadata.letickers)?;
-    StickerWrapper::update_metadata(root.stickers, &mut metadata.stickers)?;
-    StatWrapper::update_metadata(root.stats, &mut metadata.stats)?;
+    ItemWrapper::unwrap_into(root.items, &mut metadata.items)?;
+    ActorWrapper::unwrap_into(root.actors, &mut metadata.actors)?;
+    AtcWrapper::unwrap_into(root.atcs, &mut metadata.atcs)?;
+    SuitWrapper::unwrap_into(root.suits, &mut metadata.suits)?;
+    StageWrapper::unwrap_into(root.stages, &mut metadata.stages)?;
+    LetickerWrapper::unwrap_into(root.letickers, &mut metadata.letickers)?;
+    StickerWrapper::unwrap_into(root.stickers, &mut metadata.stickers)?;
+    StatWrapper::unwrap_into(root.stats, &mut metadata.stats)?;
     ctx.begin_update()
         .write_globals(GlobalsBuilder::new().base(&mut globals).metadata(&metadata))?
         .commit()?;

@@ -9,6 +9,7 @@ pub mod messages;
 pub mod project;
 pub mod script;
 pub mod shop;
+pub mod stage;
 
 #[cfg(feature = "debug")]
 pub mod debug;
@@ -32,6 +33,7 @@ pub fn execute(ctx: Context, command: Command) -> Result<()> {
         Command::Qp(opt) => archive::command_qp(ctx, opt),
         Command::Script(opt) => script::command(ctx, opt),
         Command::Shop(opt) => shop::command(ctx, opt),
+        Command::Stage(opt) => stage::command(ctx, opt),
         #[cfg(feature = "debug")]
         Command::Debug(opt) => debug::command(ctx, opt),
     }

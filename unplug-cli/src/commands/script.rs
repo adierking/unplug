@@ -1,27 +1,17 @@
-use crate::context::{Context, FileId, OpenContext};
+use crate::common::find_stage_file;
+use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::opt::{ScriptCommand, ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt};
-use anyhow::{bail, Result};
+use anyhow::Result;
 use log::info;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
-use unplug::common::ReadSeek;
-use unplug::data::stage::{StageDefinition, STAGES};
+use unplug::data::stage::STAGES;
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
-
-fn find_stage_file<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId> {
-    match ctx.explicit_file_at(name)? {
-        Some(id) => Ok(id),
-        None => match StageDefinition::find(name) {
-            Some(def) => ctx.qp_file_at(def.path()),
-            None => bail!("Unrecognized stage \"{}\"", name),
-        },
-    }
-}
 
 fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
     for (i, id) in libs.entry_points.iter().enumerate() {

@@ -101,6 +101,10 @@ pub enum Command {
     #[clap(subcommand)]
     Shop(ShopCommand),
 
+    /// Edit stage data
+    #[clap(subcommand)]
+    Stage(StageCommand),
+
     /// Edit Unplug configuration options
     #[clap(subcommand, display_order = 1000)]
     Config(ConfigCommand),
@@ -650,4 +654,54 @@ pub enum QpCommand {
     ExtractAll(ArchiveExtractAllOpt),
     /// Replace a file in qp.bin
     Replace(ArchiveReplaceOpt),
+}
+
+#[derive(Subcommand)]
+pub enum StageCommand {
+    /// Export stage data to a JSON file
+    Export(StageExportOpt),
+    /// Export data for all stages to JSON files
+    ExportAll(StageExportAllOpt),
+    /// Import stage data from a JSON file
+    Import(StageImportOpt),
+    /// Import all stages from JSON files
+    ImportAll(StageImportAllOpt),
+}
+
+#[derive(Args)]
+pub struct StageExportOpt {
+    /// Name of the stage to export
+    pub stage: String,
+
+    /// Redirect output to a file instead of stdout
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Args)]
+pub struct StageExportAllOpt {
+    /// Path to the output directory
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: PathBuf,
+}
+
+#[derive(Args)]
+pub struct StageImportOpt {
+    /// Name of the stage to import
+    pub stage: String,
+
+    /// Path to the input JSON file
+    #[clap(parse(from_os_str))]
+    pub input: PathBuf,
+}
+
+#[derive(Args)]
+pub struct StageImportAllOpt {
+    /// Path to the input directory
+    #[clap(parse(from_os_str))]
+    pub input: PathBuf,
+
+    /// Always import a stage even if it hasn't changed
+    #[clap(short, long)]
+    pub force: bool,
 }

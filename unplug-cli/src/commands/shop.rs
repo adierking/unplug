@@ -1,16 +1,17 @@
 use crate::context::Context;
 use crate::io::OutputRedirect;
+use crate::json::MaxIndentJsonFormatter;
 use crate::opt::{ShopCommand, ShopExportOpt, ShopImportOpt};
 use anyhow::{bail, Error, Result};
 use lazy_static::lazy_static;
 use log::{error, info, warn};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::ser::{Formatter, Serializer};
+use serde_json::ser::Serializer;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter};
 use unplug::data::atc::AtcDefinition;
 use unplug::data::item::ItemDefinition;
 use unplug::data::stage::{Stage, StageDefinition};
@@ -22,87 +23,8 @@ lazy_static! {
     static ref FLAG_REGEX: Regex = Regex::new(r"^flag\((\d+)\)$").unwrap();
 }
 
-/// Formatter specifically designed for making shop data look clean. Hacky and probably doesn't work
-/// well with anything other than an array of `ShopModel`s. The main difference between this and the
-/// default pretty formatting is that the `requires` arrays get written on one line.
-struct ShopFormatter {
-    array_level: usize,
-}
-
-impl ShopFormatter {
-    fn new() -> Self {
-        Self { array_level: 0 }
-    }
-}
-
-impl Formatter for ShopFormatter {
-    fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        self.array_level += 1;
-        writer.write_all(b"[")
-    }
-
-    fn end_array<W>(&mut self, writer: &mut W) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        self.array_level -= 1;
-        if self.array_level == 0 {
-            writer.write_all(b"\n]")
-        } else {
-            writer.write_all(b"]")
-        }
-    }
-
-    fn begin_array_value<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        if !first {
-            writer.write_all(b",")?;
-        }
-        if self.array_level == 1 {
-            writer.write_all(b"\n  ")?;
-        } else if !first {
-            writer.write_all(b" ")?;
-        }
-        Ok(())
-    }
-
-    fn begin_object<W>(&mut self, writer: &mut W) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        writer.write_all(b"{")
-    }
-
-    fn end_object<W>(&mut self, writer: &mut W) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        writer.write_all(b"\n  }")
-    }
-
-    fn begin_object_key<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        if first {
-            writer.write_all(b"\n    ")
-        } else {
-            writer.write_all(b",\n    ")
-        }
-    }
-
-    fn begin_object_value<W>(&mut self, writer: &mut W) -> io::Result<()>
-    where
-        W: ?Sized + io::Write,
-    {
-        writer.write_all(b": ")
-    }
-}
+/// Maximum JSON indentation
+const MAX_INDENT: usize = 2;
 
 /// Parses a requirement string into a `Requirement`.
 fn parse_requirement(s: &str) -> Result<Requirement> {
@@ -220,7 +142,8 @@ pub fn command_export(ctx: Context, opt: ShopExportOpt) -> Result<()> {
     if opt.compact {
         serde_json::to_writer(out, &slots)?;
     } else {
-        let mut serializer = Serializer::with_formatter(out, ShopFormatter::new());
+        let formatter = MaxIndentJsonFormatter::new(MAX_INDENT);
+        let mut serializer = Serializer::with_formatter(out, formatter);
         slots.serialize(&mut serializer)?;
     }
 
@@ -284,7 +207,7 @@ pub fn command_import(ctx: Context, opt: ShopImportOpt) -> Result<()> {
     info!("Updating game files");
     ctx.begin_update()
         .write_globals(GlobalsBuilder::new().base(&mut globals).metadata(&metadata))?
-        .write_stage(Stage::ChibiHouse, stage)?
+        .write_stage(Stage::ChibiHouse, &stage)?
         .commit()?;
     Ok(())
 }

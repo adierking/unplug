@@ -1,9 +1,54 @@
-use anyhow::Result;
+use crate::context::{FileId, OpenContext};
+use anyhow::{bail, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Display};
 use std::path::Path;
 use std::time::Duration;
 use unicase::UniCase;
+use unplug::common::ReadSeek;
+use unplug::data::stage::StageDefinition;
+
+/// Generates a serializable wrapper type for list elements which adds an `id` field.
+#[macro_export]
+macro_rules! serde_list_wrapper {
+    ($wrapper:ident, $inner:ty $(, $def:literal)?) => {
+        #[derive(::serde::Serialize, ::serde::Deserialize)]
+        struct $wrapper {
+            id: usize,
+            #[serde(flatten $(, with = $def)?)]
+            inner: $inner,
+        }
+
+        #[allow(dead_code)]
+        impl $wrapper {
+            fn wrap<I: Into<$inner>>(s: impl IntoIterator<Item = I>) -> Vec<Self> {
+                s.into_iter().enumerate().map(|(id, inner)| Self { id, inner: inner.into() }).collect()
+            }
+
+            fn unwrap<T: From<$inner>>(mut wrappers: Vec<Self>) -> ::anyhow::Result<Vec<T>> {
+                wrappers.sort_by_key(|w| w.id);
+                for (i, wrapper) in wrappers.iter().enumerate() {
+                    if wrapper.id < i {
+                        ::anyhow::bail!("Duplicate {} ID: {}", stringify!($inner), wrapper.id);
+                    } else if wrapper.id > i {
+                        ::anyhow::bail!("Missing {} ID: {}", stringify!($inner), i);
+                    }
+                }
+                Ok(wrappers.into_iter().map(|w| w.inner.into()).collect())
+            }
+
+            fn unwrap_into(wrappers: Vec<Self>, dest: &mut [$inner]) -> ::anyhow::Result<()> {
+                for wrapper in wrappers {
+                    if wrapper.id >= dest.len() {
+                        ::anyhow::bail!("Invalid {} ID: {}", stringify!($inner), wrapper.id);
+                    }
+                    dest[wrapper.id] = wrapper.inner;
+                }
+                Ok(())
+            }
+        }
+    };
+}
 
 /// Formats a duration using `MM:SS.mmm`.
 pub fn format_duration(duration: Duration) -> String {
@@ -12,6 +57,17 @@ pub fn format_duration(duration: Duration) -> String {
     let secs = total_secs % 60;
     let millis = duration.subsec_millis();
     format!("{:>02}:{:>02}.{:>03}", minutes, secs, millis)
+}
+
+/// Finds the stage file corresponding to `name`.
+pub fn find_stage_file<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId> {
+    match ctx.explicit_file_at(name)? {
+        Some(id) => Ok(id),
+        None => match StageDefinition::find(name) {
+            Some(def) => ctx.qp_file_at(def.path()),
+            None => bail!("Unrecognized stage \"{}\"", name),
+        },
+    }
 }
 
 /// Takes an output path passed to a command along with whether multiple items need to be written to
