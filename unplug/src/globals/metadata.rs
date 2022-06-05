@@ -1,7 +1,7 @@
 use super::{Error, Result};
-use crate::common::{ReadFrom, Text, WriteTo};
+use crate::common::{ReadFrom, SfxId, Text, WriteTo};
 use bitflags::bitflags;
-use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE, LE};
+use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use std::convert::TryInto;
 use std::ffi::CString;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -1037,8 +1037,8 @@ pub struct Metadata {
     pub player_globals: PlayerGlobals,
     pub default_atcs: DefaultAtcs,
     pub coin_values: CoinValues,
-    pub pickup_sounds: [u32; NUM_PICKUP_SOUNDS],
-    pub collect_sounds: [u32; NUM_COLLECT_SOUNDS],
+    pub pickup_sounds: [SfxId; NUM_PICKUP_SOUNDS],
+    pub collect_sounds: [SfxId; NUM_COLLECT_SOUNDS],
     pub items: Box<[Item]>,
     pub actors: Box<[Actor]>,
     pub atcs: Box<[Atc]>,
@@ -1060,8 +1060,8 @@ impl Metadata {
             player_globals: PlayerGlobals::new(),
             default_atcs: DefaultAtcs::new(),
             coin_values: CoinValues::new(),
-            pickup_sounds: [0; NUM_PICKUP_SOUNDS],
-            collect_sounds: [0; NUM_COLLECT_SOUNDS],
+            pickup_sounds: [SfxId::default(); NUM_PICKUP_SOUNDS],
+            collect_sounds: [SfxId::default(); NUM_COLLECT_SOUNDS],
             items: vec![Item::new(); NUM_ITEMS].into_boxed_slice(),
             actors: vec![Actor::new(); NUM_ACTORS].into_boxed_slice(),
             atcs: vec![Atc::new(); NUM_ATCS].into_boxed_slice(),
@@ -1104,9 +1104,9 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for Metadata {
         reader.seek(SeekFrom::Start(header.coin_values_offset as u64))?;
         metadata.coin_values = CoinValues::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.pickup_sounds_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.pickup_sounds)?;
+        SfxId::read_all_from(reader, &mut metadata.pickup_sounds)?;
         reader.seek(SeekFrom::Start(header.collect_sounds_offset as u64))?;
-        reader.read_u32_into::<LE>(&mut metadata.collect_sounds)?;
+        SfxId::read_all_from(reader, &mut metadata.collect_sounds)?;
 
         let mut reader = StringReader::new(reader);
         reader.seek(SeekFrom::Start(header.items_offset as u64))?;
@@ -1155,16 +1155,6 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for Metadata {
     }
 }
 
-fn write_u32_slice<E: ByteOrder, W: Write + ?Sized>(
-    writer: &mut W,
-    nums: &[u32],
-) -> io::Result<()> {
-    for &num in nums {
-        writer.write_u32::<E>(num)?;
-    }
-    Ok(())
-}
-
 impl<W: Write + Seek + ?Sized> WriteTo<W> for Metadata {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
@@ -1198,9 +1188,9 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for Metadata {
         header.coin_values_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.coin_values.write_to(writer)?;
         header.pickup_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.pickup_sounds)?;
+        SfxId::write_all_to(writer, &self.pickup_sounds)?;
         header.collect_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        write_u32_slice::<LE, W>(writer, &self.collect_sounds)?;
+        SfxId::write_all_to(writer, &self.collect_sounds)?;
 
         let mut writer = StringWriter::new(writer);
         header.items_offset = writer.seek(SeekFrom::Current(0))? as u32;

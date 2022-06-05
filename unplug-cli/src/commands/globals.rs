@@ -4,10 +4,13 @@ use crate::opt::{GlobalsCommand, GlobalsDumpCollidersOpt, GlobalsExportOpt, Glob
 use crate::serde_list_wrapper;
 use anyhow::{bail, Result};
 use log::info;
+use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
-use unplug::common::Text;
+use unplug::common::{SfxId, Text};
+use unplug::data::music::{MusicDefinition, MUSIC};
+use unplug::data::sfx::{SfxDefinition, SFX};
 use unplug::data::Object;
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
@@ -262,6 +265,44 @@ struct StatDef {
 
 serde_list_wrapper!(StatWrapper, Stat, "StatDef");
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct SfxDef(SfxId);
+
+impl Serialize for SfxDef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self.0 {
+            SfxId::Music(music) => {
+                let name = MusicDefinition::get(music).name;
+                serializer.serialize_str(name)
+            }
+            SfxId::Sound(sound) => {
+                let name = SfxDefinition::get(sound).name;
+                serializer.serialize_str(name)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SfxDef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer)?;
+        let music = MUSIC.iter().find(|m| unicase::eq(m.name, &name));
+        if let Some(music) = music {
+            return Ok(SfxDef(SfxId::Music(music.id)));
+        }
+        match SFX.iter().find(|e| unicase::eq(e.name, &name)) {
+            Some(sfx) => Ok(SfxDef(SfxId::Sound(sfx.id))),
+            None => Err(D::Error::custom(format!("invalid SFX name: \"{}\"", name))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MetadataDef {
@@ -279,8 +320,8 @@ struct MetadataDef {
     default_atcs: DefaultAtcs,
     #[serde(with = "CoinValuesDef")]
     coin_values: CoinValues,
-    pickup_sounds: Vec<u32>,
-    collect_sounds: Vec<u32>,
+    pickup_sounds: Vec<SfxDef>,
+    collect_sounds: Vec<SfxDef>,
     items: Vec<ItemWrapper>,
     actors: Vec<ActorWrapper>,
     atcs: Vec<AtcWrapper>,
@@ -301,8 +342,8 @@ impl From<Metadata> for MetadataDef {
             player_globals: metadata.player_globals,
             default_atcs: metadata.default_atcs,
             coin_values: metadata.coin_values,
-            pickup_sounds: metadata.pickup_sounds.to_vec(),
-            collect_sounds: metadata.collect_sounds.to_vec(),
+            pickup_sounds: metadata.pickup_sounds.into_iter().map(SfxDef).collect(),
+            collect_sounds: metadata.collect_sounds.into_iter().map(SfxDef).collect(),
             items: ItemWrapper::wrap(Vec::from(metadata.items)),
             actors: ActorWrapper::wrap(Vec::from(metadata.actors)),
             atcs: AtcWrapper::wrap(Vec::from(metadata.atcs)),
@@ -350,14 +391,18 @@ pub fn command_import(ctx: Context, opt: GlobalsImportOpt) -> Result<()> {
     metadata.player_globals = root.player_globals;
     metadata.default_atcs = root.default_atcs;
     metadata.coin_values = root.coin_values;
+
     if root.pickup_sounds.len() != metadata.pickup_sounds.len() {
         bail!("expected exactly {} pickupSounds", metadata.pickup_sounds.len());
     }
     if root.collect_sounds.len() != metadata.collect_sounds.len() {
         bail!("expected exactly {} collectSounds", metadata.collect_sounds.len());
     }
-    metadata.pickup_sounds.copy_from_slice(&root.pickup_sounds);
-    metadata.collect_sounds.copy_from_slice(&root.collect_sounds);
+    let pickup_sounds = root.pickup_sounds.into_iter().map(|s| s.0).collect::<Vec<_>>();
+    let collect_sounds = root.collect_sounds.into_iter().map(|s| s.0).collect::<Vec<_>>();
+    metadata.pickup_sounds.copy_from_slice(&pickup_sounds);
+    metadata.collect_sounds.copy_from_slice(&collect_sounds);
+
     ItemWrapper::unwrap_into(root.items, &mut metadata.items)?;
     ActorWrapper::unwrap_into(root.actors, &mut metadata.actors)?;
     AtcWrapper::unwrap_into(root.atcs, &mut metadata.atcs)?;

@@ -371,7 +371,7 @@ impl<R: BufRead> MessageReader<R> {
         let sound = if let Some(name) = &name {
             parse_sound(name)?
         } else if let Some(id) = id {
-            id.try_into().map_err(|id| anyhow!("Invalid sound ID: {:#x}", id))?
+            id.try_into().map_err(|_| anyhow!("Invalid sound ID: {:#x}", id))?
         } else {
             bail!("Missing {} attribute", ATTR_NAME);
         };

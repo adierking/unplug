@@ -3,10 +3,10 @@ mod list;
 mod math;
 mod read_write;
 mod region;
-mod sfx_id;
 
 pub mod endian;
 pub mod io;
+pub mod sfx_id;
 pub mod string_table;
 pub mod text;
 

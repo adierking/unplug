@@ -1,7 +1,8 @@
 use super::block::WriteIp;
 use super::opcodes::*;
+use crate::common::sfx_id::{self, SfxId};
 use crate::common::text::{self, Text};
-use crate::common::{ReadFrom, SfxId, WriteTo};
+use crate::common::{ReadFrom, WriteTo};
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -57,12 +58,16 @@ pub enum Error {
     Invalid,
 
     #[error(transparent)]
+    Sfx(Box<sfx_id::Error>),
+
+    #[error(transparent)]
     Text(Box<text::Error>),
 
     #[error(transparent)]
     Io(Box<io::Error>),
 }
 
+from_error_boxed!(Error::Sfx, sfx_id::Error);
 from_error_boxed!(Error::Text, text::Error);
 from_error_boxed!(Error::Io, io::Error);
 
@@ -185,10 +190,7 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
                 MSG_WAIT => Some(MsgCommand::Wait(MsgWaitType::read_from(reader)?)),
                 MSG_ANIM => Some(MsgCommand::Anim(MsgAnimArgs::read_from(reader)?)),
                 MSG_SFX => {
-                    let sound = match SfxId::try_from(reader.read_u32::<LE>()?) {
-                        Ok(sound) => sound,
-                        Err(id) => return Err(Error::UnrecognizedSound(id)),
-                    };
+                    let sound = SfxId::read_from(reader)?;
                     Some(MsgCommand::Sfx(sound, MsgSfxType::read_from(reader)?))
                 }
                 MSG_VOICE => {
@@ -301,7 +303,7 @@ impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for MsgArgs {
                 }
                 MsgCommand::Sfx(id, ty) => {
                     writer.write_u8(MSG_SFX)?;
-                    writer.write_u32::<LE>(u32::from(*id))?;
+                    id.write_to(writer)?;
                     ty.write_to(writer)?;
                 }
                 MsgCommand::Voice(voice) => {
