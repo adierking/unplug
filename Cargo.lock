@@ -1764,7 +1764,7 @@ checksum = "957e51f3646910546462e67d5f7599b9e4fb8acdd304b087a6494730f9eebf04"
 
 [[package]]
 name = "unplug"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1790,7 +1790,7 @@ dependencies = [
 
 [[package]]
 name = "unplug-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "arrayvec",
