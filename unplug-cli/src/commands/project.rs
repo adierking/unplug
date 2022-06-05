@@ -1,10 +1,16 @@
+use crate::common::IString;
 use crate::config::{Config, Project, ProjectKind};
 use crate::context::Context;
-use crate::opt::{ProjectAddOpt, ProjectCommand, ProjectForgetOpt, ProjectInfoOpt, ProjectOpenOpt};
+use crate::opt::{
+    ProjectAddOpt, ProjectCommand, ProjectForgetOpt, ProjectInfoOpt, ProjectNewOpt, ProjectOpenOpt,
+    ProjectWipeOpt,
+};
+use crate::terminal::ask_yes_no;
 use anyhow::{anyhow, bail, Result};
 use log::info;
 use std::fs;
 use std::mem;
+use std::path::Path;
 
 /// The `project info` CLI command.
 fn command_info(opt: ProjectInfoOpt) -> Result<()> {
@@ -29,6 +35,68 @@ fn command_list() -> Result<()> {
     for (name, project) in &Config::get().projects {
         println!("{} ({})", name, project.path);
     }
+    Ok(())
+}
+
+/// The `project new` CLI command.
+fn command_new(opt: ProjectNewOpt) -> Result<()> {
+    let mut config = Config::get();
+    let project_key = IString::new(&opt.name);
+    if !opt.force && config.projects.contains_key(&project_key) {
+        bail!("Project \"{}\" is already defined (use --force to overwrite)", opt.name);
+    }
+
+    let source = match opt.source {
+        Some(s) => s.canonicalize()?,
+        None if !config.settings.default_iso.is_empty() => {
+            Path::new(&config.settings.default_iso).to_owned()
+        }
+        None => bail!("No default ISO is configured. Use `config set default-iso <PATH>`."),
+    };
+    let dest = match opt.output {
+        Some(o) => o.canonicalize()?,
+        None => source.with_file_name(format!("{}.iso", opt.name)),
+    };
+
+    info!("Source path: {}", source.display());
+    info!("Destination path: {}", dest.display());
+    if source == dest {
+        bail!("The source and destination paths cannot be the same");
+    }
+    if !opt.force && dest.exists() {
+        bail!("The destination file already exists (use --force to overwrite)");
+    }
+    fs::copy(&source, &dest)?;
+
+    let project = Project { kind: ProjectKind::Iso, path: dest.to_string_lossy().into_owned() };
+    config.projects.insert(project_key, project);
+    config.save()?;
+    info!("Created project: {}", opt.name);
+    Ok(())
+}
+
+/// The `project wipe` CLI command.
+fn command_wipe(opt: ProjectWipeOpt) -> Result<()> {
+    let mut config = Config::get();
+    let (name, project) = config.find_project(&opt.name)?;
+
+    if !opt.force {
+        print!("This will irreversibly delete all data for {}! Continue (y/n)? ", name);
+        if !ask_yes_no() {
+            println!("Canceled.");
+            return Ok(());
+        }
+    }
+
+    info!("Deleting file: {}", project.path);
+    std::fs::remove_file(&project.path)?;
+
+    let project_key = IString::new(name);
+    config.projects.remove_entry(&project_key);
+    if project_key.matches(&config.settings.project) {
+        config.settings.project = String::new();
+    }
+    config.save()?;
     Ok(())
 }
 
@@ -109,6 +177,8 @@ pub fn command(_ctx: Context, opt: ProjectCommand) -> Result<()> {
     match opt {
         ProjectCommand::Info(opt) => command_info(opt),
         ProjectCommand::List => command_list(),
+        ProjectCommand::New(opt) => command_new(opt),
+        ProjectCommand::Wipe(opt) => command_wipe(opt),
         ProjectCommand::Add(opt) => command_add(opt),
         ProjectCommand::Forget(opt) => command_forget(opt),
         ProjectCommand::Open(opt) => command_open(opt),

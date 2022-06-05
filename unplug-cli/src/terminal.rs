@@ -250,6 +250,16 @@ pub fn set_playback_paused(bar: &ProgressBar, paused: bool) {
     bar.set_style(if paused { PLAYBACK_PAUSED_STYLE.clone() } else { PLAYBACK_STYLE.clone() });
 }
 
+/// Prompts the user to answer a yes-or-no question.
+pub fn ask_yes_no() -> bool {
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    while input.is_empty() {
+        io::stdin().read_line(&mut input).unwrap();
+    }
+    input.to_lowercase().starts_with('y')
+}
+
 /// Trait for a `PlaybackUi` controller.
 pub trait PlaybackController {
     fn update(&mut self) -> bool;

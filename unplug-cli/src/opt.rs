@@ -165,6 +165,10 @@ pub enum ProjectCommand {
     Info(ProjectInfoOpt),
     /// List defined projects
     List,
+    /// Create a new project by copying the default ISO
+    New(ProjectNewOpt),
+    /// Delete a project's files and unregister it
+    Wipe(ProjectWipeOpt),
     /// Register an existing project
     Add(ProjectAddOpt),
     /// Unregister a project without deleting any of its files
@@ -202,6 +206,34 @@ pub struct ProjectForgetOpt {
 pub struct ProjectOpenOpt {
     /// Name of the project to open
     pub name: String,
+}
+
+#[derive(Args)]
+pub struct ProjectNewOpt {
+    /// Name of the new project
+    pub name: String,
+
+    /// Path to the ISO to copy from
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub source: Option<PathBuf>,
+
+    /// Path of the new ISO
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: Option<PathBuf>,
+
+    /// Allow overwriting existing projects/files
+    #[clap(short, long)]
+    pub force: bool,
+}
+
+#[derive(Args)]
+pub struct ProjectWipeOpt {
+    /// Name of the project to wipe
+    pub name: String,
+
+    /// Do not prompt for confirmation
+    #[clap(short, long)]
+    pub force: bool,
 }
 
 #[derive(Args)]
