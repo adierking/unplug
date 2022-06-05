@@ -47,7 +47,7 @@ fn get_context(opt: ContextOpt) -> Result<Context> {
 
     // Try loading a project
     let config = Config::get();
-    if !opt.no_project {
+    if !opt.default_iso {
         if let Some(context) = config::load_project(&config, opt.project.as_deref())? {
             return Ok(context);
         }

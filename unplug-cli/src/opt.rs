@@ -10,8 +10,9 @@ const MIN_VOLUME: i32 = 0;
 const MAX_VOLUME: i32 = 100;
 
 #[derive(Parser)]
-#[clap(name = "Unplug", author, version)]
+#[clap(name = "Unplug", version)]
 #[clap(about = "Chibi-Robo! Plug Into Adventure! Modding Toolkit")]
+#[clap(subcommand_value_name = "COMMAND", subcommand_help_heading = "COMMANDS")]
 #[clap(help_expected = true, infer_subcommands = true)]
 pub struct Opt {
     /// Show debug logs
@@ -49,16 +50,16 @@ pub struct ConfigOpt {
 #[derive(Args)]
 pub struct ContextOpt {
     /// Run the command on an ISO
-    #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
+    #[clap(long, value_name("PATH"), parse(from_os_str), global(true), group("context"))]
     pub iso: Option<PathBuf>,
 
-    /// Use a project instead of the current one
-    #[clap(short, long, value_name("NAME"), global(true))]
-    pub project: Option<String>,
+    /// Run the command on the default ISO
+    #[clap(long, global(true), group("context"))]
+    pub default_iso: bool,
 
-    /// Ignore the current project
-    #[clap(long, global(true), conflicts_with("project"))]
-    pub no_project: bool,
+    /// Use a project instead of the current one
+    #[clap(short, long, value_name("NAME"), global(true), group("context"))]
+    pub project: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -70,6 +71,13 @@ pub enum Command {
     /// Export, import, or play audio resources
     #[clap(subcommand)]
     Audio(AudioCommand),
+
+    /// Edit Unplug configuration options
+    #[clap(subcommand)]
+    Config(ConfigCommand),
+
+    /// Run Dolphin with the current project/ISO
+    Dolphin(DolphinOpt),
 
     /// Edit global metadata
     #[clap(subcommand)]
@@ -86,6 +94,10 @@ pub enum Command {
     /// Edit cutscene messages
     #[clap(subcommand)]
     Messages(MessagesCommand),
+
+    /// Manage Unplug projects
+    #[clap(subcommand)]
+    Project(ProjectCommand),
 
     /// View, edit, or extract qp.bin
     ///
@@ -105,22 +117,10 @@ pub enum Command {
     #[clap(subcommand)]
     Stage(StageCommand),
 
-    /// Edit Unplug configuration options
-    #[clap(subcommand, display_order = 1000)]
-    Config(ConfigCommand),
-
     #[cfg(feature = "debug")]
-    #[clap(subcommand, display_order = 1001)]
+    #[clap(subcommand)]
     /// Debugging commands (development builds only)
     Debug(DebugCommand),
-
-    /// Run Dolphin with the current project/ISO
-    #[clap(display_order = 1002)]
-    Dolphin(DolphinOpt),
-
-    /// Manage Unplug projects
-    #[clap(subcommand, display_order = 1003)]
-    Project(ProjectCommand),
 }
 
 #[derive(Subcommand)]
