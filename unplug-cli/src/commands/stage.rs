@@ -7,20 +7,24 @@ use crate::opt::{
 };
 use crate::serde_list_wrapper;
 use anyhow::{anyhow, bail, Error, Result};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::ser::Serializer;
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::num::NonZeroI32;
 use std::path::Path;
 use unplug::data::stage::{Stage as StageId, StageDefinition, STAGES};
-use unplug::data::Object;
-use unplug::event::BlockId;
+use unplug::data::{Item, Object};
+use unplug::event::{BlockId, Command, Expr, Ip, Script};
 use unplug::stage::{ObjectFlags, ObjectPlacement, Stage};
 
 /// Maximum JSON indentation
 const MAX_INDENT: usize = 3;
+
+/// lib() function for collecting an item
+const LIB_COLLECT_ITEM: i16 = 77;
 
 /// Serialize/Deserialize implementation for Object
 mod object {
@@ -326,6 +330,67 @@ fn script_modified_error() -> Error {
     anyhow!("Editing object scripts is not supported yet")
 }
 
+/// Patches an item script to change the item ID and returns true if a patch was made.
+fn patch_item_script(
+    script: &mut Script,
+    entry_point: BlockId,
+    item: Item,
+    visited: &mut HashSet<BlockId>,
+) -> bool {
+    if !visited.insert(entry_point) {
+        return false;
+    }
+
+    // Recursively scan for any calls to the "collect item" function and patch the item argument
+    let code = script.block_mut(entry_point).code_mut().unwrap();
+    let mut success = false;
+    for i in 1..code.commands.len() {
+        if code.commands[i] == Command::Lib(LIB_COLLECT_ITEM) {
+            if let Command::SetSp(_) = code.commands[i - 1] {
+                code.commands[i - 1] = Command::SetSp(Expr::Imm16(item.into()).into());
+                success = true;
+            }
+        }
+    }
+
+    let (next_block, else_block) = (code.next_block, code.else_block);
+    if let Some(Ip::Block(next_block)) = next_block {
+        success = patch_item_script(script, next_block, item, visited) || success;
+    }
+    if let Some(Ip::Block(else_block)) = else_block {
+        success = patch_item_script(script, else_block, item, visited) || success;
+    }
+    success
+}
+
+/// Compares object tables and autopatches scripts to match changes.
+fn patch_scripts(
+    script: &mut Script,
+    old_objects: &[ObjectPlacement],
+    new_objects: &[ObjectPlacement],
+) {
+    for (i, (old, new)) in old_objects.iter().zip(new_objects).enumerate() {
+        let obj_script = match new.script {
+            Some(s) => s,
+            None => continue,
+        };
+        let (old_item, new_item) = match (Item::try_from(old.id), Item::try_from(new.id)) {
+            (Ok(o), Ok(n)) => (o, n),
+            _ => continue,
+        };
+        if new_item != old_item {
+            if patch_item_script(script, obj_script, new_item, &mut HashSet::new()) {
+                info!("Patched item script for object {} ({:?})", i, new.id);
+            } else {
+                warn!(
+                    "Item script for object {} ({:?}) is nonstandard and could not be patched",
+                    i, new.id
+                );
+            }
+        }
+    }
+}
+
 /// The `stage import` CLI command.
 fn command_import(ctx: Context, opt: StageImportOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
@@ -335,7 +400,7 @@ fn command_import(ctx: Context, opt: StageImportOpt) -> Result<()> {
 
     let file = find_stage_file(&mut ctx, &opt.stage)?;
     let info = ctx.query_file(&file)?;
-    info!("Rebuilding {}", info.name);
+    info!("Patching {}", info.name);
     let libs = ctx.read_globals()?.read_libs()?;
     let mut stage = ctx.read_stage_file(&libs, &file)?;
 
@@ -347,6 +412,7 @@ fn command_import(ctx: Context, opt: StageImportOpt) -> Result<()> {
         return Err(script_modified_error());
     }
 
+    patch_scripts(&mut stage.script, &stage.objects, &imported.objects);
     stage.objects = imported.objects;
     ctx.begin_update().write_stage_file(&file, &stage)?.commit()?;
     Ok(())
@@ -383,14 +449,17 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
         if !opt.force && stage.objects == imported.objects {
             continue;
         }
+
+        info!("Patching {}.bin", stage_def.name);
         if is_script_modified(&stage.objects, &imported.objects) {
             // See command_import()
             error!("{}.bin's script does not match", stage_def.name);
             return Err(script_modified_error());
         }
+
+        patch_scripts(&mut stage.script, &stage.objects, &imported.objects);
         stage.objects = imported.objects;
         updated.push((id, Box::from(stage)));
-        info!("{}.bin will be imported", stage_def.name);
     }
     if updated.is_empty() {
         info!("No stages were changed");
@@ -404,4 +473,157 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
     }
     update.commit()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use unplug::event::command::IfArgs;
+    use unplug::event::{Block, CodeBlock};
+
+    #[test]
+    fn test_patch_item_script_basic() {
+        let blocks = vec![Block::Code(CodeBlock {
+            commands: vec![
+                Command::PushBp,
+                Command::SetSp(Expr::Imm16(Item::DogBone.into()).into()),
+                Command::Lib(77),
+                Command::PopBp,
+                Command::Return,
+            ],
+            next_block: None,
+            else_block: None,
+        })];
+
+        let mut script = Script::with_blocks(blocks);
+        assert!(patch_item_script(
+            &mut script,
+            BlockId::new(0),
+            Item::Wastepaper,
+            &mut HashSet::new()
+        ));
+
+        let expected = vec![
+            Command::PushBp,
+            Command::SetSp(Expr::Imm16(Item::Wastepaper.into()).into()),
+            Command::Lib(77),
+            Command::PopBp,
+            Command::Return,
+        ];
+        let block = script.block(BlockId::new(0)).code().unwrap();
+        assert_eq!(block.commands, expected);
+    }
+
+    #[test]
+    fn test_patch_item_script_complex() {
+        // This script is nonsense, but the test effectively checks a couple different scenarios:
+        // 1. The item collection call appears more than once and both are patched
+        // 2. The patcher can handle loops in a script
+        let blocks = vec![
+            // 0
+            Block::Code(CodeBlock {
+                commands: vec![Command::While(Box::from(IfArgs {
+                    condition: Expr::Imm16(1),
+                    else_target: BlockId::new(5).into(),
+                }))],
+                next_block: Some(BlockId::new(1).into()),
+                else_block: Some(BlockId::new(5).into()),
+            }),
+            // 1
+            Block::Code(CodeBlock {
+                commands: vec![Command::If(Box::from(IfArgs {
+                    condition: Expr::Imm16(1),
+                    else_target: BlockId::new(3).into(),
+                }))],
+                next_block: Some(BlockId::new(2).into()),
+                else_block: Some(BlockId::new(3).into()),
+            }),
+            // 2
+            Block::Code(CodeBlock {
+                commands: vec![
+                    Command::PushBp,
+                    Command::SetSp(Expr::Imm16(Item::DogBone.into()).into()),
+                    Command::Lib(77),
+                    Command::PopBp,
+                    Command::EndIf(BlockId::new(4).into()),
+                ],
+                next_block: Some(BlockId::new(4).into()),
+                else_block: None,
+            }),
+            // 3
+            Block::Code(CodeBlock {
+                commands: vec![
+                    Command::PushBp,
+                    Command::SetSp(Expr::Imm16(Item::DogBone.into()).into()),
+                    Command::Lib(77),
+                    Command::PopBp,
+                ],
+                next_block: Some(BlockId::new(4).into()),
+                else_block: None,
+            }),
+            // 4
+            Block::Code(CodeBlock {
+                commands: vec![Command::Goto(BlockId::new(0).into())],
+                next_block: Some(BlockId::new(0).into()),
+                else_block: None,
+            }),
+            // 5
+            Block::Code(CodeBlock {
+                commands: vec![Command::Return],
+                next_block: None,
+                else_block: None,
+            }),
+        ];
+
+        let mut script = Script::with_blocks(blocks.clone());
+        assert!(patch_item_script(
+            &mut script,
+            BlockId::new(0),
+            Item::Wastepaper,
+            &mut HashSet::new()
+        ));
+
+        assert_eq!(*script.block(BlockId::new(0)), blocks[0]);
+        assert_eq!(*script.block(BlockId::new(1)), blocks[1]);
+        assert_eq!(*script.block(BlockId::new(4)), blocks[4]);
+        assert_eq!(*script.block(BlockId::new(5)), blocks[5]);
+
+        let expected2 = vec![
+            Command::PushBp,
+            Command::SetSp(Expr::Imm16(Item::Wastepaper.into()).into()),
+            Command::Lib(77),
+            Command::PopBp,
+            Command::EndIf(BlockId::new(4).into()),
+        ];
+        let block2 = script.block(BlockId::new(2)).code().unwrap();
+        assert_eq!(block2.commands, expected2);
+
+        let expected3 = vec![
+            Command::PushBp,
+            Command::SetSp(Expr::Imm16(Item::Wastepaper.into()).into()),
+            Command::Lib(77),
+            Command::PopBp,
+        ];
+        let block3 = script.block(BlockId::new(3)).code().unwrap();
+        assert_eq!(block3.commands, expected3);
+    }
+
+    #[test]
+    fn test_patch_item_script_nonstandard() {
+        let blocks = vec![Block::Code(CodeBlock {
+            commands: vec![Command::Return],
+            next_block: None,
+            else_block: None,
+        })];
+
+        let mut script = Script::with_blocks(blocks.clone());
+        assert!(!patch_item_script(
+            &mut script,
+            BlockId::new(0),
+            Item::Wastepaper,
+            &mut HashSet::new()
+        ));
+
+        assert_eq!(*script.block(BlockId::new(0)), blocks[0]);
+    }
 }
