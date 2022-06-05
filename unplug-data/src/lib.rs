@@ -51,4 +51,10 @@ pub enum Error {
 
     #[error("{0:?} does not have a corresponding item")]
     NoAtcItem(Atc),
+
+    #[error("{0:?} does not have a corresponding object")]
+    NoItemObject(Item),
+
+    #[error("{0:?} does not have a corresponding item")]
+    NoObjectItem(Object),
 }

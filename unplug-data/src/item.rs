@@ -1,4 +1,6 @@
 use super::Object;
+use crate::object::{ObjectClass, ObjectDefinition};
+use crate::{Error, Result};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
@@ -78,6 +80,28 @@ impl Debug for Item {
     }
 }
 
+/// `TryFrom` impl for converting `Object`s to a corresponding `Item`
+impl TryFrom<Object> for Item {
+    type Error = Error;
+    fn try_from(obj: Object) -> Result<Self> {
+        let def = ObjectDefinition::get(obj);
+        if def.class == ObjectClass::Item {
+            let id = def.subclass as i16;
+            Item::try_from(id).or(Err(Error::NoObjectItem(obj)))
+        } else {
+            Err(Error::NoObjectItem(obj))
+        }
+    }
+}
+
+/// `TryFrom` impl for converting `Items`s to a corresponding `Object`
+impl TryFrom<Item> for Object {
+    type Error = Error;
+    fn try_from(item: Item) -> Result<Self> {
+        ItemDefinition::get(item).object.ok_or(Error::NoItemObject(item))
+    }
+}
+
 // Generated using unplug-datagen
 include!("gen/items.inc.rs");
 
@@ -110,5 +134,17 @@ mod tests {
         assert_eq!(ItemDefinition::find("wastepaper").unwrap().id, Item::Wastepaper);
         assert_eq!(ItemDefinition::find("unk_20").unwrap().id, Item::Unk20);
         assert!(ItemDefinition::find("foo").is_none());
+    }
+
+    #[test]
+    fn test_try_item_from_object() {
+        assert_eq!(Item::try_from(Object::ItemKamiKuzu), Ok(Item::Wastepaper));
+        assert_eq!(Item::try_from(Object::YogoreOil), Err(Error::NoObjectItem(Object::YogoreOil)));
+    }
+
+    #[test]
+    fn test_try_object_from_item() {
+        assert_eq!(Object::try_from(Item::Wastepaper), Ok(Object::ItemKamiKuzu));
+        assert_eq!(Object::try_from(Item::Unk20), Err(Error::NoItemObject(Item::Unk20)));
     }
 }
