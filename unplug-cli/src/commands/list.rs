@@ -1,9 +1,12 @@
 use crate::context::Context;
-use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt, ListStagesOpt};
+use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt};
 use anyhow::Result;
 use unicase::Ascii;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
+use unplug::data::music::MUSIC;
+use unplug::data::object::OBJECTS;
+use unplug::data::sfx::SFX;
 use unplug::data::stage::STAGES;
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
@@ -50,11 +53,41 @@ fn command_equipment(opt: ListEquipmentOpt) -> Result<()> {
 }
 
 /// The `list stages` CLI command.
-fn command_stages(opt: ListStagesOpt) -> Result<()> {
+fn command_stages(opt: ListIdsOpt) -> Result<()> {
     let mut stages: Vec<_> = STAGES.iter().map(|s| (s.id, s.title)).collect();
-    sort_ids(&mut stages, &opt.settings);
+    sort_ids(&mut stages, &opt);
     for (id, title) in stages {
         println!("[{:>3}] {}", i32::from(id), title);
+    }
+    Ok(())
+}
+
+/// The `list objects` CLI command.
+fn command_objects(opt: ListIdsOpt) -> Result<()> {
+    let mut objects: Vec<_> = OBJECTS.iter().map(|o| (o.id, o.name)).collect();
+    sort_ids(&mut objects, &opt);
+    for (id, name) in objects {
+        println!("[{:>5}] {}", i32::from(id), name);
+    }
+    Ok(())
+}
+
+/// The `list music` CLI command.
+fn command_music(opt: ListIdsOpt) -> Result<()> {
+    let mut music: Vec<_> = MUSIC.iter().map(|m| (m.id, m.name)).collect();
+    sort_ids(&mut music, &opt);
+    for (id, name) in music {
+        println!("[{:>3}] {}", u8::from(id), name);
+    }
+    Ok(())
+}
+
+/// The `list sounds` CLI command.
+fn command_sounds(opt: ListIdsOpt) -> Result<()> {
+    let mut sfx: Vec<_> = SFX.iter().map(|m| (m.id, m.name)).collect();
+    sort_ids(&mut sfx, &opt);
+    for (id, name) in sfx {
+        println!("[{:>08x}] {}", u32::from(id), name);
     }
     Ok(())
 }
@@ -65,5 +98,8 @@ pub fn command(_ctx: Context, opt: ListCommand) -> Result<()> {
         ListCommand::Items(opt) => command_items(opt),
         ListCommand::Equipment(opt) => command_equipment(opt),
         ListCommand::Stages(opt) => command_stages(opt),
+        ListCommand::Objects(opt) => command_objects(opt),
+        ListCommand::Music(opt) => command_music(opt),
+        ListCommand::Sounds(opt) => command_sounds(opt),
     }
 }

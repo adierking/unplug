@@ -281,7 +281,13 @@ pub enum ListCommand {
     /// List each type of equipment
     Equipment(ListEquipmentOpt),
     /// List each stage
-    Stages(ListStagesOpt),
+    Stages(ListIdsOpt),
+    /// List each object
+    Objects(ListIdsOpt),
+    /// List each music file
+    Music(ListIdsOpt),
+    /// List each sound effect
+    Sounds(ListIdsOpt),
 }
 
 #[derive(Args)]
@@ -302,12 +308,6 @@ pub struct ListEquipmentOpt {
     /// Include equipment without names
     #[clap(long)]
     pub show_unknown: bool,
-}
-
-#[derive(Args)]
-pub struct ListStagesOpt {
-    #[clap(flatten)]
-    pub settings: ListIdsOpt,
 }
 
 #[derive(Subcommand)]
