@@ -75,6 +75,9 @@ where
 
 /// The `config` CLI command.
 pub fn command(_ctx: Context, opt: ConfigCommand) -> Result<()> {
+    if !Config::get().is_loaded() {
+        bail!("The `config` command requires a config file to be loaded");
+    }
     match opt {
         ConfigCommand::Clear => command_clear(),
         ConfigCommand::Path => command_path(),

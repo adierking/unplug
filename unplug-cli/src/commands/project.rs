@@ -174,6 +174,9 @@ fn command_close() -> Result<()> {
 
 /// The `project` CLI command.
 pub fn command(_ctx: Context, opt: ProjectCommand) -> Result<()> {
+    if !Config::get().is_loaded() {
+        bail!("The `project` command requires a config file to be loaded");
+    }
     match opt {
         ProjectCommand::Info(opt) => command_info(opt),
         ProjectCommand::List => command_list(),

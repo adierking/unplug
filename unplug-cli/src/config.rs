@@ -71,6 +71,11 @@ impl Config {
         self.load_from(user_config_path())
     }
 
+    /// Returns whether the config has a file associated with it.
+    pub fn is_loaded(&self) -> bool {
+        !self.path.as_os_str().is_empty()
+    }
+
     /// Loads the configuration from `path`.
     pub fn load_from(&mut self, path: PathBuf) -> Result<()> {
         if path.exists() {
@@ -90,7 +95,7 @@ impl Config {
     /// Saves the configuration back to the path it was loaded from.
     pub fn save(&self) -> Result<()> {
         let contents = toml::to_string_pretty(self)?;
-        if self.path.as_os_str().is_empty() {
+        if !self.is_loaded() {
             bail!("No config file is loaded");
         }
         let dir = self.path.parent().unwrap_or_else(|| Path::new("."));
