@@ -162,33 +162,46 @@ pub enum SetSetting {
 #[derive(Subcommand)]
 pub enum ProjectCommand {
     /// Show information about a project (or the current one)
-    Info {
-        /// Name of the project to show
-        name: Option<String>,
-    },
+    Info(ProjectInfoOpt),
     /// List defined projects
     List,
     /// Register an existing project
-    Add {
-        /// Path to the project file(s)
-        #[clap(parse(from_os_str))]
-        path: PathBuf,
-        /// The project name (defaults to the filename)
-        #[clap(short, long)]
-        name: Option<String>,
-    },
+    Add(ProjectAddOpt),
     /// Unregister a project without deleting any of its files
-    Forget {
-        /// Name of the project to forget
-        name: String,
-    },
+    Forget(ProjectForgetOpt),
     /// Open a project to be automatically used for future Unplug commands
-    Open {
-        /// Name of the project to open
-        name: String,
-    },
+    Open(ProjectOpenOpt),
     /// Close the currently-open project
     Close,
+}
+
+#[derive(Args)]
+pub struct ProjectInfoOpt {
+    /// Name of the project to show
+    pub name: Option<String>,
+}
+
+#[derive(Args)]
+pub struct ProjectAddOpt {
+    /// Path to the project file(s)
+    #[clap(parse(from_os_str))]
+    pub path: PathBuf,
+
+    /// The project name (defaults to the filename)
+    #[clap(short, long)]
+    pub name: Option<String>,
+}
+
+#[derive(Args)]
+pub struct ProjectForgetOpt {
+    /// Name of the project to forget
+    pub name: String,
+}
+
+#[derive(Args)]
+pub struct ProjectOpenOpt {
+    /// Name of the project to open
+    pub name: String,
 }
 
 #[derive(Args)]
