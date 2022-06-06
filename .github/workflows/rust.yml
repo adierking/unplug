@@ -91,14 +91,14 @@ jobs:
           CHIBI_BRSAR: ${{ github.workspace }}/cb_robo.brsar
 
       - name: Build CLI
-        run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --profile distribution --no-default-features --features distribution
+        run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
           name: unplug-${{ github.ref_name }}-${{ matrix.name }}
           path:
-            target/${{ matrix.target }}/distribution/${{ matrix.exe-name }}
+            target/${{ matrix.target }}/release/${{ matrix.exe-name }}
           if-no-files-found: error
 
       - if: ${{ contains(matrix.name, 'x64') }}
