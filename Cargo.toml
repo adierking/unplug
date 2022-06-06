@@ -22,5 +22,9 @@ codegen-units = 1
 lto = "thin"
 panic = "abort"
 
+[profile.distribution]
+inherits = "release"
+strip = true
+
 [patch.crates-io]
 toml = { git = "https://github.com/adierking/toml-rs" }
