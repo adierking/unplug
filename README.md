@@ -97,4 +97,4 @@ There are lots of ways you can contribute to the project:
 Before implementing a complex feature, you should reach out to Derpky through the
 [community Discord](http://discord.gg/ymNDqTyjRQ) to discuss it.
 
-Unplug is currently licensed under version 3 of the GNU General Public License (GPL).
+Unplug is currently licensed under the MIT license.
