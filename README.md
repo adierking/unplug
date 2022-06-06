@@ -29,12 +29,13 @@ binary for Windows or Linux.
 ## Features
 
 - Built-in support for ISO reading and writing
+- Audio export, import, and playback
+- Edit objects in stage files
 - Export and import cutscene messages
 - Change items in the shop
 - Edit the global metadata
 - Disassemble script bytecode
-- List and extract the ISO
-- List and extract qp.bin entries
+- List, extract, and edit the ISO and qp.bin
 
 Stay tuned for more!
 
@@ -44,12 +45,12 @@ You will need an NTSC-U (GGTE01) *Chibi-Robo! Plug Into Adventure!* ISO to use U
 versions of the game are not supported yet.
 
 Unplug is a command-line app, so you'll need to open PowerShell/Command Prompt/Terminal to use
-it. On Windows 10, you should try downloading Windows Terminal from the Store.
+it. On Windows 10+, you should try downloading Windows Terminal from the Store.
 
 Each function provided by Unplug is a subcommand of the main program. Running Unplug without any
-command-line arguments or with `--help` will display a list of available commands.
+command-line arguments or with `help` will display a list of available commands.
 
-Refer to the [examples guide](docs/examples.md) for examples of how to use each command.
+Refer to the [tour](docs/tour.md) for examples of how to use each command.
 
 ## Compiling
 
