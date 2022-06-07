@@ -7,7 +7,7 @@
 [![Test Coverage](https://img.shields.io/coveralls/github/adierking/unplug)](https://coveralls.io/github/adierking/unplug)
 [![License](https://img.shields.io/github/license/adierking/unplug)](COPYING)
 
-:satellite: [Download](#download)<br>
+:satellite: [Download](https://github.com/adierking/unplug/releases)<br>
 :star: [Goals](#goals)<br>
 :robot: [Features](#features)<br>
 :thinking: [How to Use](#how-to-use)<br>
@@ -17,7 +17,11 @@
 ## Download
 
 Go to the [releases page](https://github.com/adierking/unplug/releases) to download a prebuilt
-binary for Windows or Linux.
+binary for Windows, macOS, or Linux.
+
+You can also get bleeding-edge continuous builds
+[here](https://github.com/adierking/unplug/actions), though these are undocumented and not
+guaranteed to work correctly.
 
 ## Goals
 
@@ -35,7 +39,6 @@ binary for Windows or Linux.
 - Change items in the shop
 - Edit the global metadata
 - Disassemble script bytecode
-- List, extract, and edit the ISO and qp.bin
 
 Stay tuned for more!
 
@@ -50,11 +53,17 @@ it. On Windows 10+, you should try downloading Windows Terminal from the Store.
 Each function provided by Unplug is a subcommand of the main program. Running Unplug without any
 command-line arguments or with `help` will display a list of available commands.
 
-Refer to the [tour](docs/tour.md) for examples of how to use each command.
+Follow the [tour guide](docs/tour.md) for examples of how to use each command.
 
 ## Compiling
 
-Unplug requires Rust 1.56+ in order to compile. You can compile it with Cargo as usual:
+Prerequisites:
+
+- Rust 1.56+
+- C compiler (for dependencies)
+- CMake (for dependencies)
+
+You can compile with Cargo as usual:
 
 ```sh
 cargo build
