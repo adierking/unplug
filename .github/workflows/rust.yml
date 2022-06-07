@@ -92,6 +92,8 @@ jobs:
 
       - name: Build CLI
         run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
+        env:
+          RUSTFLAGS: -C strip=symbols
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
