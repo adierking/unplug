@@ -45,6 +45,9 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      - name: Clippy
+        run: cargo +1.56 clippy --workspace --all-targets --target ${{ matrix.target }}
+
       - name: Build CLI
         run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
         env:
@@ -86,9 +89,6 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Clippy
-        run: cargo +1.56 clippy --workspace --all-targets --target ${{ matrix.target }}
-
       - if: ${{ contains(matrix.host, 'windows') }}
         name: Download Test Resources (Windows)
         run: |
@@ -111,7 +111,7 @@ jobs:
           ISO_URL: ${{ secrets.iso_url }}
           BRSAR_URL: ${{ secrets.brsar_url }}
 
-      - name: Run Tests
+      - name: Build and Run Tests
         run: cargo llvm-cov -vv --workspace --target ${{ matrix.target }} --lcov --output-path lcov.info
         env:
           CHIBI_ISO: ${{ github.workspace }}/chibi.iso
