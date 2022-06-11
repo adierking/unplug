@@ -249,7 +249,7 @@ impl DynamicFormat for AnyFormat {
 
 /// Opaque data type for `AnyFormat` sample data.
 #[repr(transparent)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct AnyData(u8);
 
 /// Parameters for `AnyFormat` samples.

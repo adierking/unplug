@@ -136,7 +136,9 @@ fn command_add(opt: ProjectAddOpt) -> Result<()> {
 /// The `project forget` CLI command.
 fn command_forget(opt: ProjectForgetOpt) -> Result<()> {
     let mut config = Config::get();
-    let name = match config.projects.remove_entry(&opt.name.clone().into()) {
+    let project_key = IString::new(opt.name.clone());
+    let result = config.projects.remove_entry(&project_key);
+    let name = match result {
         Some((name, _)) => name,
         None => bail!("Unknown project \"{}\"", opt.name),
     };

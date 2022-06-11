@@ -89,7 +89,7 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
     }
 
     let mut power = 0;
-    while power <= 12 && (max_distance > 7 || max_distance < -8) {
+    while power <= 12 && !(-8..=7).contains(&max_distance) {
         max_distance /= 2;
         power += 1;
     }

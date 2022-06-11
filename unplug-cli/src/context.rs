@@ -185,7 +185,7 @@ impl<T: ReadSeek> DiscSource<T> {
 
     /// Queries information about a disc file.
     fn query(&self, file: &FileId) -> Result<FileInfo> {
-        if let &FileId::Iso(entry) = file {
+        if let FileId::Iso(entry) = *file {
             let info = match self {
                 Self::None => return Err(no_disc_error()),
                 Self::Iso(disc) => disc.files[entry].file().unwrap(),
@@ -198,7 +198,7 @@ impl<T: ReadSeek> DiscSource<T> {
 
     /// Opens a disc file for reading.
     fn open(&mut self, file: &FileId) -> Result<Box<dyn ReadSeek + '_>> {
-        if let &FileId::Iso(entry) = file {
+        if let FileId::Iso(entry) = *file {
             match self {
                 Self::None => Err(no_disc_error()),
                 Self::Iso(disc) => Ok(disc.open_file(entry)?),
@@ -212,7 +212,7 @@ impl<T: ReadSeek> DiscSource<T> {
 impl<T: ReadWriteSeek> DiscSource<T> {
     /// Overwrites a disc file with data read from `reader`.
     fn write(&mut self, file: &FileId, reader: &mut dyn ReadSeek) -> Result<()> {
-        if let &FileId::Iso(entry) = file {
+        if let FileId::Iso(entry) = *file {
             match self {
                 Self::None => Err(no_disc_error()),
                 Self::Iso(disc) => Ok(disc.replace_file(entry, reader)?),
