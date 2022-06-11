@@ -14,81 +14,36 @@ env:
 
 jobs:
   build:
+    name: "Build"
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: windows-x64
-            os: windows-latest
+            host: windows-latest
             target: x86_64-pc-windows-msvc
             exe-name: unplug.exe
           - name: macos-arm64
-            os: macos-latest
+            host: macos-latest
             target: aarch64-apple-darwin
             exe-name: unplug
           - name: macos-x64
-            os: macos-latest
+            host: macos-latest
             target: x86_64-apple-darwin
             exe-name: unplug
           - name: linux-x64
-            os: ubuntu-latest
+            host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             exe-name: unplug
-
-    runs-on: ${{ matrix.os }}
-
+    runs-on: ${{ matrix.host }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - if: ${{ contains(matrix.os, 'ubuntu') }}
-        name: Install Dependencies (Ubuntu)
-        run: |
-          sudo apt-get update
-          sudo apt-get install libasound2-dev
-
       - name: Install Toolchain
-        run: |
-          rustup toolchain install 1.56 --component clippy
-          rustup toolchain install 1.61 --component llvm-tools-preview
-          rustup target add --toolchain 1.56 ${{ matrix.target }}
-          rustup target add --toolchain 1.61 ${{ matrix.target }}
-          rustup default 1.61
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Clippy
-        run: cargo +1.56 clippy --workspace --all-targets --target ${{ matrix.target }}
-
-      - if: ${{ contains(matrix.name, 'x64') && contains(matrix.name, 'windows') }}
-        name: Download Test Resources (Windows x64)
-        run: |
-          Start-BitsTransfer -Source "$Env:ISO_URL" -Destination chibi.zip 2>$null
-          Start-BitsTransfer -Source "$Env:BRSAR_URL" -Destination cb_robo.brsar 2>$null
-          Expand-Archive chibi.zip -DestinationPath .
-          Remove-Item chibi.zip
-        env:
-          ISO_URL: ${{ secrets.iso_url }}
-          BRSAR_URL: ${{ secrets.brsar_url }}
-
-      - if: ${{ contains(matrix.name, 'x64') && !contains(matrix.name, 'windows') }}
-        name: Download Test Resources (Unix x64)
-        run: |
-          curl -fsS "$ISO_URL" -o chibi.zip
-          curl -fsS "$BRSAR_URL" -o cb_robo.brsar
-          unzip chibi.zip
-          rm chibi.zip
-        env:
-          ISO_URL: ${{ secrets.iso_url }}
-          BRSAR_URL: ${{ secrets.brsar_url }}
-
-      - if: ${{ contains(matrix.name, 'x64') }}
-        name: Test (x64)
-        run: cargo llvm-cov -vv --workspace --target ${{ matrix.target }} --lcov --output-path lcov.info
-        env:
-          CHIBI_ISO: ${{ github.workspace }}/chibi.iso
-          CHIBI_BRSAR: ${{ github.workspace }}/cb_robo.brsar
+        uses: ./.github/actions/toolchain.yml
+        with:
+          target: ${{ matrix.target }}
 
       - name: Build CLI
         run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
@@ -103,8 +58,66 @@ jobs:
             target/${{ matrix.target }}/release/${{ matrix.exe-name }}
           if-no-files-found: error
 
-      - if: ${{ contains(matrix.name, 'x64') }}
-        name: Upload Code Coverage (x64)
+  test:
+    name: "Test"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            host: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: macos-x64
+            host: macos-latest
+            target: x86_64-apple-darwin
+          - name: linux-x64
+            host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.host }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Toolchain
+        uses: ./.github/actions/toolchain.yml
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Clippy
+        run: cargo +1.56 clippy --workspace --all-targets --target ${{ matrix.target }}
+
+      - if: ${{ contains(matrix.host, 'windows') }}
+        name: Download Test Resources (Windows)
+        run: |
+          Start-BitsTransfer -Source "$Env:ISO_URL" -Destination chibi.zip 2>$null
+          Start-BitsTransfer -Source "$Env:BRSAR_URL" -Destination cb_robo.brsar 2>$null
+          Expand-Archive chibi.zip -DestinationPath .
+          Remove-Item chibi.zip
+        env:
+          ISO_URL: ${{ secrets.iso_url }}
+          BRSAR_URL: ${{ secrets.brsar_url }}
+
+      - if: ${{ !contains(matrix.host, 'windows') }}
+        name: Download Test Resources (Unix)
+        run: |
+          curl -fsS "$ISO_URL" -o chibi.zip
+          curl -fsS "$BRSAR_URL" -o cb_robo.brsar
+          unzip chibi.zip
+          rm chibi.zip
+        env:
+          ISO_URL: ${{ secrets.iso_url }}
+          BRSAR_URL: ${{ secrets.brsar_url }}
+
+      - name: Run Tests
+        run: cargo llvm-cov -vv --workspace --target ${{ matrix.target }} --lcov --output-path lcov.info
+        env:
+          CHIBI_ISO: ${{ github.workspace }}/chibi.iso
+          CHIBI_BRSAR: ${{ github.workspace }}/cb_robo.brsar
+
+      - name: Upload Code Coverage
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.github_token }}
@@ -112,8 +125,9 @@ jobs:
           path-to-lcov: lcov.info
           parallel: true
 
-  finish:
-    needs: build
+  test-done:
+    name: "Test (Finalize)"
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Finalize Coverage

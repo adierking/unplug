@@ -1,0 +1,24 @@
+name: 'Install Toolchain'
+description: 'Install the toolchain needed to compile Unplug'
+
+inputs:
+  target:
+    description: "Target triple"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - if: ${{ contains(inputs.target, 'linux') }}
+      name: Install Dependencies (Linux)
+      run: |
+        sudo apt-get update
+        sudo apt-get install libasound2-dev
+
+    - name: Install Toolchain
+      run: |
+        rustup toolchain install 1.56 --component clippy
+        rustup toolchain install 1.61 --component llvm-tools-preview
+        rustup target add --toolchain 1.56 ${{ inputs.target }}
+        rustup target add --toolchain 1.61 ${{ inputs.target }}
+        rustup default 1.61
