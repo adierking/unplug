@@ -329,6 +329,10 @@ impl<'a> Iterator for BlocksOrderedMut<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.locations.next().map(|&loc| (loc, self.get(loc.id)))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.locations.size_hint()
+    }
 }
 
 impl DoubleEndedIterator for BlocksOrderedMut<'_> {
@@ -541,7 +545,9 @@ mod tests {
 
     #[test]
     fn test_blocks_ordered() {
-        let blocks: Vec<_> = TEST_SCRIPT.blocks_ordered().collect();
+        let iter = TEST_SCRIPT.blocks_ordered();
+        assert_eq!(iter.len(), 3);
+        let blocks: Vec<_> = iter.collect();
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].0, *LOCATION_1);
         assert_eq!(blocks[0].1.commands().unwrap(), &[Command::Lib(0)]);
@@ -553,7 +559,9 @@ mod tests {
 
     #[test]
     fn test_blocks_ordered_rev() {
-        let blocks: Vec<_> = TEST_SCRIPT.blocks_ordered().rev().collect();
+        let iter = TEST_SCRIPT.blocks_ordered().rev();
+        assert_eq!(iter.len(), 3);
+        let blocks: Vec<_> = iter.collect();
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].0, *LOCATION_2);
         assert_eq!(blocks[0].1.commands().unwrap(), &[Command::Lib(2)]);
@@ -566,7 +574,9 @@ mod tests {
     #[test]
     fn test_blocks_ordered_mut() {
         let mut script = TEST_SCRIPT.clone();
-        let mut blocks: Vec<_> = script.blocks_ordered_mut().collect();
+        let iter = script.blocks_ordered_mut();
+        assert_eq!(iter.len(), 3);
+        let mut blocks: Vec<_> = iter.collect();
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].0, *LOCATION_1);
         assert_eq!(blocks[0].1.commands().unwrap(), &[Command::Lib(0)]);
@@ -587,7 +597,9 @@ mod tests {
     #[test]
     fn test_blocks_ordered_mut_rev() {
         let mut script = TEST_SCRIPT.clone();
-        let mut blocks: Vec<_> = script.blocks_ordered_mut().rev().collect();
+        let iter = script.blocks_ordered_mut().rev();
+        assert_eq!(iter.len(), 3);
+        let mut blocks: Vec<_> = iter.collect();
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].0, *LOCATION_2);
         assert_eq!(blocks[0].1.commands().unwrap(), &[Command::Lib(2)]);
