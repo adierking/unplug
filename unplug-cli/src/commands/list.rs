@@ -54,7 +54,7 @@ fn command_equipment(opt: ListEquipmentOpt) -> Result<()> {
 
 /// The `list stages` CLI command.
 fn command_stages(opt: ListIdsOpt) -> Result<()> {
-    let mut stages: Vec<_> = Stage::all().map(|s| (s, s.title())).collect();
+    let mut stages: Vec<_> = Stage::iter().map(|s| (s, s.title())).collect();
     sort_ids(&mut stages, &opt);
     for (id, title) in stages {
         println!("[{:>3}] {}", i32::from(id), title);

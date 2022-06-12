@@ -21,7 +21,6 @@ const STAGE_DIR: &str = "bin/e";
 const STAGE_EXT: &str = ".bin";
 
 /// Metadata describing a stage.
-#[derive(Debug)]
 struct Metadata {
     /// The corresponding stage ID.
     id: Stage,
@@ -44,7 +43,7 @@ macro_rules! declare_stages {
             $($id = $val),*
         }
 
-        static METADATA: &'static [Metadata] = &[
+        const METADATA: &'static [Metadata] = &[
             $(
                 Metadata {
                     id: Stage::$id,
@@ -58,13 +57,13 @@ macro_rules! declare_stages {
 
 impl Stage {
     /// Returns an iterator over all stage IDs.
-    pub fn all() -> ResourceIterator<Stage> {
+    pub fn iter() -> ResourceIterator<Self> {
         ResourceIterator::new()
     }
 
     /// Tries to find the stage whose name matches `name`.
     pub fn find(name: &str) -> Option<Stage> {
-        Self::all().find(|s| s.name() == name)
+        Self::iter().find(|s| s.name() == name)
     }
 
     /// Returns the name of the stage file without the filename or extension.
@@ -147,12 +146,12 @@ mod tests {
     }
 
     #[test]
-    fn test_all() {
-        let all = Stage::all().collect::<Vec<_>>();
-        assert_eq!(all.len(), NUM_STAGES);
-        assert_eq!(all[0], Stage::Debug);
-        assert_eq!(all[29], Stage::Stage29);
-        assert_eq!(all[30], Stage::Shun);
-        assert_eq!(all[38], Stage::Mariko);
+    fn test_iter() {
+        let stages = Stage::iter().collect::<Vec<_>>();
+        assert_eq!(stages.len(), NUM_STAGES);
+        assert_eq!(stages[0], Stage::Debug);
+        assert_eq!(stages[29], Stage::Stage29);
+        assert_eq!(stages[30], Stage::Shun);
+        assert_eq!(stages[38], Stage::Mariko);
     }
 }

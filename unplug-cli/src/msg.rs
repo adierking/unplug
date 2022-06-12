@@ -36,7 +36,7 @@ impl MessageSource {
         if s == "globals" {
             Ok(Self::Globals)
         } else {
-            let stage = Stage::all()
+            let stage = Stage::iter()
                 .find(|stage| stage.name() == s)
                 .ok_or_else(|| anyhow!("Invalid message source: {}", s))?;
             Ok(Self::Stage(stage))

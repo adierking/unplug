@@ -45,7 +45,7 @@ fn test_reimport_stages() -> Result<()> {
     };
 
     info!("Comparing stage data");
-    for id in StageId::all() {
+    for id in StageId::iter() {
         let name = id.name();
         let path = id.path();
         info!("Reading original {}", name);

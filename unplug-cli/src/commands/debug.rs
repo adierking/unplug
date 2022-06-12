@@ -14,7 +14,7 @@ fn command_rebuild_scripts(ctx: Context) -> Result<()> {
     let libs = globals.read_libs()?;
 
     let mut stages = vec![];
-    for id in Stage::all() {
+    for id in Stage::iter() {
         info!("Reading {}.bin", id.name());
         let stage = ctx.read_stage(&libs, id)?;
         stages.push((id, stage));

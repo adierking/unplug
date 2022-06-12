@@ -293,7 +293,7 @@ pub fn command_export_all(ctx: Context, opt: StageExportAllOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     fs::create_dir_all(&opt.output)?;
     let libs = ctx.read_globals()?.read_libs()?;
-    for id in StageId::all() {
+    for id in StageId::iter() {
         let filename = format!("{}.json", id.name());
         info!("Exporting {}", filename);
         let stage = ctx.read_stage(&libs, id)?;
@@ -423,7 +423,7 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
 
     info!("Reading input JSON");
     let mut jsons: Vec<(StageId, ImportedStage)> = vec![];
-    for id in StageId::all() {
+    for id in StageId::iter() {
         let filename = format!("{}.json", id.name());
         debug!("Reading {}", filename);
         let path = opt.input.join(&filename);

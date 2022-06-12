@@ -63,7 +63,7 @@ fn test_reimport_messages() -> Result<()> {
     info!("Comparing globals messages");
     compare_messages(MessageSource::Globals, &original_libs.script, &rebuilt_libs.script);
 
-    for id in StageId::all() {
+    for id in StageId::iter() {
         let name = id.name();
         let path = id.path();
         info!("Reading original {}", name);

@@ -37,7 +37,7 @@ pub fn command_export(ctx: Context, opt: MessagesExportOpt) -> Result<()> {
     writer.start()?;
     writer.write_script(MessageSource::Globals, &libs.script)?;
 
-    for id in Stage::all() {
+    for id in Stage::iter() {
         info!("Reading {}.bin", id.name());
         let stage = ctx.read_stage(&libs, id)?;
         writer.write_script(MessageSource::Stage(id), &stage.script)?;

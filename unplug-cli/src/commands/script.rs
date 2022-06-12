@@ -122,7 +122,7 @@ pub fn command_script_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()
     let libs_out = File::create(Path::join(&opt.output, "globals.txt"))?;
     do_dump_libs(&libs, &opt.flags, BufWriter::new(libs_out))?;
 
-    for id in StageId::all() {
+    for id in StageId::iter() {
         info!("Dumping {}.bin", id.name());
         let stage = ctx.read_stage(&libs, id)?;
         let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", id.name())))?;
