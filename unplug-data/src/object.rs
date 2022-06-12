@@ -1,43 +1,33 @@
+use crate::private::Sealed;
+use crate::resource::{Resource, ResourceIterator};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
 
 /// The total number of non-internal objects.
-pub const NUM_OBJECTS: usize = 1162;
-
+pub const NUM_MAIN_OBJECTS: usize = 1162;
+/// The total number of internal objects.
+pub const NUM_INTERNAL_OBJECTS: usize = 36;
 /// The ID that internal objects start at.
-const INTERNAL_OBJECT_BASE: usize = 10000;
+pub const INTERNAL_OBJECT_BASE: i32 = 10000;
+/// The total number of objects.
+pub const NUM_OBJECTS: usize = NUM_MAIN_OBJECTS + NUM_INTERNAL_OBJECTS;
 
-#[derive(Debug)]
-pub struct ObjectDefinition {
-    /// The object's corresponding `Object`.
-    pub id: Object,
+/// Metadata describing an object.
+struct Metadata {
+    /// The corresponding object ID.
+    id: Object,
     /// A unique name assigned by unplug-datagen.
-    pub name: &'static str,
+    name: &'static str,
     /// The object's engine class.
-    pub class: ObjectClass,
+    class: ObjectClass,
     /// A subclass value meaningful to the engine class.
-    pub subclass: u16,
+    subclass: u16,
     /// The object's model path.
-    pub path: &'static str,
+    path: &'static str,
 }
 
-impl ObjectDefinition {
-    /// Retrieves the definition corresponding to an `Object`.
-    pub fn get(id: Object) -> &'static ObjectDefinition {
-        let mut index = i32::from(id) as usize;
-        if index >= INTERNAL_OBJECT_BASE {
-            index = index - INTERNAL_OBJECT_BASE + NUM_OBJECTS;
-        }
-        &OBJECTS[index]
-    }
-
-    /// Tries to find the object definition whose name matches `name`.
-    pub fn find(name: &str) -> Option<&'static ObjectDefinition> {
-        OBJECTS.iter().find(|o| o.name == name)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+/// Object engine classes.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ObjectClass {
     Camera,
     Light,
@@ -72,6 +62,7 @@ macro_rules! declare_objects {
         $($index:literal => $id:ident { $name:literal, $class:ident, $subclass:literal, $path:literal }),*
         $(,)*
     } => {
+        /// An object ID.
         #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i32)]
@@ -79,9 +70,9 @@ macro_rules! declare_objects {
             $($id = $index),*
         }
 
-        pub static OBJECTS: &[ObjectDefinition] = &[
+        const METADATA: &[Metadata] = &[
             $(
-                ObjectDefinition {
+                Metadata {
                     id: Object::$id,
                     name: $name,
                     class: ObjectClass::$class,
@@ -93,9 +84,60 @@ macro_rules! declare_objects {
     }
 }
 
+impl Object {
+    /// Returns an iterator over all object IDs.
+    pub fn iter() -> ResourceIterator<Self> {
+        ResourceIterator::new()
+    }
+
+    /// Tries to find the object definition whose name matches `name`.
+    pub fn find(name: &str) -> Option<Object> {
+        Self::iter().find(|o| o.name() == name)
+    }
+
+    /// Returns a unique name for the object assigned by unplug-datagen.
+    pub fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    /// Returns the object's engine class.
+    pub fn class(self) -> ObjectClass {
+        self.meta().class
+    }
+
+    /// Returns a subclass value meaningful to the engine class.
+    pub fn subclass(self) -> u16 {
+        self.meta().subclass
+    }
+
+    /// Returns the object's model path.
+    pub fn path(self) -> &'static str {
+        self.meta().path
+    }
+
+    fn meta(self) -> &'static Metadata {
+        let id = i32::from(self);
+        let internal = id - INTERNAL_OBJECT_BASE;
+        if internal >= 0 {
+            &METADATA[internal as usize + NUM_MAIN_OBJECTS]
+        } else {
+            &METADATA[id as usize]
+        }
+    }
+}
+
 impl Debug for Object {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{}>", ObjectDefinition::get(*self).name)
+        write!(f, "<{}>", self.name())
+    }
+}
+
+impl Sealed for Object {}
+
+impl Resource for Object {
+    const COUNT: usize = NUM_OBJECTS;
+    fn at(index: usize) -> Self {
+        METADATA[index].id
     }
 }
 
@@ -108,33 +150,38 @@ mod tests {
 
     #[test]
     fn test_get_regular_object() {
-        let object = ObjectDefinition::get(Object::NpcTonpy);
-        assert_eq!(object.id, Object::NpcTonpy);
-        assert_eq!(object.name, "npc_tonpy");
-        assert_eq!(object.class, ObjectClass::ActorToy); // telly is a toy CONFIRMED
-        assert_eq!(object.subclass, 10);
-        assert_eq!(object.path, "npc/tonpy");
-        assert_eq!(format!("{:?}", object.id), "<npc_tonpy>");
+        let object = Object::NpcTonpy;
+        assert_eq!(object.name(), "npc_tonpy");
+        assert_eq!(object.class(), ObjectClass::ActorToy); // telly is a toy CONFIRMED
+        assert_eq!(object.subclass(), 10);
+        assert_eq!(object.path(), "npc/tonpy");
+        assert_eq!(format!("{:?}", object), "<npc_tonpy>");
     }
 
     #[test]
     fn test_get_internal_object() {
-        let object = ObjectDefinition::get(Object::InternalExclamation);
-        assert_eq!(object.id, Object::InternalExclamation);
-        assert_eq!(object.name, "internal_exclamation");
-        assert_eq!(object.class, ObjectClass::Free);
-        assert_eq!(object.subclass, 0);
-        assert_eq!(object.path, "exclamation");
-        assert_eq!(format!("{:?}", object.id), "<internal_exclamation>");
+        let object = Object::InternalExclamation;
+        assert_eq!(object.name(), "internal_exclamation");
+        assert_eq!(object.class(), ObjectClass::Free);
+        assert_eq!(object.subclass(), 0);
+        assert_eq!(object.path(), "exclamation");
+        assert_eq!(format!("{:?}", object), "<internal_exclamation>");
     }
 
     #[test]
     fn test_find_object() {
-        assert_eq!(ObjectDefinition::find("npc_tonpy").unwrap().id, Object::NpcTonpy);
-        assert_eq!(
-            ObjectDefinition::find("internal_exclamation").unwrap().id,
-            Object::InternalExclamation
-        );
-        assert!(ObjectDefinition::find("foo").is_none());
+        assert_eq!(Object::find("npc_tonpy"), Some(Object::NpcTonpy));
+        assert_eq!(Object::find("internal_exclamation"), Some(Object::InternalExclamation));
+        assert_eq!(Object::find("foo"), None);
+    }
+
+    #[test]
+    fn test_iter() {
+        let objects = Object::iter().collect::<Vec<_>>();
+        assert_eq!(objects.len(), NUM_OBJECTS);
+        assert_eq!(objects[0], Object::CbRobo);
+        assert_eq!(objects[1161], Object::NpcSunUfo);
+        assert_eq!(objects[1162], Object::InternalTitleIconBb);
+        assert_eq!(objects[1197], Object::InternalUsBatuModel);
     }
 }

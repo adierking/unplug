@@ -30,21 +30,20 @@ mod object {
     use super::*;
     use serde::de::Error;
     use serde::{Deserializer, Serializer};
-    use unplug::data::object::ObjectDefinition;
 
     pub(super) fn serialize<S: Serializer>(
         object: &Object,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        ObjectDefinition::get(*object).name.serialize(serializer)
+        object.name().serialize(serializer)
     }
 
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Object, D::Error> {
         let name = String::deserialize(deserializer)?;
-        match ObjectDefinition::find(&name) {
-            Some(obj) => Ok(obj.id),
+        match Object::find(&name) {
+            Some(obj) => Ok(obj),
             None => Err(D::Error::custom(format!("invalid object name: \"{}\"", name))),
         }
     }

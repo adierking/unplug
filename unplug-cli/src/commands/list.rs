@@ -5,9 +5,8 @@ use unicase::Ascii;
 use unplug::data::atc::ATCS;
 use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::music::MUSIC;
-use unplug::data::object::OBJECTS;
 use unplug::data::sfx::SFX;
-use unplug::data::Stage;
+use unplug::data::{Object, Stage};
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
@@ -64,7 +63,7 @@ fn command_stages(opt: ListIdsOpt) -> Result<()> {
 
 /// The `list objects` CLI command.
 fn command_objects(opt: ListIdsOpt) -> Result<()> {
-    let mut objects: Vec<_> = OBJECTS.iter().map(|o| (o.id, o.name)).collect();
+    let mut objects: Vec<_> = Object::iter().map(|o| (o, o.name())).collect();
     sort_ids(&mut objects, &opt);
     for (id, name) in objects {
         println!("[{:>5}] {}", i32::from(id), name);

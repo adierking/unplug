@@ -1,5 +1,5 @@
 use super::Object;
-use crate::object::{ObjectClass, ObjectDefinition};
+use crate::object::ObjectClass;
 use crate::{Error, Result};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -84,9 +84,8 @@ impl Debug for Item {
 impl TryFrom<Object> for Item {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self> {
-        let def = ObjectDefinition::get(obj);
-        if def.class == ObjectClass::Item {
-            let id = def.subclass as i16;
+        if obj.class() == ObjectClass::Item {
+            let id = obj.subclass() as i16;
             Item::try_from(id).or(Err(Error::NoObjectItem(obj)))
         } else {
             Err(Error::NoObjectItem(obj))
