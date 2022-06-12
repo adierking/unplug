@@ -7,7 +7,7 @@ use unplug::data::item::{ItemFlags, ITEMS};
 use unplug::data::music::MUSIC;
 use unplug::data::object::OBJECTS;
 use unplug::data::sfx::SFX;
-use unplug::data::stage::STAGES;
+use unplug::data::Stage;
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
@@ -54,7 +54,7 @@ fn command_equipment(opt: ListEquipmentOpt) -> Result<()> {
 
 /// The `list stages` CLI command.
 fn command_stages(opt: ListIdsOpt) -> Result<()> {
-    let mut stages: Vec<_> = STAGES.iter().map(|s| (s.id, s.title)).collect();
+    let mut stages: Vec<_> = Stage::all().map(|s| (s, s.title())).collect();
     sort_ids(&mut stages, &opt);
     for (id, title) in stages {
         println!("[{:>3}] {}", i32::from(id), title);

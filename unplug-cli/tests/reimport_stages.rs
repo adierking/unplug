@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::fs::File;
 use tempfile::TempDir;
-use unplug::data::stage::STAGES;
+use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
@@ -45,9 +45,9 @@ fn test_reimport_stages() -> Result<()> {
     };
 
     info!("Comparing stage data");
-    for stage_def in STAGES {
-        let name = stage_def.name;
-        let path = stage_def.path();
+    for id in StageId::all() {
+        let name = id.name();
+        let path = id.path();
         info!("Reading original {}", name);
         let mut original_reader = original_qp.open_file_at(&path)?;
         let original_stage = Stage::read_from(&mut original_reader, &libs)?;

@@ -1,3 +1,5 @@
+use crate::private::Sealed;
+use crate::resource::{Resource, ResourceIterator};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
 
@@ -20,40 +22,13 @@ const STAGE_EXT: &str = ".bin";
 
 /// Metadata describing a stage.
 #[derive(Debug)]
-pub struct StageDefinition {
-    /// The stage's ID.
-    pub id: Stage,
+struct Metadata {
+    /// The corresponding stage ID.
+    id: Stage,
     /// The name of the stage file without the filename or extension.
-    pub name: &'static str,
+    name: &'static str,
     /// The stage's title in the English version of the game.
-    pub title: &'static str,
-}
-
-impl StageDefinition {
-    /// Retrieves the definition corresponding to a `Stage`.
-    pub fn get(id: Stage) -> &'static StageDefinition {
-        let index = i32::from(id);
-        if index >= FIRST_DEV_STAGE {
-            &STAGES[(index - FIRST_DEV_STAGE) as usize + NUM_MAIN_STAGES]
-        } else {
-            &STAGES[index as usize]
-        }
-    }
-
-    /// Gets the path to the stage file within the ISO.
-    pub fn path(&self) -> String {
-        format!("{}/{}{}", STAGE_DIR, self.name, STAGE_EXT)
-    }
-
-    /// Tries to find the stage definition whose name matches `name`.
-    pub fn find(name: &str) -> Option<&'static StageDefinition> {
-        STAGES.iter().find(|s| s.name == name)
-    }
-
-    /// Returns `true` if this is a dev stage (shun, hori, ahk, etc.).
-    pub fn is_dev(&self) -> bool {
-        i32::from(self.id) >= FIRST_DEV_STAGE
-    }
+    title: &'static str,
 }
 
 macro_rules! declare_stages {
@@ -61,6 +36,7 @@ macro_rules! declare_stages {
         $($val:literal => $id:ident { $name:literal, $title:literal }),*
         $(,)*
     } => {
+        /// A stage ID.
         #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i32)]
@@ -68,9 +44,9 @@ macro_rules! declare_stages {
             $($id = $val),*
         }
 
-        pub static STAGES: &'static [StageDefinition] = &[
+        static METADATA: &'static [Metadata] = &[
             $(
-                StageDefinition {
+                Metadata {
                     id: Stage::$id,
                     name: $name,
                     title: $title,
@@ -80,9 +56,60 @@ macro_rules! declare_stages {
     }
 }
 
+impl Stage {
+    /// Returns an iterator over all stage IDs.
+    pub fn all() -> ResourceIterator<Stage> {
+        ResourceIterator::new()
+    }
+
+    /// Tries to find the stage whose name matches `name`.
+    pub fn find(name: &str) -> Option<Stage> {
+        Self::all().find(|s| s.name() == name)
+    }
+
+    /// Returns the name of the stage file without the filename or extension.
+    pub fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    /// Returns the stage's title in the English version of the game.
+    pub fn title(self) -> &'static str {
+        self.meta().title
+    }
+
+    /// Gets the path to the stage file within the ISO.
+    pub fn path(self) -> String {
+        format!("{}/{}{}", STAGE_DIR, self.name(), STAGE_EXT)
+    }
+
+    /// Returns `true` if this is a dev stage (shun, hori, ahk, etc.).
+    pub fn is_dev(self) -> bool {
+        i32::from(self) >= FIRST_DEV_STAGE
+    }
+
+    fn meta(self) -> &'static Metadata {
+        let index = i32::from(self);
+        let dev_index = index - FIRST_DEV_STAGE;
+        if dev_index >= 0 {
+            &METADATA[dev_index as usize + NUM_MAIN_STAGES]
+        } else {
+            &METADATA[index as usize]
+        }
+    }
+}
+
 impl Debug for Stage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{}>", StageDefinition::get(*self).name)
+        write!(f, "<{}>", self.name())
+    }
+}
+
+impl Sealed for Stage {}
+
+impl Resource for Stage {
+    const COUNT: usize = NUM_STAGES;
+    fn at(index: usize) -> Self {
+        METADATA[index].id
     }
 }
 
@@ -95,29 +122,37 @@ mod tests {
 
     #[test]
     fn test_get_stage_main() {
-        let stage = StageDefinition::get(Stage::LivingRoom);
-        assert_eq!(stage.id, Stage::LivingRoom);
-        assert_eq!(stage.name, "stage07");
-        assert_eq!(stage.title, "Living Room");
+        let stage = Stage::LivingRoom;
+        assert_eq!(stage.name(), "stage07");
+        assert_eq!(stage.title(), "Living Room");
         assert_eq!(stage.path(), "bin/e/stage07.bin");
         assert!(!stage.is_dev());
-        assert_eq!(format!("{:?}", stage.id), "<stage07>");
+        assert_eq!(format!("{:?}", stage), "<stage07>");
     }
 
     #[test]
     fn test_get_stage_dev() {
-        let stage = StageDefinition::get(Stage::Ahk);
-        assert_eq!(stage.id, Stage::Ahk);
-        assert_eq!(stage.name, "ahk");
+        let stage = Stage::Ahk;
+        assert_eq!(stage.name(), "ahk");
         assert_eq!(stage.path(), "bin/e/ahk.bin");
         assert!(stage.is_dev());
-        assert_eq!(format!("{:?}", stage.id), "<ahk>");
+        assert_eq!(format!("{:?}", stage), "<ahk>");
     }
 
     #[test]
     fn test_find_stage() {
-        assert_eq!(StageDefinition::find("stage07").unwrap().id, Stage::LivingRoom);
-        assert_eq!(StageDefinition::find("ahk").unwrap().id, Stage::Ahk);
-        assert!(StageDefinition::find("stage").is_none());
+        assert_eq!(Stage::find("stage07"), Some(Stage::LivingRoom));
+        assert_eq!(Stage::find("ahk"), Some(Stage::Ahk));
+        assert_eq!(Stage::find("stage"), None);
+    }
+
+    #[test]
+    fn test_all() {
+        let all = Stage::all().collect::<Vec<_>>();
+        assert_eq!(all.len(), NUM_STAGES);
+        assert_eq!(all[0], Stage::Debug);
+        assert_eq!(all[29], Stage::Stage29);
+        assert_eq!(all[30], Stage::Shun);
+        assert_eq!(all[38], Stage::Mariko);
     }
 }

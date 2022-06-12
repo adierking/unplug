@@ -18,6 +18,7 @@ pub mod atc;
 pub mod item;
 pub mod music;
 pub mod object;
+pub mod resource;
 pub mod sfx;
 pub mod sfx_group;
 pub mod sfx_sample;
@@ -57,4 +58,8 @@ pub enum Error {
 
     #[error("{0:?} does not have a corresponding item")]
     NoObjectItem(Object),
+}
+
+mod private {
+    pub trait Sealed {}
 }

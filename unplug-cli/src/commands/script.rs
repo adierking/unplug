@@ -8,7 +8,7 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
-use unplug::data::stage::STAGES;
+use unplug::data::Stage as StageId;
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
@@ -122,10 +122,10 @@ pub fn command_script_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()
     let libs_out = File::create(Path::join(&opt.output, "globals.txt"))?;
     do_dump_libs(&libs, &opt.flags, BufWriter::new(libs_out))?;
 
-    for stage_def in STAGES {
-        info!("Dumping {}.bin", stage_def.name);
-        let stage = ctx.read_stage(&libs, stage_def.id)?;
-        let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", stage_def.name)))?;
+    for id in StageId::all() {
+        info!("Dumping {}.bin", id.name());
+        let stage = ctx.read_stage(&libs, id)?;
+        let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", id.name())))?;
         do_dump_stage(&stage, &opt.flags, BufWriter::new(stage_out))?;
     }
 

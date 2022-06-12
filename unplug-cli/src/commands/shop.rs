@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use unplug::data::atc::AtcDefinition;
 use unplug::data::item::ItemDefinition;
-use unplug::data::stage::{Stage, StageDefinition};
+use unplug::data::Stage;
 use unplug::globals::{GlobalsBuilder, Metadata};
 use unplug::shop::{Requirement, Shop, Slot, NUM_SLOTS};
 
@@ -129,8 +129,7 @@ pub fn command_export(ctx: Context, opt: ShopExportOpt) -> Result<()> {
     info!("Reading script globals");
     let libs = globals.read_libs()?;
 
-    let chibi_house = StageDefinition::get(Stage::ChibiHouse);
-    info!("Reading {}.bin", chibi_house.name);
+    info!("Reading {}.bin", Stage::ChibiHouse.name());
     let stage = ctx.read_stage(&libs, Stage::ChibiHouse)?;
 
     info!("Parsing shop code");
@@ -190,8 +189,7 @@ pub fn command_import(ctx: Context, opt: ShopImportOpt) -> Result<()> {
     info!("Reading script globals");
     let libs = globals.read_libs()?;
 
-    let chibi_house = StageDefinition::get(Stage::ChibiHouse);
-    info!("Reading {}.bin", chibi_house.name);
+    info!("Reading {}.bin", Stage::ChibiHouse.name());
     let mut stage = ctx.read_stage(&libs, Stage::ChibiHouse)?;
 
     info!("Compiling new shop code");

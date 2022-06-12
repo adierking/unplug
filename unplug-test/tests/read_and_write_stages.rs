@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Cursor, Seek, SeekFrom};
 use std::mem;
 use unplug::common::WriteTo;
-use unplug::data::stage::{Stage as StageId, StageDefinition};
+use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, OpenFile};
 use unplug::event::{Block, BlockId, CodeBlock, Command, DataBlock, Ip, Script};
 use unplug::globals::{GlobalsBuilder, GlobalsReader};
@@ -118,7 +118,7 @@ fn test_read_and_write_stages() -> Result<()> {
     drop(globals);
 
     for info in STAGE_INFO {
-        let stage_path = StageDefinition::get(info.id).path();
+        let stage_path = info.id.path();
         info!("Reading {}", stage_path);
         let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
         let original = Stage::read_from(&mut file, &libs)?;

@@ -8,7 +8,7 @@ pub use writer::MessageWriter;
 use anyhow::{anyhow, ensure, Result};
 use byteorder::{ByteOrder, LE};
 use std::fmt;
-use unplug::data::stage::{Stage, StageDefinition, STAGES};
+use unplug::data::Stage;
 use unplug::event::msg::MsgArgs;
 use unplug::event::script::CommandLocation;
 use unplug::event::{Command, Script};
@@ -27,7 +27,7 @@ impl MessageSource {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Globals => "globals",
-            Self::Stage(stage) => StageDefinition::get(*stage).name,
+            Self::Stage(stage) => stage.name(),
         }
     }
 
@@ -36,11 +36,10 @@ impl MessageSource {
         if s == "globals" {
             Ok(Self::Globals)
         } else {
-            let stage = STAGES
-                .iter()
-                .find(|stage| stage.name == s)
+            let stage = Stage::all()
+                .find(|stage| stage.name() == s)
                 .ok_or_else(|| anyhow!("Invalid message source: {}", s))?;
-            Ok(Self::Stage(stage.id))
+            Ok(Self::Stage(stage))
         }
     }
 }

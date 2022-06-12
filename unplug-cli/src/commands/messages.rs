@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Cursor};
 use unplug::common::WriteTo;
-use unplug::data::stage::{StageDefinition, GLOBALS_PATH, STAGES};
+use unplug::data::stage::{Stage, GLOBALS_PATH};
 use unplug::event::msg::MsgArgs;
 use unplug::event::Script;
 use unplug::globals::GlobalsBuilder;
@@ -37,10 +37,10 @@ pub fn command_export(ctx: Context, opt: MessagesExportOpt) -> Result<()> {
     writer.start()?;
     writer.write_script(MessageSource::Globals, &libs.script)?;
 
-    for def in STAGES {
-        info!("Reading {}.bin", def.name);
-        let stage = ctx.read_stage(&libs, def.id)?;
-        writer.write_script(MessageSource::Stage(def.id), &stage.script)?;
+    for id in Stage::all() {
+        info!("Reading {}.bin", id.name());
+        let stage = ctx.read_stage(&libs, id)?;
+        writer.write_script(MessageSource::Stage(id), &stage.script)?;
     }
 
     writer.finish()?;
@@ -88,14 +88,13 @@ pub fn command_import(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
             MessageSource::Globals => continue,
             MessageSource::Stage(id) => id,
         };
-        let stage_def = StageDefinition::get(stage_id);
-        info!("Rebuilding {}.bin", stage_def.name);
+        info!("Rebuilding {}.bin", stage_id.name());
         let mut stage = ctx.read_stage(&libs, stage_id)?;
         apply_messages(source, &mut stage.script, &mut messages);
         let mut writer = Cursor::new(vec![]);
         stage.write_to(&mut writer)?;
         let bytes = writer.into_inner().into_boxed_slice();
-        rebuilt_files.push((stage_def.path(), bytes));
+        rebuilt_files.push((stage_id.path(), bytes));
     }
 
     if !messages.is_empty() {

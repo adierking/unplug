@@ -16,8 +16,8 @@ use unplug::common::{ReadFrom, ReadSeek, ReadWriteSeek, WriteTo};
 use unplug::data::music::MusicDefinition;
 use unplug::data::sfx::PLAYLIST_PATH;
 use unplug::data::sfx_group::SfxGroupDefinition;
-use unplug::data::stage::{StageDefinition, GLOBALS_PATH};
-use unplug::data::{self, Music, SfxGroup};
+use unplug::data::stage::GLOBALS_PATH;
+use unplug::data::{Music, SfxGroup, Stage as StageId};
 use unplug::dvd::{ArchiveBuilder, ArchiveReader, DiscStream, EntryId, FileTree, OpenFile};
 use unplug::globals::{GlobalsBuilder, GlobalsReader, Libs};
 use unplug::stage::Stage;
@@ -366,8 +366,8 @@ impl<T: ReadSeek> OpenContext<T> {
     }
 
     /// Opens the stage file corresponding to `id`.
-    pub fn read_stage(&mut self, libs: &Libs, id: data::Stage) -> Result<Stage> {
-        let file = self.qp_file_at(&StageDefinition::get(id).path())?;
+    pub fn read_stage(&mut self, libs: &Libs, id: StageId) -> Result<Stage> {
+        let file = self.qp_file_at(id.path())?;
         self.read_stage_file(libs, &file)
     }
 
@@ -478,8 +478,8 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
     }
 
     /// Enqueues the stage file corresponding to `id` to be written from `stage`.
-    pub fn write_stage(self, id: data::Stage, stage: &Stage) -> Result<Self> {
-        let file = self.ctx.qp_file_at(&StageDefinition::get(id).path())?;
+    pub fn write_stage(self, id: StageId, stage: &Stage) -> Result<Self> {
+        let file = self.ctx.qp_file_at(id.path())?;
         self.write_stage_file(&file, stage)
     }
 

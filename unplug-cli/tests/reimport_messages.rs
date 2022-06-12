@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::fs::File;
 use tempfile::NamedTempFile;
-use unplug::data::stage::STAGES;
+use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::event::msg::MsgArgs;
 use unplug::event::Script;
@@ -63,9 +63,9 @@ fn test_reimport_messages() -> Result<()> {
     info!("Comparing globals messages");
     compare_messages(MessageSource::Globals, &original_libs.script, &rebuilt_libs.script);
 
-    for stage_def in STAGES {
-        let name = stage_def.name;
-        let path = stage_def.path();
+    for id in StageId::all() {
+        let name = id.name();
+        let path = id.path();
         info!("Reading original {}", name);
         let mut original_reader = original_qp.open_file_at(&path)?;
         let original_stage = Stage::read_from(&mut original_reader, &original_libs)?;
@@ -73,11 +73,7 @@ fn test_reimport_messages() -> Result<()> {
         let mut rebuilt_reader = rebuilt_qp.open_file_at(&path)?;
         let rebuilt_stage = Stage::read_from(&mut rebuilt_reader, &rebuilt_libs)?;
         info!("Comparing {} messages", name);
-        compare_messages(
-            MessageSource::Stage(stage_def.id),
-            &original_stage.script,
-            &rebuilt_stage.script,
-        );
+        compare_messages(MessageSource::Stage(id), &original_stage.script, &rebuilt_stage.script);
     }
 
     Ok(())

@@ -15,8 +15,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::num::NonZeroI32;
 use std::path::Path;
-use unplug::data::stage::{Stage as StageId, StageDefinition, STAGES};
-use unplug::data::{Item, Object};
+use unplug::data::{Item, Object, Stage as StageId};
 use unplug::event::{BlockId, Command, Expr, Ip, Script};
 use unplug::stage::{ObjectFlags, ObjectPlacement, Stage};
 
@@ -294,10 +293,10 @@ pub fn command_export_all(ctx: Context, opt: StageExportAllOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     fs::create_dir_all(&opt.output)?;
     let libs = ctx.read_globals()?.read_libs()?;
-    for stage_def in STAGES {
-        let filename = format!("{}.json", stage_def.name);
+    for id in StageId::all() {
+        let filename = format!("{}.json", id.name());
         info!("Exporting {}", filename);
-        let stage = ctx.read_stage(&libs, stage_def.id)?;
+        let stage = ctx.read_stage(&libs, id)?;
         let path = opt.output.join(filename);
         let out = BufWriter::new(File::create(path)?);
         write_stage(stage, out)?;
@@ -424,8 +423,8 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
 
     info!("Reading input JSON");
     let mut jsons: Vec<(StageId, ImportedStage)> = vec![];
-    for stage_def in STAGES {
-        let filename = format!("{}.json", stage_def.name);
+    for id in StageId::all() {
+        let filename = format!("{}.json", id.name());
         debug!("Reading {}", filename);
         let path = opt.input.join(&filename);
         if opt.force || path.exists() {
@@ -433,7 +432,7 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
                 Ok(x) => x,
                 Err(e) => bail!("Error reading {}: {:#}", filename, e),
             };
-            jsons.push((stage_def.id, imported));
+            jsons.push((id, imported));
         }
     }
     if jsons.is_empty() {
@@ -444,16 +443,15 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
     let libs = ctx.read_globals()?.read_libs()?;
     let mut updated: Vec<(StageId, Box<Stage>)> = vec![];
     for (id, imported) in jsons {
-        let stage_def = StageDefinition::get(id);
         let mut stage = ctx.read_stage(&libs, id)?;
         if !opt.force && stage.objects == imported.objects {
             continue;
         }
 
-        info!("Patching {}.bin", stage_def.name);
+        info!("Patching {}.bin", id.name());
         if is_script_modified(&stage.objects, &imported.objects) {
             // See command_import()
-            error!("{}.bin's script does not match", stage_def.name);
+            error!("{}.bin's script does not match", id.name());
             return Err(script_modified_error());
         }
 

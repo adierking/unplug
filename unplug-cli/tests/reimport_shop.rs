@@ -3,7 +3,7 @@ use log::info;
 use std::fs::File;
 use std::io::BufReader;
 use tempfile::NamedTempFile;
-use unplug::data::stage::{Stage as StageId, StageDefinition};
+use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::shop::Shop;
@@ -49,12 +49,12 @@ fn test_reimport_shop() -> Result<()> {
     let rebuilt_libs = rebuilt_globals.read_libs()?;
     drop(rebuilt_globals);
 
-    let chibi_house = StageDefinition::get(StageId::ChibiHouse);
-    info!("Reading original {}.bin", chibi_house.name);
+    let chibi_house = StageId::ChibiHouse;
+    info!("Reading original {}.bin", chibi_house.name());
     let file = original_qp.open_file_at(&chibi_house.path())?;
     let original_stage = Stage::read_from(&mut BufReader::new(file), &original_libs)?;
 
-    info!("Reading rebuilt {}.bin", chibi_house.name);
+    info!("Reading rebuilt {}.bin", chibi_house.name());
     let file = rebuilt_qp.open_file_at(&chibi_house.path())?;
     let rebuilt_stage = Stage::read_from(&mut BufReader::new(file), &rebuilt_libs)?;
 
