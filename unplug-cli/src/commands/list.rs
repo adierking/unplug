@@ -3,10 +3,10 @@ use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt};
 use anyhow::Result;
 use unicase::Ascii;
 use unplug::data::atc::ATCS;
-use unplug::data::item::{ItemFlags, ITEMS};
+use unplug::data::item::ItemFlags;
 use unplug::data::music::MUSIC;
 use unplug::data::sfx::SFX;
-use unplug::data::{Object, Stage};
+use unplug::data::{Item, Object, Stage};
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
@@ -24,12 +24,11 @@ fn sort_ids<I: Copy + Ord>(ids: &mut [(I, &str)], settings: &ListIdsOpt) {
 /// The `list items` CLI command.
 fn command_items(opt: ListItemsOpt) -> Result<()> {
     let mut items: Vec<_> = if opt.show_unknown {
-        ITEMS.iter().map(|i| (i.id, i.name)).collect()
+        Item::iter().map(|i| (i, i.name())).collect()
     } else {
-        ITEMS
-            .iter()
-            .filter(|i| !i.flags.contains(ItemFlags::UNUSED))
-            .map(|i| (i.id, i.name))
+        Item::iter()
+            .filter(|i| !i.flags().contains(ItemFlags::UNUSED))
+            .map(|i| (i, i.name()))
             .collect()
     };
     sort_ids(&mut items, &opt.settings);

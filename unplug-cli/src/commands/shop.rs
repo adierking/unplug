@@ -13,8 +13,7 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use unplug::data::atc::AtcDefinition;
-use unplug::data::item::ItemDefinition;
-use unplug::data::Stage;
+use unplug::data::{Item, Stage};
 use unplug::globals::{GlobalsBuilder, Metadata};
 use unplug::shop::{Requirement, Shop, Slot, NUM_SLOTS};
 
@@ -41,8 +40,8 @@ fn parse_requirement(s: &str) -> Result<Requirement> {
         Ok(Requirement::HaveFlag(flag))
     } else if let Some(def) = AtcDefinition::find(s) {
         Ok(Requirement::HaveAtc(def.id))
-    } else if let Some(def) = ItemDefinition::find(s) {
-        Ok(Requirement::HaveItem(def.id))
+    } else if let Some(item) = Item::find(s) {
+        Ok(Requirement::HaveItem(item))
     } else {
         bail!("Invalid requirement: \"{}\"", s);
     }
@@ -67,9 +66,7 @@ impl SlotModel {
         let mut requires = vec![];
         for requirement in &slot.requirements {
             match requirement {
-                Requirement::HaveItem(item) => {
-                    requires.push(ItemDefinition::get(*item).name.to_owned())
-                }
+                Requirement::HaveItem(item) => requires.push(item.name().to_owned()),
                 Requirement::HaveAtc(atc) => {
                     requires.push(AtcDefinition::get(*atc).name.to_owned())
                 }
@@ -78,12 +75,7 @@ impl SlotModel {
             }
         }
         requires.sort_unstable();
-        Self {
-            item: slot.item.map(|i| ItemDefinition::get(i).name.to_owned()),
-            price,
-            limit: slot.limit,
-            requires,
-        }
+        Self { item: slot.item.map(|i| i.name().to_owned()), price, limit: slot.limit, requires }
     }
 
     /// Creates a new `SlotModel` from `slot`, retrieving the price from `globals`.
@@ -102,8 +94,8 @@ impl TryFrom<&SlotModel> for Slot {
     type Error = Error;
     fn try_from(model: &SlotModel) -> Result<Self> {
         let item = if let Some(item_str) = &model.item {
-            match ItemDefinition::find(item_str) {
-                Some(def) => Some(def.id),
+            match Item::find(item_str) {
+                Some(item) => Some(item),
                 None => bail!("Invalid item name: \"{}\"", item_str),
             }
         } else {

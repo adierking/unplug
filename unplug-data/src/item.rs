@@ -1,33 +1,24 @@
 use super::Object;
 use crate::object::ObjectClass;
+use crate::private::Sealed;
+use crate::resource::{Resource, ResourceIterator};
 use crate::{Error, Result};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
 
+/// The total number of items.
+pub const NUM_ITEMS: usize = 159;
+
 /// Metadata describing an item.
 #[derive(Debug)]
-pub struct ItemDefinition {
-    /// The item's corresponding `Item`.
-    pub id: Item,
+struct Metadata {
     /// A unique name assigned by unplug-datagen.
-    pub name: &'static str,
+    name: &'static str,
     /// The object corresponding to this item, if there is one.
-    pub object: Option<Object>,
+    object: Option<Object>,
     /// Flags describing the item.
-    pub flags: ItemFlags,
-}
-
-impl ItemDefinition {
-    /// Retrieves the definition corresponding to an `Item`.
-    pub fn get(id: Item) -> &'static ItemDefinition {
-        &ITEMS[i16::from(id) as usize]
-    }
-
-    /// Tries to find the item definition whose name matches `name`.
-    pub fn find(name: &str) -> Option<&'static ItemDefinition> {
-        ITEMS.iter().find(|i| i.name == name)
-    }
+    flags: ItemFlags,
 }
 
 bitflags! {
@@ -54,6 +45,7 @@ macro_rules! declare_items {
         $($index:literal => $id:ident { $name:literal, $object:ident $(, $flag:ident)* }),*
         $(,)*
     } => {
+        /// An item ID.
         #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i16)]
@@ -61,10 +53,9 @@ macro_rules! declare_items {
             $($id = $index),*
         }
 
-        pub static ITEMS: &[ItemDefinition] = &[
+        const METADATA: &[Metadata] = &[
             $(
-                ItemDefinition {
-                    id: Item::$id,
+                Metadata {
                     name: $name,
                     object: __impl_object_id!($object),
                     flags: ItemFlags::from_bits_truncate(0 $(| ItemFlags::$flag.bits())*),
@@ -74,9 +65,49 @@ macro_rules! declare_items {
     }
 }
 
+impl Item {
+    /// Returns an iterator over all item IDs.
+    pub fn iter() -> ResourceIterator<Self> {
+        ResourceIterator::new()
+    }
+
+    /// Tries to find the item definition whose name matches `name`.
+    pub fn find(name: &str) -> Option<Self> {
+        Self::iter().find(|i| i.name() == name)
+    }
+
+    /// Returns a unique name for the item assigned by unplug-datagen.
+    pub fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    /// Returns the object corresponding to this item, if there is one.
+    pub fn object(self) -> Option<Object> {
+        self.meta().object
+    }
+
+    /// Returns flags describing the item.
+    pub fn flags(self) -> ItemFlags {
+        self.meta().flags
+    }
+
+    fn meta(self) -> &'static Metadata {
+        &METADATA[i16::from(self) as usize]
+    }
+}
+
+impl Sealed for Item {}
+
+impl Resource for Item {
+    const COUNT: usize = NUM_ITEMS;
+    fn at(index: usize) -> Self {
+        Item::try_from(index as i16).unwrap()
+    }
+}
+
 impl Debug for Item {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{}>", ItemDefinition::get(*self).name)
+        write!(f, "<{}>", self.name())
     }
 }
 
@@ -97,7 +128,7 @@ impl TryFrom<Object> for Item {
 impl TryFrom<Item> for Object {
     type Error = Error;
     fn try_from(item: Item) -> Result<Self> {
-        ItemDefinition::get(item).object.ok_or(Error::NoItemObject(item))
+        item.object().ok_or(Error::NoItemObject(item))
     }
 }
 
@@ -110,29 +141,27 @@ mod tests {
 
     #[test]
     fn test_get_item() {
-        let item = ItemDefinition::get(Item::Wastepaper);
-        assert_eq!(item.id, Item::Wastepaper);
-        assert_eq!(item.name, "wastepaper");
-        assert_eq!(item.object, Some(Object::ItemKamiKuzu));
-        assert!(item.flags.is_empty());
-        assert_eq!(format!("{:?}", item.id), "<wastepaper>");
+        let item = Item::Wastepaper;
+        assert_eq!(item.name(), "wastepaper");
+        assert_eq!(item.object(), Some(Object::ItemKamiKuzu));
+        assert_eq!(item.flags(), ItemFlags::empty());
+        assert_eq!(format!("{:?}", item), "<wastepaper>");
     }
 
     #[test]
     fn test_get_item_without_object() {
-        let item = ItemDefinition::get(Item::Unk20);
-        assert_eq!(item.id, Item::Unk20);
-        assert_eq!(item.name, "unk_20");
-        assert_eq!(item.object, None);
-        assert_eq!(item.flags, ItemFlags::UNUSED);
-        assert_eq!(format!("{:?}", item.id), "<unk_20>");
+        let item = Item::Unk20;
+        assert_eq!(item.name(), "unk_20");
+        assert_eq!(item.object(), None);
+        assert_eq!(item.flags(), ItemFlags::UNUSED);
+        assert_eq!(format!("{:?}", item), "<unk_20>");
     }
 
     #[test]
     fn test_find_item() {
-        assert_eq!(ItemDefinition::find("wastepaper").unwrap().id, Item::Wastepaper);
-        assert_eq!(ItemDefinition::find("unk_20").unwrap().id, Item::Unk20);
-        assert!(ItemDefinition::find("foo").is_none());
+        assert_eq!(Item::find("wastepaper"), Some(Item::Wastepaper));
+        assert_eq!(Item::find("unk_20"), Some(Item::Unk20));
+        assert_eq!(Item::find("foo"), None);
     }
 
     #[test]
@@ -145,5 +174,15 @@ mod tests {
     fn test_try_object_from_item() {
         assert_eq!(Object::try_from(Item::Wastepaper), Ok(Object::ItemKamiKuzu));
         assert_eq!(Object::try_from(Item::Unk20), Err(Error::NoItemObject(Item::Unk20)));
+    }
+
+    #[test]
+    fn test_iter() {
+        let items = Item::iter().collect::<Vec<_>>();
+        assert_eq!(items.len(), NUM_ITEMS);
+        assert_eq!(items[0], Item::FrogRing);
+        assert_eq!(items[1], Item::Pen);
+        assert_eq!(items[157], Item::WhiteFlowers);
+        assert_eq!(items[158], Item::ChibiBattery);
     }
 }
