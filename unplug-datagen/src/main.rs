@@ -561,10 +561,9 @@ struct AtcDefinition {
 
 /// Builds the ATC list from globals data.
 fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
-    globals
+    let mut atcs = globals
         .iter()
         .enumerate()
-        .skip(1) // ATC IDs start from 1
         .map(|(id, atc)| {
             let display_name = atc.name.decode().unwrap();
             let label = if !display_name.is_empty() {
@@ -575,7 +574,10 @@ fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
             let name = Label::snake_case(&label.0);
             AtcDefinition { id: id as u16, label, name }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    atcs[0].label = Label("None".to_owned());
+    atcs[0].name = Label("none".to_owned());
+    atcs
 }
 
 /// Representation of a suit which is written to the generated source.

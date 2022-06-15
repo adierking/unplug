@@ -15,12 +15,13 @@ pub struct AtcDefinition {
 impl AtcDefinition {
     /// Retrieves the definition corresponding to an `Atc`.
     pub fn get(id: Atc) -> &'static AtcDefinition {
-        &ATCS[i16::from(id) as usize - 1]
+        &ATCS[i16::from(id) as usize]
     }
 
     /// Tries to find the ATC definition whose name matches `name`.
     pub fn find(name: &str) -> Option<&'static AtcDefinition> {
-        ATCS.iter().find(|a| a.name == name)
+        // skip(1) to ignore None
+        ATCS.iter().skip(1).find(|a| a.name == name)
     }
 }
 
@@ -84,6 +85,12 @@ impl Debug for Atc {
     }
 }
 
+impl Default for Atc {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 // Generated using unplug-datagen
 include!("gen/atcs.inc.rs");
 
@@ -115,5 +122,10 @@ mod tests {
     fn test_find_atc() {
         assert_eq!(AtcDefinition::find("toothbrush").unwrap().id, Atc::Toothbrush);
         assert!(AtcDefinition::find("foo").is_none());
+    }
+
+    #[test]
+    fn test_find_none() {
+        assert!(AtcDefinition::find("none").is_none());
     }
 }
