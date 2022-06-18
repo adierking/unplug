@@ -33,6 +33,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::process;
+use time::macros::format_description;
 use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::Brsar;
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek};
@@ -218,8 +219,10 @@ fn init_logging() {
     let config = ConfigBuilder::new()
         .set_thread_level(LevelFilter::Off)
         .set_target_level(LevelFilter::Trace)
-        .set_time_format_str("%T%.3f")
         .set_level_color(Level::Info, Some(Color::Green))
+        .set_time_format_custom(format_description!(
+            "[hour]:[minute]:[second].[subsecond digits:3]"
+        ))
         .build();
     TermLogger::init(LevelFilter::Debug, config, TerminalMode::Stderr, ColorChoice::Auto).unwrap();
 }

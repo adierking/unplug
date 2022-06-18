@@ -12,10 +12,11 @@ use indicatif::{ProgressBar, ProgressDrawTarget, ProgressFinish, ProgressStyle};
 use lazy_static::lazy_static;
 use log::{info, log_enabled, Level, Log};
 use simplelog::{Color, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
-use std::convert::TryInto;
+use std::convert::identity;
 use std::io::{self, StdoutLock, Write};
 use std::sync::Mutex;
 use std::time::Duration;
+use time::macros::format_description;
 use unplug::audio::ProgressHint;
 
 const PROGRESS_UPDATE_RATE: u64 = 10;
@@ -173,8 +174,12 @@ pub fn init_logging(verbosity: u64) {
     let config = ConfigBuilder::new()
         .set_thread_level(LevelFilter::Off)
         .set_target_level(LevelFilter::Trace)
-        .set_time_format_str("%T%.3f")
         .set_level_color(Level::Info, Some(Color::Green))
+        .set_time_format_custom(format_description!(
+            "[hour]:[minute]:[second].[subsecond digits:3]"
+        ))
+        .set_time_offset_to_local()
+        .unwrap_or_else(identity)
         .build();
     let logger = TermLogger::new(filter, config, TerminalMode::Stderr, ColorChoice::Auto);
     let wrapper = Box::new(ProgressBarLogger { inner: logger });

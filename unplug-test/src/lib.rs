@@ -7,6 +7,7 @@ use std::io::Read;
 use std::sync::Once;
 use tempfile::{NamedTempFile, TempPath};
 // rust-analyzer doesn't like this import but it should be fine, just disable the diagnostic
+use time::macros::format_description;
 use unplug::common::ReadSeek;
 use unplug::dvd::DiscStream;
 
@@ -23,8 +24,10 @@ static INIT_LOGGING: Once = Once::new();
 pub fn init_logging() {
     INIT_LOGGING.call_once(|| {
         let config = ConfigBuilder::new()
-            .set_time_format_str("%T%.3f")
             .set_level_color(Level::Info, Some(Color::Green))
+            .set_time_format_custom(format_description!(
+                "[hour]:[minute]:[second].[subsecond digits:3]"
+            ))
             .build();
         TermLogger::init(LevelFilter::Debug, config, TerminalMode::Stderr, ColorChoice::Auto)
             .unwrap();

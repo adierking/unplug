@@ -7,8 +7,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 log = { version = "0.4" }
-simplelog = "0.10"
+simplelog = "^0.12.0"
 tempfile = "3"
+time = { version = "0.3", features = ["formatting", "macros"] }
 unplug = { path = "../unplug" }
 
 [dev-dependencies]
