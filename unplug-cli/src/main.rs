@@ -18,12 +18,12 @@ fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
     use tracing_subscriber::registry::Registry;
 
     let file = BufWriter::new(File::create(path)?);
-    let (writer, _guard) = tracing_appender::non_blocking(file);
+    let (writer, guard) = tracing_appender::non_blocking(file);
     let flame = FlameLayer::new(writer);
     let subscriber = Registry::default().with(flame);
     tracing::subscriber::set_global_default(subscriber).expect("failed to set global subscriber");
     debug!("inferno-flamegraph trace data will be written to {}", path.display());
-    Ok(_guard)
+    Ok(guard)
 }
 
 fn load_config(opt: ConfigOpt) {
