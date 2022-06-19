@@ -12,7 +12,7 @@ pub struct BlockInfo {
     /// The IDs of blocks that can execute immediately before this block.
     pub predecessors: Vec<BlockId>,
     /// The IDs of blocks that can execute immediately after this block.
-    pub successors: ArrayVec<[BlockId; 2]>,
+    pub successors: ArrayVec<BlockId, 2>,
     /// The definitions which are reachable at the start of this block.
     /// Computed as the union of the predecessors' outputs.
     pub inputs: HashSet<DefId>,

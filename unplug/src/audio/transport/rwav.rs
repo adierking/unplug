@@ -235,8 +235,8 @@ impl<R: Read + ?Sized> ReadFrom<R> for AdpcmCodecInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InfoSection {
     header: InfoHeader,
-    channels: ArrayVec<[ChannelHeader; 2]>,
-    codec_info: ArrayVec<[AdpcmCodecInfo; 2]>,
+    channels: ArrayVec<ChannelHeader, 2>,
+    codec_info: ArrayVec<AdpcmCodecInfo, 2>,
 }
 
 impl<R: Read + Seek + ?Sized> ReadFrom<R> for InfoSection {
@@ -252,13 +252,13 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for InfoSection {
 
         // channels_offset is an offset to a list of offsets to channel headers
         section.seek(SeekFrom::Start(header.channels_offset as u64))?;
-        let mut channel_offsets: ArrayVec<[u32; 2]> = ArrayVec::new();
+        let mut channel_offsets: ArrayVec<u32, 2> = ArrayVec::new();
         for _ in 0..header.num_channels {
             channel_offsets.push(section.read_u32::<BE>()?);
         }
 
-        let mut channels: ArrayVec<[ChannelHeader; 2]> = ArrayVec::new();
-        let mut codec_info: ArrayVec<[AdpcmCodecInfo; 2]> = ArrayVec::new();
+        let mut channels = ArrayVec::new();
+        let mut codec_info = ArrayVec::new();
         for offset in channel_offsets {
             section.seek(SeekFrom::Start(offset as u64))?;
             let channel = ChannelHeader::read_from(&mut section)?;
@@ -297,7 +297,7 @@ impl Debug for Channel {
 struct DataSection {
     start_address: u32,
     end_address: u32,
-    channels: ArrayVec<[Channel; 2]>,
+    channels: ArrayVec<Channel, 2>,
 }
 
 impl DataSection {
@@ -314,7 +314,7 @@ impl DataSection {
             Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
 
         // Read the data for each channel
-        let mut channels: ArrayVec<[Channel; 2]> = ArrayVec::new();
+        let mut channels = ArrayVec::new();
         for (i, channel) in info.channels.iter().enumerate() {
             // Correct the data offset and addresses in the INFO section so that we don't include
             // data that never gets decoded. This is not strictly necessary, but it is more
@@ -360,7 +360,7 @@ pub struct Rwav {
     /// The end address of the sample data.
     pub end_address: u32,
     /// The data for each channel in the sound.
-    pub channels: ArrayVec<[Channel; 2]>,
+    pub channels: ArrayVec<Channel, 2>,
     /// The audio source tag for debugging purposes.
     tag: SourceTag,
 }

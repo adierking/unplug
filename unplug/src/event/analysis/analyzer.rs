@@ -163,7 +163,7 @@ impl ScriptAnalyzer {
     fn calc_edges(&mut self, blocks: &[Block], sub: &SubroutineInfo) {
         for &id in &sub.postorder {
             let code = id.get(blocks).code().unwrap();
-            let mut successors: ArrayVec<[_; 2]> = ArrayVec::new();
+            let mut successors = ArrayVec::new();
             if let Some(Ip::Block(next_id)) = code.next_block {
                 self.blocks[next_id].predecessors.push(id);
                 successors.push(next_id);

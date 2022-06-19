@@ -257,7 +257,7 @@ pub struct Encoder<'r, 's> {
     /// The total number of samples which will need to be encoded.
     total_samples: Option<NonZeroU64>,
     /// The current frame which needs to be filled before it can be encoded.
-    frame: ArrayVec<[i16; SAMPLES_PER_FRAME]>,
+    frame: ArrayVec<i16, SAMPLES_PER_FRAME>,
     /// A buffer for samples which have been read but not encoded yet.
     buffer: VecDeque<Samples<'s, PcmS16Le>>,
     /// The offset within the samples at the front of `buffer` to start encoding from.

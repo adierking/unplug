@@ -139,7 +139,7 @@ struct PlaybackState {
     next_frame: u64,
     /// Known sample instants. The first instant is used as the base instant for calculating the
     /// playback position and will be removed after the second instant passes.
-    instants: ArrayVec<[PlaybackInstant; 2]>,
+    instants: ArrayVec<PlaybackInstant, 2>,
     /// Volume filter used to adjust sample volumes in real-time.
     volume: Volume<PcmF32Le>,
     /// `true` if no more samples are available for buffering.

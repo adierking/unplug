@@ -99,7 +99,7 @@ struct SampleHeader {
     /// The audio sample rate.
     rate: u32,
     /// The headers for each channel.
-    channels: ArrayVec<[ChannelHeader; 2]>,
+    channels: ArrayVec<ChannelHeader, 2>,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for SampleHeader {
@@ -107,7 +107,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for SampleHeader {
     fn read_from(reader: &mut R) -> Result<Self> {
         let num_channels = reader.read_u32::<BE>()?;
         let rate = reader.read_u32::<BE>()?;
-        let mut channels: ArrayVec<[ChannelHeader; 2]> = ArrayVec::new();
+        let mut channels = ArrayVec::new();
         for _ in 0..num_channels {
             channels.push(ChannelHeader::read_from(reader)?);
         }
@@ -233,7 +233,7 @@ pub struct BankSample {
     /// The audio sample rate.
     pub rate: u32,
     /// The data for each audio channel.
-    pub channels: ArrayVec<[Channel; 2]>,
+    pub channels: ArrayVec<Channel, 2>,
 }
 
 impl BankSample {
@@ -317,7 +317,7 @@ impl BankSample {
     }
 
     fn from_bank(header: &SampleHeader, bank_data: &[u8]) -> Self {
-        let channels: ArrayVec<_> =
+        let channels =
             header.channels.iter().map(|channel| Channel::from_bank(channel, bank_data)).collect();
         Self { rate: header.rate, channels }
     }

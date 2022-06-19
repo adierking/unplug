@@ -24,7 +24,7 @@ struct HpsState {
     /// The stream's sample rate in Hz (e.g. 44100).
     sample_rate: u32,
     /// Information about each channel in the stream.
-    channels: ArrayVec<[Channel; 2]>,
+    channels: ArrayVec<Channel, 2>,
     /// The index of the block to loop back to when the end is reached.
     loop_start: Option<usize>,
     /// The blocks making up the stream data.
@@ -49,7 +49,7 @@ impl<'r> HpsReader<'r> {
     #[instrument(level = "trace", skip_all)]
     fn new_impl(mut reader: Box<dyn ReadSeek + 'r>, tag: SourceTag) -> Result<Self> {
         let header = FileHeader::read_from(&mut reader)?;
-        let channels: ArrayVec<[Channel; 2]> =
+        let channels: ArrayVec<Channel, 2> =
             header.channels.iter().take(header.num_channels as usize).copied().collect();
 
         let mut blocks = vec![];

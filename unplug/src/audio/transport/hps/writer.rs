@@ -32,7 +32,7 @@ struct Block {
     /// The end address of the audio data in the block.
     end_address: u32,
     /// The data for each channel in the block.
-    channels: ArrayVec<[BlockChannel; 2]>,
+    channels: ArrayVec<BlockChannel, 2>,
     /// The cue points in the block.
     cues: Vec<CuePoint>,
 }
