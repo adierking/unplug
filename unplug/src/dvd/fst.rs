@@ -4,7 +4,7 @@ use crate::common::{
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use encoding_rs::SHIFT_JIS;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use slotmap::{new_key_type, DenseSlotMap};
+use slotmap::{new_key_type, SlotMap};
 use std::convert::TryFrom;
 use std::ffi::CString;
 use std::io::{self, Read, Write};
@@ -345,7 +345,7 @@ impl DirectoryEntry {
         entry: FstEntry,
         index: usize,
         fst: &FileStringTable,
-        entry_map: &mut DenseSlotMap<EntryId, Entry>,
+        entry_map: &mut SlotMap<EntryId, Entry>,
     ) -> Result<Self> {
         let name = if index > 0 {
             fst.decode_name(entry.name_offset)?
@@ -460,7 +460,7 @@ impl FusedIterator for TreeRecurse<'_> {}
 #[derive(Clone)]
 pub struct FileTree {
     /// The entries in the table.
-    pub entries: DenseSlotMap<EntryId, Entry>,
+    pub entries: SlotMap<EntryId, Entry>,
     /// The ID of the root directory.
     root: EntryId,
 }
@@ -468,14 +468,14 @@ pub struct FileTree {
 impl FileTree {
     /// Constructs a new `FileTree`.
     pub fn new() -> Self {
-        let mut entries = DenseSlotMap::with_key();
+        let mut entries = SlotMap::with_key();
         let root = entries.insert(DirectoryEntry::new("").into());
         Self { entries, root }
     }
 
     /// Constructs a `FileTree` from the contents of `fst`.
     pub fn from_fst(fst: &FileStringTable) -> Result<Self> {
-        let mut entry_map = DenseSlotMap::with_capacity_and_key(fst.entries.len());
+        let mut entry_map = SlotMap::with_capacity_and_key(fst.entries.len());
         let root_node = DirectoryEntry::from_fst(fst.entries[0], 0, fst, &mut entry_map)?;
         let root_id = entry_map.insert(root_node.into());
         Ok(Self { entries: entry_map, root: root_id })
