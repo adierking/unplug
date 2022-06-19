@@ -3,7 +3,7 @@ use super::MessageId;
 use crate::id::IdString;
 use anyhow::{anyhow, bail, ensure, Result};
 use quick_xml::events::attributes::Attribute;
-use quick_xml::events::{BytesStart, Event};
+use quick_xml::events::{BytesStart, BytesText, Event};
 use quick_xml::Reader;
 use std::convert::TryInto;
 use std::io::BufRead;
@@ -516,12 +516,6 @@ impl<R: BufRead> MessageReader<R> {
                 let name = String::from_utf8_lossy(e.name());
                 bail!("Unexpected end element: {}", name);
             }
-            Event::Text(t) | Event::CData(t) => {
-                let text = String::from_utf8_lossy(t.escaped());
-                let trimmed = text.trim();
-                ensure!(trimmed.is_empty(), "Unexpected text: \"{}\"", trimmed);
-                Ok(())
-            }
             Event::Decl(_) => {
                 bail!("Unexpected XML declaration");
             }
@@ -534,9 +528,18 @@ impl<R: BufRead> MessageReader<R> {
             Event::Eof => {
                 bail!("Unexpected end of file");
             }
-            // Ignore comments
-            Event::Comment(_) => Ok(()),
+            Event::Text(t) => Self::ensure_text_empty(t),
+            Event::CData(d) => Self::ensure_text_empty(d.escape()),
+            Event::Comment(_) => Ok(()), // Ignore comments
         }
+    }
+
+    /// Validates that a text element is empty.
+    fn ensure_text_empty(t: BytesText<'_>) -> Result<()> {
+        let text = String::from_utf8_lossy(t.escaped());
+        let trimmed = text.trim();
+        ensure!(trimmed.is_empty(), "Unexpected text: \"{}\"", trimmed);
+        Ok(())
     }
 }
 
