@@ -1,5 +1,5 @@
 use super::block::WriteIp;
-use super::expr::{self, Expr, SetExpr, SfxExpr};
+use super::expr::{self, Expr, SetExpr, SoundExpr};
 use super::msg::{self, MsgArgs};
 use super::opcodes::*;
 use super::Ip;
@@ -515,7 +515,7 @@ expr_enum! {
 #[read_from(error = Error)]
 #[write_to(stream = Write + WriteIp, error = Error)]
 pub struct CheckSfxArgs {
-    sfx: SfxExpr,
+    sfx: SoundExpr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
@@ -801,7 +801,7 @@ expr_enum! {
 #[read_from(error = Error)]
 #[write_to(stream = Write + WriteIp, error = Error)]
 pub struct SfxArgs {
-    pub sfx: SfxExpr,
+    pub sfx: SoundExpr,
     pub ty: SfxType,
 }
 
@@ -1036,7 +1036,7 @@ mod tests {
             MsgCommand::Text(text("radar")),
         ]))));
         assert_write_and_read!(Command::Sfx(Box::new(SfxArgs {
-            sfx: SfxExpr::Music(Music::BgmNight),
+            sfx: SoundExpr::Music(Music::BgmNight),
             ty: SfxType::Stop
         })));
         assert_write_and_read!(Command::Timer(Box::new(TimerArgs {

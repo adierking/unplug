@@ -25,12 +25,12 @@ use unplug::audio::transport::{
     FlacReader, HpsReader, Mp3Reader, OggReader, SfxBank, WavReader, WavWriter,
 };
 use unplug::audio::{Cue, ReadSamples};
-use unplug::common::{ReadSeek, ReadWriteSeek, SfxId, WriteTo};
+use unplug::common::{ReadSeek, ReadWriteSeek, WriteTo};
 use unplug::data::music::{MusicDefinition, MUSIC};
 use unplug::data::sfx::{SfxDefinition, SFX};
 use unplug::data::sfx_group::{SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
-use unplug::data::{Music, Sfx};
+use unplug::data::{Music, Sfx, Sound};
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
@@ -208,12 +208,12 @@ impl AudioResource {
         }
     }
 
-    /// Gets the corresponding `SfxId` if known.
-    fn id(&self) -> Option<SfxId> {
+    /// Gets the corresponding `Sound` if known.
+    fn id(&self) -> Option<Sound> {
         match *self {
-            Self::Music(music) => Some(SfxId::from(music)),
+            Self::Music(music) => Some(Sound::from(music)),
             Self::MusicFile { .. } => None,
-            Self::Sfx(sfx) => Some(SfxId::from(sfx)),
+            Self::Sfx(sfx) => Some(Sound::from(sfx)),
         }
     }
 }

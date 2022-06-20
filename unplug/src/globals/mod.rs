@@ -12,7 +12,7 @@ pub use libs::*;
 pub use metadata::Metadata;
 pub use reader::*;
 
-use crate::common::sfx_id;
+use crate::data;
 use crate::event::script;
 use std::io;
 use thiserror::Error;
@@ -40,15 +40,15 @@ pub enum Error {
     InvalidCollectSound(i8),
 
     #[error(transparent)]
-    Script(Box<script::Error>),
+    Data(Box<data::Error>),
 
     #[error(transparent)]
-    Sfx(Box<sfx_id::Error>),
+    Script(Box<script::Error>),
 
     #[error(transparent)]
     Io(Box<io::Error>),
 }
 
+from_error_boxed!(Error::Data, data::Error);
 from_error_boxed!(Error::Script, script::Error);
-from_error_boxed!(Error::Sfx, sfx_id::Error);
 from_error_boxed!(Error::Io, io::Error);

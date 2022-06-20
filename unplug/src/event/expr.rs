@@ -1,8 +1,8 @@
 use super::block::{Ip, WriteIp};
 use super::opcodes::*;
 use crate::common::io::write_u8_and;
-use crate::common::{ReadFrom, SfxId, WriteTo};
-use crate::data::{Atc, Item, Music, Object, Sfx};
+use crate::common::{ReadFrom, WriteTo};
+use crate::data::{Atc, Item, Music, Object, Sfx, Sound};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Debug};
@@ -779,82 +779,82 @@ pub struct ObjBone {
 /// A wrapper which makes it easier to work with expressions that reference sounds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(variant_size_differences)]
-pub enum SfxExpr {
+pub enum SoundExpr {
     /// An immediate expression referring to a sound effect.
-    Sound(Sfx),
+    Sfx(Sfx),
     /// An immediate expression referring to a music track.
     Music(Music),
     /// An expression which evaulates to a sound ID.
     Expr(Box<Expr>),
 }
 
-impl From<SfxId> for SfxExpr {
-    fn from(id: SfxId) -> Self {
+impl From<Sound> for SoundExpr {
+    fn from(id: Sound) -> Self {
         match id {
-            SfxId::Sound(sound) => Self::Sound(sound),
-            SfxId::Music(music) => Self::Music(music),
+            Sound::Sfx(sound) => Self::Sfx(sound),
+            Sound::Music(music) => Self::Music(music),
         }
     }
 }
 
-impl TryFrom<SfxExpr> for SfxId {
-    type Error = SfxExpr;
-    fn try_from(expr: SfxExpr) -> std::result::Result<Self, Self::Error> {
+impl TryFrom<SoundExpr> for Sound {
+    type Error = SoundExpr;
+    fn try_from(expr: SoundExpr) -> std::result::Result<Self, Self::Error> {
         match expr {
-            SfxExpr::Sound(sound) => Ok(Self::Sound(sound)),
-            SfxExpr::Music(music) => Ok(Self::Music(music)),
-            SfxExpr::Expr(_) => Err(expr),
+            SoundExpr::Sfx(sound) => Ok(Self::Sfx(sound)),
+            SoundExpr::Music(music) => Ok(Self::Music(music)),
+            SoundExpr::Expr(_) => Err(expr),
         }
     }
 }
 
-impl From<Sfx> for SfxExpr {
+impl From<Sfx> for SoundExpr {
     fn from(sound: Sfx) -> Self {
-        Self::Sound(sound)
+        Self::Sfx(sound)
     }
 }
 
-impl From<Music> for SfxExpr {
+impl From<Music> for SoundExpr {
     fn from(music: Music) -> Self {
         Self::Music(music)
     }
 }
 
-impl From<Expr> for SfxExpr {
+impl From<Expr> for SoundExpr {
     fn from(expr: Expr) -> Self {
         let id = match expr.value() {
             Some(id) => id as u32,
             None => return Self::Expr(expr.into()),
         };
-        match SfxId::try_from(id) {
+        match Sound::try_from(id) {
             Ok(id) => id.into(),
             Err(_) => Self::Expr(expr.into()),
         }
     }
 }
 
-impl From<SfxExpr> for Expr {
-    fn from(sfx: SfxExpr) -> Self {
+impl From<SoundExpr> for Expr {
+    fn from(sfx: SoundExpr) -> Self {
         match sfx {
-            SfxExpr::Sound(sound) => Expr::Imm32(u32::from(SfxId::Sound(sound)) as i32),
-            SfxExpr::Music(music) => Expr::Imm32(u32::from(SfxId::Music(music)) as i32),
-            SfxExpr::Expr(expr) => *expr,
+            SoundExpr::Sfx(sound) => Expr::Imm32(u32::from(Sound::Sfx(sound)) as i32),
+            SoundExpr::Music(music) => Expr::Imm32(u32::from(Sound::Music(music)) as i32),
+            SoundExpr::Expr(expr) => *expr,
         }
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for SfxExpr {
+impl<R: Read + ?Sized> ReadFrom<R> for SoundExpr {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Expr::read_from(reader)?.into())
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SfxExpr {
+impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SoundExpr {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         match self {
-            Self::Sound(_) | Self::Music(_) => Expr::from(self.clone()).write_to(writer),
+            Self::Sfx(_) | Self::Music(_) => Expr::from(self.clone()).write_to(writer),
             Self::Expr(expr) => expr.write_to(writer),
         }
     }
@@ -1198,9 +1198,9 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_sfx_expr() {
-        assert_write_and_read!(SfxExpr::Sound(Sfx::KitchenOil));
-        assert_write_and_read!(SfxExpr::Music(Music::BgmNight));
-        assert_write_and_read!(SfxExpr::Expr(Expr::from_var(0).into()));
+    fn test_write_and_read_sound_expr() {
+        assert_write_and_read!(SoundExpr::Sfx(Sfx::KitchenOil));
+        assert_write_and_read!(SoundExpr::Music(Music::BgmNight));
+        assert_write_and_read!(SoundExpr::Expr(Expr::from_var(0).into()));
     }
 }

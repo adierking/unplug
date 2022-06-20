@@ -22,6 +22,7 @@ pub mod resource;
 pub mod sfx;
 pub mod sfx_group;
 pub mod sfx_sample;
+pub mod sound;
 pub mod stage;
 pub mod suit;
 
@@ -32,6 +33,7 @@ pub use object::Object;
 pub use sfx::Sfx;
 pub use sfx_group::SfxGroup;
 pub use sfx_sample::SfxSample;
+pub use sound::Sound;
 pub use stage::Stage;
 pub use suit::Suit;
 
@@ -58,6 +60,9 @@ pub enum Error {
 
     #[error("{0:?} does not have a corresponding item")]
     NoObjectItem(Object),
+
+    #[error("invalid sound ID: 0x{0:>08x}")]
+    InvalidSoundId(u32),
 }
 
 mod private {

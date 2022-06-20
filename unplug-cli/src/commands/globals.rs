@@ -8,10 +8,10 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
-use unplug::common::{SfxId, Text};
+use unplug::common::Text;
 use unplug::data::music::{MusicDefinition, MUSIC};
 use unplug::data::sfx::{SfxDefinition, SFX};
-use unplug::data::Object;
+use unplug::data::{Object, Sound};
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
 
@@ -266,19 +266,19 @@ struct StatDef {
 serde_list_wrapper!(StatWrapper, Stat, "StatDef");
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-struct SfxDef(SfxId);
+struct SoundDef(Sound);
 
-impl Serialize for SfxDef {
+impl Serialize for SoundDef {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         match self.0 {
-            SfxId::Music(music) => {
+            Sound::Music(music) => {
                 let name = MusicDefinition::get(music).name;
                 serializer.serialize_str(name)
             }
-            SfxId::Sound(sound) => {
+            Sound::Sfx(sound) => {
                 let name = SfxDefinition::get(sound).name;
                 serializer.serialize_str(name)
             }
@@ -286,7 +286,7 @@ impl Serialize for SfxDef {
     }
 }
 
-impl<'de> Deserialize<'de> for SfxDef {
+impl<'de> Deserialize<'de> for SoundDef {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -294,10 +294,10 @@ impl<'de> Deserialize<'de> for SfxDef {
         let name = String::deserialize(deserializer)?;
         let music = MUSIC.iter().find(|m| unicase::eq(m.name, &name));
         if let Some(music) = music {
-            return Ok(SfxDef(SfxId::Music(music.id)));
+            return Ok(SoundDef(Sound::Music(music.id)));
         }
         match SFX.iter().find(|e| unicase::eq(e.name, &name)) {
-            Some(sfx) => Ok(SfxDef(SfxId::Sound(sfx.id))),
+            Some(sfx) => Ok(SoundDef(Sound::Sfx(sfx.id))),
             None => Err(D::Error::custom(format!("invalid SFX name: \"{}\"", name))),
         }
     }
@@ -320,8 +320,8 @@ struct MetadataDef {
     default_atcs: DefaultAtcs,
     #[serde(with = "CoinValuesDef")]
     coin_values: CoinValues,
-    pickup_sounds: Vec<SfxDef>,
-    collect_sounds: Vec<SfxDef>,
+    pickup_sounds: Vec<SoundDef>,
+    collect_sounds: Vec<SoundDef>,
     items: Vec<ItemWrapper>,
     actors: Vec<ActorWrapper>,
     atcs: Vec<AtcWrapper>,
@@ -342,8 +342,8 @@ impl From<Metadata> for MetadataDef {
             player_globals: metadata.player_globals,
             default_atcs: metadata.default_atcs,
             coin_values: metadata.coin_values,
-            pickup_sounds: metadata.pickup_sounds.into_iter().map(SfxDef).collect(),
-            collect_sounds: metadata.collect_sounds.into_iter().map(SfxDef).collect(),
+            pickup_sounds: metadata.pickup_sounds.into_iter().map(SoundDef).collect(),
+            collect_sounds: metadata.collect_sounds.into_iter().map(SoundDef).collect(),
             items: ItemWrapper::wrap(Vec::from(metadata.items)),
             actors: ActorWrapper::wrap(Vec::from(metadata.actors)),
             atcs: AtcWrapper::wrap(Vec::from(metadata.atcs)),

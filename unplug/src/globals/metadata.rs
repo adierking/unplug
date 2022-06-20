@@ -1,5 +1,6 @@
 use super::{Error, Result};
-use crate::common::{ReadFrom, SfxId, Text, WriteTo};
+use crate::common::{ReadFrom, Text, WriteTo};
+use crate::data::Sound;
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use std::convert::TryInto;
@@ -1025,6 +1026,20 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Stat {
     }
 }
 
+fn read_sounds(mut reader: impl Read, sounds: &mut [Sound]) -> Result<()> {
+    for sound in sounds {
+        *sound = reader.read_u32::<LE>()?.try_into()?;
+    }
+    Ok(())
+}
+
+fn write_sounds(mut writer: impl Write, sounds: &[Sound]) -> Result<()> {
+    for sound in sounds {
+        writer.write_u32::<LE>(sound.value())?;
+    }
+    Ok(())
+}
+
 /// The metadata stored in globals.bin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -1037,8 +1052,8 @@ pub struct Metadata {
     pub player_globals: PlayerGlobals,
     pub default_atcs: DefaultAtcs,
     pub coin_values: CoinValues,
-    pub pickup_sounds: [SfxId; NUM_PICKUP_SOUNDS],
-    pub collect_sounds: [SfxId; NUM_COLLECT_SOUNDS],
+    pub pickup_sounds: [Sound; NUM_PICKUP_SOUNDS],
+    pub collect_sounds: [Sound; NUM_COLLECT_SOUNDS],
     pub items: Box<[Item]>,
     pub actors: Box<[Actor]>,
     pub atcs: Box<[Atc]>,
@@ -1060,8 +1075,8 @@ impl Metadata {
             player_globals: PlayerGlobals::new(),
             default_atcs: DefaultAtcs::new(),
             coin_values: CoinValues::new(),
-            pickup_sounds: [SfxId::default(); NUM_PICKUP_SOUNDS],
-            collect_sounds: [SfxId::default(); NUM_COLLECT_SOUNDS],
+            pickup_sounds: [Sound::default(); NUM_PICKUP_SOUNDS],
+            collect_sounds: [Sound::default(); NUM_COLLECT_SOUNDS],
             items: vec![Item::new(); NUM_ITEMS].into_boxed_slice(),
             actors: vec![Actor::new(); NUM_ACTORS].into_boxed_slice(),
             atcs: vec![Atc::new(); NUM_ATCS].into_boxed_slice(),
@@ -1104,9 +1119,9 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for Metadata {
         reader.seek(SeekFrom::Start(header.coin_values_offset as u64))?;
         metadata.coin_values = CoinValues::read_from(reader)?;
         reader.seek(SeekFrom::Start(header.pickup_sounds_offset as u64))?;
-        SfxId::read_all_from(reader, &mut metadata.pickup_sounds)?;
+        read_sounds(&mut *reader, &mut metadata.pickup_sounds)?;
         reader.seek(SeekFrom::Start(header.collect_sounds_offset as u64))?;
-        SfxId::read_all_from(reader, &mut metadata.collect_sounds)?;
+        read_sounds(&mut *reader, &mut metadata.collect_sounds)?;
 
         let mut reader = StringReader::new(reader);
         reader.seek(SeekFrom::Start(header.items_offset as u64))?;
@@ -1188,9 +1203,9 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for Metadata {
         header.coin_values_offset = writer.seek(SeekFrom::Current(0))? as u32;
         self.coin_values.write_to(writer)?;
         header.pickup_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        SfxId::write_all_to(writer, &self.pickup_sounds)?;
+        write_sounds(&mut *writer, &self.pickup_sounds)?;
         header.collect_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
-        SfxId::write_all_to(writer, &self.collect_sounds)?;
+        write_sounds(&mut *writer, &self.collect_sounds)?;
 
         let mut writer = StringWriter::new(writer);
         header.items_offset = writer.seek(SeekFrom::Current(0))? as u32;

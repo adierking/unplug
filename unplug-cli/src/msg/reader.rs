@@ -9,9 +9,10 @@ use std::convert::TryInto;
 use std::io::BufRead;
 use std::mem;
 use std::str;
-use unplug::common::{SfxId, Text};
+use unplug::common::Text;
 use unplug::data::music::MUSIC;
 use unplug::data::sfx::SFX;
+use unplug::data::Sound;
 use unplug::event::msg::*;
 
 /// Parses a 32-bit integer which may be represented in either hex or decimal.
@@ -47,8 +48,8 @@ fn parse_yes_no(string: &str) -> Result<bool> {
     }
 }
 
-/// Parses a sound or music name into a `SoundId`.
-fn parse_sound(name: &str) -> Result<SfxId> {
+/// Parses a sound or music name into a `Sound`.
+fn parse_sound(name: &str) -> Result<Sound> {
     for music in MUSIC {
         if unicase::eq(music.name, name) {
             return Ok(music.id.into());
@@ -587,10 +588,10 @@ mod tests {
 
     #[test]
     fn test_parse_sound() -> Result<()> {
-        assert_eq!(parse_sound("elec")?, SfxId::Sound(Sfx::Elec));
-        assert_eq!(parse_sound("ElEc")?, SfxId::Sound(Sfx::Elec));
-        assert_eq!(parse_sound("bgm_night")?, SfxId::Music(Music::BgmNight));
-        assert_eq!(parse_sound("BgM_NiGhT")?, SfxId::Music(Music::BgmNight));
+        assert_eq!(parse_sound("elec")?, Sound::Sfx(Sfx::Elec));
+        assert_eq!(parse_sound("ElEc")?, Sound::Sfx(Sfx::Elec));
+        assert_eq!(parse_sound("bgm_night")?, Sound::Music(Music::BgmNight));
+        assert_eq!(parse_sound("BgM_NiGhT")?, Sound::Music(Music::BgmNight));
         assert!(parse_sound("foo").is_err());
         Ok(())
     }
