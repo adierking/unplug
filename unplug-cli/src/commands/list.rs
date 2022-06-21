@@ -2,11 +2,10 @@ use crate::context::Context;
 use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt};
 use anyhow::Result;
 use unicase::Ascii;
-use unplug::data::atc::ATCS;
 use unplug::data::item::ItemFlags;
 use unplug::data::music::MUSIC;
 use unplug::data::sfx::SFX;
-use unplug::data::{Item, Object, Stage};
+use unplug::data::{Atc, Item, Object, Stage};
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
@@ -40,7 +39,7 @@ fn command_items(opt: ListItemsOpt) -> Result<()> {
 
 /// The `list equipment` CLI command.
 fn command_equipment(opt: ListEquipmentOpt) -> Result<()> {
-    let mut atcs: Vec<_> = ATCS.iter().map(|a| (a.id, a.name)).collect();
+    let mut atcs: Vec<_> = Atc::iter().map(|a| (a, a.name())).collect();
     sort_ids(&mut atcs, &opt.settings);
     for (id, name) in atcs {
         if opt.show_unknown || !name.starts_with(UNKNOWN_ID_PREFIX) {

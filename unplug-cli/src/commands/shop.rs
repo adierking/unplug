@@ -12,8 +12,7 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
-use unplug::data::atc::AtcDefinition;
-use unplug::data::{Item, Stage};
+use unplug::data::{Atc, Item, Stage};
 use unplug::globals::{GlobalsBuilder, Metadata};
 use unplug::shop::{Requirement, Shop, Slot, NUM_SLOTS};
 
@@ -38,8 +37,8 @@ fn parse_requirement(s: &str) -> Result<Requirement> {
             Err(_) => bail!("Invalid flag index: {}", flag_str),
         };
         Ok(Requirement::HaveFlag(flag))
-    } else if let Some(def) = AtcDefinition::find(s) {
-        Ok(Requirement::HaveAtc(def.id))
+    } else if let Some(atc) = Atc::find(s) {
+        Ok(Requirement::HaveAtc(atc))
     } else if let Some(item) = Item::find(s) {
         Ok(Requirement::HaveItem(item))
     } else {
@@ -67,9 +66,7 @@ impl SlotModel {
         for requirement in &slot.requirements {
             match requirement {
                 Requirement::HaveItem(item) => requires.push(item.name().to_owned()),
-                Requirement::HaveAtc(atc) => {
-                    requires.push(AtcDefinition::get(*atc).name.to_owned())
-                }
+                Requirement::HaveAtc(atc) => requires.push(atc.name().to_owned()),
                 Requirement::HaveFlag(flag) => requires.push(format!("{}({})", FLAG_PREFIX, flag)),
                 _ => warn!("Unsupported requirement: {:?}", requirement),
             }

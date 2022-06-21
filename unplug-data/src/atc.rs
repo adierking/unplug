@@ -1,28 +1,17 @@
+use crate::private::Sealed;
+use crate::resource::{Resource, ResourceIterator};
 use crate::{Error, Item, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Formatter};
 
+/// The total number of attachments.
+pub const NUM_ATCS: usize = 9;
+
 /// Metadata describing an attachment (ATC).
-#[derive(Debug)]
-pub struct AtcDefinition {
-    /// The attachment's corresponding `Atc`.
-    pub id: Atc,
+struct Metadata {
     /// A unique name assigned by unplug-datagen.
-    pub name: &'static str,
-}
-
-impl AtcDefinition {
-    /// Retrieves the definition corresponding to an `Atc`.
-    pub fn get(id: Atc) -> &'static AtcDefinition {
-        &ATCS[i16::from(id) as usize]
-    }
-
-    /// Tries to find the ATC definition whose name matches `name`.
-    pub fn find(name: &str) -> Option<&'static AtcDefinition> {
-        // skip(1) to ignore None
-        ATCS.iter().skip(1).find(|a| a.name == name)
-    }
+    name: &'static str,
 }
 
 // Macro used in the generated ATC list
@@ -31,6 +20,7 @@ macro_rules! declare_atcs {
         $($index:literal => $id:ident { $name:literal }),*
         $(,)*
     } => {
+        /// An attachment (ATC) ID.
         #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[derive(IntoPrimitive, TryFromPrimitive)]
         #[repr(i16)]
@@ -38,13 +28,43 @@ macro_rules! declare_atcs {
             $($id = $index),*
         }
 
-        pub static ATCS: &[AtcDefinition] = &[
-            $(AtcDefinition {
-                id: Atc::$id,
+        const METADATA: &[Metadata] = &[
+            $(Metadata {
                 name: $name,
             }),*
         ];
     };
+}
+
+impl Atc {
+    /// Returns an iterator over all attachment IDs.
+    pub fn iter() -> ResourceIterator<Self> {
+        ResourceIterator::new()
+    }
+
+    /// Tries to find the attachment whose name matches `name`.
+    pub fn find(name: &str) -> Option<Self> {
+        // skip(1) to ignore None
+        Self::iter().skip(1).find(|a| a.name() == name)
+    }
+
+    /// Returns a unique name for the attachment assigned by unplug-datagen.
+    pub fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    fn meta(self) -> &'static Metadata {
+        &METADATA[i16::from(self) as usize]
+    }
+}
+
+impl Sealed for Atc {}
+
+impl Resource for Atc {
+    const COUNT: usize = NUM_ATCS;
+    fn at(index: usize) -> Self {
+        Atc::try_from(index as i16).unwrap()
+    }
 }
 
 /// `TryFrom` impl for converting `Item`s to a corresponding `Atc`
@@ -81,7 +101,7 @@ impl TryFrom<Atc> for Item {
 
 impl Debug for Atc {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "<{}>", AtcDefinition::get(*self).name)
+        write!(f, "<{}>", self.name())
     }
 }
 
@@ -100,10 +120,9 @@ mod tests {
 
     #[test]
     fn test_get_atc() {
-        let atc = AtcDefinition::get(Atc::Toothbrush);
-        assert_eq!(atc.id, Atc::Toothbrush);
-        assert_eq!(atc.name, "toothbrush");
-        assert_eq!(format!("{:?}", atc.id), "<toothbrush>");
+        let atc = Atc::Toothbrush;
+        assert_eq!(atc.name(), "toothbrush");
+        assert_eq!(format!("{:?}", atc), "<toothbrush>");
     }
 
     #[test]
@@ -120,12 +139,18 @@ mod tests {
 
     #[test]
     fn test_find_atc() {
-        assert_eq!(AtcDefinition::find("toothbrush").unwrap().id, Atc::Toothbrush);
-        assert!(AtcDefinition::find("foo").is_none());
+        assert_eq!(Atc::find("toothbrush"), Some(Atc::Toothbrush));
+        assert_eq!(Atc::find("foo"), None);
+        assert_eq!(Atc::find("none"), None);
     }
 
     #[test]
-    fn test_find_none() {
-        assert!(AtcDefinition::find("none").is_none());
+    fn test_iter() {
+        let atcs = Atc::iter().collect::<Vec<_>>();
+        assert_eq!(atcs.len(), NUM_ATCS);
+        assert_eq!(atcs[0], Atc::None);
+        assert_eq!(atcs[1], Atc::ChibiCopter);
+        assert_eq!(atcs[7], Atc::Squirter);
+        assert_eq!(atcs[8], Atc::Unk8);
     }
 }
