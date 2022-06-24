@@ -49,9 +49,6 @@ pub enum Error {
     #[error("{0:?} does not have a corresponding ATC")]
     NoItemAtc(Item),
 
-    #[error("{0:?} does not have a corresponding suit")]
-    NoItemSuit(Item),
-
     #[error("{0:?} does not have a corresponding item")]
     NoAtcItem(Atc),
 
@@ -60,6 +57,12 @@ pub enum Error {
 
     #[error("{0:?} does not have a corresponding item")]
     NoObjectItem(Object),
+
+    #[error("{0:?} does not have a corresponding suit")]
+    NoItemSuit(Item),
+
+    #[error("{0:?} does not have a corresponding item")]
+    NoSuitItem(Suit),
 
     #[error("invalid sound ID: 0x{0:>08x}")]
     InvalidSoundId(u32),

@@ -7,21 +7,39 @@ use std::convert::TryFrom;
 pub struct SuitDefinition {
     /// The suit's corresponding `Suit`.
     pub id: Suit,
-    /// The item corresponding to the suit.
-    pub item: Item,
+    /// A unique name assigned by unplug-datagen.
+    pub name: &'static str,
+    /// The item corresponding to the suit, if there is one.
+    pub item: Option<Item>,
 }
 
 impl SuitDefinition {
     /// Retrieves the definition corresponding to a `Suit`.
-    pub fn get(id: Suit) -> &'static SuitDefinition {
-        &SUITS[i16::from(id) as usize - 1]
+    pub fn get(id: Suit) -> &'static Self {
+        &SUITS[i16::from(id) as usize]
     }
+
+    /// Tries to find the suit whose name matches `name`.
+    pub fn find(name: &str) -> Option<&'static Self> {
+        // skip(1) to ignore None
+        SUITS.iter().skip(1).find(|s| s.name == name)
+    }
+}
+
+/// Expands an item ID name into an `Option<Item>`.
+macro_rules! __impl_item_id {
+    (None) => {
+        None
+    };
+    ($name:ident) => {
+        Some(Item::$name)
+    };
 }
 
 // Macro used in the generated suit list
 macro_rules! declare_suits {
     {
-        $($index:literal => $id:ident { $item:ident }),*
+        $($index:literal => $id:ident { $name:literal, $item:ident }),*
         $(,)*
     } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -35,7 +53,8 @@ macro_rules! declare_suits {
             $(
                 SuitDefinition {
                     id: Suit::$id,
-                    item: Item::$item,
+                    name: $name,
+                    item: __impl_item_id!($item),
                 }
             ),*
         ];
@@ -43,9 +62,10 @@ macro_rules! declare_suits {
 }
 
 /// `From` impl for converting `Suit`s to a corresponding `Item`
-impl From<Suit> for Item {
-    fn from(suit: Suit) -> Self {
-        SuitDefinition::get(suit).item
+impl TryFrom<Suit> for Item {
+    type Error = Error;
+    fn try_from(suit: Suit) -> Result<Self> {
+        SuitDefinition::get(suit).item.ok_or(Error::NoSuitItem(suit))
     }
 }
 
@@ -53,11 +73,7 @@ impl From<Suit> for Item {
 impl TryFrom<Item> for Suit {
     type Error = Error;
     fn try_from(item: Item) -> Result<Self> {
-        if let Some(suit) = SUITS.iter().find(|s| s.item == item) {
-            Ok(suit.id)
-        } else {
-            Err(Error::NoItemSuit(item))
-        }
+        SUITS.iter().find(|s| s.item == Some(item)).map(|s| s.id).ok_or(Error::NoItemSuit(item))
     }
 }
 
@@ -72,17 +88,26 @@ mod tests {
     fn test_get_suit() {
         let suit = SuitDefinition::get(Suit::Pajamas);
         assert_eq!(suit.id, Suit::Pajamas);
-        assert_eq!(suit.item, Item::Pajamas);
+        assert_eq!(suit.name, "pajamas");
+        assert_eq!(suit.item, Some(Item::Pajamas));
     }
 
     #[test]
-    fn test_item_from_suit() {
-        assert_eq!(Item::from(Suit::Pajamas), Item::Pajamas);
+    fn test_try_item_from_suit() {
+        assert_eq!(Item::try_from(Suit::Pajamas), Ok(Item::Pajamas));
+        assert_eq!(Item::try_from(Suit::None), Err(Error::NoSuitItem(Suit::None)));
     }
 
     #[test]
     fn test_try_suit_from_item() {
         assert_eq!(Suit::try_from(Item::Pajamas), Ok(Suit::Pajamas));
         assert_eq!(Suit::try_from(Item::HotRod), Err(Error::NoItemSuit(Item::HotRod)));
+    }
+
+    #[test]
+    fn test_find_suit() {
+        assert_eq!(SuitDefinition::find("frog").unwrap().id, Suit::Frog);
+        assert!(SuitDefinition::find("foo").is_none());
+        assert!(SuitDefinition::find("none").is_none());
     }
 }

@@ -2,12 +2,13 @@
 // To regenerate: cargo run -p unplug-datagen -- <iso path>
 
 declare_suits! {
-    1 => DrakeRedcrest { DrakeRedcrestSuit },
-    2 => Frog { FrogSuit },
-    3 => Tao { TaoSuit },
-    4 => Trauma { TraumaSuit },
-    5 => Unk5 { Unk33 },
-    6 => Ghost { GhostSuit },
-    7 => Pajamas { Pajamas },
-    8 => SuperChibiRobo { SuperChibiRoboSuit },
+    0 => None { "none", None },
+    1 => DrakeRedcrest { "drake_redcrest", DrakeRedcrestSuit },
+    2 => Frog { "frog", FrogSuit },
+    3 => Tao { "tao", TaoSuit },
+    4 => Trauma { "trauma", TraumaSuit },
+    5 => Unk5 { "unk_5", Unk33 },
+    6 => Ghost { "ghost", GhostSuit },
+    7 => Pajamas { "pajamas", Pajamas },
+    8 => SuperChibiRobo { "super_chibi_robo", SuperChibiRoboSuit },
 }

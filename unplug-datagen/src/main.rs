@@ -588,6 +588,7 @@ fn build_atcs(globals: &[Atc]) -> Vec<AtcDefinition> {
 struct SuitDefinition {
     id: u16,
     label: Label,
+    name: Label,
     item: Label,
 }
 
@@ -620,7 +621,10 @@ fn read_suits(
     let mut item_ids = [0; NUM_SUITS];
     reader.read_u16_into::<BE>(&mut item_ids)?;
 
-    let mut suits = vec![SuitDefinition::default(); NUM_SUITS];
+    let mut suits = vec![SuitDefinition::default(); NUM_SUITS + 1];
+    suits[0].label = Label("None".to_owned());
+    suits[0].name = Label("none".to_owned());
+    suits[0].item = Label("None".to_owned());
     for (&id, &item_id) in order.iter().zip(&item_ids) {
         // Get the display name and label from globals
         let display_name = globals[id as usize].name.decode()?;
@@ -630,12 +634,11 @@ fn read_suits(
             Label(format!("{}{}", UNKNOWN_PREFIX, id))
         };
         label = Label(label.0.replace(STRIP_SUIT_LABEL, ""));
+        let name = Label::snake_case(&label.0);
 
         // Look up the item ID in the suit items array
         let item = items[item_id as usize].label.clone();
-
-        // Suit IDs start from 1
-        suits[id as usize - 1] = SuitDefinition { id, label, item };
+        suits[id as usize] = SuitDefinition { id, label, name, item };
     }
     Ok(suits)
 }
@@ -983,7 +986,11 @@ fn write_atcs(mut writer: impl Write, atcs: &[AtcDefinition]) -> Result<()> {
 fn write_suits(mut writer: impl Write, suits: &[SuitDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, SUITS_HEADER)?;
     for suit in suits {
-        writeln!(writer, "    {} => {} {{ {} }},", suit.id, suit.label.0, suit.item.0)?;
+        writeln!(
+            writer,
+            "    {} => {} {{ \"{}\", {} }},",
+            suit.id, suit.label.0, suit.name.0, suit.item.0
+        )?;
     }
     write!(writer, "{}", SUITS_FOOTER)?;
     writer.flush()?;
