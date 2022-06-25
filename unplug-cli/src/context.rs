@@ -14,7 +14,6 @@ use unplug::audio::transport::{HpsReader, SfxBank};
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::{ReadFrom, ReadSeek, ReadWriteSeek, WriteTo};
 use unplug::data::sfx::PLAYLIST_PATH;
-use unplug::data::sfx_group::SfxGroupDefinition;
 use unplug::data::stage::GLOBALS_PATH;
 use unplug::data::{Music, SfxGroup, Stage as StageId};
 use unplug::dvd::{ArchiveBuilder, ArchiveReader, DiscStream, EntryId, FileTree, OpenFile};
@@ -399,8 +398,7 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Reads the sample bank corresponding to `bank`.
     pub fn read_bank(&mut self, bank: SfxGroup) -> Result<SfxBank> {
-        let def = SfxGroupDefinition::get(bank);
-        let file = self.disc_file_at(def.bank_path())?;
+        let file = self.disc_file_at(bank.path())?;
         self.read_bank_file(&file)
     }
 

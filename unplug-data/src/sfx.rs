@@ -1,4 +1,4 @@
-use super::sfx_group::{SfxGroup, SfxGroupDefinition, SFX_GROUPS};
+use crate::SfxGroup;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug};
 
@@ -49,14 +49,13 @@ impl Sfx {
     /// Returns the sound effect's `SfxGroup`.
     pub fn group(&self) -> SfxGroup {
         let id = u32::from(*self);
-        SFX_GROUPS[(id >> 16) as usize].id
+        SfxGroup::try_from((id >> 16) as u16).unwrap()
     }
 
     /// Returns the sound effect's material index within the playlist.
     pub fn material_index(&self) -> usize {
-        let group = SfxGroupDefinition::get(self.group());
         let id = u32::from(*self);
-        (group.first_material + (id & 0xffff)) as usize
+        (self.group().first_material() + (id & 0xffff)) as usize
     }
 }
 

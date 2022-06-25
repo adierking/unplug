@@ -6,7 +6,7 @@ use crate::opt::{
 };
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use log::{debug, info, log_enabled, warn, Level};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -27,9 +27,8 @@ use unplug::audio::transport::{
 use unplug::audio::{Cue, ReadSamples};
 use unplug::common::{ReadSeek, ReadWriteSeek, WriteTo};
 use unplug::data::sfx::{SfxDefinition, SFX};
-use unplug::data::sfx_group::{SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
-use unplug::data::{Music, Sfx, Sound};
+use unplug::data::{Music, Sfx, SfxGroup, Sound};
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
@@ -97,7 +96,7 @@ fn open_sound_file(
 
 /// Checks whether we have sample name information for a bank.
 fn have_sample_names(bank: &SfxBank) -> bool {
-    SFX_GROUPS.iter().any(|g| g.first_sample == bank.base_index())
+    SfxGroup::iter().any(|g| g.first_sample() == bank.base_index())
 }
 
 /// Gets the name of a sound sample.
@@ -116,14 +115,9 @@ fn find_bank<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId
     if let Some(file) = ctx.explicit_file_at(name)? {
         return Ok(file);
     }
-    let group = SFX_GROUPS.iter().find(|m| unicase::eq(m.name, name));
-    match group {
-        Some(group) => {
-            debug!("Resolved bank \"{}\": {:?}", name, group);
-            Ok(ctx.disc_file_at(group.bank_path())?)
-        }
-        None => bail!("Unknown sample bank: {}", name),
-    }
+    let group = SfxGroup::find(name).ok_or_else(|| anyhow!("Unknown sample bank: {}", name))?;
+    debug!("Resolved bank \"{}\": {:?}", name, group);
+    ctx.disc_file_at(group.path())
 }
 
 /// Caches playlist and sample bank data so it doesn't get double-loaded.
@@ -238,7 +232,7 @@ impl AudioFileId {
             AudioResource::Sfx(id) => {
                 let def = SfxDefinition::get(*id);
                 let playlist = cache.open_playlist(ctx)?;
-                let group = SfxGroupDefinition::get(id.group());
+                let group = id.group();
                 let material = id.material_index();
                 let sample = match playlist.sounds[material].sample_id() {
                     Some(id) => SfxSample::try_from(id).unwrap(),
@@ -246,9 +240,9 @@ impl AudioFileId {
                         bail!("Sound effect \"{}\" does not have an associated sample", def.name)
                     }
                 };
-                let index = (u32::from(sample) - group.first_sample) as usize;
-                debug!("Resolved sound \"{}\": group={}, index={}", def.name, group.name, index);
-                let file = ctx.disc_file_at(group.bank_path())?;
+                let index = (u32::from(sample) - group.first_sample()) as usize;
+                debug!("Resolved sound \"{}\": group={}, index={}", def.name, group.name(), index);
+                let file = ctx.disc_file_at(group.path())?;
                 Ok(Self::Sfx { file, index })
             }
         }
@@ -392,8 +386,8 @@ fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
 
     // Export registered banks
-    for group in SFX_GROUPS {
-        let file = ctx.disc_file_at(&group.bank_path())?;
+    for group in SfxGroup::iter() {
+        let file = ctx.disc_file_at(&group.path())?;
         export_bank_subdir(&mut ctx, &opt.settings, &file, &opt.output)?;
     }
 
