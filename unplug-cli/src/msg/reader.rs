@@ -10,9 +10,8 @@ use std::io::BufRead;
 use std::mem;
 use std::str;
 use unplug::common::Text;
-use unplug::data::music::MusicDefinition;
 use unplug::data::sfx::SFX;
-use unplug::data::Sound;
+use unplug::data::{Music, Sound};
 use unplug::event::msg::*;
 
 /// Parses a 32-bit integer which may be represented in either hex or decimal.
@@ -50,8 +49,8 @@ fn parse_yes_no(string: &str) -> Result<bool> {
 
 /// Parses a sound or music name into a `Sound`.
 fn parse_sound(name: &str) -> Result<Sound> {
-    if let Some(music) = MusicDefinition::find(name) {
-        return Ok(music.id.into());
+    if let Some(music) = Music::find(name) {
+        return Ok(music.into());
     }
     for sound in SFX {
         if unicase::eq(sound.name, name) {

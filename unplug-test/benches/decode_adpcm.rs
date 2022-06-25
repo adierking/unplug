@@ -3,7 +3,7 @@ use std::io::Cursor;
 use unplug::audio::format::PcmS16Le;
 use unplug::audio::transport::HpsReader;
 use unplug::audio::{ReadSamples, Samples};
-use unplug::data::music::{Music, MusicDefinition};
+use unplug::data::Music;
 use unplug::dvd::OpenFile;
 use unplug_test as common;
 
@@ -11,11 +11,11 @@ const MUSIC_TO_DECODE: Music = Music::Bgm;
 
 fn load_music() -> HpsReader<'static> {
     let mut iso = common::open_iso().expect("could not open ISO");
-    let music = MusicDefinition::get(MUSIC_TO_DECODE);
-    let mut reader = iso.open_file_at(&music.path().unwrap()).expect("could not open HPS file");
+    let path = MUSIC_TO_DECODE.path().unwrap();
+    let mut reader = iso.open_file_at(&path).expect("could not open HPS file");
     let mut bytes = vec![];
     reader.read_to_end(&mut bytes).expect("could not read HPS file");
-    HpsReader::new(Cursor::new(bytes), music.name).expect("failed to load HPS file")
+    HpsReader::new(Cursor::new(bytes), MUSIC_TO_DECODE.name()).expect("failed to load HPS file")
 }
 
 fn decode_adpcm(music: &HpsReader) -> Vec<Samples<'static, PcmS16Le>> {

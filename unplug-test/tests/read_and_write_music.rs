@@ -7,7 +7,6 @@ use std::io::Cursor;
 use unplug::audio::format::{PcmS16Le, ReadWriteBytes};
 use unplug::audio::transport::{HpsReader, HpsWriter};
 use unplug::audio::{Cue, ReadSamples};
-use unplug::data::music::MusicDefinition;
 use unplug::data::Music;
 use unplug::dvd::OpenFile;
 use unplug_test as common;
@@ -34,7 +33,7 @@ fn test_read_and_write_music() -> Result<()> {
 
     let mut iso = common::open_iso()?;
     for &(id, name, expected) in CHECKSUMS {
-        let path = MusicDefinition::get(id).path().unwrap();
+        let path = id.path().unwrap();
         info!("Reading {}", path);
         let mut reader = iso.open_file_at(&path)?;
         let mut original_bytes = vec![];

@@ -13,7 +13,6 @@ use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::{HpsReader, SfxBank};
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::{ReadFrom, ReadSeek, ReadWriteSeek, WriteTo};
-use unplug::data::music::MusicDefinition;
 use unplug::data::sfx::PLAYLIST_PATH;
 use unplug::data::sfx_group::SfxGroupDefinition;
 use unplug::data::stage::GLOBALS_PATH;
@@ -380,9 +379,7 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Opens the music file corresponding to `id`.
     pub fn open_music(&mut self, id: Music) -> Result<HpsReader<'_>> {
-        let def = MusicDefinition::get(id);
-        let path =
-            def.path().ok_or_else(|| anyhow!("{:?} does not have an associated file", id))?;
+        let path = id.path().ok_or_else(|| anyhow!("{:?} does not have an associated file", id))?;
         let file = self.disc_file_at(path)?;
         self.open_music_file(&file)
     }

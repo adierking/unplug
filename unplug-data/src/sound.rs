@@ -1,6 +1,5 @@
-use super::music::{Music, MusicDefinition};
 use super::sfx::{Sfx, SfxDefinition};
-use super::{Error, Result};
+use super::{Error, Music, Result};
 
 /// The special group value (hiword) corresponding to a music ID.
 const MUSIC_GROUP: u32 = 0xffff;
@@ -19,7 +18,7 @@ impl Sound {
     pub fn name(&self) -> &'static str {
         match *self {
             Self::Sfx(sfx) => SfxDefinition::get(sfx).name,
-            Self::Music(music) => MusicDefinition::get(music).name,
+            Self::Music(music) => music.name(),
         }
     }
 

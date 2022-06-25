@@ -3,9 +3,8 @@ use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt};
 use anyhow::Result;
 use unicase::Ascii;
 use unplug::data::item::ItemFlags;
-use unplug::data::music::MUSIC;
 use unplug::data::sfx::SFX;
-use unplug::data::{Atc, Item, Object, Stage};
+use unplug::data::{Atc, Item, Music, Object, Stage};
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
@@ -71,7 +70,7 @@ fn command_objects(opt: ListIdsOpt) -> Result<()> {
 
 /// The `list music` CLI command.
 fn command_music(opt: ListIdsOpt) -> Result<()> {
-    let mut music: Vec<_> = MUSIC.iter().map(|m| (m.id, m.name)).collect();
+    let mut music: Vec<_> = Music::iter().map(|m| (m, m.name())).collect();
     sort_ids(&mut music, &opt);
     for (id, name) in music {
         println!("[{:>3}] {}", u8::from(id), name);

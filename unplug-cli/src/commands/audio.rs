@@ -26,7 +26,6 @@ use unplug::audio::transport::{
 };
 use unplug::audio::{Cue, ReadSamples};
 use unplug::common::{ReadSeek, ReadWriteSeek, WriteTo};
-use unplug::data::music::{MusicDefinition, MUSIC};
 use unplug::data::sfx::{SfxDefinition, SFX};
 use unplug::data::sfx_group::{SfxGroupDefinition, SFX_GROUPS};
 use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
@@ -185,9 +184,9 @@ impl AudioResource {
             return Ok(Self::MusicFile { file, name });
         }
 
-        if let Some(music) = MusicDefinition::find(name) {
-            debug!("Resolved music \"{}\": {:?}", name, music.id);
-            return Ok(Self::Music(music.id));
+        if let Some(music) = Music::find(name) {
+            debug!("Resolved music \"{}\": {:?}", name, music);
+            return Ok(Self::Music(music));
         }
 
         let sfx = match SFX.iter().find(|e| unicase::eq(e.name, name)) {
@@ -201,7 +200,7 @@ impl AudioResource {
     /// Gets the name of the audio resource without any extension.
     fn name(&self) -> &str {
         match self {
-            Self::Music(music) => MusicDefinition::get(*music).name,
+            Self::Music(music) => music.name(),
             Self::MusicFile { name, .. } => name,
             Self::Sfx(sfx) => SfxDefinition::get(*sfx).name,
         }
@@ -210,9 +209,9 @@ impl AudioResource {
     /// Gets the corresponding `Sound` if known.
     fn id(&self) -> Option<Sound> {
         match *self {
-            Self::Music(music) => Some(Sound::from(music)),
+            Self::Music(music) => Some(music.into()),
             Self::MusicFile { .. } => None,
-            Self::Sfx(sfx) => Some(Sound::from(sfx)),
+            Self::Sfx(sfx) => Some(sfx.into()),
         }
     }
 }
@@ -232,7 +231,7 @@ impl AudioFileId {
     ) -> Result<Self> {
         match resource {
             AudioResource::Music(id) => {
-                let file = ctx.disc_file_at(MusicDefinition::get(*id).path().unwrap())?;
+                let file = ctx.disc_file_at(id.path().unwrap())?;
                 Ok(Self::Music(file))
             }
             AudioResource::MusicFile { file, .. } => Ok(Self::Music(file.clone())),
@@ -405,12 +404,12 @@ fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
     // Export music
     let mut cache = AudioCache::new();
     // skip(1) to skip None
-    for music in MUSIC.iter().skip(1) {
-        info!("Exporting {}.wav", music.name);
-        let resource = AudioResource::Music(music.id);
+    for music in Music::iter().skip(1) {
+        info!("Exporting {}.wav", music.name());
+        let resource = AudioResource::Music(music);
         let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
         let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
-        let output = opt.output.join(format!("{}.wav", music.name));
+        let output = opt.output.join(format!("{}.wav", music.name()));
         export(&audio, &opt.settings, &output)?;
     }
     Ok(())
