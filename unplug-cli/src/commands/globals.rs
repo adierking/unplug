@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use unplug::common::Text;
-use unplug::data::music::{MusicDefinition, MUSIC};
+use unplug::data::music::MusicDefinition;
 use unplug::data::sfx::{SfxDefinition, SFX};
 use unplug::data::{Object, Sound};
 use unplug::globals::metadata::*;
@@ -292,8 +292,7 @@ impl<'de> Deserialize<'de> for SoundDef {
         D: serde::Deserializer<'de>,
     {
         let name = String::deserialize(deserializer)?;
-        let music = MUSIC.iter().find(|m| unicase::eq(m.name, &name));
-        if let Some(music) = music {
+        if let Some(music) = MusicDefinition::find(&name) {
             return Ok(SoundDef(Sound::Music(music.id)));
         }
         match SFX.iter().find(|e| unicase::eq(e.name, &name)) {

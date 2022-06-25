@@ -12,7 +12,7 @@ const MUSIC_TO_DECODE: Music = Music::Bgm;
 fn load_music() -> HpsReader<'static> {
     let mut iso = common::open_iso().expect("could not open ISO");
     let music = MusicDefinition::get(MUSIC_TO_DECODE);
-    let mut reader = iso.open_file_at(&music.path()).expect("could not open HPS file");
+    let mut reader = iso.open_file_at(&music.path().unwrap()).expect("could not open HPS file");
     let mut bytes = vec![];
     reader.read_to_end(&mut bytes).expect("could not read HPS file");
     HpsReader::new(Cursor::new(bytes), music.name).expect("failed to load HPS file")

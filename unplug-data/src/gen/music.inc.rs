@@ -2,6 +2,7 @@
 // To regenerate: cargo run -p unplug-datagen -- <iso path>
 
 declare_music! {
+    0 => None { 255, "none" },
     1 => Sample { 255, "sample" },
     2 => Funk { 255, "funk" },
     3 => Theme { 150, "theme" },

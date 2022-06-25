@@ -760,8 +760,7 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
     RawMusicDefinition::read_all_from(reader, &mut raw_music)?;
 
     let mut definitions: Vec<MusicDefinition> = vec![];
-    // Music IDs start at 1
-    for (id, music) in raw_music.iter().enumerate().skip(1) {
+    for (id, music) in raw_music.iter().enumerate() {
         let path_offset = dol.address_to_offset(music.path_addr)? as u64;
         reader.seek(SeekFrom::Start(path_offset))?;
         let mut path = CString::read_from(reader)?.into_string()?;
@@ -783,6 +782,8 @@ fn read_music(dol: &DolHeader, reader: &mut (impl Read + Seek)) -> Result<Vec<Mu
         };
         definitions.push(MusicDefinition { id: id as u8, label, name, volume: music.volume });
     }
+    definitions[0].label = Label("None".to_owned());
+    definitions[0].name = "none".to_owned();
     Ok(definitions)
 }
 

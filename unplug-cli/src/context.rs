@@ -381,7 +381,9 @@ impl<T: ReadSeek> OpenContext<T> {
     /// Opens the music file corresponding to `id`.
     pub fn open_music(&mut self, id: Music) -> Result<HpsReader<'_>> {
         let def = MusicDefinition::get(id);
-        let file = self.disc_file_at(def.path())?;
+        let path =
+            def.path().ok_or_else(|| anyhow!("{:?} does not have an associated file", id))?;
+        let file = self.disc_file_at(path)?;
         self.open_music_file(&file)
     }
 

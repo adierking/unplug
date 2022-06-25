@@ -185,8 +185,7 @@ impl AudioResource {
             return Ok(Self::MusicFile { file, name });
         }
 
-        let music = MUSIC.iter().find(|m| unicase::eq(m.name, name));
-        if let Some(music) = music {
+        if let Some(music) = MusicDefinition::find(name) {
             debug!("Resolved music \"{}\": {:?}", name, music.id);
             return Ok(Self::Music(music.id));
         }
@@ -233,7 +232,7 @@ impl AudioFileId {
     ) -> Result<Self> {
         match resource {
             AudioResource::Music(id) => {
-                let file = ctx.disc_file_at(MusicDefinition::get(*id).path())?;
+                let file = ctx.disc_file_at(MusicDefinition::get(*id).path().unwrap())?;
                 Ok(Self::Music(file))
             }
             AudioResource::MusicFile { file, .. } => Ok(Self::Music(file.clone())),
@@ -405,7 +404,8 @@ fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
 
     // Export music
     let mut cache = AudioCache::new();
-    for music in MUSIC {
+    // skip(1) to skip None
+    for music in MUSIC.iter().skip(1) {
         info!("Exporting {}.wav", music.name);
         let resource = AudioResource::Music(music.id);
         let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
