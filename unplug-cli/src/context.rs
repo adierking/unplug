@@ -13,9 +13,7 @@ use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::{HpsReader, SfxBank};
 use unplug::common::io::{copy_buffered, BUFFER_SIZE};
 use unplug::common::{ReadFrom, ReadSeek, ReadWriteSeek, WriteTo};
-use unplug::data::sfx::PLAYLIST_PATH;
-use unplug::data::stage::GLOBALS_PATH;
-use unplug::data::{Music, SfxGroup, Stage as StageId};
+use unplug::data::{Music, Sfx, SfxGroup, Stage as StageId};
 use unplug::dvd::{ArchiveBuilder, ArchiveReader, DiscStream, EntryId, FileTree, OpenFile};
 use unplug::globals::{GlobalsBuilder, GlobalsReader, Libs};
 use unplug::stage::Stage;
@@ -358,7 +356,7 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Opens a `GlobalsReader` on globals.bin.
     pub fn read_globals(&mut self) -> Result<GlobalsReader<MemoryCursor>> {
-        let reader = self.open_qp_file_at(GLOBALS_PATH)?;
+        let reader = self.open_qp_file_at(StageId::QP_GLOBALS_PATH)?;
         let cursor = copy_into_memory(reader)?;
         Ok(GlobalsReader::open(cursor)?)
     }
@@ -392,7 +390,7 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Opens sfx_sample.sem.
     pub fn read_playlist(&mut self) -> Result<SfxPlaylist> {
-        let mut reader = self.open_disc_file_at(PLAYLIST_PATH)?;
+        let mut reader = self.open_disc_file_at(Sfx::DISC_PLAYLIST_PATH)?;
         Ok(SfxPlaylist::read_from(&mut reader)?)
     }
 
@@ -471,7 +469,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
         let mut writer = Cursor::new(vec![]);
         builder.write_to(&mut writer)?;
         writer.seek(SeekFrom::Start(0))?;
-        self.write_qp_file_at(GLOBALS_PATH, writer)
+        self.write_qp_file_at(StageId::QP_GLOBALS_PATH, writer)
     }
 
     /// Enqueues the stage file corresponding to `id` to be written from `stage`.

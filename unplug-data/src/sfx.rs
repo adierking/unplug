@@ -1,13 +1,7 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
-use crate::SfxGroup;
+use crate::{Resource, SfxGroup};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug};
-
-pub const NUM_SFX: usize = 1120;
-
-/// ISO path to the playlist file.
-pub const PLAYLIST_PATH: &str = "qp/sfx_sample.sem";
 
 /// Metadata describing a sound effect.
 struct Metadata {
@@ -43,10 +37,8 @@ macro_rules! declare_sfx {
 }
 
 impl Sfx {
-    /// Returns an iterator over all sound effect IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
+    /// Path to the playlist file in the disc.
+    pub const DISC_PLAYLIST_PATH: &'static str = "qp/sfx_sample.sem";
 
     /// Tries to find the sound effect whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
@@ -79,9 +71,11 @@ impl Sfx {
 impl Sealed for Sfx {}
 
 impl Resource for Sfx {
-    const COUNT: usize = NUM_SFX;
-    fn at(index: usize) -> Self {
-        METADATA[index].id
+    type Value = u32;
+    const COUNT: usize = METADATA.len();
+
+    fn at(index: u32) -> Self {
+        METADATA[index as usize].id
     }
 }
 
@@ -124,7 +118,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let sfx = Sfx::iter().collect::<Vec<_>>();
-        assert_eq!(sfx.len(), NUM_SFX);
+        assert_eq!(sfx.len(), 1120);
         assert_eq!(sfx[0], Sfx::None);
         assert_eq!(sfx[1], Sfx::RoboDown);
         assert_eq!(sfx[1118], Sfx::EndingHayashitate);

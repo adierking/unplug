@@ -15,7 +15,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::num::NonZeroI32;
 use std::path::Path;
-use unplug::data::{Item, Object, Stage as StageId};
+use unplug::data::{Item, Object, Resource, Stage as StageId};
 use unplug::event::{BlockId, Command, Expr, Ip, Script};
 use unplug::stage::{ObjectFlags, ObjectPlacement, Stage};
 

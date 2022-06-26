@@ -1,10 +1,6 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
-use crate::{Error, Item, Result};
+use crate::{Error, Item, Resource, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-
-/// The total number of suits.
-pub const NUM_SUITS: usize = 9;
 
 /// Metadata describing a suit.
 struct Metadata {
@@ -49,11 +45,6 @@ macro_rules! declare_suits {
 }
 
 impl Suit {
-    /// Returns an iterator over all suit IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
-
     /// Tries to find the suit whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
         // skip(1) to ignore None
@@ -78,9 +69,11 @@ impl Suit {
 impl Sealed for Suit {}
 
 impl Resource for Suit {
-    const COUNT: usize = NUM_SUITS;
-    fn at(index: usize) -> Self {
-        Suit::try_from(index as i16).unwrap()
+    type Value = i16;
+    const COUNT: usize = METADATA.len();
+
+    fn at(index: i16) -> Self {
+        Suit::try_from(index).unwrap()
     }
 }
 
@@ -136,7 +129,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let suits = Suit::iter().collect::<Vec<_>>();
-        assert_eq!(suits.len(), NUM_SUITS);
+        assert_eq!(suits.len(), 9);
         assert_eq!(suits[0], Suit::None);
         assert_eq!(suits[1], Suit::DrakeRedcrest);
         assert_eq!(suits[7], Suit::Pajamas);

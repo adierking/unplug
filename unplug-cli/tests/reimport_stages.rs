@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::fs::File;
 use tempfile::TempDir;
-use unplug::data::Stage as StageId;
+use unplug::data::{Resource, Stage as StageId};
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;

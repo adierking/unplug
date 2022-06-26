@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::fs::File;
 use tempfile::NamedTempFile;
-use unplug::data::Stage as StageId;
+use unplug::data::{Resource, Stage as StageId};
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::event::msg::MsgArgs;
 use unplug::event::Script;

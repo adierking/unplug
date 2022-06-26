@@ -14,22 +14,23 @@
     variant_size_differences
 )]
 
-pub mod atc;
-pub mod item;
-pub mod music;
-pub mod object;
-pub mod resource;
-pub mod sfx;
-pub mod sfx_group;
-pub mod sfx_sample;
-pub mod sound;
-pub mod stage;
-pub mod suit;
+mod atc;
+mod item;
+mod music;
+mod object;
+mod resource;
+mod sfx;
+mod sfx_group;
+mod sfx_sample;
+mod sound;
+mod stage;
+mod suit;
 
 pub use atc::Atc;
-pub use item::Item;
+pub use item::{Item, ItemFlags};
 pub use music::Music;
 pub use object::Object;
+pub use resource::{Resource, ResourceIterator};
 pub use sfx::Sfx;
 pub use sfx_group::SfxGroup;
 pub use sfx_sample::SfxSample;

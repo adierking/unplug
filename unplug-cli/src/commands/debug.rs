@@ -2,7 +2,7 @@ use crate::context::Context;
 use crate::opt::DebugCommand;
 use anyhow::Result;
 use log::info;
-use unplug::data::Stage;
+use unplug::data::{Resource, Stage};
 use unplug::globals::GlobalsBuilder;
 
 /// The `debug rebuild-scripts` CLI command.

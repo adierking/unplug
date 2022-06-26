@@ -1,6 +1,6 @@
 use super::{Error, Result};
 use crate::common::{NonNoneList, ReadFrom, ReadOptionFrom, WriteOptionTo, WriteTo};
-use crate::data::object::{Object, NUM_MAIN_OBJECTS};
+use crate::data::Object;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryInto;
@@ -124,11 +124,11 @@ impl IndexMut<Object> for ObjectColliders {
 impl<R: Read + Seek + ?Sized> ReadFrom<R> for ObjectColliders {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
-        let mut offsets = Vec::with_capacity(NUM_MAIN_OBJECTS);
-        for _ in 0..NUM_MAIN_OBJECTS {
+        let mut offsets = Vec::with_capacity(Object::MAIN_COUNT);
+        for _ in 0..Object::MAIN_COUNT {
             offsets.push(reader.read_u32::<LE>()?);
         }
-        let mut objects: Vec<Vec<Collider>> = Vec::with_capacity(NUM_MAIN_OBJECTS);
+        let mut objects: Vec<Vec<Collider>> = Vec::with_capacity(Object::MAIN_COUNT);
         for &offset in &offsets {
             if offset != 0 {
                 reader.seek(SeekFrom::Start(offset as u64))?;
@@ -145,11 +145,11 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for ObjectColliders {
 impl<W: Write + Seek + ?Sized> WriteTo<W> for ObjectColliders {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
-        assert_eq!(self.objects.len(), NUM_MAIN_OBJECTS);
+        assert_eq!(self.objects.len(), Object::MAIN_COUNT);
 
         // Write an empty offset table because it has to come first
         let table_offset = writer.seek(SeekFrom::Current(0))?;
-        let mut offsets = vec![0u32; NUM_MAIN_OBJECTS];
+        let mut offsets = vec![0u32; Object::MAIN_COUNT];
         for &offset in &offsets {
             writer.write_u32::<LE>(offset)?;
         }

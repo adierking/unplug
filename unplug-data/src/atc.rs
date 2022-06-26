@@ -1,12 +1,8 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
-use crate::{Error, Item, Result};
+use crate::{Error, Item, Resource, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Formatter};
-
-/// The total number of attachments.
-pub const NUM_ATCS: usize = 9;
 
 /// Metadata describing an attachment (ATC).
 struct Metadata {
@@ -37,11 +33,6 @@ macro_rules! declare_atcs {
 }
 
 impl Atc {
-    /// Returns an iterator over all attachment IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
-
     /// Tries to find the attachment whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
         // skip(1) to ignore None
@@ -61,9 +52,11 @@ impl Atc {
 impl Sealed for Atc {}
 
 impl Resource for Atc {
-    const COUNT: usize = NUM_ATCS;
-    fn at(index: usize) -> Self {
-        Atc::try_from(index as i16).unwrap()
+    type Value = i16;
+    const COUNT: usize = METADATA.len();
+
+    fn at(index: i16) -> Self {
+        Atc::try_from(index).unwrap()
     }
 }
 
@@ -147,7 +140,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let atcs = Atc::iter().collect::<Vec<_>>();
-        assert_eq!(atcs.len(), NUM_ATCS);
+        assert_eq!(atcs.len(), 9);
         assert_eq!(atcs[0], Atc::None);
         assert_eq!(atcs[1], Atc::ChibiCopter);
         assert_eq!(atcs[7], Atc::Squirter);

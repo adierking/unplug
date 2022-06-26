@@ -1,10 +1,7 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
+use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug};
-
-/// The total number of sound samples.
-pub const NUM_SAMPLES: usize = 1112;
 
 /// Metadata describing a sample file used in a sound effect.
 struct Metadata {
@@ -37,11 +34,6 @@ macro_rules! declare_sfx_samples {
 }
 
 impl SfxSample {
-    /// Returns an iterator over all sample IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
-
     /// Tries to find the sample whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
         Self::iter().find(|s| s.name() == name)
@@ -60,9 +52,11 @@ impl SfxSample {
 impl Sealed for SfxSample {}
 
 impl Resource for SfxSample {
-    const COUNT: usize = NUM_SAMPLES;
-    fn at(index: usize) -> Self {
-        Self::try_from(index as u32).unwrap()
+    type Value = u32;
+    const COUNT: usize = METADATA.len();
+
+    fn at(index: u32) -> Self {
+        Self::try_from(index).unwrap()
     }
 }
 
@@ -95,7 +89,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let samples = SfxSample::iter().collect::<Vec<_>>();
-        assert_eq!(samples.len(), NUM_SAMPLES);
+        assert_eq!(samples.len(), 1112);
         assert_eq!(samples[0], SfxSample::RoboMotor);
         assert_eq!(samples[1], SfxSample::RoboDown);
         assert_eq!(samples[1110], SfxSample::EndingHayashitate);

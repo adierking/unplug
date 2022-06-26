@@ -8,7 +8,7 @@ pub use writer::MessageWriter;
 use anyhow::{anyhow, ensure, Result};
 use byteorder::{ByteOrder, LE};
 use std::fmt;
-use unplug::data::Stage;
+use unplug::data::{Resource, Stage};
 use unplug::event::msg::MsgArgs;
 use unplug::event::script::CommandLocation;
 use unplug::event::{Command, Script};

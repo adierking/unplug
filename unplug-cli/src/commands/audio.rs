@@ -26,7 +26,7 @@ use unplug::audio::transport::{
 };
 use unplug::audio::{Cue, ReadSamples};
 use unplug::common::{ReadSeek, ReadWriteSeek, WriteTo};
-use unplug::data::{Music, Sfx, SfxGroup, SfxSample, Sound};
+use unplug::data::{Music, Resource, Sfx, SfxGroup, SfxSample, Sound};
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.

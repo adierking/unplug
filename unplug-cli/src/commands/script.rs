@@ -8,7 +8,7 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
-use unplug::data::Stage as StageId;
+use unplug::data::{Resource, Stage as StageId};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;

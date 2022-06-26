@@ -1,9 +1,7 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
+use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
-
-pub const NUM_GROUPS: usize = 25;
 
 const BANK_DIR: &str = "qp";
 const BANK_EXT: &str = ".ssm";
@@ -45,11 +43,6 @@ macro_rules! declare_sfx_groups {
 }
 
 impl SfxGroup {
-    /// Returns an iterator over all sound effect group IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
-
     /// Tries to find the group whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
         Self::iter().find(|g| g.name() == name)
@@ -83,9 +76,11 @@ impl SfxGroup {
 impl Sealed for SfxGroup {}
 
 impl Resource for SfxGroup {
-    const COUNT: usize = NUM_GROUPS;
-    fn at(index: usize) -> Self {
-        SfxGroup::try_from(index as u16).unwrap()
+    type Value = u16;
+    const COUNT: usize = METADATA.len();
+
+    fn at(index: u16) -> Self {
+        SfxGroup::try_from(index).unwrap()
     }
 }
 
@@ -121,7 +116,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let groups = SfxGroup::iter().collect::<Vec<_>>();
-        assert_eq!(groups.len(), NUM_GROUPS);
+        assert_eq!(groups.len(), 25);
         assert_eq!(groups[0], SfxGroup::Sample);
         assert_eq!(groups[1], SfxGroup::Stage07);
         assert_eq!(groups[23], SfxGroup::Concert);

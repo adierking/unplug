@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Cursor};
 use unplug::common::WriteTo;
-use unplug::data::stage::{Stage, GLOBALS_PATH};
+use unplug::data::{Resource, Stage};
 use unplug::event::msg::MsgArgs;
 use unplug::event::Script;
 use unplug::globals::GlobalsBuilder;
@@ -79,7 +79,7 @@ pub fn command_import(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
         let mut writer = Cursor::new(vec![]);
         GlobalsBuilder::new().base(&mut globals).libs(&libs).write_to(&mut writer)?;
         let bytes = writer.into_inner().into_boxed_slice();
-        rebuilt_files.push((GLOBALS_PATH.to_owned(), bytes));
+        rebuilt_files.push((Stage::QP_GLOBALS_PATH.to_owned(), bytes));
     }
     drop(globals);
 

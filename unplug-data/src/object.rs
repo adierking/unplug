@@ -1,16 +1,7 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
+use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
-
-/// The total number of non-internal objects.
-pub const NUM_MAIN_OBJECTS: usize = 1162;
-/// The total number of internal objects.
-pub const NUM_INTERNAL_OBJECTS: usize = 36;
-/// The ID that internal objects start at.
-pub const INTERNAL_OBJECT_BASE: i32 = 10000;
-/// The total number of objects.
-pub const NUM_OBJECTS: usize = NUM_MAIN_OBJECTS + NUM_INTERNAL_OBJECTS;
 
 /// Metadata describing an object.
 struct Metadata {
@@ -85,10 +76,12 @@ macro_rules! declare_objects {
 }
 
 impl Object {
-    /// Returns an iterator over all object IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
+    /// The total number of non-internal objects.
+    pub const MAIN_COUNT: usize = 1162;
+    /// The total number of internal objects.
+    pub const INTERNAL_COUNT: usize = 36;
+    /// The ID that internal objects start at.
+    pub const INTERNAL_BASE: i32 = 10000;
 
     /// Tries to find the object definition whose name matches `name`.
     pub fn find(name: &str) -> Option<Object> {
@@ -117,9 +110,9 @@ impl Object {
 
     fn meta(self) -> &'static Metadata {
         let id = i32::from(self);
-        let internal = id - INTERNAL_OBJECT_BASE;
+        let internal = id - Self::INTERNAL_BASE;
         if internal >= 0 {
-            &METADATA[internal as usize + NUM_MAIN_OBJECTS]
+            &METADATA[internal as usize + Self::MAIN_COUNT]
         } else {
             &METADATA[id as usize]
         }
@@ -135,9 +128,11 @@ impl Debug for Object {
 impl Sealed for Object {}
 
 impl Resource for Object {
-    const COUNT: usize = NUM_OBJECTS;
-    fn at(index: usize) -> Self {
-        METADATA[index].id
+    type Value = i32;
+    const COUNT: usize = Self::MAIN_COUNT + Self::INTERNAL_COUNT;
+
+    fn at(index: i32) -> Self {
+        METADATA[index as usize].id
     }
 }
 
@@ -178,7 +173,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let objects = Object::iter().collect::<Vec<_>>();
-        assert_eq!(objects.len(), NUM_OBJECTS);
+        assert_eq!(objects.len(), 1198);
         assert_eq!(objects[0], Object::CbRobo);
         assert_eq!(objects[1161], Object::NpcSunUfo);
         assert_eq!(objects[1162], Object::InternalTitleIconBb);

@@ -37,7 +37,6 @@ use time::macros::format_description;
 use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::Brsar;
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek};
-use unplug::data::stage::GLOBALS_PATH;
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
 use unplug::globals::metadata::{Atc, Item, Stage, Suit};
 use unplug::globals::GlobalsReader;
@@ -63,6 +62,7 @@ const NUM_MUSIC: usize = 109;
 const MUSIC_EXT: &str = ".hps";
 
 const QP_PATH: &str = "qp.bin";
+const QP_GLOBALS_PATH: &str = "bin/e/globals.bin";
 
 const INTERNAL_PREFIX: &str = "Internal";
 const UNKNOWN_PREFIX: &str = "Unk";
@@ -1108,7 +1108,7 @@ fn run_app() -> Result<()> {
         info!("Opening {}", QP_PATH);
         let mut qp = ArchiveReader::open(iso.open_file_at(QP_PATH)?)?;
         info!("Reading globals.bin");
-        let mut globals = GlobalsReader::open(qp.open_file_at(GLOBALS_PATH)?)?;
+        let mut globals = GlobalsReader::open(qp.open_file_at(QP_GLOBALS_PATH)?)?;
         globals.read_metadata()?
     };
 

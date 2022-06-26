@@ -1,19 +1,7 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
+use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
-
-/// The number of main (non-dev) stages.
-pub const NUM_MAIN_STAGES: usize = 30;
-/// The number of dev stages (shun, hori, ahk, etc.)
-pub const NUM_DEV_STAGES: usize = 9;
-/// The ID of the first dev stage.
-pub const FIRST_DEV_STAGE: i32 = 100;
-/// The total number of stages.
-pub const NUM_STAGES: usize = NUM_MAIN_STAGES + NUM_DEV_STAGES;
-
-/// The path where globals.bin is stored in qp.bin.
-pub const GLOBALS_PATH: &str = "bin/e/globals.bin";
 
 /// The directory where stages are stored.
 const STAGE_DIR: &str = "bin/e";
@@ -56,10 +44,14 @@ macro_rules! declare_stages {
 }
 
 impl Stage {
-    /// Returns an iterator over all stage IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
+    /// The number of main (non-dev) stages.
+    pub const MAIN_COUNT: usize = 30;
+    /// The number of dev stages (shun, hori, ahk, etc.)
+    pub const DEV_COUNT: usize = 9;
+    /// The ID of the first dev stage.
+    pub const DEV_BASE: i32 = 100;
+    /// The path where globals.bin is stored in qp.bin.
+    pub const QP_GLOBALS_PATH: &'static str = "bin/e/globals.bin";
 
     /// Tries to find the stage whose name matches `name`.
     pub fn find(name: &str) -> Option<Stage> {
@@ -83,14 +75,14 @@ impl Stage {
 
     /// Returns `true` if this is a dev stage (shun, hori, ahk, etc.).
     pub fn is_dev(self) -> bool {
-        i32::from(self) >= FIRST_DEV_STAGE
+        i32::from(self) >= Self::DEV_BASE
     }
 
     fn meta(self) -> &'static Metadata {
         let index = i32::from(self);
-        let dev_index = index - FIRST_DEV_STAGE;
+        let dev_index = index - Self::DEV_BASE;
         if dev_index >= 0 {
-            &METADATA[dev_index as usize + NUM_MAIN_STAGES]
+            &METADATA[dev_index as usize + Self::MAIN_COUNT]
         } else {
             &METADATA[index as usize]
         }
@@ -106,9 +98,11 @@ impl Debug for Stage {
 impl Sealed for Stage {}
 
 impl Resource for Stage {
-    const COUNT: usize = NUM_STAGES;
-    fn at(index: usize) -> Self {
-        METADATA[index].id
+    type Value = i32;
+    const COUNT: usize = Self::MAIN_COUNT + Self::DEV_COUNT;
+
+    fn at(index: i32) -> Self {
+        METADATA[index as usize].id
     }
 }
 
@@ -148,7 +142,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let stages = Stage::iter().collect::<Vec<_>>();
-        assert_eq!(stages.len(), NUM_STAGES);
+        assert_eq!(stages.len(), 39);
         assert_eq!(stages[0], Stage::Debug);
         assert_eq!(stages[29], Stage::Stage29);
         assert_eq!(stages[30], Stage::Shun);

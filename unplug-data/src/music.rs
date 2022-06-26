@@ -1,10 +1,7 @@
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
+use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug};
-
-/// The total number of music IDs.
-pub const NUM_MUSIC: usize = 109;
 
 const MUSIC_DIR: &str = "qp/streaming";
 const MUSIC_EXT: &str = ".hps";
@@ -43,11 +40,6 @@ macro_rules! declare_music {
 }
 
 impl Music {
-    /// Returns an iterator over all music IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
-
     /// Tries to find the music whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
         // skip(1) to ignore None
@@ -88,9 +80,11 @@ impl Music {
 impl Sealed for Music {}
 
 impl Resource for Music {
-    const COUNT: usize = NUM_MUSIC;
-    fn at(index: usize) -> Self {
-        Self::try_from(index as u8).unwrap()
+    type Value = u8;
+    const COUNT: usize = METADATA.len();
+
+    fn at(index: u8) -> Self {
+        Self::try_from(index).unwrap()
     }
 }
 
@@ -136,7 +130,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let music = Music::iter().collect::<Vec<_>>();
-        assert_eq!(music.len(), NUM_MUSIC);
+        assert_eq!(music.len(), 109);
         assert_eq!(music[0], Music::None);
         assert_eq!(music[1], Music::Sample);
         assert_eq!(music[107], Music::Living);

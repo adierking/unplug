@@ -1,14 +1,10 @@
 use super::Object;
 use crate::object::ObjectClass;
 use crate::private::Sealed;
-use crate::resource::{Resource, ResourceIterator};
-use crate::{Error, Result};
+use crate::{Error, Resource, Result};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt::{self, Debug, Formatter};
-
-/// The total number of items.
-pub const NUM_ITEMS: usize = 159;
 
 /// Metadata describing an item.
 #[derive(Debug)]
@@ -66,11 +62,6 @@ macro_rules! declare_items {
 }
 
 impl Item {
-    /// Returns an iterator over all item IDs.
-    pub fn iter() -> ResourceIterator<Self> {
-        ResourceIterator::new()
-    }
-
     /// Tries to find the item definition whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
         Self::iter().find(|i| i.name() == name)
@@ -99,9 +90,11 @@ impl Item {
 impl Sealed for Item {}
 
 impl Resource for Item {
-    const COUNT: usize = NUM_ITEMS;
-    fn at(index: usize) -> Self {
-        Item::try_from(index as i16).unwrap()
+    type Value = i16;
+    const COUNT: usize = METADATA.len();
+
+    fn at(index: i16) -> Self {
+        Item::try_from(index).unwrap()
     }
 }
 
@@ -179,7 +172,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let items = Item::iter().collect::<Vec<_>>();
-        assert_eq!(items.len(), NUM_ITEMS);
+        assert_eq!(items.len(), 159);
         assert_eq!(items[0], Item::FrogRing);
         assert_eq!(items[1], Item::Pen);
         assert_eq!(items[157], Item::WhiteFlowers);

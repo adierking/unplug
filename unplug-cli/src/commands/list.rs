@@ -2,8 +2,7 @@ use crate::context::Context;
 use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt};
 use anyhow::Result;
 use unicase::Ascii;
-use unplug::data::item::ItemFlags;
-use unplug::data::{Atc, Item, Music, Object, Sfx, Stage};
+use unplug::data::{Atc, Item, ItemFlags, Music, Object, Resource, Sfx, Stage};
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
