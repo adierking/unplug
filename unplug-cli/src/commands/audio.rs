@@ -26,7 +26,6 @@ use unplug::audio::transport::{
 };
 use unplug::audio::{Cue, ReadSamples};
 use unplug::common::{ReadSeek, ReadWriteSeek, WriteTo};
-use unplug::data::sfx::{SfxDefinition, SFX};
 use unplug::data::{Music, Sfx, SfxGroup, SfxSample, Sound};
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
@@ -177,17 +176,17 @@ impl AudioResource {
             return Ok(Self::MusicFile { file, name });
         }
 
-        if let Some(music) = Music::find(name) {
-            debug!("Resolved music \"{}\": {:?}", name, music);
-            return Ok(Self::Music(music));
-        }
-
-        let sfx = match SFX.iter().find(|e| unicase::eq(e.name, name)) {
-            Some(sfx) => sfx,
+        match Sound::find(name) {
+            Some(Sound::Music(music)) => {
+                debug!("Resolved music \"{}\": {:?}", name, music);
+                Ok(Self::Music(music))
+            }
+            Some(Sound::Sfx(sfx)) => {
+                debug!("Resolved SFX \"{}\": {:?}", name, sfx);
+                Ok(Self::Sfx(sfx))
+            }
             None => bail!("Unknown audio resource: {}", name),
-        };
-        debug!("Resolved SFX \"{}\": {:?}", name, sfx.id);
-        Ok(Self::Sfx(sfx.id))
+        }
     }
 
     /// Gets the name of the audio resource without any extension.
@@ -195,7 +194,7 @@ impl AudioResource {
         match self {
             Self::Music(music) => music.name(),
             Self::MusicFile { name, .. } => name,
-            Self::Sfx(sfx) => SfxDefinition::get(*sfx).name,
+            Self::Sfx(sfx) => sfx.name(),
         }
     }
 
@@ -229,18 +228,17 @@ impl AudioFileId {
             }
             AudioResource::MusicFile { file, .. } => Ok(Self::Music(file.clone())),
             AudioResource::Sfx(id) => {
-                let def = SfxDefinition::get(*id);
                 let playlist = cache.open_playlist(ctx)?;
                 let group = id.group();
                 let material = id.material_index();
                 let sample = match playlist.sounds[material].sample_id() {
                     Some(id) => SfxSample::try_from(id).unwrap(),
                     None => {
-                        bail!("Sound effect \"{}\" does not have an associated sample", def.name)
+                        bail!("Sound effect \"{}\" does not have an associated sample", id.name())
                     }
                 };
                 let index = (u32::from(sample) - group.first_sample()) as usize;
-                debug!("Resolved sound \"{}\": group={}, index={}", def.name, group.name(), index);
+                debug!("Resolved sound \"{}\": group={}, index={}", id.name(), group.name(), index);
                 let file = ctx.disc_file_at(group.path())?;
                 Ok(Self::Sfx { file, index })
             }

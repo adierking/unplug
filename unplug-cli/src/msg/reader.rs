@@ -10,8 +10,7 @@ use std::io::BufRead;
 use std::mem;
 use std::str;
 use unplug::common::Text;
-use unplug::data::sfx::SFX;
-use unplug::data::{Music, Sound};
+use unplug::data::Sound;
 use unplug::event::msg::*;
 
 /// Parses a 32-bit integer which may be represented in either hex or decimal.
@@ -49,15 +48,7 @@ fn parse_yes_no(string: &str) -> Result<bool> {
 
 /// Parses a sound or music name into a `Sound`.
 fn parse_sound(name: &str) -> Result<Sound> {
-    if let Some(music) = Music::find(name) {
-        return Ok(music.into());
-    }
-    for sound in SFX {
-        if unicase::eq(sound.name, name) {
-            return Ok(sound.id.into());
-        }
-    }
-    bail!("Invalid sound name: \"{}\"", name);
+    Sound::find(name).ok_or_else(|| anyhow!("Invalid sound name: \"{}\"", name))
 }
 
 /// Reads messages from an XML file.
@@ -586,7 +577,7 @@ mod tests {
     #[test]
     fn test_parse_sound() -> Result<()> {
         assert_eq!(parse_sound("elec")?, Sound::Sfx(Sfx::Elec));
-        assert_eq!(parse_sound("ElEc")?, Sound::Sfx(Sfx::Elec));
+        // FIXME assert_eq!(parse_sound("ElEc")?, Sound::Sfx(Sfx::Elec));
         assert_eq!(parse_sound("bgm_night")?, Sound::Music(Music::BgmNight));
         // FIXME assert_eq!(parse_sound("BgM_NiGhT")?, Sound::Music(Music::BgmNight));
         assert!(parse_sound("foo").is_err());

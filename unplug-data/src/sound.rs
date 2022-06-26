@@ -1,5 +1,4 @@
-use super::sfx::{Sfx, SfxDefinition};
-use super::{Error, Music, Result};
+use super::{Error, Music, Result, Sfx};
 
 /// The special group value (hiword) corresponding to a music ID.
 const MUSIC_GROUP: u32 = 0xffff;
@@ -17,9 +16,15 @@ impl Sound {
     /// Gets the name of the corresponding audio file without the extension.
     pub fn name(&self) -> &'static str {
         match *self {
-            Self::Sfx(sfx) => SfxDefinition::get(sfx).name,
+            Self::Sfx(sfx) => sfx.name(),
             Self::Music(music) => music.name(),
         }
+    }
+
+    /// Tries to find the music or sound effect whose name matches `name`. Music will be searched
+    /// first before sound effects.
+    pub fn find(name: &str) -> Option<Sound> {
+        Music::find(name).map(Sound::Music).or_else(|| Sfx::find(name).map(Sound::Sfx))
     }
 
     /// Gets the 32-bit ID value.
@@ -77,6 +82,14 @@ impl Default for Sound {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_find() {
+        assert_eq!(Sound::find("teriyaki"), Some(Sound::Music(Music::Teriyaki)));
+        assert_eq!(Sound::find("kitchen_oil"), Some(Sound::Sfx(Sfx::KitchenOil)));
+        assert_eq!(Sound::find("foo"), None);
+        assert_eq!(Sound::find("none"), None);
+    }
 
     #[test]
     fn test_into_u32() {

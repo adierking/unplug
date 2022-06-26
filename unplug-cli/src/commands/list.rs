@@ -3,8 +3,7 @@ use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt};
 use anyhow::Result;
 use unicase::Ascii;
 use unplug::data::item::ItemFlags;
-use unplug::data::sfx::SFX;
-use unplug::data::{Atc, Item, Music, Object, Stage};
+use unplug::data::{Atc, Item, Music, Object, Sfx, Stage};
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
@@ -80,7 +79,7 @@ fn command_music(opt: ListIdsOpt) -> Result<()> {
 
 /// The `list sounds` CLI command.
 fn command_sounds(opt: ListIdsOpt) -> Result<()> {
-    let mut sfx: Vec<_> = SFX.iter().map(|m| (m.id, m.name)).collect();
+    let mut sfx: Vec<_> = Sfx::iter().map(|s| (s, s.name())).collect();
     sort_ids(&mut sfx, &opt);
     for (id, name) in sfx {
         println!("[{:>08x}] {}", u32::from(id), name);

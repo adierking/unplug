@@ -9,8 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use unplug::common::Text;
-use unplug::data::sfx::{SfxDefinition, SFX};
-use unplug::data::{Music, Object, Sound};
+use unplug::data::{Object, Sound};
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
 
@@ -274,10 +273,7 @@ impl Serialize for SoundDef {
     {
         match self.0 {
             Sound::Music(music) => serializer.serialize_str(music.name()),
-            Sound::Sfx(sound) => {
-                let name = SfxDefinition::get(sound).name;
-                serializer.serialize_str(name)
-            }
+            Sound::Sfx(sfx) => serializer.serialize_str(sfx.name()),
         }
     }
 }
@@ -288,13 +284,9 @@ impl<'de> Deserialize<'de> for SoundDef {
         D: serde::Deserializer<'de>,
     {
         let name = String::deserialize(deserializer)?;
-        if let Some(music) = Music::find(&name) {
-            return Ok(SoundDef(music.into()));
-        }
-        match SFX.iter().find(|e| unicase::eq(e.name, &name)) {
-            Some(sfx) => Ok(SoundDef(Sound::Sfx(sfx.id))),
-            None => Err(D::Error::custom(format!("invalid SFX name: \"{}\"", name))),
-        }
+        Sound::find(&name)
+            .map(SoundDef)
+            .ok_or_else(|| D::Error::custom(format!("invalid sound name: \"{}\"", name)))
     }
 }
 
