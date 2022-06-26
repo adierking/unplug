@@ -27,8 +27,7 @@ use unplug::audio::transport::{
 use unplug::audio::{Cue, ReadSamples};
 use unplug::common::{ReadSeek, ReadWriteSeek, WriteTo};
 use unplug::data::sfx::{SfxDefinition, SFX};
-use unplug::data::sfx_sample::{SfxSample, SfxSampleDefinition};
-use unplug::data::{Music, Sfx, SfxGroup, Sound};
+use unplug::data::{Music, Sfx, SfxGroup, SfxSample, Sound};
 
 /// The highest sample rate that imported music can have. Music sampled higher than this will be
 /// downsampled.
@@ -103,8 +102,8 @@ fn have_sample_names(bank: &SfxBank) -> bool {
 fn sfx_name(bank: &SfxBank, index: usize, have_names: bool) -> Cow<'static, str> {
     let id = bank.base_index() + (index as u32);
     if have_names {
-        if let Ok(sound) = SfxSample::try_from(id) {
-            return SfxSampleDefinition::get(sound).name.into();
+        if let Ok(sample) = SfxSample::try_from(id) {
+            return sample.name().into();
         }
     }
     format!("{:>04}", id).into()
