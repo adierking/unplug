@@ -42,8 +42,7 @@ impl Sfx {
 
     /// Tries to find the sound effect whose name matches `name`.
     pub fn find(name: &str) -> Option<Self> {
-        // skip(1) to ignore None
-        Self::iter().skip(1).find(|s| s.name() == name)
+        Self::iter().find(|s| s.name() == name)
     }
 
     /// Returns the sound effect's name.
@@ -111,8 +110,8 @@ mod tests {
     #[test]
     fn test_find() {
         assert_eq!(Sfx::find("kitchen_oil"), Some(Sfx::KitchenOil));
+        assert_eq!(Sfx::find("none"), Some(Sfx::None));
         assert_eq!(Sfx::find("foo"), None);
-        assert_eq!(Sfx::find("none"), None);
     }
 
     #[test]

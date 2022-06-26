@@ -780,6 +780,8 @@ pub struct ObjBone {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(variant_size_differences)]
 pub enum SoundExpr {
+    /// An immediate expression referring to no sound.
+    None,
     /// An immediate expression referring to a sound effect.
     Sfx(Sfx),
     /// An immediate expression referring to a music track.
@@ -788,9 +790,16 @@ pub enum SoundExpr {
     Expr(Box<Expr>),
 }
 
+impl Default for SoundExpr {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 impl From<Sound> for SoundExpr {
     fn from(id: Sound) -> Self {
         match id {
+            Sound::None => Self::None,
             Sound::Sfx(sound) => Self::Sfx(sound),
             Sound::Music(music) => Self::Music(music),
         }
@@ -801,6 +810,7 @@ impl TryFrom<SoundExpr> for Sound {
     type Error = SoundExpr;
     fn try_from(expr: SoundExpr) -> std::result::Result<Self, Self::Error> {
         match expr {
+            SoundExpr::None => Ok(Self::None),
             SoundExpr::Sfx(sound) => Ok(Self::Sfx(sound)),
             SoundExpr::Music(music) => Ok(Self::Music(music)),
             SoundExpr::Expr(_) => Err(expr),
@@ -836,6 +846,7 @@ impl From<Expr> for SoundExpr {
 impl From<SoundExpr> for Expr {
     fn from(sfx: SoundExpr) -> Self {
         match sfx {
+            SoundExpr::None => Expr::Imm32(-1),
             SoundExpr::Sfx(sound) => Expr::Imm32(u32::from(Sound::Sfx(sound)) as i32),
             SoundExpr::Music(music) => Expr::Imm32(u32::from(Sound::Music(music)) as i32),
             SoundExpr::Expr(expr) => *expr,
@@ -854,7 +865,7 @@ impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SoundExpr {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
         match self {
-            Self::Sfx(_) | Self::Music(_) => Expr::from(self.clone()).write_to(writer),
+            Self::None | Self::Sfx(_) | Self::Music(_) => Expr::from(self.clone()).write_to(writer),
             Self::Expr(expr) => expr.write_to(writer),
         }
     }
@@ -1199,6 +1210,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_sound_expr() {
+        assert_write_and_read!(SoundExpr::None);
         assert_write_and_read!(SoundExpr::Sfx(Sfx::KitchenOil));
         assert_write_and_read!(SoundExpr::Music(Music::BgmNight));
         assert_write_and_read!(SoundExpr::Expr(Expr::from_var(0).into()));

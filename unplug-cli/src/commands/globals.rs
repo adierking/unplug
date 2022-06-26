@@ -272,6 +272,7 @@ impl Serialize for SoundDef {
         S: serde::Serializer,
     {
         match self.0 {
+            Sound::None => serializer.serialize_none(),
             Sound::Music(music) => serializer.serialize_str(music.name()),
             Sound::Sfx(sfx) => serializer.serialize_str(sfx.name()),
         }
@@ -283,7 +284,10 @@ impl<'de> Deserialize<'de> for SoundDef {
     where
         D: serde::Deserializer<'de>,
     {
-        let name = String::deserialize(deserializer)?;
+        let name = match Option::<String>::deserialize(deserializer)? {
+            Some(name) => name,
+            None => return Ok(SoundDef(Sound::None)),
+        };
         Sound::find(&name)
             .map(SoundDef)
             .ok_or_else(|| D::Error::custom(format!("invalid sound name: \"{}\"", name)))

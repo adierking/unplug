@@ -8,14 +8,17 @@ const MUSIC_GROUP: u32 = 0xffff;
 #[allow(variant_size_differences)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Sound {
+    None,
     Sfx(Sfx),
     Music(Music),
 }
 
 impl Sound {
-    /// Gets the name of the corresponding audio file without the extension.
+    /// Retrieves a unique name for the sound. For `Sound::None`, this will return an empty string
+    /// (because "none" is a valid sound effect!).
     pub fn name(&self) -> &'static str {
         match *self {
+            Self::None => "",
             Self::Sfx(sfx) => sfx.name(),
             Self::Music(music) => music.name(),
         }
@@ -30,6 +33,7 @@ impl Sound {
     /// Gets the 32-bit ID value.
     pub fn value(&self) -> u32 {
         match *self {
+            Sound::None => u32::MAX,
             Sound::Sfx(sound) => u32::from(sound),
             Sound::Music(music) => (MUSIC_GROUP << 16) | (u8::from(music) as u32),
         }
@@ -57,6 +61,9 @@ impl From<Sound> for u32 {
 impl TryFrom<u32> for Sound {
     type Error = Error;
     fn try_from(id: u32) -> Result<Self> {
+        if id == u32::MAX {
+            return Ok(Self::None);
+        }
         let group = id >> 16;
         let index = id & 0xffff;
         if group == MUSIC_GROUP {
@@ -75,7 +82,7 @@ impl TryFrom<u32> for Sound {
 
 impl Default for Sound {
     fn default() -> Self {
-        Self::Sfx(Sfx::None)
+        Self::None
     }
 }
 
@@ -87,19 +94,21 @@ mod tests {
     fn test_find() {
         assert_eq!(Sound::find("teriyaki"), Some(Sound::Music(Music::Teriyaki)));
         assert_eq!(Sound::find("kitchen_oil"), Some(Sound::Sfx(Sfx::KitchenOil)));
+        assert_eq!(Sound::find("none"), Some(Sound::Sfx(Sfx::None)));
         assert_eq!(Sound::find("foo"), None);
-        assert_eq!(Sound::find("none"), None);
     }
 
     #[test]
     fn test_into_u32() {
+        assert_eq!(u32::from(Sound::None), 0xffffffff);
         assert_eq!(u32::from(Sound::Sfx(Sfx::KitchenOil)), 0x00040015);
         assert_eq!(u32::from(Sound::Music(Music::BgmNight)), 0xffff0010);
-        assert_eq!(u32::from(Sound::default()), 0);
     }
 
     #[test]
     fn test_try_from_u32() {
+        assert_eq!(Sound::try_from(0xffffffff).unwrap(), Sound::None);
+
         let id = Sound::try_from(0x00040015).unwrap();
         assert_eq!(id, Sound::Sfx(Sfx::KitchenOil));
         assert_eq!(id.name(), "kitchen_oil");

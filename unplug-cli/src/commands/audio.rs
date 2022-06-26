@@ -185,7 +185,7 @@ impl AudioResource {
                 debug!("Resolved SFX \"{}\": {:?}", name, sfx);
                 Ok(Self::Sfx(sfx))
             }
-            None => bail!("Unknown audio resource: {}", name),
+            Some(Sound::None) | None => bail!("Unknown audio resource: {}", name),
         }
     }
 
