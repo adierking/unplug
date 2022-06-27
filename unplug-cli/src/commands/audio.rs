@@ -36,6 +36,8 @@ const MAX_SFX_SAMPLE_RATE: u32 = 48000;
 
 /// Path to sfx_hori.ssm, a sample bank never used by the game.
 const SFX_HORI_PATH: &str = "qp/sfx_hori.ssm";
+/// Name of the directory to export music files into
+const MUSIC_DIR: &str = "streaming";
 
 /// Extension to use for Audacity label output
 const LABELS_EXT: &str = "labels.txt";
@@ -392,14 +394,16 @@ fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
     let hori = ctx.disc_file_at(SFX_HORI_PATH)?;
     export_bank_subdir(&mut ctx, &opt.settings, &hori, &opt.output)?;
 
-    // Export music
+    // Export music into a subdirectory
+    let music_dir = opt.output.join(MUSIC_DIR);
+    fs::create_dir_all(&music_dir)?;
     let mut cache = AudioCache::new();
     for music in Music::iter().filter(|m| m.is_some()) {
-        info!("Exporting {}.wav", music.name());
+        info!("Exporting {}/{}.wav", MUSIC_DIR, music.name());
         let resource = AudioResource::Music(music);
         let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
         let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
-        let output = opt.output.join(format!("{}.wav", music.name()));
+        let output = music_dir.join(format!("{}.wav", music.name()));
         export(&audio, &opt.settings, &output)?;
     }
     Ok(())
