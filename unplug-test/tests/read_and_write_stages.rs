@@ -118,7 +118,7 @@ fn test_read_and_write_stages() -> Result<()> {
     drop(globals);
 
     for info in STAGE_INFO {
-        let stage_path = info.id.path();
+        let stage_path = info.id.qp_path();
         info!("Reading {}", stage_path);
         let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
         let original = Stage::read_from(&mut file, &libs)?;

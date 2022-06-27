@@ -46,8 +46,8 @@ fn test_reimport_stages() -> Result<()> {
 
     info!("Comparing stage data");
     for id in StageId::iter() {
-        let name = id.name();
-        let path = id.path();
+        let name = id.file_name();
+        let path = id.qp_path();
         info!("Reading original {}", name);
         let mut original_reader = original_qp.open_file_at(&path)?;
         let original_stage = Stage::read_from(&mut original_reader, &libs)?;

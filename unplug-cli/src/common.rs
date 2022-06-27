@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 use unicase::UniCase;
 use unplug::common::ReadSeek;
-use unplug::data::Stage;
+use unplug::data::{Resource, Stage};
 
 /// Generates a serializable wrapper type for list elements which adds an `id` field.
 #[macro_export]
@@ -64,7 +64,7 @@ pub fn find_stage_file<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Res
     match ctx.explicit_file_at(name)? {
         Some(id) => Ok(id),
         None => match Stage::find(name) {
-            Some(def) => ctx.qp_file_at(def.path()),
+            Some(stage) => ctx.qp_file_at(stage.qp_path()),
             None => bail!("Unrecognized stage \"{}\"", name),
         },
     }

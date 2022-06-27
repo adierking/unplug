@@ -1,7 +1,9 @@
 use crate::private::Sealed;
 use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use phf::phf_map;
 use std::fmt::{self, Debug};
+use unicase::UniCase;
 
 /// Metadata describing a sample file used in a sound effect.
 struct Metadata {
@@ -12,7 +14,7 @@ struct Metadata {
 /// Macro used in the generated sample list.
 macro_rules! declare_sfx_samples {
     {
-        $($index:literal => $id:ident { $name:literal }),*
+        $($index:literal => $id:ident { $name:tt }),*
         $(,)*
     } => {
         /// A sound effect sample ID.
@@ -30,20 +32,15 @@ macro_rules! declare_sfx_samples {
                 }
             ),*
         ];
+
+        static LOOKUP: phf::Map<UniCase<&'static str>, SfxSample> = phf_map! {
+            $(UniCase::ascii($name) => SfxSample::$id),*
+        };
     }
 }
 
 impl SfxSample {
-    /// Tries to find the sample whose name matches `name`.
-    pub fn find(name: &str) -> Option<Self> {
-        Self::iter().find(|s| s.name() == name)
-    }
-
-    /// Returns the sample's name.
-    pub fn name(self) -> &'static str {
-        self.meta().name
-    }
-
+    #[inline]
     fn meta(self) -> &'static Metadata {
         &METADATA[u32::from(self) as usize]
     }
@@ -55,8 +52,23 @@ impl Resource for SfxSample {
     type Value = u32;
     const COUNT: usize = METADATA.len();
 
+    #[inline]
     fn at(index: u32) -> Self {
         Self::try_from(index).unwrap()
+    }
+
+    #[inline]
+    fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    #[inline]
+    fn is_none(self) -> bool {
+        false
+    }
+
+    fn find(name: impl AsRef<str>) -> Option<Self> {
+        LOOKUP.get(&UniCase::ascii(name.as_ref())).copied()
     }
 }
 
@@ -83,6 +95,7 @@ mod tests {
     #[test]
     fn test_find() {
         assert_eq!(SfxSample::find("voice_help_me"), Some(SfxSample::VoiceHelpMe));
+        assert_eq!(SfxSample::find("VoIcE_hElP_mE"), Some(SfxSample::VoiceHelpMe));
         assert_eq!(SfxSample::find("foo"), None);
     }
 

@@ -104,7 +104,7 @@ fn test_parse_shop() -> Result<()> {
         globals.read_libs()?
     };
 
-    let stage_path = StageId::ChibiHouse.path();
+    let stage_path = StageId::ChibiHouse.qp_path();
     info!("Reading {}", stage_path);
     let mut file = BufReader::new(qp.open_file_at(&stage_path)?);
     let chibi_house = Stage::read_from(&mut file, &libs)?;

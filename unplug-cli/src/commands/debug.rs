@@ -15,7 +15,7 @@ fn command_rebuild_scripts(ctx: Context) -> Result<()> {
 
     let mut stages = vec![];
     for id in Stage::iter() {
-        info!("Reading {}.bin", id.name());
+        info!("Reading {}", id.file_name());
         let stage = ctx.read_stage(&libs, id)?;
         stages.push((id, stage));
     }
@@ -24,7 +24,7 @@ fn command_rebuild_scripts(ctx: Context) -> Result<()> {
     let mut update = ctx.begin_update();
     update = update.write_globals(GlobalsBuilder::new().base(&mut globals).libs(&libs))?;
     for (id, stage) in stages {
-        info!("Rebuilding {}.bin", id.name());
+        info!("Rebuilding {}", id.file_name());
         update = update.write_stage(id, &stage)?;
     }
 

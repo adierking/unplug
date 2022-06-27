@@ -8,4 +8,7 @@ edition = "2021"
 bitflags = "1.2.1"
 num_enum = "0.5.1"
 num-traits = "0.2"
+phf = { version = "0.10", features = ["macros"] }
+phf_macros = { version = "0.10", features = ["unicase"] }
 thiserror = "1.0"
+unicase = "2.6"

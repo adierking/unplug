@@ -65,7 +65,7 @@ fn test_reimport_messages() -> Result<()> {
 
     for id in StageId::iter() {
         let name = id.name();
-        let path = id.path();
+        let path = id.qp_path();
         info!("Reading original {}", name);
         let mut original_reader = original_qp.open_file_at(&path)?;
         let original_stage = Stage::read_from(&mut original_reader, &original_libs)?;

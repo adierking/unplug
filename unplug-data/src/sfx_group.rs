@@ -1,7 +1,9 @@
 use crate::private::Sealed;
 use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use phf::phf_map;
 use std::fmt::{self, Debug, Formatter};
+use unicase::UniCase;
 
 const BANK_DIR: &str = "qp";
 const BANK_EXT: &str = ".ssm";
@@ -19,7 +21,7 @@ struct Metadata {
 /// Macro used in the generated sound bank list.
 macro_rules! declare_sfx_groups {
     {
-        $($index:literal => $id:ident { $sbase:literal, $pbase:literal, $name:literal }),*
+        $($index:literal => $id:ident { $sbase:literal, $pbase:literal, $name:tt }),*
         $(,)*
     } => {
         /// A sound effect group ID.
@@ -39,35 +41,37 @@ macro_rules! declare_sfx_groups {
                 }
             ),*
         ];
+
+        static LOOKUP: phf::Map<UniCase<&'static str>, SfxGroup> = phf_map! {
+            $(UniCase::ascii($name) => SfxGroup::$id),*
+        };
     }
 }
 
 impl SfxGroup {
-    /// Tries to find the group whose name matches `name`.
-    pub fn find(name: &str) -> Option<Self> {
-        Self::iter().find(|g| g.name() == name)
-    }
-
-    /// Returns the name of the sound bank without the directory or file extension.
-    pub fn name(self) -> &'static str {
-        self.meta().name
-    }
-
     /// Returns the index of the group's first sample file within the sample banks.
+    #[inline]
     pub fn first_sample(self) -> u32 {
         self.meta().first_sample
     }
 
     /// Returns the index of the group's first sound material within the SFX playlist.
+    #[inline]
     pub fn first_material(self) -> u32 {
         self.meta().first_material
     }
 
-    /// Gets the path to the group's corresponding bank file within the ISO.
-    pub fn path(&self) -> String {
-        format!("{}/{}{}", BANK_DIR, self.name(), BANK_EXT)
+    /// Returns the name of the group's bank file on disc.
+    pub fn file_name(&self) -> String {
+        format!("{}{}", self.meta().name, BANK_EXT)
     }
 
+    /// Returns the path to the group's bank file on disc.
+    pub fn disc_path(&self) -> String {
+        format!("{}/{}{}", BANK_DIR, self.meta().name, BANK_EXT)
+    }
+
+    #[inline]
     fn meta(self) -> &'static Metadata {
         &METADATA[u16::from(self) as usize]
     }
@@ -79,8 +83,23 @@ impl Resource for SfxGroup {
     type Value = u16;
     const COUNT: usize = METADATA.len();
 
+    #[inline]
     fn at(index: u16) -> Self {
         SfxGroup::try_from(index).unwrap()
+    }
+
+    #[inline]
+    fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    #[inline]
+    fn is_none(self) -> bool {
+        false
+    }
+
+    fn find(name: impl AsRef<str>) -> Option<Self> {
+        LOOKUP.get(&UniCase::ascii(name.as_ref())).copied()
     }
 }
 
@@ -103,13 +122,15 @@ mod tests {
         assert_eq!(group.name(), "sfx_ufo");
         assert_eq!(group.first_sample(), 0x2f9);
         assert_eq!(group.first_material(), 0x2fe);
-        assert_eq!(group.path(), "qp/sfx_ufo.ssm");
+        assert_eq!(group.file_name(), "sfx_ufo.ssm");
+        assert_eq!(group.disc_path(), "qp/sfx_ufo.ssm");
         assert_eq!(format!("{:?}", group), "<sfx_ufo>");
     }
 
     #[test]
     fn test_find() {
         assert_eq!(SfxGroup::find("sfx_ufo"), Some(SfxGroup::Ufo));
+        assert_eq!(SfxGroup::find("SfX_uFo"), Some(SfxGroup::Ufo));
         assert_eq!(SfxGroup::find("foo"), None);
     }
 

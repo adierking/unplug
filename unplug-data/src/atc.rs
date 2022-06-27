@@ -1,8 +1,10 @@
 use crate::private::Sealed;
 use crate::{Error, Item, Resource, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use phf::phf_map;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Formatter};
+use unicase::UniCase;
 
 /// Metadata describing an attachment (ATC).
 struct Metadata {
@@ -13,7 +15,7 @@ struct Metadata {
 // Macro used in the generated ATC list
 macro_rules! declare_atcs {
     {
-        $($index:literal => $id:ident { $name:literal }),*
+        $($index:literal => $id:ident { $name:tt }),*
         $(,)*
     } => {
         /// An attachment (ATC) ID.
@@ -29,21 +31,15 @@ macro_rules! declare_atcs {
                 name: $name,
             }),*
         ];
+
+        static LOOKUP: phf::Map<UniCase<&'static str>, Atc> = phf_map! {
+            $(UniCase::ascii($name) => Atc::$id),*
+        };
     };
 }
 
 impl Atc {
-    /// Tries to find the attachment whose name matches `name`.
-    pub fn find(name: &str) -> Option<Self> {
-        // skip(1) to ignore None
-        Self::iter().skip(1).find(|a| a.name() == name)
-    }
-
-    /// Returns a unique name for the attachment assigned by unplug-datagen.
-    pub fn name(self) -> &'static str {
-        self.meta().name
-    }
-
+    #[inline]
     fn meta(self) -> &'static Metadata {
         &METADATA[i16::from(self) as usize]
     }
@@ -55,8 +51,23 @@ impl Resource for Atc {
     type Value = i16;
     const COUNT: usize = METADATA.len();
 
+    #[inline]
     fn at(index: i16) -> Self {
         Atc::try_from(index).unwrap()
+    }
+
+    #[inline]
+    fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    #[inline]
+    fn is_none(self) -> bool {
+        self == Atc::None
+    }
+
+    fn find(name: impl AsRef<str>) -> Option<Self> {
+        LOOKUP.get(&UniCase::ascii(name.as_ref())).copied()
     }
 }
 
@@ -114,8 +125,16 @@ mod tests {
     #[test]
     fn test_get_atc() {
         let atc = Atc::Toothbrush;
+        assert!(atc.is_some());
         assert_eq!(atc.name(), "toothbrush");
         assert_eq!(format!("{:?}", atc), "<toothbrush>");
+    }
+
+    #[test]
+    fn test_get_none() {
+        let atc = Atc::None;
+        assert!(atc.is_none());
+        assert_eq!(atc.name(), "none");
     }
 
     #[test]
@@ -133,8 +152,9 @@ mod tests {
     #[test]
     fn test_find_atc() {
         assert_eq!(Atc::find("toothbrush"), Some(Atc::Toothbrush));
+        assert_eq!(Atc::find("ToOtHbRuSh"), Some(Atc::Toothbrush));
+        assert_eq!(Atc::find("none"), Some(Atc::None));
         assert_eq!(Atc::find("foo"), None);
-        assert_eq!(Atc::find("none"), None);
     }
 
     #[test]

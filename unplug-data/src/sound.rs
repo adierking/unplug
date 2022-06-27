@@ -1,4 +1,4 @@
-use super::{Error, Music, Result, Sfx};
+use super::{Error, Music, Resource, Result, Sfx};
 
 /// The special group value (hiword) corresponding to a music ID.
 const MUSIC_GROUP: u32 = 0xffff;
@@ -24,10 +24,10 @@ impl Sound {
         }
     }
 
-    /// Tries to find the music or sound effect whose name matches `name`. Music will be searched
-    /// first before sound effects.
+    /// Tries to find the music or sound effect whose name matches `name`. Sound effects will be
+    /// searched first before music.
     pub fn find(name: &str) -> Option<Sound> {
-        Music::find(name).map(Sound::Music).or_else(|| Sfx::find(name).map(Sound::Sfx))
+        Sfx::find(name).map(Sound::Sfx).or_else(|| Music::find(name).map(Sound::Music))
     }
 
     /// Gets the 32-bit ID value.
@@ -93,9 +93,12 @@ mod tests {
     #[test]
     fn test_find() {
         assert_eq!(Sound::find("teriyaki"), Some(Sound::Music(Music::Teriyaki)));
+        assert_eq!(Sound::find("TeRiYaKi"), Some(Sound::Music(Music::Teriyaki)));
         assert_eq!(Sound::find("kitchen_oil"), Some(Sound::Sfx(Sfx::KitchenOil)));
+        assert_eq!(Sound::find("KiTcHeN_oIl"), Some(Sound::Sfx(Sfx::KitchenOil)));
         assert_eq!(Sound::find("none"), Some(Sound::Sfx(Sfx::None)));
         assert_eq!(Sound::find("foo"), None);
+        assert_eq!(Sound::find(""), None);
     }
 
     #[test]

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use unplug::common::Text;
-use unplug::data::{Object, Sound};
+use unplug::data::{Object, Resource, Sound};
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
 

@@ -115,7 +115,7 @@ fn find_bank<T: ReadSeek>(ctx: &mut OpenContext<T>, name: &str) -> Result<FileId
     }
     let group = SfxGroup::find(name).ok_or_else(|| anyhow!("Unknown sample bank: {}", name))?;
     debug!("Resolved bank \"{}\": {:?}", name, group);
-    ctx.disc_file_at(group.path())
+    ctx.disc_file_at(group.disc_path())
 }
 
 /// Caches playlist and sample bank data so it doesn't get double-loaded.
@@ -223,7 +223,7 @@ impl AudioFileId {
     ) -> Result<Self> {
         match resource {
             AudioResource::Music(id) => {
-                let file = ctx.disc_file_at(id.path().unwrap())?;
+                let file = ctx.disc_file_at(id.disc_path().unwrap())?;
                 Ok(Self::Music(file))
             }
             AudioResource::MusicFile { file, .. } => Ok(Self::Music(file.clone())),
@@ -239,7 +239,7 @@ impl AudioFileId {
                 };
                 let index = (u32::from(sample) - group.first_sample()) as usize;
                 debug!("Resolved sound \"{}\": group={}, index={}", id.name(), group.name(), index);
-                let file = ctx.disc_file_at(group.path())?;
+                let file = ctx.disc_file_at(group.disc_path())?;
                 Ok(Self::Sfx { file, index })
             }
         }
@@ -384,7 +384,7 @@ fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
 
     // Export registered banks
     for group in SfxGroup::iter() {
-        let file = ctx.disc_file_at(&group.path())?;
+        let file = ctx.disc_file_at(&group.disc_path())?;
         export_bank_subdir(&mut ctx, &opt.settings, &file, &opt.output)?;
     }
 
@@ -394,8 +394,7 @@ fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
 
     // Export music
     let mut cache = AudioCache::new();
-    // skip(1) to skip None
-    for music in Music::iter().skip(1) {
+    for music in Music::iter().filter(|m| m.is_some()) {
         info!("Exporting {}.wav", music.name());
         let resource = AudioResource::Music(music);
         let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;

@@ -4,7 +4,9 @@ use crate::private::Sealed;
 use crate::{Error, Resource, Result};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use phf::phf_map;
 use std::fmt::{self, Debug, Formatter};
+use unicase::UniCase;
 
 /// Metadata describing an item.
 #[derive(Debug)]
@@ -38,7 +40,7 @@ macro_rules! __impl_object_id {
 // Macro used in the generated item list
 macro_rules! declare_items {
     {
-        $($index:literal => $id:ident { $name:literal, $object:ident $(, $flag:ident)* }),*
+        $($index:literal => $id:ident { $name:tt, $object:ident $(, $flag:ident)* }),*
         $(,)*
     } => {
         /// An item ID.
@@ -58,30 +60,27 @@ macro_rules! declare_items {
                 }
             ),*
         ];
+
+        static LOOKUP: phf::Map<UniCase<&'static str>, Item> = phf_map! {
+            $(UniCase::ascii($name) => Item::$id),*
+        };
     }
 }
 
 impl Item {
-    /// Tries to find the item definition whose name matches `name`.
-    pub fn find(name: &str) -> Option<Self> {
-        Self::iter().find(|i| i.name() == name)
-    }
-
-    /// Returns a unique name for the item assigned by unplug-datagen.
-    pub fn name(self) -> &'static str {
-        self.meta().name
-    }
-
     /// Returns the object corresponding to this item, if there is one.
+    #[inline]
     pub fn object(self) -> Option<Object> {
         self.meta().object
     }
 
     /// Returns flags describing the item.
+    #[inline]
     pub fn flags(self) -> ItemFlags {
         self.meta().flags
     }
 
+    #[inline]
     fn meta(self) -> &'static Metadata {
         &METADATA[i16::from(self) as usize]
     }
@@ -93,8 +92,23 @@ impl Resource for Item {
     type Value = i16;
     const COUNT: usize = METADATA.len();
 
+    #[inline]
     fn at(index: i16) -> Self {
         Item::try_from(index).unwrap()
+    }
+
+    #[inline]
+    fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    #[inline]
+    fn is_none(self) -> bool {
+        false
+    }
+
+    fn find(name: impl AsRef<str>) -> Option<Self> {
+        LOOKUP.get(&UniCase::ascii(name.as_ref())).copied()
     }
 }
 
@@ -153,6 +167,7 @@ mod tests {
     #[test]
     fn test_find_item() {
         assert_eq!(Item::find("wastepaper"), Some(Item::Wastepaper));
+        assert_eq!(Item::find("WaStEpApEr"), Some(Item::Wastepaper));
         assert_eq!(Item::find("unk_20"), Some(Item::Unk20));
         assert_eq!(Item::find("foo"), None);
     }

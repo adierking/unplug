@@ -1,7 +1,9 @@
 use crate::private::Sealed;
 use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use phf::phf_map;
 use std::fmt::{self, Debug, Formatter};
+use unicase::UniCase;
 
 /// The directory where stages are stored.
 const STAGE_DIR: &str = "bin/e";
@@ -20,7 +22,7 @@ struct Metadata {
 
 macro_rules! declare_stages {
     {
-        $($val:literal => $id:ident { $name:literal, $title:literal }),*
+        $($val:literal => $id:ident { $name:tt, $title:literal }),*
         $(,)*
     } => {
         /// A stage ID.
@@ -40,6 +42,10 @@ macro_rules! declare_stages {
                 }
             ),*
         ];
+
+        static LOOKUP: phf::Map<UniCase<&'static str>, Stage> = phf_map! {
+            $(UniCase::ascii($name) => Stage::$id),*
+        };
     }
 }
 
@@ -53,27 +59,24 @@ impl Stage {
     /// The path where globals.bin is stored in qp.bin.
     pub const QP_GLOBALS_PATH: &'static str = "bin/e/globals.bin";
 
-    /// Tries to find the stage whose name matches `name`.
-    pub fn find(name: &str) -> Option<Stage> {
-        Self::iter().find(|s| s.name() == name)
-    }
-
-    /// Returns the name of the stage file without the filename or extension.
-    pub fn name(self) -> &'static str {
-        self.meta().name
-    }
-
     /// Returns the stage's title in the English version of the game.
+    #[inline]
     pub fn title(self) -> &'static str {
         self.meta().title
     }
 
-    /// Gets the path to the stage file within the ISO.
-    pub fn path(self) -> String {
-        format!("{}/{}{}", STAGE_DIR, self.name(), STAGE_EXT)
+    /// Gets the name of the stage file in qp.bin.
+    pub fn file_name(self) -> String {
+        format!("{}{}", self.meta().name, STAGE_EXT)
+    }
+
+    /// Gets the path to the stage file in qp.bin.
+    pub fn qp_path(self) -> String {
+        format!("{}/{}{}", STAGE_DIR, self.meta().name, STAGE_EXT)
     }
 
     /// Returns `true` if this is a dev stage (shun, hori, ahk, etc.).
+    #[inline]
     pub fn is_dev(self) -> bool {
         i32::from(self) >= Self::DEV_BASE
     }
@@ -101,8 +104,23 @@ impl Resource for Stage {
     type Value = i32;
     const COUNT: usize = Self::MAIN_COUNT + Self::DEV_COUNT;
 
+    #[inline]
     fn at(index: i32) -> Self {
         METADATA[index as usize].id
+    }
+
+    #[inline]
+    fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    #[inline]
+    fn is_none(self) -> bool {
+        false
+    }
+
+    fn find(name: impl AsRef<str>) -> Option<Self> {
+        LOOKUP.get(&UniCase::ascii(name.as_ref())).copied()
     }
 }
 
@@ -118,7 +136,8 @@ mod tests {
         let stage = Stage::LivingRoom;
         assert_eq!(stage.name(), "stage07");
         assert_eq!(stage.title(), "Living Room");
-        assert_eq!(stage.path(), "bin/e/stage07.bin");
+        assert_eq!(stage.file_name(), "stage07.bin");
+        assert_eq!(stage.qp_path(), "bin/e/stage07.bin");
         assert!(!stage.is_dev());
         assert_eq!(format!("{:?}", stage), "<stage07>");
     }
@@ -127,7 +146,8 @@ mod tests {
     fn test_get_stage_dev() {
         let stage = Stage::Ahk;
         assert_eq!(stage.name(), "ahk");
-        assert_eq!(stage.path(), "bin/e/ahk.bin");
+        assert_eq!(stage.file_name(), "ahk.bin");
+        assert_eq!(stage.qp_path(), "bin/e/ahk.bin");
         assert!(stage.is_dev());
         assert_eq!(format!("{:?}", stage), "<ahk>");
     }
@@ -135,7 +155,9 @@ mod tests {
     #[test]
     fn test_find_stage() {
         assert_eq!(Stage::find("stage07"), Some(Stage::LivingRoom));
+        assert_eq!(Stage::find("StAgE07"), Some(Stage::LivingRoom));
         assert_eq!(Stage::find("ahk"), Some(Stage::Ahk));
+        assert_eq!(Stage::find("AhK"), Some(Stage::Ahk));
         assert_eq!(Stage::find("stage"), None);
     }
 

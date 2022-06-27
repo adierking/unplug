@@ -363,7 +363,7 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Opens the stage file corresponding to `id`.
     pub fn read_stage(&mut self, libs: &Libs, id: StageId) -> Result<Stage> {
-        let file = self.qp_file_at(id.path())?;
+        let file = self.qp_file_at(id.qp_path())?;
         self.read_stage_file(libs, &file)
     }
 
@@ -376,7 +376,8 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Opens the music file corresponding to `id`.
     pub fn open_music(&mut self, id: Music) -> Result<HpsReader<'_>> {
-        let path = id.path().ok_or_else(|| anyhow!("{:?} does not have an associated file", id))?;
+        let path =
+            id.disc_path().ok_or_else(|| anyhow!("{:?} does not have an associated file", id))?;
         let file = self.disc_file_at(path)?;
         self.open_music_file(&file)
     }
@@ -396,7 +397,7 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Reads the sample bank corresponding to `bank`.
     pub fn read_bank(&mut self, bank: SfxGroup) -> Result<SfxBank> {
-        let file = self.disc_file_at(bank.path())?;
+        let file = self.disc_file_at(bank.disc_path())?;
         self.read_bank_file(&file)
     }
 
@@ -474,7 +475,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
 
     /// Enqueues the stage file corresponding to `id` to be written from `stage`.
     pub fn write_stage(self, id: StageId, stage: &Stage) -> Result<Self> {
-        let file = self.ctx.qp_file_at(id.path())?;
+        let file = self.ctx.qp_file_at(id.qp_path())?;
         self.write_stage_file(&file, stage)
     }
 

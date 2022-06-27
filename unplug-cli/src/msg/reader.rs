@@ -577,9 +577,9 @@ mod tests {
     #[test]
     fn test_parse_sound() -> Result<()> {
         assert_eq!(parse_sound("elec")?, Sound::Sfx(Sfx::Elec));
-        // FIXME assert_eq!(parse_sound("ElEc")?, Sound::Sfx(Sfx::Elec));
+        assert_eq!(parse_sound("ElEc")?, Sound::Sfx(Sfx::Elec));
         assert_eq!(parse_sound("bgm_night")?, Sound::Music(Music::BgmNight));
-        // FIXME assert_eq!(parse_sound("BgM_NiGhT")?, Sound::Music(Music::BgmNight));
+        assert_eq!(parse_sound("BgM_NiGhT")?, Sound::Music(Music::BgmNight));
         assert!(parse_sound("foo").is_err());
         Ok(())
     }

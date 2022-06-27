@@ -447,10 +447,10 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
             continue;
         }
 
-        info!("Patching {}.bin", id.name());
+        info!("Patching {}", id.file_name());
         if is_script_modified(&stage.objects, &imported.objects) {
             // See command_import()
-            error!("{}.bin's script does not match", id.name());
+            error!("{}'s script does not match", id.file_name());
             return Err(script_modified_error());
         }
 

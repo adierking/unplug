@@ -123,7 +123,7 @@ pub fn command_script_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()
     do_dump_libs(&libs, &opt.flags, BufWriter::new(libs_out))?;
 
     for id in StageId::iter() {
-        info!("Dumping {}.bin", id.name());
+        info!("Dumping {}", id.file_name());
         let stage = ctx.read_stage(&libs, id)?;
         let stage_out = File::create(Path::join(&opt.output, format!("{}.txt", id.name())))?;
         do_dump_stage(&stage, &opt.flags, BufWriter::new(stage_out))?;

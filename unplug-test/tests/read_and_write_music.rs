@@ -33,7 +33,7 @@ fn test_read_and_write_music() -> Result<()> {
 
     let mut iso = common::open_iso()?;
     for &(id, name, expected) in CHECKSUMS {
-        let path = id.path().unwrap();
+        let path = id.disc_path().unwrap();
         info!("Reading {}", path);
         let mut reader = iso.open_file_at(&path)?;
         let mut original_bytes = vec![];

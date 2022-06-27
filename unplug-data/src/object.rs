@@ -1,7 +1,9 @@
 use crate::private::Sealed;
 use crate::Resource;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use phf::phf_map;
 use std::fmt::{self, Debug, Formatter};
+use unicase::UniCase;
 
 /// Metadata describing an object.
 struct Metadata {
@@ -50,7 +52,7 @@ pub enum ObjectClass {
 // Macro used in the generated object list
 macro_rules! declare_objects {
     {
-        $($index:literal => $id:ident { $name:literal, $class:ident, $subclass:literal, $path:literal }),*
+        $($index:literal => $id:ident { $name:tt, $class:ident, $subclass:literal, $path:literal }),*
         $(,)*
     } => {
         /// An object ID.
@@ -72,6 +74,10 @@ macro_rules! declare_objects {
                 }
             ),*
         ];
+
+        static LOOKUP: phf::Map<UniCase<&'static str>, Object> = phf_map! {
+            $(UniCase::ascii($name) => Object::$id),*
+        };
     }
 }
 
@@ -83,28 +89,21 @@ impl Object {
     /// The ID that internal objects start at.
     pub const INTERNAL_BASE: i32 = 10000;
 
-    /// Tries to find the object definition whose name matches `name`.
-    pub fn find(name: &str) -> Option<Object> {
-        Self::iter().find(|o| o.name() == name)
-    }
-
-    /// Returns a unique name for the object assigned by unplug-datagen.
-    pub fn name(self) -> &'static str {
-        self.meta().name
-    }
-
     /// Returns the object's engine class.
+    #[inline]
     pub fn class(self) -> ObjectClass {
         self.meta().class
     }
 
     /// Returns a subclass value meaningful to the engine class.
+    #[inline]
     pub fn subclass(self) -> u16 {
         self.meta().subclass
     }
 
-    /// Returns the object's model path.
-    pub fn path(self) -> &'static str {
+    /// Returns the object's model path inside qp.bin.
+    #[inline]
+    pub fn qp_path(self) -> &'static str {
         self.meta().path
     }
 
@@ -131,8 +130,23 @@ impl Resource for Object {
     type Value = i32;
     const COUNT: usize = Self::MAIN_COUNT + Self::INTERNAL_COUNT;
 
+    #[inline]
     fn at(index: i32) -> Self {
         METADATA[index as usize].id
+    }
+
+    #[inline]
+    fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    #[inline]
+    fn is_none(self) -> bool {
+        false
+    }
+
+    fn find(name: impl AsRef<str>) -> Option<Self> {
+        LOOKUP.get(&UniCase::ascii(name.as_ref())).copied()
     }
 }
 
@@ -149,7 +163,7 @@ mod tests {
         assert_eq!(object.name(), "npc_tonpy");
         assert_eq!(object.class(), ObjectClass::ActorToy); // telly is a toy CONFIRMED
         assert_eq!(object.subclass(), 10);
-        assert_eq!(object.path(), "npc/tonpy");
+        assert_eq!(object.qp_path(), "npc/tonpy");
         assert_eq!(format!("{:?}", object), "<npc_tonpy>");
     }
 
@@ -159,14 +173,16 @@ mod tests {
         assert_eq!(object.name(), "internal_exclamation");
         assert_eq!(object.class(), ObjectClass::Free);
         assert_eq!(object.subclass(), 0);
-        assert_eq!(object.path(), "exclamation");
+        assert_eq!(object.qp_path(), "exclamation");
         assert_eq!(format!("{:?}", object), "<internal_exclamation>");
     }
 
     #[test]
-    fn test_find_object() {
+    fn test_find() {
         assert_eq!(Object::find("npc_tonpy"), Some(Object::NpcTonpy));
+        assert_eq!(Object::find("NpC_tOnPy"), Some(Object::NpcTonpy));
         assert_eq!(Object::find("internal_exclamation"), Some(Object::InternalExclamation));
+        assert_eq!(Object::find("InTeRnAl_ExClAmAtIoN"), Some(Object::InternalExclamation));
         assert_eq!(Object::find("foo"), None);
     }
 

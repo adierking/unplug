@@ -38,7 +38,7 @@ pub fn command_export(ctx: Context, opt: MessagesExportOpt) -> Result<()> {
     writer.write_script(MessageSource::Globals, &libs.script)?;
 
     for id in Stage::iter() {
-        info!("Reading {}.bin", id.name());
+        info!("Reading {}", id.file_name());
         let stage = ctx.read_stage(&libs, id)?;
         writer.write_script(MessageSource::Stage(id), &stage.script)?;
     }
@@ -88,13 +88,13 @@ pub fn command_import(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
             MessageSource::Globals => continue,
             MessageSource::Stage(id) => id,
         };
-        info!("Rebuilding {}.bin", stage_id.name());
+        info!("Rebuilding {}", stage_id.file_name());
         let mut stage = ctx.read_stage(&libs, stage_id)?;
         apply_messages(source, &mut stage.script, &mut messages);
         let mut writer = Cursor::new(vec![]);
         stage.write_to(&mut writer)?;
         let bytes = writer.into_inner().into_boxed_slice();
-        rebuilt_files.push((stage_id.path(), bytes));
+        rebuilt_files.push((stage_id.qp_path(), bytes));
     }
 
     if !messages.is_empty() {

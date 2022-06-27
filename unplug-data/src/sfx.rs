@@ -1,7 +1,9 @@
 use crate::private::Sealed;
 use crate::{Resource, SfxGroup};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use phf::phf_map;
 use std::fmt::{self, Debug};
+use unicase::UniCase;
 
 /// Metadata describing a sound effect.
 struct Metadata {
@@ -14,7 +16,7 @@ struct Metadata {
 /// Macro used in the generated SFX list.
 macro_rules! declare_sfx {
     {
-        $($index:literal => $id:ident { $name:literal }),*
+        $($index:literal => $id:ident { $name:tt }),*
         $(,)*
     } => {
         /// A sound effect ID.
@@ -33,22 +35,16 @@ macro_rules! declare_sfx {
                 }
             ),*
         ];
+
+        static LOOKUP: phf::Map<UniCase<&'static str>, Sfx> = phf_map! {
+            $(UniCase::ascii($name) => Sfx::$id),*
+        };
     }
 }
 
 impl Sfx {
-    /// Path to the playlist file in the disc.
+    /// Path to the playlist file on the disc.
     pub const DISC_PLAYLIST_PATH: &'static str = "qp/sfx_sample.sem";
-
-    /// Tries to find the sound effect whose name matches `name`.
-    pub fn find(name: &str) -> Option<Self> {
-        Self::iter().find(|s| s.name() == name)
-    }
-
-    /// Returns the sound effect's name.
-    pub fn name(self) -> &'static str {
-        self.meta().name
-    }
 
     /// Returns the sound effect's group ID.
     pub fn group(self) -> SfxGroup {
@@ -62,6 +58,7 @@ impl Sfx {
         (self.group().first_material() + (id & 0xffff)) as usize
     }
 
+    #[inline]
     fn meta(self) -> &'static Metadata {
         &METADATA[self.material_index()]
     }
@@ -73,8 +70,23 @@ impl Resource for Sfx {
     type Value = u32;
     const COUNT: usize = METADATA.len();
 
+    #[inline]
     fn at(index: u32) -> Self {
         METADATA[index as usize].id
+    }
+
+    #[inline]
+    fn name(self) -> &'static str {
+        self.meta().name
+    }
+
+    #[inline]
+    fn is_none(self) -> bool {
+        false
+    }
+
+    fn find(name: impl AsRef<str>) -> Option<Self> {
+        LOOKUP.get(&UniCase::ascii(name.as_ref())).copied()
     }
 }
 
@@ -110,6 +122,7 @@ mod tests {
     #[test]
     fn test_find() {
         assert_eq!(Sfx::find("kitchen_oil"), Some(Sfx::KitchenOil));
+        assert_eq!(Sfx::find("KiTcHeN_oIl"), Some(Sfx::KitchenOil));
         assert_eq!(Sfx::find("none"), Some(Sfx::None));
         assert_eq!(Sfx::find("foo"), None);
     }

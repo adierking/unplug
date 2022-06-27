@@ -50,12 +50,12 @@ fn test_reimport_shop() -> Result<()> {
     drop(rebuilt_globals);
 
     let chibi_house = StageId::ChibiHouse;
-    info!("Reading original {}.bin", chibi_house.name());
-    let file = original_qp.open_file_at(&chibi_house.path())?;
+    info!("Reading original {}", chibi_house.file_name());
+    let file = original_qp.open_file_at(&chibi_house.qp_path())?;
     let original_stage = Stage::read_from(&mut BufReader::new(file), &original_libs)?;
 
-    info!("Reading rebuilt {}.bin", chibi_house.name());
-    let file = rebuilt_qp.open_file_at(&chibi_house.path())?;
+    info!("Reading rebuilt {}", chibi_house.file_name());
+    let file = rebuilt_qp.open_file_at(&chibi_house.qp_path())?;
     let rebuilt_stage = Stage::read_from(&mut BufReader::new(file), &rebuilt_libs)?;
 
     info!("Parsing original shop code");

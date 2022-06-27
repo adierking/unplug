@@ -1,10 +1,11 @@
 use crate::private::Sealed;
 use num_traits::{AsPrimitive, FromPrimitive, NumAssignOps, One, PrimInt, Zero};
+use std::hash::Hash;
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-/// Trait for resources which can be iterated over.
-pub trait Resource: Sealed + Sized {
+/// A type of resource ID.
+pub trait Resource: Sealed + Copy + Eq + Hash + Ord + Sized {
     /// The ID type as an integer.
     type Value: PrimInt
         + NumAssignOps
@@ -20,7 +21,28 @@ pub trait Resource: Sealed + Sized {
     /// ***Panics*** if the index is out-of-range.
     fn at(index: Self::Value) -> Self;
 
+    /// Returns a string which uniquely identifies the resource.
+    fn name(self) -> &'static str;
+
+    /// Checks whether the ID represents a "none" value. This may always be false for resource types
+    /// which do not have "none" values.
+    fn is_none(self) -> bool;
+
+    /// Checks whether the ID does not represent a "none" value. This may always be true for
+    /// resource types which do not have "none" values.
+    #[inline]
+    fn is_some(self) -> bool {
+        !self.is_none()
+    }
+
+    /// Searches for the resource ID whose name matches `name` (case-insensitive).
+    ///
+    /// This may use a lookup table under the hood, potentially making it much faster than calling
+    /// `iter()` and checking every name.
+    fn find(name: impl AsRef<str>) -> Option<Self>;
+
     /// Creates an iterator over all resource IDs.
+    #[inline]
     fn iter() -> ResourceIterator<Self> {
         ResourceIterator::new()
     }
@@ -82,18 +104,20 @@ mod tests {
     use super::*;
     use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-    #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+    #[derive(
+        Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, IntoPrimitive, TryFromPrimitive,
+    )]
     #[repr(u32)]
     enum Test {
+        None,
         A,
         B,
         C,
         D,
         E,
-        F,
     }
 
-    const VALS: &[Test] = &[Test::A, Test::B, Test::C, Test::D, Test::E, Test::F];
+    const VALS: &[Test] = &[Test::None, Test::A, Test::B, Test::C, Test::D, Test::E];
 
     impl Sealed for Test {}
     impl Resource for Test {
@@ -102,6 +126,30 @@ mod tests {
         fn at(index: u32) -> Self {
             VALS[index as usize]
         }
+        fn name(self) -> &'static str {
+            match self {
+                Self::None => "none",
+                Self::A => "a",
+                Self::B => "b",
+                Self::C => "c",
+                Self::D => "d",
+                Self::E => "e",
+            }
+        }
+        fn is_none(self) -> bool {
+            self == Test::None
+        }
+        fn find(_name: impl AsRef<str>) -> Option<Self> {
+            unimplemented!()
+        }
+    }
+
+    #[test]
+    fn test_none() {
+        assert!(Test::None.is_none());
+        assert!(!Test::None.is_some());
+        assert!(!Test::A.is_none());
+        assert!(Test::A.is_some());
     }
 
     #[test]
@@ -122,12 +170,12 @@ mod tests {
     #[test]
     fn test_iter_bidirectional() {
         let mut iter = Test::iter();
-        assert_eq!(iter.next(), Some(Test::A));
-        assert_eq!(iter.next_back(), Some(Test::F));
-        assert_eq!(iter.next(), Some(Test::B));
-        assert_eq!(iter.next(), Some(Test::C));
+        assert_eq!(iter.next(), Some(Test::None));
         assert_eq!(iter.next_back(), Some(Test::E));
+        assert_eq!(iter.next(), Some(Test::A));
+        assert_eq!(iter.next(), Some(Test::B));
         assert_eq!(iter.next_back(), Some(Test::D));
+        assert_eq!(iter.next_back(), Some(Test::C));
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next_back(), None);
     }
