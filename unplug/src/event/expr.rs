@@ -1,5 +1,6 @@
 use super::block::{Ip, WriteIp};
-use super::opcodes::*;
+use super::opcodes::ggte::*;
+use super::opcodes::ExprOpcode;
 use crate::common::io::write_u8_and;
 use crate::common::{ReadFrom, WriteTo};
 use crate::data::{Atc, Item, Music, Object, Sfx, Sound};
@@ -192,16 +193,19 @@ pub enum Expr {
 
 impl Expr {
     /// Constructs a new `Expr` from a variable index.
+    #[must_use]
     pub fn from_var(index: i32) -> Self {
         Self::Variable(Self::Imm32(index).into())
     }
 
     /// Constructs a new `Expr` from a flag index.
+    #[must_use]
     pub fn from_flag(index: i32) -> Self {
         Self::Flag(Self::Imm32(index).into())
     }
 
     /// Return's the expression's constant value if it has one.
+    #[must_use]
     pub fn value(&self) -> Option<i32> {
         match self {
             Self::Imm16(x) => Some(*x as i32),
@@ -211,11 +215,13 @@ impl Expr {
     }
 
     /// Returns `true` if the expression accepts two operands.
+    #[must_use]
     pub fn is_binary_op(&self) -> bool {
         self.binary_op().is_some()
     }
 
     /// If the expression accepts two operands, gets a reference to the `BinaryOp`.
+    #[must_use]
     pub fn binary_op(&self) -> Option<&BinaryOp> {
         match self {
             Self::Equal(op)
@@ -245,16 +251,19 @@ impl Expr {
     }
 
     /// If the expression accepts two operands, gets a reference to the left-hand operand.
+    #[must_use]
     pub fn lhs(&self) -> Option<&Self> {
         self.binary_op().map(|op| &op.lhs)
     }
 
     /// If the expression accepts two operands, gets a reference to the left-hand operand.
+    #[must_use]
     pub fn rhs(&self) -> Option<&Self> {
         self.binary_op().map(|op| &op.rhs)
     }
 
     /// Returns `true` if the expression is an in-place assignment (e.g. `+=`).
+    #[must_use]
     pub fn is_assign(&self) -> bool {
         matches!(
             self,
@@ -296,6 +305,69 @@ impl Expr {
 
             Self::Not(op) => *op,
             expr => Self::Not(expr.into()),
+        }
+    }
+
+    /// Returns the opcode corresponding to the expression.
+    #[must_use]
+    pub fn opcode(&self) -> ExprOpcode {
+        match self {
+            Self::Equal(_) => ExprOpcode::Equal,
+            Self::NotEqual(_) => ExprOpcode::NotEqual,
+            Self::Less(_) => ExprOpcode::Less,
+            Self::LessEqual(_) => ExprOpcode::LessEqual,
+            Self::Greater(_) => ExprOpcode::Greater,
+            Self::GreaterEqual(_) => ExprOpcode::GreaterEqual,
+            Self::Not(_) => ExprOpcode::Not,
+            Self::Add(_) => ExprOpcode::Add,
+            Self::Subtract(_) => ExprOpcode::Subtract,
+            Self::Multiply(_) => ExprOpcode::Multiply,
+            Self::Divide(_) => ExprOpcode::Divide,
+            Self::Modulo(_) => ExprOpcode::Modulo,
+            Self::BitAnd(_) => ExprOpcode::BitAnd,
+            Self::BitOr(_) => ExprOpcode::BitOr,
+            Self::BitXor(_) => ExprOpcode::BitXor,
+            Self::AddAssign(_) => ExprOpcode::AddAssign,
+            Self::SubtractAssign(_) => ExprOpcode::SubtractAssign,
+            Self::MultiplyAssign(_) => ExprOpcode::MultiplyAssign,
+            Self::DivideAssign(_) => ExprOpcode::DivideAssign,
+            Self::ModuloAssign(_) => ExprOpcode::ModuloAssign,
+            Self::BitAndAssign(_) => ExprOpcode::BitAndAssign,
+            Self::BitOrAssign(_) => ExprOpcode::BitOrAssign,
+            Self::BitXorAssign(_) => ExprOpcode::BitXorAssign,
+            Self::Imm16(_) => ExprOpcode::Imm16,
+            Self::Imm32(_) => ExprOpcode::Imm32,
+            Self::AddressOf(_) => ExprOpcode::AddressOf,
+            Self::Stack(_) => ExprOpcode::Stack,
+            Self::ParentStack(_) => ExprOpcode::ParentStack,
+            Self::Flag(_) => ExprOpcode::Flag,
+            Self::Variable(_) => ExprOpcode::Variable,
+            Self::Result1 => ExprOpcode::Result1,
+            Self::Result2 => ExprOpcode::Result2,
+            Self::Pad(_) => ExprOpcode::Pad,
+            Self::Battery(_) => ExprOpcode::Battery,
+            Self::Money => ExprOpcode::Money,
+            Self::Item(_) => ExprOpcode::Item,
+            Self::Atc(_) => ExprOpcode::Atc,
+            Self::Rank => ExprOpcode::Rank,
+            Self::Exp => ExprOpcode::Exp,
+            Self::Level => ExprOpcode::Level,
+            Self::Hold => ExprOpcode::Hold,
+            Self::Map(_) => ExprOpcode::Map,
+            Self::ActorName(_) => ExprOpcode::ActorName,
+            Self::ItemName(_) => ExprOpcode::ItemName,
+            Self::Time(_) => ExprOpcode::Time,
+            Self::CurrentSuit => ExprOpcode::CurrentSuit,
+            Self::Scrap => ExprOpcode::Scrap,
+            Self::CurrentAtc => ExprOpcode::CurrentAtc,
+            Self::Use => ExprOpcode::Use,
+            Self::Hit => ExprOpcode::Hit,
+            Self::StickerName(_) => ExprOpcode::StickerName,
+            Self::Obj(_) => ExprOpcode::Obj,
+            Self::Random(_) => ExprOpcode::Random,
+            Self::Sin(_) => ExprOpcode::Sin,
+            Self::Cos(_) => ExprOpcode::Cos,
+            Self::ArrayElement(_) => ExprOpcode::ArrayElement,
         }
     }
 }
@@ -560,13 +632,39 @@ pub enum SetExpr {
 
 impl SetExpr {
     /// Constructs a new `SetExpr` from a variable index.
+    #[must_use]
     pub fn from_var(index: i32) -> Self {
         Self::Variable(Expr::Imm32(index))
     }
 
     /// Constructs a new `SetExpr` from a flag index.
+    #[must_use]
     pub fn from_flag(index: i32) -> Self {
         Self::Flag(Expr::Imm32(index))
+    }
+
+    /// Returns the opcode corresponding to the expression.
+    #[must_use]
+    pub fn opcode(&self) -> ExprOpcode {
+        match self {
+            Self::Stack(_) => ExprOpcode::Stack,
+            Self::Flag(_) => ExprOpcode::Flag,
+            Self::Variable(_) => ExprOpcode::Variable,
+            Self::Result1 => ExprOpcode::Result1,
+            Self::Result2 => ExprOpcode::Result2,
+            Self::Pad(_) => ExprOpcode::Pad,
+            Self::Battery(_) => ExprOpcode::Battery,
+            Self::Money => ExprOpcode::Money,
+            Self::Item(_) => ExprOpcode::Item,
+            Self::Atc(_) => ExprOpcode::Atc,
+            Self::Rank => ExprOpcode::Rank,
+            Self::Exp => ExprOpcode::Exp,
+            Self::Level => ExprOpcode::Level,
+            Self::Time(_) => ExprOpcode::Time,
+            Self::CurrentSuit => ExprOpcode::CurrentSuit,
+            Self::Scrap => ExprOpcode::Scrap,
+            Self::CurrentAtc => ExprOpcode::CurrentAtc,
+        }
     }
 }
 

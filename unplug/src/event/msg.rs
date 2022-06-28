@@ -1,5 +1,5 @@
 use super::block::WriteIp;
-use super::opcodes::*;
+use super::opcodes::ggte::*;
 use crate::common::text::{self, Text};
 use crate::common::{ReadFrom, WriteTo};
 use crate::data::{self, Sound};

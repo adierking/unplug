@@ -5,7 +5,7 @@ use super::reader::CopyGlobals;
 use super::{Libs, Result};
 use crate::common::io::pad;
 use crate::common::{Region, WriteSeek, WriteTo};
-use crate::event::opcodes::CMD_RETURN;
+use crate::event::opcodes::ggte::CMD_RETURN;
 use std::io::{BufWriter, SeekFrom, Write};
 
 /// Partitions are aligned on 4-byte boundaries

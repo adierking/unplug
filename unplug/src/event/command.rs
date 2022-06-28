@@ -1,7 +1,8 @@
 use super::block::WriteIp;
 use super::expr::{self, Expr, SetExpr, SoundExpr};
 use super::msg::{self, MsgArgs};
-use super::opcodes::*;
+use super::opcodes::ggte::*;
+use super::opcodes::CommandOpcode;
 use super::Ip;
 use crate::common::io::write_u8_and;
 use crate::common::{ReadFrom, Text, WriteTo};
@@ -93,11 +94,13 @@ pub enum Command {
 
 impl Command {
     /// Returns `true` if the command is an `if` statement.
+    #[must_use]
     pub fn is_if(&self) -> bool {
         self.if_args().is_some()
     }
 
     /// If the command is an `if` statement, retrieve its `IfArgs`.
+    #[must_use]
     pub fn if_args(&self) -> Option<&IfArgs> {
         match self {
             Self::If(x) => Some(x),
@@ -110,6 +113,7 @@ impl Command {
     }
 
     /// If the command is an `if` statement, retrieve a mutable reference to its `IfArgs`.
+    #[must_use]
     pub fn if_args_mut(&mut self) -> Option<&mut IfArgs> {
         match self {
             Self::If(x) => Some(x),
@@ -122,11 +126,13 @@ impl Command {
     }
 
     /// Returns `true` if the command always jumps to another offset.
+    #[must_use]
     pub fn is_goto(&self) -> bool {
         self.goto_target().is_some()
     }
 
     /// If the command always jumps to another offset, retrieve the target.
+    #[must_use]
     pub fn goto_target(&self) -> Option<&Ip> {
         match self {
             Self::Break(x) => Some(x),
@@ -137,6 +143,7 @@ impl Command {
     }
 
     /// If the command always jumps to another offset, retrieve a mutable reference to the target.
+    #[must_use]
     pub fn goto_target_mut(&mut self) -> Option<&mut Ip> {
         match self {
             Self::Break(x) => Some(x),
@@ -148,6 +155,7 @@ impl Command {
 
     /// Returns `true` if the command may jump to another offset or end the event. Function calls are
     /// not included.
+    #[must_use]
     pub fn is_control_flow(&self) -> bool {
         matches!(
             self,
@@ -162,6 +170,62 @@ impl Command {
                 | Self::While(_)
                 | Self::Break(_)
         )
+    }
+
+    /// Returns the opcode corresponding to the command.
+    #[must_use]
+    pub fn opcode(&self) -> CommandOpcode {
+        match self {
+            Self::Abort => CommandOpcode::Abort,
+            Self::Return => CommandOpcode::Return,
+            Self::Goto(_) => CommandOpcode::Goto,
+            Self::Set(_) => CommandOpcode::Set,
+            Self::If(_) => CommandOpcode::If,
+            Self::Elif(_) => CommandOpcode::Elif,
+            Self::EndIf(_) => CommandOpcode::EndIf,
+            Self::Case(_) => CommandOpcode::Case,
+            Self::Expr(_) => CommandOpcode::Expr,
+            Self::While(_) => CommandOpcode::While,
+            Self::Break(_) => CommandOpcode::Break,
+            Self::Run(_) => CommandOpcode::Run,
+            Self::Lib(_) => CommandOpcode::Lib,
+            Self::PushBp => CommandOpcode::PushBp,
+            Self::PopBp => CommandOpcode::PopBp,
+            Self::SetSp(_) => CommandOpcode::SetSp,
+            Self::Anim(_) => CommandOpcode::Anim,
+            Self::Anim1(_) => CommandOpcode::Anim1,
+            Self::Anim2(_) => CommandOpcode::Anim2,
+            Self::Attach(_) => CommandOpcode::Attach,
+            Self::Born(_) => CommandOpcode::Born,
+            Self::Call(_) => CommandOpcode::Call,
+            Self::Camera(_) => CommandOpcode::Camera,
+            Self::Check(_) => CommandOpcode::Check,
+            Self::Color(_) => CommandOpcode::Color,
+            Self::Detach(_) => CommandOpcode::Detach,
+            Self::Dir(_) => CommandOpcode::Dir,
+            Self::MDir(_) => CommandOpcode::MDir,
+            Self::Disp(_) => CommandOpcode::Disp,
+            Self::Kill(_) => CommandOpcode::Kill,
+            Self::Light(_) => CommandOpcode::Light,
+            Self::Menu(_) => CommandOpcode::Menu,
+            Self::Move(_) => CommandOpcode::Move,
+            Self::MoveTo(_) => CommandOpcode::MoveTo,
+            Self::Msg(_) => CommandOpcode::Msg,
+            Self::Pos(_) => CommandOpcode::Pos,
+            Self::PrintF(_) => CommandOpcode::PrintF,
+            Self::Ptcl(_) => CommandOpcode::Ptcl,
+            Self::Read(_) => CommandOpcode::Read,
+            Self::Scale(_) => CommandOpcode::Scale,
+            Self::MScale(_) => CommandOpcode::MScale,
+            Self::Scrn(_) => CommandOpcode::Scrn,
+            Self::Select(_) => CommandOpcode::Select,
+            Self::Sfx(_) => CommandOpcode::Sfx,
+            Self::Timer(_) => CommandOpcode::Timer,
+            Self::Wait(_) => CommandOpcode::Wait,
+            Self::Warp(_) => CommandOpcode::Warp,
+            Self::Win(_) => CommandOpcode::Win,
+            Self::Movie(_) => CommandOpcode::Movie,
+        }
     }
 }
 
