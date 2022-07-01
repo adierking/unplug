@@ -207,57 +207,6 @@ opcodes! {
     }
 }
 
-// Commands
-pub const CMD_ABORT: u8 = 1; // 01
-pub const CMD_RETURN: u8 = 2; // 02
-pub const CMD_GOTO: u8 = 3; // 03
-pub const CMD_SET: u8 = 4; // 04
-pub const CMD_IF: u8 = 5; // 05
-pub const CMD_ELIF: u8 = 6; // 06
-pub const CMD_ENDIF: u8 = 7; // 07
-pub const CMD_CASE: u8 = 8; // 08
-pub const CMD_EXPR: u8 = 9; // 09
-pub const CMD_WHILE: u8 = 10; // 0a
-pub const CMD_BREAK: u8 = 11; // 0b
-pub const CMD_RUN: u8 = 12; // 0c
-pub const CMD_LIB: u8 = 13; // 0d
-pub const CMD_PUSHBP: u8 = 14; // 0e
-pub const CMD_POPBP: u8 = 15; // 0f
-pub const CMD_SETSP: u8 = 16; // 10
-pub const CMD_ANIM: u8 = 17; // 11
-pub const CMD_ANIM1: u8 = 18; // 12
-pub const CMD_ANIM2: u8 = 19; // 13
-pub const CMD_ATTACH: u8 = 20; // 14
-pub const CMD_BORN: u8 = 21; // 15
-pub const CMD_CALL: u8 = 22; // 16
-pub const CMD_CAMERA: u8 = 23; // 17
-pub const CMD_CHECK: u8 = 24; // 18
-pub const CMD_COLOR: u8 = 25; // 19
-pub const CMD_DETACH: u8 = 26; // 1a
-pub const CMD_DIR: u8 = 27; // 1b
-pub const CMD_MDIR: u8 = 28; // 1c
-pub const CMD_DISP: u8 = 29; // 1d
-pub const CMD_KILL: u8 = 30; // 1e
-pub const CMD_LIGHT: u8 = 31; // 1f
-pub const CMD_MENU: u8 = 32; // 20
-pub const CMD_MOVE: u8 = 33; // 21
-pub const CMD_MOVETO: u8 = 34; // 22
-pub const CMD_MSG: u8 = 35; // 23
-pub const CMD_POS: u8 = 36; // 24
-pub const CMD_PRINTF: u8 = 37; // 25
-pub const CMD_PTCL: u8 = 38; // 26
-pub const CMD_READ: u8 = 39; // 27
-pub const CMD_SCALE: u8 = 40; // 28
-pub const CMD_MSCALE: u8 = 41; // 29
-pub const CMD_SCRN: u8 = 42; // 2a
-pub const CMD_SELECT: u8 = 43; // 2b
-pub const CMD_SFX: u8 = 44; // 2c
-pub const CMD_TIMER: u8 = 45; // 2d
-pub const CMD_WAIT: u8 = 46; // 2e
-pub const CMD_WARP: u8 = 47; // 2f
-pub const CMD_WIN: u8 = 48; // 30
-pub const CMD_MOVIE: u8 = 49; // 31
-
 // Expression opcodes
 pub const OP_EQUAL: u8 = 0; // 00
 pub const OP_NOT_EQUAL: u8 = 1; // 01
