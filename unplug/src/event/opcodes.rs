@@ -1,8 +1,89 @@
 pub mod ggte;
+pub use ggte::Opcodes as Ggte;
+
+/// Base trait for an opcode enum.
+pub trait Opcode: Copy + Eq + Sized {
+    /// The type of a raw opcode value.
+    type Value: Copy + Eq;
+
+    /// Maps an unrecognized value to an opcode.
+    fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value>;
+
+    /// Maps an unsupported opcode to a value.
+    fn map_unsupported(opcode: Self) -> Result<Self::Value, Self>;
+}
+
+/// Maps opcodes to and from raw values.
+pub trait OpcodeMap<T: Opcode> {
+    /// Gets the opcode corresponding to a value.
+    fn get(value: T::Value) -> Result<T, T::Value>;
+    /// Gets the value corresponding to an opcode.
+    fn value(opcode: T) -> Result<T::Value, T>;
+}
+
+/// Declares a struct which implements `OpcodeMap` for sets of opcodes.
+///
+/// # Example
+///
+/// ```
+/// # use unplug::event::opcodes::{ExprOp, CmdOp, OpcodeMap};
+/// # use unplug::opcodes;
+/// opcodes! {
+///     pub struct Opcodes;
+///
+///     ExprOp {
+///         Equal = 0,
+///         NotEqual = 1,
+///         // ...
+///     }
+///
+///     CmdOp {
+///         Abort = 1,
+///         Return = 2,
+///         // ...
+///     }
+/// }
+///
+/// assert_eq!(Opcodes::value(ExprOp::NotEqual).unwrap(), 1);
+/// assert_eq!(Opcodes::value(CmdOp::Return).unwrap(), 2);
+/// ```
+#[macro_export]
+macro_rules! opcodes {
+    {
+        $(#[$meta:meta])*
+        $vis:vis struct $struct:ident;
+        $($type:ident {
+            $($name:ident = $value:literal),* $(,)*
+        })*
+    } => {
+        $(#[$meta])*
+        $vis struct $struct;
+        $(impl $crate::event::opcodes::OpcodeMap<$type> for $struct {
+            fn get(
+                value: <$type as $crate::event::opcodes::Opcode>::Value
+            ) -> ::std::result::Result<$type, <$type as $crate::event::opcodes::Opcode>::Value> {
+                ::std::result::Result::Ok(match value {
+                    $($value => $type::$name,)*
+                    _ => return <$type as $crate::event::opcodes::Opcode>::map_unrecognized(value),
+                })
+            }
+
+            #[allow(unreachable_patterns)]
+            fn value(
+                opcode: $type
+            ) -> ::std::result::Result<<$type as $crate::event::opcodes::Opcode>::Value, $type> {
+                ::std::result::Result::Ok(match opcode {
+                    $($type::$name => $value,)*
+                    _ => return <$type as $crate::event::opcodes::Opcode>::map_unsupported(opcode),
+                })
+            }
+        })*
+    };
+}
 
 /// An expression opcode. Refer to `Expr` for documentation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum ExprOpcode {
+pub enum ExprOp {
     Equal,
     NotEqual,
     Less,
@@ -61,9 +142,19 @@ pub enum ExprOpcode {
     ArrayElement,
 }
 
+impl Opcode for ExprOp {
+    type Value = u8;
+    fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
+        Err(value)
+    }
+    fn map_unsupported(opcode: Self) -> Result<Self::Value, Self> {
+        Err(opcode)
+    }
+}
+
 /// A command opcode. Refer to `Command` for documentation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum CommandOpcode {
+pub enum CmdOp {
     Abort,
     Return,
     Goto,
@@ -115,9 +206,20 @@ pub enum CommandOpcode {
     Movie,
 }
 
+impl Opcode for CmdOp {
+    type Value = u8;
+    fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
+        Err(value)
+    }
+    fn map_unsupported(opcode: Self) -> Result<Self::Value, Self> {
+        Err(opcode)
+    }
+}
+
 /// A command type opcode (note, these are actually represented as immediate expressions). Refer to
 /// individual commands for documentation.
-pub enum TypeOpcode {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum TypeOp {
     Time,
     Unk201,
     Wipe,
@@ -171,4 +273,52 @@ pub enum TypeOpcode {
     Unk250,
     Unk251,
     Unk252,
+}
+
+impl Opcode for TypeOp {
+    type Value = i32;
+    fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
+        Err(value)
+    }
+    fn map_unsupported(opcode: Self) -> Result<Self::Value, Self> {
+        Err(opcode)
+    }
+}
+
+/// A message command opcode. Refer to `MsgCommand` for documentation.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum MsgOp {
+    End,
+    Speed,
+    Wait,
+    Anim,
+    Sfx,
+    Voice,
+    Default,
+    Newline,
+    NewlineVt,
+    Format,
+    Size,
+    Color,
+    Rgba,
+    Proportional,
+    Icon,
+    Shake,
+    Center,
+    Rotate,
+    Scale,
+    NumInput,
+    Question,
+    Stay,
+    Char(u8),
+}
+
+impl Opcode for MsgOp {
+    type Value = u8;
+    fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
+        Ok(Self::Char(value))
+    }
+    fn map_unsupported(opcode: Self) -> Result<Self::Value, Self> {
+        Err(opcode)
+    }
 }

@@ -166,7 +166,7 @@ macro_rules! expr {
 ///
 /// Basic usage:
 /// ```
-/// # use unplug::event::{expr, opcodes::{TYPE_MODULATE, TYPE_BLEND}};
+/// # use unplug::event::{expr, opcodes::ggte::{TYPE_MODULATE, TYPE_BLEND}};
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
@@ -179,7 +179,7 @@ macro_rules! expr {
 ///
 /// External argument list type:
 /// ```
-/// # use unplug::event::opcodes::{TYPE_ANIM, TYPE_BONE_X, TYPE_DISTANCE};
+/// # use unplug::event::opcodes::ggte::{TYPE_ANIM, TYPE_BONE_X, TYPE_DISTANCE};
 /// # use unplug::event::expr::{self, ObjExprObj, ObjExprBone, ObjExprPair};
 /// # use unplug::expr_enum;
 /// expr_enum! {
@@ -194,7 +194,7 @@ macro_rules! expr {
 ///
 /// Inline argument lists:
 /// ```
-/// # use unplug::event::{expr, opcodes::{TYPE_POS, TYPE_COLOR}};
+/// # use unplug::event::{expr, opcodes::ggte::{TYPE_POS, TYPE_COLOR}};
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
