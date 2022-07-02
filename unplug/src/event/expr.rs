@@ -1,7 +1,6 @@
 use super::block::{Ip, WriteIp};
 use super::opcodes::ggte::*;
-use super::opcodes::ExprOp;
-use crate::common::io::write_u8_and;
+use super::opcodes::{ExprOp, Ggte, OpcodeMap};
 use crate::common::{ReadFrom, WriteTo};
 use crate::data::{Atc, Item, Music, Object, Sfx, Sound};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
@@ -21,11 +20,11 @@ pub enum Error {
     #[error("unrecognized expression opcode: {0}")]
     UnrecognizedOp(u8),
 
+    #[error("unsupported expression: {0:?}")]
+    NotSupported(ExprOp),
+
     #[error("unrecognized type code: {0}")]
     UnrecognizedType(i32),
-
-    #[error("expression is not supported in this context: {0:?}")]
-    NotSupported(Box<Expr>),
 
     #[error("expression is not a constant: {0:?}")]
     NonConstant(Box<Expr>),
@@ -375,65 +374,65 @@ impl Expr {
 impl<R: Read + ?Sized> ReadFrom<R> for Expr {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
-        let op = reader.read_u8()?;
-        Ok(match op {
-            OP_EQUAL => Self::Equal(BinaryOp::read_from(reader)?.into()),
-            OP_NOT_EQUAL => Self::NotEqual(BinaryOp::read_from(reader)?.into()),
-            OP_LESS => Self::Less(BinaryOp::read_from(reader)?.into()),
-            OP_LESS_EQUAL => Self::LessEqual(BinaryOp::read_from(reader)?.into()),
-            OP_GREATER => Self::Greater(BinaryOp::read_from(reader)?.into()),
-            OP_GREATER_EQUAL => Self::GreaterEqual(BinaryOp::read_from(reader)?.into()),
-            OP_NOT => Self::Not(Self::read_from(reader)?.into()),
-            OP_ADD => Self::Add(BinaryOp::read_from(reader)?.into()),
-            OP_SUBTRACT => Self::Subtract(BinaryOp::read_from(reader)?.into()),
-            OP_MULTIPLY => Self::Multiply(BinaryOp::read_from(reader)?.into()),
-            OP_DIVIDE => Self::Divide(BinaryOp::read_from(reader)?.into()),
-            OP_MODULO => Self::Modulo(BinaryOp::read_from(reader)?.into()),
-            OP_BIT_AND => Self::BitAnd(BinaryOp::read_from(reader)?.into()),
-            OP_BIT_OR => Self::BitOr(BinaryOp::read_from(reader)?.into()),
-            OP_BIT_XOR => Self::BitXor(BinaryOp::read_from(reader)?.into()),
-            OP_ADD_ASSIGN => Self::AddAssign(BinaryOp::read_from(reader)?.into()),
-            OP_SUBTRACT_ASSIGN => Self::SubtractAssign(BinaryOp::read_from(reader)?.into()),
-            OP_MULTIPLY_ASSIGN => Self::MultiplyAssign(BinaryOp::read_from(reader)?.into()),
-            OP_DIVIDE_ASSIGN => Self::DivideAssign(BinaryOp::read_from(reader)?.into()),
-            OP_MODULO_ASSIGN => Self::ModuloAssign(BinaryOp::read_from(reader)?.into()),
-            OP_BIT_AND_ASSIGN => Self::BitAndAssign(BinaryOp::read_from(reader)?.into()),
-            OP_BIT_OR_ASSIGN => Self::BitOrAssign(BinaryOp::read_from(reader)?.into()),
-            OP_BIT_XOR_ASSIGN => Self::BitXorAssign(BinaryOp::read_from(reader)?.into()),
-            OP_CONST_16 => Self::Imm16(reader.read_i16::<LE>()?),
-            OP_CONST_32 => Self::Imm32(reader.read_i32::<LE>()?),
-            OP_ADDRESS_OF => Self::AddressOf(Ip::read_from(reader)?),
-            OP_STACK => Self::Stack(reader.read_u8()?),
-            OP_PARENT_STACK => Self::ParentStack(reader.read_u8()?),
-            OP_FLAG => Self::Flag(Self::read_from(reader)?.into()),
-            OP_VARIABLE => Self::Variable(Self::read_from(reader)?.into()),
-            OP_RESULT_1 => Self::Result1,
-            OP_RESULT_2 => Self::Result2,
-            OP_PAD => Self::Pad(Self::read_from(reader)?.into()),
-            OP_BATTERY => Self::Battery(Self::read_from(reader)?.into()),
-            OP_MONEY => Self::Money,
-            OP_ITEM => Self::Item(Self::read_from(reader)?.into()),
-            OP_ATC => Self::Atc(Self::read_from(reader)?.into()),
-            OP_RANK => Self::Rank,
-            OP_EXP => Self::Exp,
-            OP_LEVEL => Self::Level,
-            OP_HOLD => Self::Hold,
-            OP_MAP => Self::Map(Self::read_from(reader)?.into()),
-            OP_ACTOR_NAME => Self::ActorName(Self::read_from(reader)?.into()),
-            OP_ITEM_NAME => Self::ItemName(Self::read_from(reader)?.into()),
-            OP_TIME => Self::Time(Self::read_from(reader)?.into()),
-            OP_CURRENT_SUIT => Self::CurrentSuit,
-            OP_SCRAP => Self::Scrap,
-            OP_CURRENT_ATC => Self::CurrentAtc,
-            OP_USE => Self::Use,
-            OP_HIT => Self::Hit,
-            OP_STICKER_NAME => Self::StickerName(Self::read_from(reader)?.into()),
-            OP_OBJ => Self::Obj(ObjExpr::read_from(reader)?.into()),
-            OP_RANDOM => Self::Random(Self::read_from(reader)?.into()),
-            OP_SIN => Self::Sin(Self::read_from(reader)?.into()),
-            OP_COS => Self::Cos(Self::read_from(reader)?.into()),
-            OP_ARRAY_ELEMENT => Self::ArrayElement(ArrayElementExpr::read_from(reader)?.into()),
-            _ => return Err(Error::UnrecognizedOp(op)),
+        let opcode = reader.read_u8()?;
+        let expr = Ggte::get(opcode).map_err(Error::UnrecognizedOp)?;
+        Ok(match expr {
+            ExprOp::Equal => Self::Equal(BinaryOp::read_from(reader)?.into()),
+            ExprOp::NotEqual => Self::NotEqual(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Less => Self::Less(BinaryOp::read_from(reader)?.into()),
+            ExprOp::LessEqual => Self::LessEqual(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Greater => Self::Greater(BinaryOp::read_from(reader)?.into()),
+            ExprOp::GreaterEqual => Self::GreaterEqual(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Not => Self::Not(Self::read_from(reader)?.into()),
+            ExprOp::Add => Self::Add(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Subtract => Self::Subtract(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Multiply => Self::Multiply(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Divide => Self::Divide(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Modulo => Self::Modulo(BinaryOp::read_from(reader)?.into()),
+            ExprOp::BitAnd => Self::BitAnd(BinaryOp::read_from(reader)?.into()),
+            ExprOp::BitOr => Self::BitOr(BinaryOp::read_from(reader)?.into()),
+            ExprOp::BitXor => Self::BitXor(BinaryOp::read_from(reader)?.into()),
+            ExprOp::AddAssign => Self::AddAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::SubtractAssign => Self::SubtractAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::MultiplyAssign => Self::MultiplyAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::DivideAssign => Self::DivideAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::ModuloAssign => Self::ModuloAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::BitAndAssign => Self::BitAndAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::BitOrAssign => Self::BitOrAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::BitXorAssign => Self::BitXorAssign(BinaryOp::read_from(reader)?.into()),
+            ExprOp::Imm16 => Self::Imm16(reader.read_i16::<LE>()?),
+            ExprOp::Imm32 => Self::Imm32(reader.read_i32::<LE>()?),
+            ExprOp::AddressOf => Self::AddressOf(Ip::read_from(reader)?),
+            ExprOp::Stack => Self::Stack(reader.read_u8()?),
+            ExprOp::ParentStack => Self::ParentStack(reader.read_u8()?),
+            ExprOp::Flag => Self::Flag(Self::read_from(reader)?.into()),
+            ExprOp::Variable => Self::Variable(Self::read_from(reader)?.into()),
+            ExprOp::Result1 => Self::Result1,
+            ExprOp::Result2 => Self::Result2,
+            ExprOp::Pad => Self::Pad(Self::read_from(reader)?.into()),
+            ExprOp::Battery => Self::Battery(Self::read_from(reader)?.into()),
+            ExprOp::Money => Self::Money,
+            ExprOp::Item => Self::Item(Self::read_from(reader)?.into()),
+            ExprOp::Atc => Self::Atc(Self::read_from(reader)?.into()),
+            ExprOp::Rank => Self::Rank,
+            ExprOp::Exp => Self::Exp,
+            ExprOp::Level => Self::Level,
+            ExprOp::Hold => Self::Hold,
+            ExprOp::Map => Self::Map(Self::read_from(reader)?.into()),
+            ExprOp::ActorName => Self::ActorName(Self::read_from(reader)?.into()),
+            ExprOp::ItemName => Self::ItemName(Self::read_from(reader)?.into()),
+            ExprOp::Time => Self::Time(Self::read_from(reader)?.into()),
+            ExprOp::CurrentSuit => Self::CurrentSuit,
+            ExprOp::Scrap => Self::Scrap,
+            ExprOp::CurrentAtc => Self::CurrentAtc,
+            ExprOp::Use => Self::Use,
+            ExprOp::Hit => Self::Hit,
+            ExprOp::StickerName => Self::StickerName(Self::read_from(reader)?.into()),
+            ExprOp::Obj => Self::Obj(ObjExpr::read_from(reader)?.into()),
+            ExprOp::Random => Self::Random(Self::read_from(reader)?.into()),
+            ExprOp::Sin => Self::Sin(Self::read_from(reader)?.into()),
+            ExprOp::Cos => Self::Cos(Self::read_from(reader)?.into()),
+            ExprOp::ArrayElement => Self::ArrayElement(ArrayElementExpr::read_from(reader)?.into()),
         })
     }
 }
@@ -441,77 +440,65 @@ impl<R: Read + ?Sized> ReadFrom<R> for Expr {
 impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Expr {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
+        let opcode = Ggte::value(self.opcode()).map_err(Error::NotSupported)?;
+        writer.write_u8(opcode)?;
         match self {
-            Self::Equal(op) => write_u8_and(writer, OP_EQUAL, &**op)?,
-            Self::NotEqual(op) => write_u8_and(writer, OP_NOT_EQUAL, &**op)?,
-            Self::Less(op) => write_u8_and(writer, OP_LESS, &**op)?,
-            Self::LessEqual(op) => write_u8_and(writer, OP_LESS_EQUAL, &**op)?,
-            Self::Greater(op) => write_u8_and(writer, OP_GREATER, &**op)?,
-            Self::GreaterEqual(op) => write_u8_and(writer, OP_GREATER_EQUAL, &**op)?,
-            Self::Not(op) => write_u8_and(writer, OP_NOT, &**op)?,
-            Self::Add(op) => write_u8_and(writer, OP_ADD, &**op)?,
-            Self::Subtract(op) => write_u8_and(writer, OP_SUBTRACT, &**op)?,
-            Self::Multiply(op) => write_u8_and(writer, OP_MULTIPLY, &**op)?,
-            Self::Divide(op) => write_u8_and(writer, OP_DIVIDE, &**op)?,
-            Self::Modulo(op) => write_u8_and(writer, OP_MODULO, &**op)?,
-            Self::BitAnd(op) => write_u8_and(writer, OP_BIT_AND, &**op)?,
-            Self::BitOr(op) => write_u8_and(writer, OP_BIT_OR, &**op)?,
-            Self::BitXor(op) => write_u8_and(writer, OP_BIT_XOR, &**op)?,
-            Self::AddAssign(op) => write_u8_and(writer, OP_ADD_ASSIGN, &**op)?,
-            Self::SubtractAssign(op) => write_u8_and(writer, OP_SUBTRACT_ASSIGN, &**op)?,
-            Self::MultiplyAssign(op) => write_u8_and(writer, OP_MULTIPLY_ASSIGN, &**op)?,
-            Self::DivideAssign(op) => write_u8_and(writer, OP_DIVIDE_ASSIGN, &**op)?,
-            Self::ModuloAssign(op) => write_u8_and(writer, OP_MODULO_ASSIGN, &**op)?,
-            Self::BitAndAssign(op) => write_u8_and(writer, OP_BIT_AND_ASSIGN, &**op)?,
-            Self::BitOrAssign(op) => write_u8_and(writer, OP_BIT_OR_ASSIGN, &**op)?,
-            Self::BitXorAssign(op) => write_u8_and(writer, OP_BIT_XOR_ASSIGN, &**op)?,
-            Self::Imm16(x) => {
-                writer.write_u8(OP_CONST_16)?;
-                writer.write_i16::<LE>(*x)?;
-            }
-            Self::Imm32(x) => {
-                writer.write_u8(OP_CONST_32)?;
-                writer.write_i32::<LE>(*x)?;
-            }
-            Self::AddressOf(ip) => write_u8_and(writer, OP_ADDRESS_OF, ip)?,
-            Self::Stack(x) => {
-                writer.write_u8(OP_STACK)?;
-                writer.write_u8(*x)?;
-            }
-            Self::ParentStack(x) => {
-                writer.write_u8(OP_PARENT_STACK)?;
-                writer.write_u8(*x)?;
-            }
-            Self::Flag(e) => write_u8_and(writer, OP_FLAG, &**e)?,
-            Self::Variable(e) => write_u8_and(writer, OP_VARIABLE, &**e)?,
-            Self::Result1 => writer.write_u8(OP_RESULT_1)?,
-            Self::Result2 => writer.write_u8(OP_RESULT_2)?,
-            Self::Pad(e) => write_u8_and(writer, OP_PAD, &**e)?,
-            Self::Battery(e) => write_u8_and(writer, OP_BATTERY, &**e)?,
-            Self::Money => writer.write_u8(OP_MONEY)?,
-            Self::Item(e) => write_u8_and(writer, OP_ITEM, &**e)?,
-            Self::Atc(e) => write_u8_and(writer, OP_ATC, &**e)?,
-            Self::Rank => writer.write_u8(OP_RANK)?,
-            Self::Exp => writer.write_u8(OP_EXP)?,
-            Self::Level => writer.write_u8(OP_LEVEL)?,
-            Self::Hold => writer.write_u8(OP_HOLD)?,
-            Self::Map(e) => write_u8_and(writer, OP_MAP, &**e)?,
-            Self::ActorName(e) => write_u8_and(writer, OP_ACTOR_NAME, &**e)?,
-            Self::ItemName(e) => write_u8_and(writer, OP_ITEM_NAME, &**e)?,
-            Self::Time(e) => write_u8_and(writer, OP_TIME, &**e)?,
-            Self::CurrentSuit => writer.write_u8(OP_CURRENT_SUIT)?,
-            Self::Scrap => writer.write_u8(OP_SCRAP)?,
-            Self::CurrentAtc => writer.write_u8(OP_CURRENT_ATC)?,
-            Self::Use => writer.write_u8(OP_USE)?,
-            Self::Hit => writer.write_u8(OP_HIT)?,
-            Self::StickerName(e) => write_u8_and(writer, OP_STICKER_NAME, &**e)?,
-            Self::Obj(e) => write_u8_and(writer, OP_OBJ, &**e)?,
-            Self::Random(e) => write_u8_and(writer, OP_RANDOM, &**e)?,
-            Self::Sin(e) => write_u8_and(writer, OP_SIN, &**e)?,
-            Self::Cos(e) => write_u8_and(writer, OP_COS, &**e)?,
-            Self::ArrayElement(e) => write_u8_and(writer, OP_ARRAY_ELEMENT, &**e)?,
+            Self::Equal(op)
+            | Self::NotEqual(op)
+            | Self::Less(op)
+            | Self::LessEqual(op)
+            | Self::Greater(op)
+            | Self::GreaterEqual(op)
+            | Self::Add(op)
+            | Self::Subtract(op)
+            | Self::Multiply(op)
+            | Self::Divide(op)
+            | Self::Modulo(op)
+            | Self::BitAnd(op)
+            | Self::BitOr(op)
+            | Self::BitXor(op)
+            | Self::AddAssign(op)
+            | Self::SubtractAssign(op)
+            | Self::MultiplyAssign(op)
+            | Self::DivideAssign(op)
+            | Self::ModuloAssign(op)
+            | Self::BitAndAssign(op)
+            | Self::BitOrAssign(op)
+            | Self::BitXorAssign(op) => op.write_to(writer),
+            Self::Not(e)
+            | Self::Flag(e)
+            | Self::Variable(e)
+            | Self::Pad(e)
+            | Self::Battery(e)
+            | Self::Item(e)
+            | Self::Atc(e)
+            | Self::Map(e)
+            | Self::ActorName(e)
+            | Self::ItemName(e)
+            | Self::Time(e)
+            | Self::StickerName(e)
+            | Self::Random(e)
+            | Self::Sin(e)
+            | Self::Cos(e) => e.write_to(writer),
+            Self::Result1
+            | Self::Result2
+            | Self::Money
+            | Self::Rank
+            | Self::Exp
+            | Self::Level
+            | Self::Hold
+            | Self::CurrentSuit
+            | Self::Scrap
+            | Self::CurrentAtc
+            | Self::Use
+            | Self::Hit => Ok(()),
+            Self::Imm16(x) => Ok(writer.write_i16::<LE>(*x)?),
+            Self::Imm32(x) => Ok(writer.write_i32::<LE>(*x)?),
+            Self::AddressOf(ip) => Ok(ip.write_to(writer)?),
+            Self::Stack(x) | Self::ParentStack(x) => Ok(writer.write_u8(*x)?),
+            Self::Obj(e) => e.write_to(writer),
+            Self::ArrayElement(e) => e.write_to(writer),
         }
-        Ok(())
     }
 }
 
@@ -671,26 +658,27 @@ impl SetExpr {
 impl<R: Read + ?Sized> ReadFrom<R> for SetExpr {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
-        let op = reader.read_u8()?;
-        Ok(match op {
-            OP_STACK => Self::Stack(reader.read_u8()?),
-            OP_FLAG => Self::Flag(Expr::read_from(reader)?),
-            OP_VARIABLE => Self::Variable(Expr::read_from(reader)?),
-            OP_RESULT_1 => Self::Result1,
-            OP_RESULT_2 => Self::Result2,
-            OP_PAD => Self::Pad(Expr::read_from(reader)?),
-            OP_BATTERY => Self::Battery(Expr::read_from(reader)?),
-            OP_MONEY => Self::Money,
-            OP_ITEM => Self::Item(Expr::read_from(reader)?),
-            OP_ATC => Self::Atc(Expr::read_from(reader)?),
-            OP_RANK => Self::Rank,
-            OP_EXP => Self::Exp,
-            OP_LEVEL => Self::Level,
-            OP_TIME => Self::Time(Expr::read_from(reader)?),
-            OP_CURRENT_SUIT => Self::CurrentSuit,
-            OP_SCRAP => Self::Scrap,
-            OP_CURRENT_ATC => Self::CurrentAtc,
-            _ => return Err(Error::UnrecognizedOp(op)),
+        let opcode = reader.read_u8()?;
+        let expr = Ggte::get(opcode).map_err(Error::UnrecognizedOp)?;
+        Ok(match expr {
+            ExprOp::Stack => Self::Stack(reader.read_u8()?),
+            ExprOp::Flag => Self::Flag(Expr::read_from(reader)?),
+            ExprOp::Variable => Self::Variable(Expr::read_from(reader)?),
+            ExprOp::Result1 => Self::Result1,
+            ExprOp::Result2 => Self::Result2,
+            ExprOp::Pad => Self::Pad(Expr::read_from(reader)?),
+            ExprOp::Battery => Self::Battery(Expr::read_from(reader)?),
+            ExprOp::Money => Self::Money,
+            ExprOp::Item => Self::Item(Expr::read_from(reader)?),
+            ExprOp::Atc => Self::Atc(Expr::read_from(reader)?),
+            ExprOp::Rank => Self::Rank,
+            ExprOp::Exp => Self::Exp,
+            ExprOp::Level => Self::Level,
+            ExprOp::Time => Self::Time(Expr::read_from(reader)?),
+            ExprOp::CurrentSuit => Self::CurrentSuit,
+            ExprOp::Scrap => Self::Scrap,
+            ExprOp::CurrentAtc => Self::CurrentAtc,
+            _ => return Err(Error::NotSupported(expr)),
         })
     }
 }
@@ -698,29 +686,27 @@ impl<R: Read + ?Sized> ReadFrom<R> for SetExpr {
 impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SetExpr {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
+        let opcode = Ggte::value(self.opcode()).map_err(Error::NotSupported)?;
+        writer.write_u8(opcode)?;
         match self {
-            Self::Stack(x) => {
-                writer.write_u8(OP_STACK)?;
-                writer.write_u8(*x)?;
-            }
-            Self::Flag(e) => write_u8_and(writer, OP_FLAG, e)?,
-            Self::Variable(e) => write_u8_and(writer, OP_VARIABLE, e)?,
-            Self::Result1 => writer.write_u8(OP_RESULT_1)?,
-            Self::Result2 => writer.write_u8(OP_RESULT_2)?,
-            Self::Pad(e) => write_u8_and(writer, OP_PAD, e)?,
-            Self::Battery(e) => write_u8_and(writer, OP_BATTERY, e)?,
-            Self::Money => writer.write_u8(OP_MONEY)?,
-            Self::Item(e) => write_u8_and(writer, OP_ITEM, e)?,
-            Self::Atc(e) => write_u8_and(writer, OP_ATC, e)?,
-            Self::Rank => writer.write_u8(OP_RANK)?,
-            Self::Exp => writer.write_u8(OP_EXP)?,
-            Self::Level => writer.write_u8(OP_LEVEL)?,
-            Self::Time(e) => write_u8_and(writer, OP_TIME, e)?,
-            Self::CurrentSuit => writer.write_u8(OP_CURRENT_SUIT)?,
-            Self::Scrap => writer.write_u8(OP_SCRAP)?,
-            Self::CurrentAtc => writer.write_u8(OP_CURRENT_ATC)?,
+            Self::Stack(x) => Ok(writer.write_u8(*x)?),
+            Self::Flag(e)
+            | Self::Variable(e)
+            | Self::Pad(e)
+            | Self::Battery(e)
+            | Self::Item(e)
+            | Self::Atc(e)
+            | Self::Time(e) => e.write_to(writer),
+            Self::Result1
+            | Self::Result2
+            | Self::Money
+            | Self::Rank
+            | Self::Exp
+            | Self::Level
+            | Self::CurrentSuit
+            | Self::Scrap
+            | Self::CurrentAtc => Ok(()),
         }
-        Ok(())
     }
 }
 
@@ -745,7 +731,7 @@ impl TryFrom<Expr> for SetExpr {
             Expr::CurrentSuit => Self::CurrentSuit,
             Expr::Scrap => Self::Scrap,
             Expr::CurrentAtc => Self::CurrentAtc,
-            _ => return Err(Error::NotSupported(op.into())),
+            _ => return Err(Error::NotSupported(op.opcode())),
         })
     }
 }

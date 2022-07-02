@@ -207,64 +207,6 @@ opcodes! {
     }
 }
 
-// Expression opcodes
-pub const OP_EQUAL: u8 = 0; // 00
-pub const OP_NOT_EQUAL: u8 = 1; // 01
-pub const OP_LESS: u8 = 2; // 02
-pub const OP_LESS_EQUAL: u8 = 3; // 03
-pub const OP_GREATER: u8 = 4; // 04
-pub const OP_GREATER_EQUAL: u8 = 5; // 05
-pub const OP_NOT: u8 = 6; // 06
-pub const OP_ADD: u8 = 7; // 07
-pub const OP_SUBTRACT: u8 = 8; // 08
-pub const OP_MULTIPLY: u8 = 9; // 09
-pub const OP_DIVIDE: u8 = 10; // 0a
-pub const OP_MODULO: u8 = 11; // 0b
-pub const OP_BIT_AND: u8 = 12; // 0c
-pub const OP_BIT_OR: u8 = 13; // 0d
-pub const OP_BIT_XOR: u8 = 14; // 0e
-pub const OP_ADD_ASSIGN: u8 = 15; // 0f
-pub const OP_SUBTRACT_ASSIGN: u8 = 16; // 10
-pub const OP_MULTIPLY_ASSIGN: u8 = 17; // 11
-pub const OP_DIVIDE_ASSIGN: u8 = 18; // 12
-pub const OP_MODULO_ASSIGN: u8 = 19; // 13
-pub const OP_BIT_AND_ASSIGN: u8 = 20; // 14
-pub const OP_BIT_OR_ASSIGN: u8 = 21; // 15
-pub const OP_BIT_XOR_ASSIGN: u8 = 22; // 16
-pub const OP_CONST_16: u8 = 23; // 17
-pub const OP_CONST_32: u8 = 24; // 18
-pub const OP_ADDRESS_OF: u8 = 25; // 19
-pub const OP_STACK: u8 = 26; // 1a
-pub const OP_PARENT_STACK: u8 = 27; // 1b
-pub const OP_FLAG: u8 = 28; // 1c
-pub const OP_VARIABLE: u8 = 29; // 1d
-pub const OP_RESULT_1: u8 = 30; // 1e
-pub const OP_RESULT_2: u8 = 31; // 1f
-pub const OP_PAD: u8 = 32; // 20
-pub const OP_BATTERY: u8 = 100; // 64
-pub const OP_MONEY: u8 = 101; // 65
-pub const OP_ITEM: u8 = 102; // 66
-pub const OP_ATC: u8 = 103; // 67
-pub const OP_RANK: u8 = 104; // 68
-pub const OP_EXP: u8 = 105; // 69
-pub const OP_LEVEL: u8 = 106; // 6a
-pub const OP_HOLD: u8 = 107; // 6b
-pub const OP_MAP: u8 = 108; // 6c
-pub const OP_ACTOR_NAME: u8 = 109; // 6d
-pub const OP_ITEM_NAME: u8 = 110; // 6e
-pub const OP_TIME: u8 = 111; // 6f
-pub const OP_CURRENT_SUIT: u8 = 112; // 70
-pub const OP_SCRAP: u8 = 113; // 71
-pub const OP_CURRENT_ATC: u8 = 114; // 72
-pub const OP_USE: u8 = 115; // 73
-pub const OP_HIT: u8 = 116; // 74
-pub const OP_STICKER_NAME: u8 = 117; // 75
-pub const OP_OBJ: u8 = 200; // c8
-pub const OP_RANDOM: u8 = 201; // c9
-pub const OP_SIN: u8 = 202; // ca
-pub const OP_COS: u8 = 203; // cb
-pub const OP_ARRAY_ELEMENT: u8 = 204; // cc
-
 // Command types
 pub const TYPE_TIME: i32 = 200; // c8
 pub const TYPE_UNK_201: i32 = 201; // c9

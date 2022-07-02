@@ -1,21 +1,8 @@
-use super::WriteTo;
-use byteorder::WriteBytesExt;
 use std::cmp;
 use std::ffi::{CStr, CString};
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 
 pub const BUFFER_SIZE: usize = 0x8000;
-
-/// Writes a byte followed by a writable object.
-pub fn write_u8_and<W, T>(writer: &mut W, op: u8, obj: &T) -> Result<(), T::Error>
-where
-    W: Write + ?Sized,
-    T: WriteTo<W>,
-    T::Error: From<io::Error>,
-{
-    writer.write_u8(op)?;
-    obj.write_to(writer)
-}
 
 /// Reads a fixed-size null-terminated string from `reader`. This will allocate `size` bytes.
 pub fn read_fixed_string(mut reader: impl Read, size: usize) -> io::Result<CString> {
