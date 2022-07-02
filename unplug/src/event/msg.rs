@@ -1,5 +1,8 @@
 use super::block::WriteIp;
-use super::opcodes::ggte::*;
+use super::opcodes::ggte::{
+    SFX_FADE, SFX_FADE_IN, SFX_FADE_OUT, SFX_PLAY, SFX_STOP, SFX_UNK_5, SFX_UNK_6, SFX_WAIT,
+};
+use super::opcodes::{Ggte, MsgOp, OpcodeMap};
 use crate::common::text::{self, Text};
 use crate::common::{ReadFrom, WriteTo};
 use crate::data::{self, Sound};
@@ -17,6 +20,12 @@ const MAX_SIZE: u64 = 2048;
 /// The maximum number of characters that can appear in a message.
 const MAX_CHARS: usize = 400;
 
+// Message wait type values
+const MSG_WAIT_SUIT_MENU: u8 = 252; // fc
+const MSG_WAIT_ATC_MENU: u8 = 253; // fd
+const MSG_WAIT_LEFT_PLUG: u8 = 254; // fe
+const MSG_WAIT_RIGHT_PLUG: u8 = 255; // ff
+
 /// The result type for message operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -31,7 +40,10 @@ pub enum Error {
     Decode,
 
     #[error("invalid message character: {0:#x}")]
-    InvalidChar(u32),
+    InvalidChar(u16),
+
+    #[error("unsupported message command: {0:?}")]
+    NotSupported(MsgOp),
 
     #[error("message is too large ({len} > {max})")]
     TooLarge { len: u64, max: u64 },
@@ -120,6 +132,37 @@ pub enum MsgCommand {
     Text(Text),
 }
 
+impl MsgCommand {
+    /// Returns the opcode corresponding to the command if there is one. `Text` will return `None`.
+    #[must_use]
+    pub fn opcode(&self) -> Option<MsgOp> {
+        Some(match self {
+            MsgCommand::Speed(_) => MsgOp::Speed,
+            MsgCommand::Wait(_) => MsgOp::Wait,
+            MsgCommand::Anim(_) => MsgOp::Anim,
+            MsgCommand::Sfx(_, _) => MsgOp::Sfx,
+            MsgCommand::Voice(_) => MsgOp::Voice,
+            MsgCommand::Default(_) => MsgOp::Default,
+            MsgCommand::Newline => MsgOp::Newline,
+            MsgCommand::NewlineVt => MsgOp::NewlineVt,
+            MsgCommand::Format(_) => MsgOp::Format,
+            MsgCommand::Size(_) => MsgOp::Size,
+            MsgCommand::Color(_) => MsgOp::Color,
+            MsgCommand::Rgba(_) => MsgOp::Rgba,
+            MsgCommand::Proportional(_) => MsgOp::Proportional,
+            MsgCommand::Icon(_) => MsgOp::Icon,
+            MsgCommand::Shake(_) => MsgOp::Shake,
+            MsgCommand::Center(_) => MsgOp::Center,
+            MsgCommand::Rotate(_) => MsgOp::Rotate,
+            MsgCommand::Scale(_, _) => MsgOp::Scale,
+            MsgCommand::NumInput(_) => MsgOp::NumInput,
+            MsgCommand::Question(_) => MsgOp::Question,
+            MsgCommand::Stay => MsgOp::Stay,
+            MsgCommand::Text(_) => return None,
+        })
+    }
+}
+
 /// Arguments to the msg() and select() commands.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct MsgArgs {
@@ -182,85 +225,87 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
         // displayed as text. Keep reading until we hit a null terminator (MSG_END).
         let mut commands = vec![];
         let mut text = Vec::with_capacity((expected_length - 1) as usize);
-        loop {
+        let mut done = false;
+        while !done {
             let b = reader.read_u8()?;
-            let command = match b {
-                MSG_END => None,
-                MSG_SPEED => Some(MsgCommand::Speed(reader.read_u8()?)),
-                MSG_WAIT => Some(MsgCommand::Wait(MsgWaitType::read_from(reader)?)),
-                MSG_ANIM => Some(MsgCommand::Anim(MsgAnimArgs::read_from(reader)?)),
-                MSG_SFX => {
+            let opcode = Ggte::get(b).map_err(|b| Error::InvalidChar(b as u16))?;
+            let command = match opcode {
+                MsgOp::End => {
+                    done = true;
+                    None
+                }
+                MsgOp::Speed => Some(MsgCommand::Speed(reader.read_u8()?)),
+                MsgOp::Wait => Some(MsgCommand::Wait(MsgWaitType::read_from(reader)?)),
+                MsgOp::Anim => Some(MsgCommand::Anim(MsgAnimArgs::read_from(reader)?)),
+                MsgOp::Sfx => {
                     let sound = reader.read_u32::<LE>()?.try_into()?;
                     Some(MsgCommand::Sfx(sound, MsgSfxType::read_from(reader)?))
                 }
-                MSG_VOICE => {
+                MsgOp::Voice => {
                     let voice = reader.read_u8()?;
                     match Voice::try_from(voice) {
                         Ok(voice) => Some(MsgCommand::Voice(voice)),
                         Err(_) => return Err(Error::UnrecognizedVoice(voice)),
                     }
                 }
-                MSG_DEFAULT => Some(MsgCommand::Default(DefaultArgs::read_from(reader)?)),
-                MSG_NEWLINE => Some(MsgCommand::Newline),
-                MSG_NEWLINE_VT => Some(MsgCommand::NewlineVt),
-                MSG_FORMAT => {
+                MsgOp::Default => Some(MsgCommand::Default(DefaultArgs::read_from(reader)?)),
+                MsgOp::Newline => Some(MsgCommand::Newline),
+                MsgOp::NewlineVt => Some(MsgCommand::NewlineVt),
+                MsgOp::Format => {
                     let mut format_text = vec![];
                     loop {
                         let b = reader.read_u8()?;
-                        if b == MSG_FORMAT {
+                        if let Ok(MsgOp::Format) = Ggte::get(b) {
                             break;
                         }
                         format_text.push(b);
                     }
                     Some(MsgCommand::Format(Text::with_bytes(format_text)))
                 }
-                MSG_SIZE => Some(MsgCommand::Size(reader.read_u8()?)),
-                MSG_COLOR => {
+                MsgOp::Size => Some(MsgCommand::Size(reader.read_u8()?)),
+                MsgOp::Color => {
                     let color = reader.read_u8()?;
                     match Color::try_from(color) {
                         Ok(color) => Some(MsgCommand::Color(color)),
                         Err(_) => return Err(Error::UnrecognizedColor(color)),
                     }
                 }
-                MSG_RGBA => {
+                MsgOp::Rgba => {
                     // Yes, this is big-endian...
                     Some(MsgCommand::Rgba(reader.read_u32::<BE>()?))
                 }
-                MSG_PROPORTIONAL => Some(MsgCommand::Proportional(reader.read_u8()? != 0)),
-                MSG_ICON => {
+                MsgOp::Proportional => Some(MsgCommand::Proportional(reader.read_u8()? != 0)),
+                MsgOp::Icon => {
                     let icon = reader.read_u8()?;
                     match Icon::try_from(icon) {
                         Ok(icon) => Some(MsgCommand::Icon(icon)),
                         Err(_) => return Err(Error::UnrecognizedIcon(icon)),
                     }
                 }
-                MSG_SHAKE => Some(MsgCommand::Shake(ShakeArgs::read_from(reader)?)),
-                MSG_CENTER => Some(MsgCommand::Center(reader.read_u8()? != 0)),
-                MSG_ROTATE => Some(MsgCommand::Rotate(reader.read_i16::<LE>()?)),
-                MSG_SCALE => {
+                MsgOp::Shake => Some(MsgCommand::Shake(ShakeArgs::read_from(reader)?)),
+                MsgOp::Center => Some(MsgCommand::Center(reader.read_u8()? != 0)),
+                MsgOp::Rotate => Some(MsgCommand::Rotate(reader.read_i16::<LE>()?)),
+                MsgOp::Scale => {
                     Some(MsgCommand::Scale(reader.read_i16::<LE>()?, reader.read_i16::<LE>()?))
                 }
-                MSG_NUM_INPUT => Some(MsgCommand::NumInput(NumInputArgs::read_from(reader)?)),
-                MSG_QUESTION => Some(MsgCommand::Question(QuestionArgs::read_from(reader)?)),
-                MSG_STAY => Some(MsgCommand::Stay),
-                _ => None,
+                MsgOp::NumInput => Some(MsgCommand::NumInput(NumInputArgs::read_from(reader)?)),
+                MsgOp::Question => Some(MsgCommand::Question(QuestionArgs::read_from(reader)?)),
+                MsgOp::Stay => Some(MsgCommand::Stay),
+                MsgOp::Char(ch) => {
+                    text.push(match ch {
+                        // '$' is an escape character for '"'
+                        b'$' => b'"',
+                        _ => ch,
+                    });
+                    continue;
+                }
             };
-            if command.is_some() || b == MSG_END {
-                if !text.is_empty() {
-                    commands.push(MsgCommand::Text(Text::with_bytes(text.clone())));
-                    text.clear();
-                }
-                if let Some(command) = command {
-                    commands.push(command);
-                } else if b == MSG_END {
-                    break;
-                }
-            } else {
-                text.push(match b {
-                    // '$' is an escape character for '"'
-                    b'$' => b'"',
-                    _ => b,
-                });
+            if !text.is_empty() {
+                commands.push(MsgCommand::Text(Text::with_bytes(text.clone())));
+                text.clear();
+            }
+            if let Some(command) = command {
+                commands.push(command);
             }
         }
 
@@ -288,100 +333,50 @@ impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for MsgArgs {
 
         let mut num_chars = 0;
         for command in &self.commands {
+            if let Some(opcode) = command.opcode() {
+                let b = Ggte::value(opcode).map_err(Error::NotSupported)?;
+                writer.write_u8(b)?;
+            }
             match command {
-                MsgCommand::Speed(a) => {
-                    writer.write_u8(MSG_SPEED)?;
-                    writer.write_u8(*a)?;
-                }
-                MsgCommand::Wait(ty) => {
-                    writer.write_u8(MSG_WAIT)?;
-                    ty.write_to(writer)?;
-                }
-                MsgCommand::Anim(arg) => {
-                    writer.write_u8(MSG_ANIM)?;
-                    arg.write_to(writer)?;
-                }
+                MsgCommand::Speed(a) => writer.write_u8(*a)?,
+                MsgCommand::Wait(ty) => ty.write_to(writer)?,
+                MsgCommand::Anim(arg) => arg.write_to(writer)?,
                 MsgCommand::Sfx(id, ty) => {
-                    writer.write_u8(MSG_SFX)?;
                     writer.write_u32::<LE>(id.value())?;
                     ty.write_to(writer)?;
                 }
-                MsgCommand::Voice(voice) => {
-                    writer.write_u8(MSG_VOICE)?;
-                    writer.write_u8((*voice).into())?;
-                }
-                MsgCommand::Default(arg) => {
-                    writer.write_u8(MSG_DEFAULT)?;
-                    arg.write_to(writer)?;
-                }
-                MsgCommand::Newline => {
-                    writer.write_u8(MSG_NEWLINE)?;
-                }
-                MsgCommand::NewlineVt => {
-                    writer.write_u8(MSG_NEWLINE_VT)?;
-                }
+                MsgCommand::Voice(voice) => writer.write_u8((*voice).into())?,
+                MsgCommand::Default(arg) => arg.write_to(writer)?,
+                MsgCommand::Newline | MsgCommand::NewlineVt => (),
                 MsgCommand::Format(text) => {
                     // Note: format strings aren't counted towards the MAX_CHARS limit here because
                     // they can expand to any length. If you use a format string in a long message,
                     // you're on your own.
-                    writer.write_u8(MSG_FORMAT)?;
                     writer.write_all(text.as_bytes())?;
-                    writer.write_u8(MSG_FORMAT)?;
+                    writer.write_u8(Ggte::value(MsgOp::Format).unwrap())?;
                 }
-                MsgCommand::Size(size) => {
-                    writer.write_u8(MSG_SIZE)?;
-                    writer.write_u8(*size)?;
-                }
-                MsgCommand::Color(color) => {
-                    writer.write_u8(MSG_COLOR)?;
-                    writer.write_u8((*color).into())?;
-                }
+                MsgCommand::Size(size) => writer.write_u8(*size)?,
+                MsgCommand::Color(color) => writer.write_u8((*color).into())?,
                 MsgCommand::Rgba(rgba) => {
-                    writer.write_u8(MSG_RGBA)?;
                     // Yes, this is big-endian...
                     writer.write_u32::<BE>(*rgba)?;
                 }
-                MsgCommand::Proportional(x) => {
-                    writer.write_u8(MSG_PROPORTIONAL)?;
-                    writer.write_u8(*x as u8)?;
-                }
-                MsgCommand::Icon(icon) => {
-                    writer.write_u8(MSG_ICON)?;
-                    writer.write_u8((*icon).into())?;
-                }
-                MsgCommand::Shake(arg) => {
-                    writer.write_u8(MSG_SHAKE)?;
-                    arg.write_to(writer)?;
-                }
-                MsgCommand::Center(x) => {
-                    writer.write_u8(MSG_CENTER)?;
-                    writer.write_u8(*x as u8)?;
-                }
-                MsgCommand::Rotate(angle) => {
-                    writer.write_u8(MSG_ROTATE)?;
-                    writer.write_i16::<LE>(*angle)?;
-                }
+                MsgCommand::Proportional(x) => writer.write_u8(*x as u8)?,
+                MsgCommand::Icon(icon) => writer.write_u8((*icon).into())?,
+                MsgCommand::Shake(arg) => arg.write_to(writer)?,
+                MsgCommand::Center(x) => writer.write_u8(*x as u8)?,
+                MsgCommand::Rotate(angle) => writer.write_i16::<LE>(*angle)?,
                 MsgCommand::Scale(x, y) => {
-                    writer.write_u8(MSG_SCALE)?;
                     writer.write_i16::<LE>(*x)?;
                     writer.write_i16::<LE>(*y)?;
                 }
-                MsgCommand::NumInput(arg) => {
-                    writer.write_u8(MSG_NUM_INPUT)?;
-                    arg.write_to(writer)?;
-                }
-                MsgCommand::Question(arg) => {
-                    writer.write_u8(MSG_QUESTION)?;
-                    arg.write_to(writer)?;
-                }
-                MsgCommand::Stay => {
-                    writer.write_u8(MSG_STAY)?;
-                }
+                MsgCommand::NumInput(arg) => arg.write_to(writer)?,
+                MsgCommand::Question(arg) => arg.write_to(writer)?,
+                MsgCommand::Stay => (),
                 MsgCommand::Text(text) => {
                     for &b in text.as_bytes() {
-                        // Bell, backspace, and tab don't have opcodes assigned
-                        if b <= MSG_OPCODE_MAX && b != b'\x07' && b != b'\x08' && b != b'\t' {
-                            return Err(Error::InvalidChar(b as u32));
+                        if !matches!(Ggte::get(b), Ok(MsgOp::Char(_))) {
+                            return Err(Error::InvalidChar(b as u16));
                         }
                         writer.write_u8(match b {
                             // '$' is an escape character for '"'
@@ -402,7 +397,7 @@ impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for MsgArgs {
         }
 
         // Add a null terminator
-        writer.write_u8(MSG_END)?;
+        writer.write_u8(Ggte::value(MsgOp::End).unwrap())?;
 
         // Ensure we don't overflow the game's message buffer
         let msg_end_offset = writer.seek(SeekFrom::Current(0))?;
@@ -826,6 +821,7 @@ mod tests {
 
     use crate::assert_write_and_read;
     use crate::data::Music;
+    use std::io::Cursor;
 
     fn msg(command: MsgCommand) -> MsgArgs {
         vec![command].into()
@@ -923,5 +919,12 @@ mod tests {
     #[test]
     fn test_write_and_read_none_voice() {
         assert_write_and_read!(msg(MsgCommand::Voice(Voice::None)));
+    }
+
+    #[test]
+    fn test_write_invalid_char() {
+        let mut cursor = Cursor::new(vec![]);
+        let msg = MsgArgs::from(vec![MsgCommand::Text(text("\x01"))]);
+        assert!(matches!(msg.write_to(&mut cursor), Err(Error::InvalidChar(1))));
     }
 }

@@ -262,37 +262,6 @@ pub const TYPE_UNK_250: i32 = 250; // fa
 pub const TYPE_UNK_251: i32 = 251; // fb
 pub const TYPE_UNK_252: i32 = 252; // fc
 
-// Message commands
-pub const MSG_END: u8 = 0; // 00
-pub const MSG_SPEED: u8 = 1; // 01
-pub const MSG_WAIT: u8 = 2; // 02
-pub const MSG_ANIM: u8 = 3; // 03
-pub const MSG_SFX: u8 = 4; // 04
-pub const MSG_VOICE: u8 = 5; // 05
-pub const MSG_DEFAULT: u8 = 6; // 06
-pub const MSG_NEWLINE: u8 = 10; // 0a
-pub const MSG_NEWLINE_VT: u8 = 11; // 0b
-pub const MSG_FORMAT: u8 = 12; // 0c
-pub const MSG_SIZE: u8 = 13; // 0d
-pub const MSG_COLOR: u8 = 14; // 0e
-pub const MSG_RGBA: u8 = 15; // 0f
-pub const MSG_PROPORTIONAL: u8 = 16; // 10
-pub const MSG_ICON: u8 = 17; // 11
-pub const MSG_SHAKE: u8 = 18; // 12
-pub const MSG_CENTER: u8 = 19; // 13
-pub const MSG_ROTATE: u8 = 20; // 14
-pub const MSG_SCALE: u8 = 21; // 15
-pub const MSG_NUM_INPUT: u8 = 22; // 16
-pub const MSG_QUESTION: u8 = 23; // 17
-pub const MSG_STAY: u8 = 24; // 18
-pub const MSG_OPCODE_MAX: u8 = 24;
-
-// Message wait types
-pub const MSG_WAIT_SUIT_MENU: u8 = 252; // fc
-pub const MSG_WAIT_ATC_MENU: u8 = 253; // fd
-pub const MSG_WAIT_LEFT_PLUG: u8 = 254; // fe
-pub const MSG_WAIT_RIGHT_PLUG: u8 = 255; // ff
-
 // SFX commands
 pub const SFX_WAIT: i32 = -1; // ff (only supported in messages)
 pub const SFX_STOP: i32 = 0; // 00

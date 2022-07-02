@@ -313,12 +313,23 @@ pub enum MsgOp {
     Char(u8),
 }
 
+/// Maximum value of a message command opcode.
+const MSG_OPCODE_MAX: u8 = 24;
+
 impl Opcode for MsgOp {
     type Value = u8;
     fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
-        Ok(Self::Char(value))
+        // Bell, backspace, and tab are interpreted as characters
+        if value > MSG_OPCODE_MAX || value == b'\x07' || value == b'\x08' || value == b'\t' {
+            Ok(Self::Char(value))
+        } else {
+            Err(value)
+        }
     }
     fn map_unsupported(opcode: Self) -> Result<Self::Value, Self> {
-        Err(opcode)
+        match opcode {
+            Self::Char(ch) => Ok(ch),
+            _ => Err(opcode),
+        }
     }
 }
