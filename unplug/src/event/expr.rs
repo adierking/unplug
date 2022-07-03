@@ -1,6 +1,5 @@
 use super::block::{Ip, WriteIp};
-use super::opcodes::ggte::*;
-use super::opcodes::{ExprOp, Ggte, OpcodeMap};
+use super::opcodes::{ExprOp, Ggte, OpcodeMap, TypeOp};
 use crate::common::{ReadFrom, WriteTo};
 use crate::data::{Atc, Item, Music, Object, Sfx, Sound};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
@@ -25,6 +24,9 @@ pub enum Error {
 
     #[error("unrecognized type code: {0}")]
     UnrecognizedType(i32),
+
+    #[error("unsupported type: {0:?}")]
+    UnsupportedType(TypeOp),
 
     #[error("expression is not a constant: {0:?}")]
     NonConstant(Box<Expr>),
@@ -787,21 +789,21 @@ impl Debug for BinaryOp {
 expr_enum! {
     type Error = Error;
     pub enum ObjExpr {
-        Anim(ObjExprObj) => TYPE_ANIM,
-        Dir(ObjExprObj) => TYPE_DIR,
-        PosX(ObjExprObj) => TYPE_POS_X,
-        PosY(ObjExprObj) => TYPE_POS_Y,
-        PosZ(ObjExprObj) => TYPE_POS_Z,
-        BoneX(ObjExprBone) => TYPE_BONE_X,
-        BoneY(ObjExprBone) => TYPE_BONE_Y,
-        BoneZ(ObjExprBone) => TYPE_BONE_Z,
-        DirTo(ObjExprPair) => TYPE_DIR_TO,
-        Distance(ObjExprPair) => TYPE_DISTANCE,
-        Unk235(ObjExprObj) => TYPE_UNK_235,
-        Unk247(ObjExprObj) => TYPE_UNK_247,
-        Unk248(ObjExprObj) => TYPE_UNK_248,
-        Unk249(ObjExprBone) => TYPE_UNK_249,
-        Unk250(ObjExprBone) => TYPE_UNK_250,
+        Anim(ObjExprObj) => TypeOp::Anim,
+        Dir(ObjExprObj) => TypeOp::Dir,
+        PosX(ObjExprObj) => TypeOp::PosX,
+        PosY(ObjExprObj) => TypeOp::PosY,
+        PosZ(ObjExprObj) => TypeOp::PosZ,
+        BoneX(ObjExprBone) => TypeOp::BoneX,
+        BoneY(ObjExprBone) => TypeOp::BoneY,
+        BoneZ(ObjExprBone) => TypeOp::BoneZ,
+        DirTo(ObjExprPair) => TypeOp::DirTo,
+        Distance(ObjExprPair) => TypeOp::Distance,
+        Unk235(ObjExprObj) => TypeOp::Unk235,
+        Unk247(ObjExprObj) => TypeOp::Unk247,
+        Unk248(ObjExprObj) => TypeOp::Unk248,
+        Unk249(ObjExprBone) => TypeOp::Unk249,
+        Unk250(ObjExprBone) => TypeOp::Unk250,
     }
 }
 

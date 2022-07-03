@@ -1,5 +1,6 @@
-pub mod ggte;
-pub use ggte::Opcodes as Ggte;
+mod ggte;
+
+pub use ggte::Ggte;
 
 /// Base trait for an opcode enum.
 pub trait Opcode: Copy + Eq + Sized {

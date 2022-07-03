@@ -1,7 +1,4 @@
 use super::block::WriteIp;
-use super::opcodes::ggte::{
-    SFX_FADE, SFX_FADE_IN, SFX_FADE_OUT, SFX_PLAY, SFX_STOP, SFX_UNK_5, SFX_UNK_6, SFX_WAIT,
-};
 use super::opcodes::{Ggte, MsgOp, OpcodeMap};
 use crate::common::text::{self, Text};
 use crate::common::{ReadFrom, WriteTo};
@@ -25,6 +22,16 @@ const MSG_WAIT_SUIT_MENU: u8 = 252; // fc
 const MSG_WAIT_ATC_MENU: u8 = 253; // fd
 const MSG_WAIT_LEFT_PLUG: u8 = 254; // fe
 const MSG_WAIT_RIGHT_PLUG: u8 = 255; // ff
+
+// Message SFX commands
+const SFX_WAIT: i32 = -1; // ff
+const SFX_STOP: i32 = 0; // 00
+const SFX_PLAY: i32 = 1; // 01
+const SFX_FADE_OUT: i32 = 2; // 02
+const SFX_FADE_IN: i32 = 3; // 03
+const SFX_FADE: i32 = 4; // 04
+const SFX_UNK_5: i32 = 5; // 05
+const SFX_UNK_6: i32 = 6; // 06
 
 /// The result type for message operations.
 pub type Result<T> = std::result::Result<T, Error>;

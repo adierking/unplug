@@ -155,7 +155,8 @@ macro_rules! expr {
     }};
 }
 
-/// Generates an enum which binds to constant `Expr` values.
+/// Generates an enum which binds to constant `Expr` values. The values can either be `TypeOp`
+/// values or `i32` literals.
 ///
 /// Each enum value can have an optional argument list attached to it, and the argument list can be
 /// specified inline (if entirely composed of `Expr`s) or use an existing type.
@@ -166,41 +167,43 @@ macro_rules! expr {
 ///
 /// Basic usage:
 /// ```
-/// # use unplug::event::{expr, opcodes::ggte::{TYPE_MODULATE, TYPE_BLEND}};
+/// # use unplug::event::expr;
+/// # use unplug::event::opcodes::TypeOp;
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
 ///     pub enum ColorType {
-///         Modulate => TYPE_MODULATE,
-///         Blend => TYPE_BLEND,
+///         Modulate => TypeOp::Modulate,
+///         Blend => TypeOp::Blend,
 ///     }
 /// }
 /// ```
 ///
 /// External argument list type:
 /// ```
-/// # use unplug::event::opcodes::ggte::{TYPE_ANIM, TYPE_BONE_X, TYPE_DISTANCE};
 /// # use unplug::event::expr::{self, ObjExprObj, ObjExprBone, ObjExprPair};
+/// # use unplug::event::opcodes::TypeOp;
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
 ///     pub enum ObjExpr {
-///         Anim(ObjExprObj) => TYPE_ANIM,
-///         BoneX(ObjExprBone) => TYPE_BONE_X,
-///         Distance(ObjExprPair) => TYPE_DISTANCE,
+///         Anim(ObjExprObj) => TypeOp::Anim,
+///         BoneX(ObjExprBone) => TypeOp::BoneX,
+///         Distance(ObjExprPair) => TypeOp::Distance,
 ///     }
 /// }
 /// ```
 ///
 /// Inline argument lists:
 /// ```
-/// # use unplug::event::{expr, opcodes::ggte::{TYPE_POS, TYPE_COLOR}};
+/// # use unplug::event::expr;
+/// # use unplug::event::opcodes::TypeOp;
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
 ///     pub enum LightType {
-///         Pos(LightPosArgs { x, y, z }) => TYPE_POS,
-///         Color(LightColorArgs { r, g, b }) => TYPE_COLOR,
+///         Pos(LightPosArgs { x, y, z }) => TypeOp::Pos,
+///         Color(LightColorArgs { r, g, b }) => TypeOp::Color,
 ///     }
 /// }
 /// ```
@@ -211,7 +214,7 @@ macro_rules! expr_enum {
         $(#[$meta:meta])*
         $vis:vis enum $name:ident {
             $(
-                $type:ident $( ( $args_type:ident $( { $($arg:ident),* } )? ) )? => $val:expr
+                $type:ident $( ( $args_type:ident $( { $($arg:ident),* } )? ) )? => $($val:literal)? $($op:path)?
             ),*
             $(,)*
         }
@@ -227,15 +230,13 @@ macro_rules! expr_enum {
         impl<R: ::std::io::Read + ?Sized> $crate::common::ReadFrom<R> for $name {
             type Error = $error;
             fn read_from(reader: &mut R) -> ::std::result::Result<Self, Self::Error> {
-                let ty_expr = $crate::event::Expr::read_from(reader)?;
-                let ty = match ty_expr.value() {
-                    Some(x) => x,
-                    None => return Err($crate::event::expr::Error::NonConstant(ty_expr.into()).into()),
-                };
-                Ok(match ty {
-                    $(x if x == $val => Self::$type $( ( $args_type::read_from(reader)? ) )?,)*
-                    _ => return Err($crate::event::expr::Error::UnrecognizedType(ty).into()),
-                })
+                let expr = $crate::event::Expr::read_from(reader)?;
+                let op = expr.value().ok_or_else(|| $crate::event::expr::Error::NonConstant(expr.into()))?;
+                let ty = expr_enum!(@opmap get(op));
+                match ty {
+                    $($(Err($val))? $(Ok($op))? => Ok(Self::$type $( ( $args_type::read_from(reader)? ) )?),)*
+                    _ => Err($crate::event::expr::Error::UnrecognizedType(op).into()),
+                }
             }
         }
 
@@ -245,8 +246,12 @@ macro_rules! expr_enum {
                 match self {
                     $(
                         expr_enum!(@match $type $(, arg, $args_type)?) => {
-                            let ty_expr = $crate::event::Expr::Imm32($val);
-                            $crate::common::WriteTo::write_to(&ty_expr, writer)?;
+                            let value =
+                                $($val)?
+                                $(expr_enum!(@opmap value($op))
+                                    .map_err($crate::event::expr::Error::UnsupportedType)?)?;
+                            let expr = $crate::event::Expr::Imm32(value);
+                            $crate::common::WriteTo::write_to(&expr, writer)?;
                             expr_enum!(@write $(writer, arg, $args_type)?);
                         }
                     )*
@@ -293,6 +298,11 @@ macro_rules! expr_enum {
         $crate::common::WriteTo::write_to($args_var, $writer)?;
     };
     (@write) => {};
+
+    // Internal rule for calling an OpcodeMap method
+    (@opmap $func:ident $args:tt) => {
+        <$crate::event::opcodes::Ggte as $crate::event::opcodes::OpcodeMap<$crate::event::opcodes::TypeOp>>::$func $args
+    };
 }
 
 #[cfg(test)]

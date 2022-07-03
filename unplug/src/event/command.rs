@@ -1,8 +1,7 @@
 use super::block::{Ip, WriteIp};
 use super::expr::{self, Expr, SetExpr, SoundExpr};
 use super::msg::{self, MsgArgs};
-use super::opcodes::ggte::*;
-use super::opcodes::{CmdOp, Ggte, OpcodeMap};
+use super::opcodes::{CmdOp, Ggte, OpcodeMap, TypeOp};
 use crate::common::{ReadFrom, Text, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
@@ -515,24 +514,24 @@ impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for CallArgs {
 expr_enum! {
     type Error = Error;
     pub enum CameraType {
-        Anim(CameraAnimArgs { val1, val2, val3 }) => TYPE_ANIM,
-        Pos(CameraPosArgs { val1, val2, val3, val4, val5 }) => TYPE_POS,
-        Obj(CameraObjArgs { val1, val2, val3 }) => TYPE_OBJ,
-        Unk209(CameraUnk209Args { val1, val2 }) => TYPE_UNK_209,
-        Unk211(CameraUnk211Args { val1, val2, val3, val4 }) => TYPE_UNK_211,
-        Lead(CameraLeadArgs { val }) => TYPE_LEAD,
-        Unk227(CameraUnk227Args { val1, val2, val3, val4, val5 }) => TYPE_UNK_227,
-        Unk228(CameraDistanceArgs { val1, val2, val3 }) => TYPE_DISTANCE,
-        Unk229(CameraUnk229Args { val1, val2, val3 }) => TYPE_UNK_229,
-        Unk230 => TYPE_UNK_230,
-        Unk232(CameraUnk232Type) => TYPE_UNK_232,
-        Unk236(CameraUnk236Args { val }) => TYPE_UNK_236,
-        Unk237(CameraUnk237Args { val }) => TYPE_UNK_237,
-        Unk238(CameraUnk238Args { val }) => TYPE_UNK_238,
-        Unk240(CameraUnk240Args { val1, val2, val3, val4 }) => TYPE_UNK_240,
-        Unk243(CameraUnk243Args { val1, val2, val3, val4 }) => TYPE_UNK_243,
-        Unk251(CameraUnk251Args { val1, val2, val3, val4 }) => TYPE_UNK_251,
-        Unk252(CameraUnk252Args { val1, val2, val3, val4 }) => TYPE_UNK_252,
+        Anim(CameraAnimArgs { val1, val2, val3 }) => TypeOp::Anim,
+        Pos(CameraPosArgs { val1, val2, val3, val4, val5 }) => TypeOp::Pos,
+        Obj(CameraObjArgs { val1, val2, val3 }) => TypeOp::Obj,
+        Unk209(CameraUnk209Args { val1, val2 }) => TypeOp::Unk209,
+        Unk211(CameraUnk211Args { val1, val2, val3, val4 }) => TypeOp::Unk211,
+        Lead(CameraLeadArgs { val }) => TypeOp::Lead,
+        Unk227(CameraUnk227Args { val1, val2, val3, val4, val5 }) => TypeOp::Unk227,
+        Unk228(CameraDistanceArgs { val1, val2, val3 }) => TypeOp::Distance,
+        Unk229(CameraUnk229Args { val1, val2, val3 }) => TypeOp::Unk229,
+        Unk230 => TypeOp::Unk230,
+        Unk232(CameraUnk232Type) => TypeOp::Unk232,
+        Unk236(CameraUnk236Args { val }) => TypeOp::Unk236,
+        Unk237(CameraUnk237Args { val }) => TypeOp::Unk237,
+        Unk238(CameraUnk238Args { val }) => TypeOp::Unk238,
+        Unk240(CameraUnk240Args { val1, val2, val3, val4 }) => TypeOp::Unk240,
+        Unk243(CameraUnk243Args { val1, val2, val3, val4 }) => TypeOp::Unk243,
+        Unk251(CameraUnk251Args { val1, val2, val3, val4 }) => TypeOp::Unk251,
+        Unk252(CameraUnk252Args { val1, val2, val3, val4 }) => TypeOp::Unk252,
     }
 }
 
@@ -552,25 +551,25 @@ expr_enum! {
 expr_enum! {
     type Error = Error;
     pub enum CheckType {
-        Time(CheckTimeArgs { duration }) => TYPE_TIME,
-        Unk201 => TYPE_UNK_201,
-        Wipe => TYPE_WIPE,
-        Unk203 => TYPE_UNK_203,
-        Anim(CheckAnimArgs { obj, val }) => TYPE_ANIM,
-        Dir(CheckDirArgs { obj }) => TYPE_DIR,
-        Move(CheckMoveArgs { obj }) => TYPE_MOVE,
-        Color(CheckColorArgs { obj }) => TYPE_COLOR,
-        Sfx(CheckSfxArgs) => TYPE_SFX,
-        Real(CheckRealArgs { val }) => TYPE_REAL,
-        Cam => TYPE_CAM,
-        Read(CheckReadArgs { obj }) => TYPE_READ,
-        Unk234 => TYPE_UNK_234,
-        Unk239 => TYPE_UNK_239,
-        Unk241 => TYPE_UNK_241,
-        Unk242 => TYPE_UNK_242,
-        Scale(CheckScaleArgs { obj }) => TYPE_SCALE,
-        Cue => TYPE_CUE,
-        Unk246(CheckUnk246Args { val }) => TYPE_UNK_246,
+        Time(CheckTimeArgs { duration }) => TypeOp::Time,
+        Unk201 => TypeOp::Unk201,
+        Wipe => TypeOp::Wipe,
+        Unk203 => TypeOp::Unk203,
+        Anim(CheckAnimArgs { obj, val }) => TypeOp::Anim,
+        Dir(CheckDirArgs { obj }) => TypeOp::Dir,
+        Move(CheckMoveArgs { obj }) => TypeOp::Move,
+        Color(CheckColorArgs { obj }) => TypeOp::Color,
+        Sfx(CheckSfxArgs) => TypeOp::Sfx,
+        Real(CheckRealArgs { val }) => TypeOp::Real,
+        Cam => TypeOp::Cam,
+        Read(CheckReadArgs { obj }) => TypeOp::Read,
+        Unk234 => TypeOp::Unk234,
+        Unk239 => TypeOp::Unk239,
+        Unk241 => TypeOp::Unk241,
+        Unk242 => TypeOp::Unk242,
+        Scale(CheckScaleArgs { obj }) => TypeOp::Scale,
+        Cue => TypeOp::Cue,
+        Unk246(CheckUnk246Args { val }) => TypeOp::Unk246,
     }
 }
 
@@ -596,8 +595,8 @@ pub struct ColorArgs {
 expr_enum! {
     type Error = Error;
     pub enum ColorType {
-        Modulate => TYPE_MODULATE,
-        Blend => TYPE_BLEND,
+        Modulate => TypeOp::Modulate,
+        Blend => TypeOp::Blend,
     }
 }
 
@@ -622,10 +621,10 @@ pub struct MDirArgs {
 expr_enum! {
     type Error = Error;
     pub enum MDirType {
-        Dir(MDirDirArgs { val }) => TYPE_DIR,
-        Pos(MDirPosArgs { val1, val2 }) => TYPE_POS,
-        Obj(MDirObjArgs { val }) => TYPE_OBJ,
-        Cam => TYPE_CAM,
+        Dir(MDirDirArgs { val }) => TypeOp::Dir,
+        Pos(MDirPosArgs { val1, val2 }) => TypeOp::Pos,
+        Obj(MDirObjArgs { val }) => TypeOp::Obj,
+        Cam => TypeOp::Cam,
     }
 }
 
@@ -648,9 +647,9 @@ pub struct LightArgs {
 expr_enum! {
     type Error = Error;
     pub enum LightType {
-        Pos(LightPosArgs { x, y, z }) => TYPE_POS,
-        Color(LightColorArgs { r, g, b }) => TYPE_COLOR,
-        Unk227(LightUnk227Args { val1, val2, val3 }) => TYPE_UNK_227,
+        Pos(LightPosArgs { x, y, z }) => TypeOp::Pos,
+        Color(LightColorArgs { r, g, b }) => TypeOp::Color,
+        Unk227(LightUnk227Args { val1, val2, val3 }) => TypeOp::Unk227,
     }
 }
 
@@ -740,10 +739,10 @@ pub struct PtclArgs {
 expr_enum! {
     type Error = Error;
     pub enum PtclType {
-        Pos(PtclPosArgs { val1, val2, val3, val4, val5, val6, val7 }) => TYPE_POS,
-        Obj(PtclObjArgs { obj, val1, val2, val3, val4, val5, val6, val7 }) => TYPE_OBJ,
-        Unk210 => TYPE_UNK_210,
-        Lead(PtclLeadArgs) => TYPE_LEAD,
+        Pos(PtclPosArgs { val1, val2, val3, val4, val5, val6, val7 }) => TypeOp::Pos,
+        Obj(PtclObjArgs { obj, val1, val2, val3, val4, val5, val6, val7 }) => TypeOp::Obj,
+        Unk210 => TypeOp::Unk210,
+        Lead(PtclLeadArgs) => TypeOp::Lead,
     }
 }
 
@@ -786,8 +785,8 @@ impl<W: Write + WriteIp + ?Sized> WriteTo<W> for PtclLeadArgs {
 expr_enum! {
     type Error = Error;
     pub enum ReadType {
-        Anim(ReadAnimArgs { obj, path }) => TYPE_ANIM,
-        Sfx(ReadSfxArgs { obj, path }) => TYPE_SFX,
+        Anim(ReadAnimArgs { obj, path }) => TypeOp::Anim,
+        Sfx(ReadSfxArgs { obj, path }) => TypeOp::Sfx,
     }
 }
 
@@ -817,20 +816,20 @@ expr_enum! {
     pub enum ScrnType {
         Unk201(ScrnUnk201Args {
             val1, val2, val3, val4, val5, val6, val7, val8, val9
-        }) => TYPE_UNK_201,
+        }) => TypeOp::Unk201,
         Wipe(ScrnWipeArgs {
             val1, val2, val3, val4, val5, val6, val7, val8, val9, val10,
             val11, val12, val13, val14, val15, val16, val17
-        }) => TYPE_WIPE,
-        Unk226(ScrnUnk226Type) => TYPE_UNK_226,
-        Unk234(ScrnUnk234Args { val1, val2, val3, val4, val5 }) => TYPE_UNK_234,
+        }) => TypeOp::Wipe,
+        Unk226(ScrnUnk226Type) => TypeOp::Unk226,
+        Unk234(ScrnUnk234Args { val1, val2, val3, val4, val5 }) => TypeOp::Unk234,
         Unk239(ScrnUnk239Args {
             val1, val2, val3, val4, val5, val6, val7, val8, val9, val10
-        }) => TYPE_UNK_239,
-        Unk241(ScrnUnk241Args { val1, val2, val3, val4, val5, val6, val7 }) => TYPE_UNK_241,
+        }) => TypeOp::Unk239,
+        Unk241(ScrnUnk241Args { val1, val2, val3, val4, val5, val6, val7 }) => TypeOp::Unk241,
         Unk242(ScrnUnk242Args {
             val1, val2, val3, val4, val5, val6, val7, val8, val9
-        }) => TYPE_UNK_242,
+        }) => TypeOp::Unk242,
     }
 }
 
@@ -871,14 +870,14 @@ pub struct SfxArgs {
 expr_enum! {
     type Error = Error;
     pub enum SfxType {
-        Stop => SFX_STOP,
-        Play => SFX_PLAY,
-        FadeOut(SfxFadeOutArgs { duration }) => SFX_FADE_OUT,
-        FadeIn(SfxFadeInArgs { duration }) => SFX_FADE_IN,
-        Fade(SfxFadeArgs { duration, volume }) => SFX_FADE,
-        Unk5 => SFX_UNK_5,
-        Unk6 => SFX_UNK_6,
-        Unk245 => SFX_UNK_245,
+        Stop => 0,
+        Play => 1,
+        FadeOut(SfxFadeOutArgs { duration }) => 2,
+        FadeIn(SfxFadeInArgs { duration }) => 3,
+        Fade(SfxFadeArgs { duration, volume }) => 4,
+        Unk5 => 5,
+        Unk6 => 6,
+        Unk245 => TypeOp::Cue,
     }
 }
 
@@ -901,11 +900,11 @@ pub struct WarpArgs {
 expr_enum! {
     type Error = Error;
     pub enum WinType {
-        Pos(WinPosArgs { val1, val2 }) => TYPE_POS,
-        Obj(WinObjArgs { obj, val1, val2, val3 }) => TYPE_OBJ,
-        Unk209 => TYPE_UNK_209,
-        Color(WinColorArgs { val1, val2, val3, val4 }) => TYPE_COLOR,
-        Unk239 => TYPE_UNK_239,
+        Pos(WinPosArgs { val1, val2 }) => TypeOp::Pos,
+        Obj(WinObjArgs { obj, val1, val2, val3 }) => TypeOp::Obj,
+        Unk209 => TypeOp::Unk209,
+        Color(WinColorArgs { val1, val2, val3, val4 }) => TypeOp::Color,
+        Unk239 => TypeOp::Unk239,
     }
 }
 
