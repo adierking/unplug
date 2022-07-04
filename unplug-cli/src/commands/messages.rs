@@ -56,9 +56,8 @@ pub fn command_import(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
     reader.read_header()?;
     let mut messages = HashMap::new();
     let mut sources = HashSet::new();
-    while let Some((id, mut msg)) = reader.read_message()? {
+    while let Some((id, msg)) = reader.read_message()? {
         sources.insert(id.source);
-        msg.extra_data = msg::encode_block_offset(id.block_offset).to_vec();
         messages.insert(id, msg);
     }
     reader.read_footer()?;

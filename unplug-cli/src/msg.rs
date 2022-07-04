@@ -6,7 +6,6 @@ pub use reader::MessageReader;
 pub use writer::MessageWriter;
 
 use anyhow::{anyhow, ensure, Result};
-use byteorder::{ByteOrder, LE};
 use std::fmt;
 use unplug::data::{Resource, Stage};
 use unplug::event::msg::MsgArgs;
@@ -49,20 +48,25 @@ impl MessageSource {
 pub struct MessageId {
     /// The message's origin.
     pub source: MessageSource,
-    /// The file offset of the code block which originally contained the message.
-    pub block_offset: u32,
+    /// The ID of the code block which originally contained the message.
+    pub block_id: usize,
     /// The index of the message command within its code block.
     pub command_index: usize,
 }
 
 impl MessageId {
+    /// Creates a new `MessageId` from its components.
+    pub fn new(source: MessageSource, block_id: usize, command_index: usize) -> Self {
+        Self { source, block_id, command_index }
+    }
+
     /// Parses a `MessageId` from its display string.
     pub fn parse(s: &str) -> Result<Self> {
         let parts: Vec<_> = s.split(':').collect();
         ensure!(parts.len() == 3, "Invalid message ID: {}", s);
         Ok(Self {
             source: MessageSource::parse(parts[0])?,
-            block_offset: u32::from_str_radix(parts[1], 16)?,
+            block_id: parts[1].parse()?,
             command_index: usize::from_str_radix(parts[2], 16)?,
         })
     }
@@ -70,39 +74,8 @@ impl MessageId {
 
 impl fmt::Display for MessageId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{:x}:{:x}", self.source.name(), self.block_offset, self.command_index)
+        write!(f, "{}:{}:{:x}", self.source.name(), self.block_id, self.command_index)
     }
-}
-
-const BLOCK_OFFSET_MAGIC: u8 = b'U';
-
-/// Encodes a block offset so that it can be stored in a message's `extra_data`.
-pub fn encode_block_offset(offset: u32) -> [u8; 4] {
-    // In practice, block offsets should only ever require 24 bits.
-    // Use the first byte as an identifier character.
-    let mut bytes = [0u8; 4];
-    bytes[0] = BLOCK_OFFSET_MAGIC;
-    assert!(offset < 0x1000000);
-    LE::write_u24(&mut bytes[1..], offset);
-    bytes
-}
-
-/// Decodes a block offset previously encoded with `encode_block_offset()`.
-pub fn decode_block_offset(bytes: &[u8]) -> Option<u32> {
-    if bytes.len() == 4 && bytes[0] == BLOCK_OFFSET_MAGIC {
-        Some(LE::read_u24(&bytes[1..]))
-    } else {
-        None
-    }
-}
-
-/// Returns a message's `MessageId`.
-fn message_id(source: MessageSource, loc: CommandLocation, msg: &MsgArgs) -> MessageId {
-    // Since we edit ISOs in-place, message IDs need to be stable between rewrites of each file so
-    // that a user can re-import an XML file into an already-edited ISO. To prevent the block offset
-    // from changing, we use the `extra_data` feature to store the original block offset.
-    let block_offset = decode_block_offset(&msg.extra_data).unwrap_or(loc.block.offset);
-    MessageId { source, block_offset, command_index: loc.index }
 }
 
 /// If a command is for a non-empty message, return its ID and message arguments.
@@ -113,7 +86,7 @@ fn filter_message(
 ) -> Option<(MessageId, &MsgArgs)> {
     if let Command::Msg(arg) | Command::Select(arg) = command {
         if !arg.commands.is_empty() {
-            return Some((message_id(source, loc, arg), arg));
+            return Some((MessageId::new(source, loc.block.id.index(), loc.index), arg));
         }
     }
     None
@@ -127,7 +100,7 @@ fn filter_message_mut(
 ) -> Option<(MessageId, &mut MsgArgs)> {
     if let Command::Msg(arg) | Command::Select(arg) = command {
         if !arg.commands.is_empty() {
-            return Some((message_id(source, loc, arg), arg));
+            return Some((MessageId::new(source, loc.block.id.index(), loc.index), arg));
         }
     }
     None
@@ -152,36 +125,37 @@ pub fn iter_messages_mut(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn id(source: MessageSource, block: u32, index: usize) -> MessageId {
-        MessageId { source, block_offset: block, command_index: index }
-    }
+    use std::fmt::Write;
 
     #[test]
     fn test_parse_message_id() -> Result<()> {
         let parse = MessageId::parse;
-        assert_eq!(parse("globals:ab:cd")?, id(MessageSource::Globals, 0xab, 0xcd));
-        assert_eq!(parse("stage02:ab:cd")?, id(MessageSource::Stage(Stage::Foyer), 0xab, 0xcd));
-        assert_eq!(parse("ahk:ab:cd")?, id(MessageSource::Stage(Stage::Ahk), 0xab, 0xcd));
-        assert!(parse("foo:ab:cd").is_err());
-        assert!(parse("stage07:ab:cd:").is_err());
+        assert_eq!(parse("globals:123:cd")?, MessageId::new(MessageSource::Globals, 123, 0xcd));
+        assert_eq!(
+            parse("stage02:123:cd")?,
+            MessageId::new(MessageSource::Stage(Stage::Foyer), 123, 0xcd)
+        );
+        assert_eq!(
+            parse("ahk:123:cd")?,
+            MessageId::new(MessageSource::Stage(Stage::Ahk), 123, 0xcd)
+        );
+        assert!(parse("foo:123:cd").is_err());
+        assert!(parse("stage07:123:cd:").is_err());
         assert!(parse("foo").is_err());
         assert!(parse("").is_err());
         Ok(())
     }
 
     #[test]
-    fn test_encode_block_offset() {
-        assert_eq!(&encode_block_offset(0x123456), &[b'U', 0x56, 0x34, 0x12]);
-        assert_eq!(&encode_block_offset(0xffffff), &[b'U', 0xff, 0xff, 0xff]);
-    }
+    fn test_display_message_id() {
+        let id = MessageId::new(MessageSource::Stage(Stage::LivingRoom), 123, 0xcd);
+        let mut s = String::new();
+        write!(s, "{}", id).unwrap();
+        assert_eq!(s, "stage07:123:cd");
 
-    #[test]
-    fn test_decode_block_offset() {
-        assert_eq!(decode_block_offset(&[b'U', 0x56, 0x34, 0x12]), Some(0x123456));
-        assert_eq!(decode_block_offset(&[b'X', 0x56, 0x34, 0x12]), None);
-        assert_eq!(decode_block_offset(&[b'U', 0x56, 0x34]), None);
-        assert_eq!(decode_block_offset(&[b'U', 0x56, 0x34, 0x12, 0x00]), None);
-        assert_eq!(decode_block_offset(&[]), None);
+        let id = MessageId::new(MessageSource::Globals, 123, 0xcd);
+        s.clear();
+        write!(s, "{}", id).unwrap();
+        assert_eq!(s, "globals:123:cd");
     }
 }

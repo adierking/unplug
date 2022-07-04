@@ -175,9 +175,6 @@ impl MsgCommand {
 pub struct MsgArgs {
     /// The commands that make up the message.
     pub commands: Vec<MsgCommand>,
-    /// Data stored after the command list. Completely ignored by the game; useful for e.g. message
-    /// editors to tag messages.
-    pub extra_data: Vec<u8>,
 }
 
 impl MsgArgs {
@@ -195,19 +192,19 @@ impl fmt::Debug for MsgArgs {
 
 impl From<Text> for MsgArgs {
     fn from(text: Text) -> Self {
-        Self { commands: vec![MsgCommand::Text(text)], extra_data: vec![] }
+        Self { commands: vec![MsgCommand::Text(text)] }
     }
 }
 
 impl From<MsgCommand> for MsgArgs {
     fn from(command: MsgCommand) -> Self {
-        Self { commands: vec![command], extra_data: vec![] }
+        Self { commands: vec![command] }
     }
 }
 
 impl<T: Into<Vec<MsgCommand>>> From<T> for MsgArgs {
     fn from(commands: T) -> Self {
-        Self { commands: commands.into(), extra_data: vec![] }
+        Self { commands: commands.into() }
     }
 }
 
@@ -216,7 +213,7 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
     fn read_from(reader: &mut R) -> Result<Self> {
         // The message string is prefixed with the offset of the next command. Technically this can
         // be anything, but the official game always stores the offset immediately after the null
-        // terminator. We can abuse this to enable editors to tag messages with arbitrary data.
+        // terminator.
         let end_offset = reader.read_i32::<LE>()? as u64;
         let start_offset = reader.seek(SeekFrom::Current(0))?;
         if end_offset <= start_offset {
@@ -316,18 +313,14 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
             }
         }
 
-        // Read the "extra" data between the null terminator and the next command
         let offset = reader.seek(SeekFrom::Current(0))?;
         if offset > end_offset {
             error!("Read past the end of the message!");
             return Err(Error::Invalid);
         }
-        let extra_data_len = (end_offset - offset) as usize;
-        let mut extra_data = vec![0u8; extra_data_len];
-        reader.read_exact(&mut extra_data)?;
 
         commands.shrink_to_fit();
-        Ok(MsgArgs { commands, extra_data })
+        Ok(MsgArgs { commands })
     }
 }
 
@@ -407,17 +400,13 @@ impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for MsgArgs {
         writer.write_u8(Ggte::value(MsgOp::End).unwrap())?;
 
         // Ensure we don't overflow the game's message buffer
-        let msg_end_offset = writer.seek(SeekFrom::Current(0))?;
-        let msg_size = msg_end_offset - start_offset;
+        let end_offset = writer.seek(SeekFrom::Current(0))?;
+        let msg_size = end_offset - start_offset;
         if msg_size > MAX_SIZE {
             return Err(Error::TooLarge { len: msg_size, max: MAX_SIZE });
         }
 
-        // Write the extra data after the null terminator because the game will ignore it
-        writer.write_all(&self.extra_data)?;
-
         // Now go back and fill in the end offset
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
         writer.seek(SeekFrom::Start(start_offset))?;
         writer.write_rel_offset((end_offset - start_offset).try_into().unwrap())?;
         writer.seek(SeekFrom::Start(end_offset))?;
@@ -913,14 +902,6 @@ mod tests {
             MsgCommand::Wait(MsgWaitType::LeftPlug),
         ]);
         assert_write_and_read!(msg);
-    }
-
-    #[test]
-    fn test_write_and_read_msg_extra_data() {
-        assert_write_and_read!(MsgArgs {
-            commands: vec![MsgCommand::Size(36), MsgCommand::Text(text("bunger")),],
-            extra_data: vec![0u8, 1u8, 2u8, 3u8],
-        });
     }
 
     #[test]
