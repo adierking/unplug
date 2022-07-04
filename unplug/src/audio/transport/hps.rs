@@ -11,7 +11,6 @@ use crate::common::{align, ReadFrom, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use std::fmt::Debug;
 use std::io::{Read, Write};
-use unplug_proc::{ReadFrom, WriteTo};
 
 /// The magic string at the beginning of an HPS file. (HALPST = HAL Program STream)
 const HPS_MAGIC: [u8; 8] = *b" HALPST\0";
@@ -84,9 +83,7 @@ impl<W: Write + ?Sized> WriteTo<W> for FileHeader {
 }
 
 /// Audio channel header.
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(error = Error)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct Channel {
     pub address: AudioAddress,
     pub adpcm: adpcm::Info,
@@ -95,6 +92,25 @@ pub struct Channel {
 impl Channel {
     fn is_initialized(&self) -> bool {
         self.address.current_address > 0 && self.address.end_address > 0
+    }
+}
+
+impl<R: Read + ?Sized> ReadFrom<R> for Channel {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            address: AudioAddress::read_from(reader)?,
+            adpcm: adpcm::Info::read_from(reader)?,
+        })
+    }
+}
+
+impl<W: Write + ?Sized> WriteTo<W> for Channel {
+    type Error = Error;
+    fn write_to(&self, writer: &mut W) -> Result<()> {
+        self.address.write_to(writer)?;
+        self.adpcm.write_to(writer)?;
+        Ok(())
     }
 }
 
