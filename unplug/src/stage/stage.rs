@@ -7,6 +7,7 @@ use crate::event::script::{Script, ScriptReader, ScriptWriter};
 use crate::globals::Libs;
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE, LE};
 use std::io::{Read, SeekFrom, Write};
+use std::iter::FusedIterator;
 use std::num::NonZeroU32;
 
 const HEADER_SIZE: u32 = 52;
@@ -14,6 +15,9 @@ const HEADER_SIZE: u32 = 52;
 // These should *always* be at the same offsets. Scripts even hardcode references to them.
 const EXPECTED_SETTINGS_OFFSET: u32 = HEADER_SIZE;
 const EXPECTED_OBJECTS_OFFSET: u32 = EXPECTED_SETTINGS_OFFSET + SETTINGS_SIZE;
+
+/// The number of global events in a stage file.
+const NUM_EVENTS: u32 = 6;
 
 #[derive(Debug, Clone, Default)]
 struct Header {
@@ -81,7 +85,7 @@ impl<W: Write + ?Sized> WriteTo<W> for Header {
 
 const SETTINGS_SIZE: u32 = 20;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Settings {
     pub unk_00: i32,
     pub unk_04: u8,
@@ -289,7 +293,7 @@ impl<W: Write + ?Sized> WriteOptionTo<W> for Unk2C {
     }
 }
 
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct Stage {
     pub objects: Vec<ObjectPlacement>,
     pub actors: Vec<Actor>,
@@ -319,6 +323,16 @@ pub struct Stage {
 }
 
 impl Stage {
+    /// Creates an empty stage.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns an iterator over the entry points to the stage's script.
+    pub fn entry_points(&self) -> EntryPointIterator<'_> {
+        EntryPointIterator::new(self)
+    }
+
     pub fn read_from<R: ReadSeek + ?Sized>(mut reader: &mut R, libs: &Libs) -> Result<Self> {
         let header = Header::read_from(reader)?;
 
@@ -423,29 +437,7 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Stage {
         }
 
         let mut script = ScriptWriter::new(&self.script);
-        if let Some(prologue) = self.on_prologue {
-            script.add_block(prologue)?;
-        }
-        if let Some(startup) = self.on_startup {
-            script.add_block(startup)?;
-        }
-        if let Some(dead) = self.on_dead {
-            script.add_block(dead)?;
-        }
-        if let Some(pose) = self.on_pose {
-            script.add_block(pose)?;
-        }
-        if let Some(time_cycle) = self.on_time_cycle {
-            script.add_block(time_cycle)?;
-        }
-        if let Some(time_up) = self.on_time_up {
-            script.add_block(time_up)?;
-        }
-        for obj in &self.objects {
-            if let Some(event) = obj.script {
-                script.add_block(event)?;
-            }
-        }
+        self.entry_points().try_for_each(|b| script.add_block(b))?;
         let offsets = script.write_to(&mut writer)?;
         let end_offset = writer.seek(SeekFrom::Current(0))?;
 
@@ -468,5 +460,103 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Stage {
         events.write_to(writer)?;
         writer.seek(SeekFrom::Start(end_offset))?;
         Ok(())
+    }
+}
+
+/// Iterator returned by `Stage::entry_points()` which iterates over the entry points to a stage's
+/// script.
+pub struct EntryPointIterator<'a> {
+    stage: &'a Stage,
+    /// Virtual index of the next event to check in `next()`
+    front: u32,
+    /// Virtual index + 1 of the next event to check in `next_back()`
+    back: u32,
+}
+
+impl<'a> EntryPointIterator<'a> {
+    fn new(stage: &'a Stage) -> Self {
+        let num_objects = u32::try_from(stage.objects.len()).unwrap();
+        Self { stage, front: 0, back: NUM_EVENTS + num_objects }
+    }
+
+    fn get(&self, index: u32) -> Option<BlockId> {
+        match index {
+            0 => self.stage.on_prologue,
+            1 => self.stage.on_startup,
+            2 => self.stage.on_dead,
+            3 => self.stage.on_pose,
+            4 => self.stage.on_time_cycle,
+            5 => self.stage.on_time_up,
+            NUM_EVENTS.. => self.stage.objects[(index - NUM_EVENTS) as usize].script,
+        }
+    }
+}
+
+impl Iterator for EntryPointIterator<'_> {
+    type Item = BlockId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.front < self.back {
+            let block = self.get(self.front);
+            self.front += 1;
+            if block.is_some() {
+                return block;
+            }
+        }
+        None
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let max_len = self.back - self.front;
+        (0, Some(max_len as usize))
+    }
+}
+
+impl DoubleEndedIterator for EntryPointIterator<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        while self.back > self.front {
+            self.back -= 1;
+            let block = self.get(self.back);
+            if block.is_some() {
+                return block;
+            }
+        }
+        None
+    }
+}
+
+impl FusedIterator for EntryPointIterator<'_> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::Object;
+    use lazy_static::lazy_static;
+
+    lazy_static! {
+        static ref TEST_STAGE: Stage = {
+            let mut stage = Stage::new();
+            stage.on_prologue = Some(BlockId::new(1));
+            stage.on_dead = Some(BlockId::new(2));
+            stage.on_time_up = Some(BlockId::new(3));
+            stage.objects.push(ObjectPlacement::with_script(Object::NpcFrog, BlockId::new(4)));
+            stage.objects.push(ObjectPlacement::new(Object::NpcFrog));
+            stage.objects.push(ObjectPlacement::with_script(Object::NpcFrog, BlockId::new(5)));
+            stage
+        };
+    }
+
+    #[test]
+    fn test_entry_points() {
+        let iter = TEST_STAGE.entry_points();
+        assert_eq!(iter.size_hint(), (0, Some(9)));
+        let blocks = iter.map(|b| b.index()).collect::<Vec<_>>();
+        assert_eq!(blocks, &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_entry_points_rev() {
+        let blocks = TEST_STAGE.entry_points().rev().map(|b| b.index()).collect::<Vec<_>>();
+        assert_eq!(blocks, &[5, 4, 3, 2, 1]);
     }
 }

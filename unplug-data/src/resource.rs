@@ -57,10 +57,7 @@ pub struct ResourceIterator<T: Resource> {
 
 impl<T: Resource> ResourceIterator<T> {
     fn new() -> Self {
-        Self {
-            front: T::Value::zero(),
-            back: T::Value::from_usize(T::COUNT).unwrap(),
-        }
+        Self { front: T::Value::zero(), back: T::Value::from_usize(T::COUNT).unwrap() }
     }
 }
 

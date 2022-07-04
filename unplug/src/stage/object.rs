@@ -49,6 +49,39 @@ pub struct ObjectPlacement {
     pub script: Option<BlockId>,
 }
 
+impl ObjectPlacement {
+    /// Creates an object placement for `id` with properties initialized to reasonable defaults.
+    pub fn new(id: Object) -> Self {
+        Self::new_impl(id, None)
+    }
+
+    /// Creates an object placement for `id` with properties initialized to reasonable defaults and
+    /// `script` assigned.
+    pub fn with_script(id: Object, script: BlockId) -> Self {
+        Self::new_impl(id, Some(script))
+    }
+
+    fn new_impl(id: Object, script: Option<BlockId>) -> Self {
+        Self {
+            id,
+            x: 0,
+            y: 0,
+            z: 0,
+            rotate_x: 0,
+            rotate_y: 0,
+            rotate_z: 0,
+            scale_x: 100,
+            scale_y: 100,
+            scale_z: 100,
+            data: 0,
+            spawn_flag: None,
+            variant: 0,
+            flags: ObjectFlags::empty(),
+            script,
+        }
+    }
+}
+
 impl<R: Read + ?Sized> ReadOptionFrom<R> for ObjectPlacement {
     type Error = Error;
     fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
