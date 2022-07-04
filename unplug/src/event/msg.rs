@@ -1,19 +1,18 @@
-use super::block::WriteIp;
-use super::opcodes::{Ggte, MsgOp, OpcodeMap};
+use super::opcodes::MsgOp;
+use super::serialize::{
+    DeserializeEvent, Error as SerError, EventDeserializer, EventSerializer, Result as SerResult,
+    SerializeEvent,
+};
 use crate::common::text::{self, Text};
-use crate::common::{ReadFrom, WriteTo};
 use crate::data::{self, Sound};
 use bitflags::bitflags;
-use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::fmt;
-use std::io::{self, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
 use tracing::error;
+use unplug_proc::{DeserializeEvent, SerializeEvent};
 
-/// The maximum size of a serialized message command list in bytes.
-const MAX_SIZE: u64 = 2048;
 /// The maximum number of characters that can appear in a message.
 const MAX_CHARS: usize = 400;
 
@@ -46,9 +45,6 @@ pub enum Error {
     #[error("message text could not be decoded with SHIFT-JIS or Windows-1252")]
     Decode,
 
-    #[error("invalid message character: {0:#x}")]
-    InvalidChar(u16),
-
     #[error("unsupported message command: {0:?}")]
     NotSupported(MsgOp),
 
@@ -73,9 +69,6 @@ pub enum Error {
     #[error("unrecognized message voice: {0}")]
     UnrecognizedVoice(u8),
 
-    #[error("invalid message")]
-    Invalid,
-
     #[error(transparent)]
     Data(Box<data::Error>),
 
@@ -83,12 +76,12 @@ pub enum Error {
     Text(Box<text::Error>),
 
     #[error(transparent)]
-    Io(Box<io::Error>),
+    Serialize(Box<SerError>),
 }
 
 from_error_boxed!(Error::Data, data::Error);
 from_error_boxed!(Error::Text, text::Error);
-from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Serialize, SerError);
 
 /// Commands that make up a message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -208,92 +201,75 @@ impl<T: Into<Vec<MsgCommand>>> From<T> for MsgArgs {
     }
 }
 
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
+impl DeserializeEvent for MsgArgs {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        // The message string is prefixed with the offset of the next command. Technically this can
-        // be anything, but the official game always stores the offset immediately after the null
-        // terminator.
-        let end_offset = reader.read_i32::<LE>()? as u64;
-        let start_offset = reader.seek(SeekFrom::Current(0))?;
-        if end_offset <= start_offset {
-            error!(
-                "Message end offset ({:#x}) is before the start offset ({:#x})!",
-                end_offset, start_offset
-            );
-            return Err(Error::Invalid);
-        }
-        let expected_length = end_offset - start_offset;
-
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
         // Commands are encoded as control characters in the text. Any non-special character is
         // displayed as text. Keep reading until we hit a null terminator (MSG_END).
         let mut commands = vec![];
-        let mut text = Vec::with_capacity((expected_length - 1) as usize);
+        let mut text = vec![];
         let mut done = false;
+        de.begin_msg()?;
         while !done {
-            let b = reader.read_u8()?;
-            let opcode = Ggte::get(b).map_err(|b| Error::InvalidChar(b as u16))?;
-            let command = match opcode {
+            let ch = de.deserialize_msg_char()?;
+            let command = match ch {
                 MsgOp::End => {
                     done = true;
                     None
                 }
-                MsgOp::Speed => Some(MsgCommand::Speed(reader.read_u8()?)),
-                MsgOp::Wait => Some(MsgCommand::Wait(MsgWaitType::read_from(reader)?)),
-                MsgOp::Anim => Some(MsgCommand::Anim(MsgAnimArgs::read_from(reader)?)),
+                MsgOp::Speed => Some(MsgCommand::Speed(de.deserialize_u8()?)),
+                MsgOp::Wait => Some(MsgCommand::Wait(MsgWaitType::deserialize(de)?)),
+                MsgOp::Anim => Some(MsgCommand::Anim(MsgAnimArgs::deserialize(de)?)),
                 MsgOp::Sfx => {
-                    let sound = reader.read_u32::<LE>()?.try_into()?;
-                    Some(MsgCommand::Sfx(sound, MsgSfxType::read_from(reader)?))
+                    let sound = de.deserialize_u32()?.try_into()?;
+                    Some(MsgCommand::Sfx(sound, MsgSfxType::deserialize(de)?))
                 }
                 MsgOp::Voice => {
-                    let voice = reader.read_u8()?;
+                    let voice = de.deserialize_u8()?;
                     match Voice::try_from(voice) {
                         Ok(voice) => Some(MsgCommand::Voice(voice)),
                         Err(_) => return Err(Error::UnrecognizedVoice(voice)),
                     }
                 }
-                MsgOp::Default => Some(MsgCommand::Default(DefaultArgs::read_from(reader)?)),
+                MsgOp::Default => Some(MsgCommand::Default(DefaultArgs::deserialize(de)?)),
                 MsgOp::Newline => Some(MsgCommand::Newline),
                 MsgOp::NewlineVt => Some(MsgCommand::NewlineVt),
                 MsgOp::Format => {
                     let mut format_text = vec![];
                     loop {
-                        let b = reader.read_u8()?;
-                        if let Ok(MsgOp::Format) = Ggte::get(b) {
-                            break;
+                        match de.deserialize_msg_char()? {
+                            MsgOp::Format => break,
+                            MsgOp::Char(ch) => format_text.push(ch),
+                            ch => return Err(Error::NotSupported(ch)),
                         }
-                        format_text.push(b);
                     }
                     Some(MsgCommand::Format(Text::with_bytes(format_text)))
                 }
-                MsgOp::Size => Some(MsgCommand::Size(reader.read_u8()?)),
+                MsgOp::Size => Some(MsgCommand::Size(de.deserialize_u8()?)),
                 MsgOp::Color => {
-                    let color = reader.read_u8()?;
+                    let color = de.deserialize_u8()?;
                     match Color::try_from(color) {
                         Ok(color) => Some(MsgCommand::Color(color)),
                         Err(_) => return Err(Error::UnrecognizedColor(color)),
                     }
                 }
-                MsgOp::Rgba => {
-                    // Yes, this is big-endian...
-                    Some(MsgCommand::Rgba(reader.read_u32::<BE>()?))
-                }
-                MsgOp::Proportional => Some(MsgCommand::Proportional(reader.read_u8()? != 0)),
+                MsgOp::Rgba => Some(MsgCommand::Rgba(de.deserialize_rgba()?)),
+                MsgOp::Proportional => Some(MsgCommand::Proportional(de.deserialize_u8()? != 0)),
                 MsgOp::Icon => {
-                    let icon = reader.read_u8()?;
+                    let icon = de.deserialize_u8()?;
                     match Icon::try_from(icon) {
                         Ok(icon) => Some(MsgCommand::Icon(icon)),
                         Err(_) => return Err(Error::UnrecognizedIcon(icon)),
                     }
                 }
-                MsgOp::Shake => Some(MsgCommand::Shake(ShakeArgs::read_from(reader)?)),
-                MsgOp::Center => Some(MsgCommand::Center(reader.read_u8()? != 0)),
-                MsgOp::Rotate => Some(MsgCommand::Rotate(reader.read_i16::<LE>()?)),
+                MsgOp::Shake => Some(MsgCommand::Shake(ShakeArgs::deserialize(de)?)),
+                MsgOp::Center => Some(MsgCommand::Center(de.deserialize_u8()? != 0)),
+                MsgOp::Rotate => Some(MsgCommand::Rotate(de.deserialize_i16()?)),
                 MsgOp::Scale => {
-                    Some(MsgCommand::Scale(reader.read_i16::<LE>()?, reader.read_i16::<LE>()?))
+                    Some(MsgCommand::Scale(de.deserialize_i16()?, de.deserialize_i16()?))
                 }
-                MsgOp::NumInput => Some(MsgCommand::NumInput(NumInputArgs::read_from(reader)?)),
-                MsgOp::Question => Some(MsgCommand::Question(QuestionArgs::read_from(reader)?)),
+                MsgOp::NumInput => Some(MsgCommand::NumInput(NumInputArgs::deserialize(de)?)),
+                MsgOp::Question => Some(MsgCommand::Question(QuestionArgs::deserialize(de)?)),
                 MsgOp::Stay => Some(MsgCommand::Stay),
                 MsgOp::Char(ch) => {
                     text.push(match ch {
@@ -312,77 +288,65 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for MsgArgs {
                 commands.push(command);
             }
         }
-
-        let offset = reader.seek(SeekFrom::Current(0))?;
-        if offset > end_offset {
-            error!("Read past the end of the message!");
-            return Err(Error::Invalid);
-        }
-
+        de.end_msg()?;
         commands.shrink_to_fit();
-        Ok(MsgArgs { commands })
+        Ok(Self { commands })
     }
 }
 
-impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for MsgArgs {
+impl SerializeEvent for MsgArgs {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        // Write a end offset of 0 for now
-        let start_offset = writer.seek(SeekFrom::Current(0))?;
-        writer.write_i32::<LE>(0)?;
-
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        ser.begin_msg()?;
         let mut num_chars = 0;
         for command in &self.commands {
             if let Some(opcode) = command.opcode() {
-                let b = Ggte::value(opcode).map_err(Error::NotSupported)?;
-                writer.write_u8(b)?;
+                ser.serialize_msg_char(opcode)?;
             }
             match command {
-                MsgCommand::Speed(a) => writer.write_u8(*a)?,
-                MsgCommand::Wait(ty) => ty.write_to(writer)?,
-                MsgCommand::Anim(arg) => arg.write_to(writer)?,
+                MsgCommand::Speed(a) => ser.serialize_u8(*a)?,
+                MsgCommand::Wait(ty) => ty.serialize(ser)?,
+                MsgCommand::Anim(arg) => arg.serialize(ser)?,
                 MsgCommand::Sfx(id, ty) => {
-                    writer.write_u32::<LE>(id.value())?;
-                    ty.write_to(writer)?;
+                    ser.serialize_u32(id.value())?;
+                    ty.serialize(ser)?;
                 }
-                MsgCommand::Voice(voice) => writer.write_u8((*voice).into())?,
-                MsgCommand::Default(arg) => arg.write_to(writer)?,
+                MsgCommand::Voice(voice) => ser.serialize_u8((*voice).into())?,
+                MsgCommand::Default(arg) => arg.serialize(ser)?,
                 MsgCommand::Newline | MsgCommand::NewlineVt => (),
                 MsgCommand::Format(text) => {
-                    // Note: format strings aren't counted towards the MAX_CHARS limit here because
-                    // they can expand to any length. If you use a format string in a long message,
-                    // you're on your own.
-                    writer.write_all(text.as_bytes())?;
-                    writer.write_u8(Ggte::value(MsgOp::Format).unwrap())?;
+                    for &b in text.as_bytes() {
+                        ser.serialize_msg_char(MsgOp::Char(b))?;
+                    }
+                    ser.serialize_msg_char(MsgOp::Format)?;
+                    // Note: format strings aren't counted much towards the MAX_CHARS limit here
+                    // because they can expand to any length. If you use a format string in a long
+                    // message, you're on your own.
+                    num_chars += 1;
                 }
-                MsgCommand::Size(size) => writer.write_u8(*size)?,
-                MsgCommand::Color(color) => writer.write_u8((*color).into())?,
-                MsgCommand::Rgba(rgba) => {
-                    // Yes, this is big-endian...
-                    writer.write_u32::<BE>(*rgba)?;
-                }
-                MsgCommand::Proportional(x) => writer.write_u8(*x as u8)?,
-                MsgCommand::Icon(icon) => writer.write_u8((*icon).into())?,
-                MsgCommand::Shake(arg) => arg.write_to(writer)?,
-                MsgCommand::Center(x) => writer.write_u8(*x as u8)?,
-                MsgCommand::Rotate(angle) => writer.write_i16::<LE>(*angle)?,
+                MsgCommand::Size(size) => ser.serialize_u8(*size)?,
+                MsgCommand::Color(color) => ser.serialize_u8((*color).into())?,
+                MsgCommand::Rgba(rgba) => ser.serialize_rgba(*rgba)?,
+                MsgCommand::Proportional(x) => ser.serialize_u8(*x as u8)?,
+                MsgCommand::Icon(icon) => ser.serialize_u8((*icon).into())?,
+                MsgCommand::Shake(arg) => arg.serialize(ser)?,
+                MsgCommand::Center(x) => ser.serialize_u8(*x as u8)?,
+                MsgCommand::Rotate(angle) => ser.serialize_i16(*angle)?,
                 MsgCommand::Scale(x, y) => {
-                    writer.write_i16::<LE>(*x)?;
-                    writer.write_i16::<LE>(*y)?;
+                    ser.serialize_i16(*x)?;
+                    ser.serialize_i16(*y)?;
                 }
-                MsgCommand::NumInput(arg) => arg.write_to(writer)?,
-                MsgCommand::Question(arg) => arg.write_to(writer)?,
+                MsgCommand::NumInput(arg) => arg.serialize(ser)?,
+                MsgCommand::Question(arg) => arg.serialize(ser)?,
                 MsgCommand::Stay => (),
                 MsgCommand::Text(text) => {
                     for &b in text.as_bytes() {
-                        if !matches!(Ggte::get(b), Ok(MsgOp::Char(_))) {
-                            return Err(Error::InvalidChar(b as u16));
-                        }
-                        writer.write_u8(match b {
+                        let escaped = match b {
                             // '$' is an escape character for '"'
                             b'"' => b'$',
                             _ => b,
-                        })?;
+                        };
+                        ser.serialize_msg_char(MsgOp::Char(escaped))?;
                     }
                     // For the purposes of enforcing the MAX_CHARS limit, assume each byte is one
                     // character. We shouldn't call `from_str()` here because it handles SHIFT-JIS
@@ -395,22 +359,7 @@ impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for MsgArgs {
         if num_chars > MAX_CHARS {
             return Err(Error::TooManyChars { len: num_chars, max: MAX_CHARS });
         }
-
-        // Add a null terminator
-        writer.write_u8(Ggte::value(MsgOp::End).unwrap())?;
-
-        // Ensure we don't overflow the game's message buffer
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
-        let msg_size = end_offset - start_offset;
-        if msg_size > MAX_SIZE {
-            return Err(Error::TooLarge { len: msg_size, max: MAX_SIZE });
-        }
-
-        // Now go back and fill in the end offset
-        writer.seek(SeekFrom::Start(start_offset))?;
-        writer.write_rel_offset((end_offset - start_offset).try_into().unwrap())?;
-        writer.seek(SeekFrom::Start(end_offset))?;
-        Ok(())
+        Ok(ser.end_msg()?)
     }
 }
 
@@ -428,11 +377,10 @@ pub enum MsgWaitType {
     RightPlug,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for MsgWaitType {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        let ty = reader.read_u8()?;
-        Ok(match ty {
+impl DeserializeEvent for MsgWaitType {
+    type Error = SerError;
+    fn deserialize(de: &mut dyn EventDeserializer) -> SerResult<Self> {
+        Ok(match de.deserialize_u8()? {
             MSG_WAIT_ATC_MENU => Self::AtcMenu,
             MSG_WAIT_SUIT_MENU => Self::SuitMenu,
             MSG_WAIT_LEFT_PLUG => Self::LeftPlug,
@@ -442,46 +390,24 @@ impl<R: Read + ?Sized> ReadFrom<R> for MsgWaitType {
     }
 }
 
-impl<W: Write + ?Sized> WriteTo<W> for MsgWaitType {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
+impl SerializeEvent for MsgWaitType {
+    type Error = SerError;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> SerResult<()> {
         match self {
-            Self::Time(x) => writer.write_u8(*x)?,
-            Self::AtcMenu => writer.write_u8(MSG_WAIT_ATC_MENU)?,
-            Self::SuitMenu => writer.write_u8(MSG_WAIT_SUIT_MENU)?,
-            Self::LeftPlug => writer.write_u8(MSG_WAIT_LEFT_PLUG)?,
-            Self::RightPlug => writer.write_u8(MSG_WAIT_RIGHT_PLUG)?,
+            Self::Time(x) => ser.serialize_u8(*x),
+            Self::AtcMenu => ser.serialize_u8(MSG_WAIT_ATC_MENU),
+            Self::SuitMenu => ser.serialize_u8(MSG_WAIT_SUIT_MENU),
+            Self::LeftPlug => ser.serialize_u8(MSG_WAIT_LEFT_PLUG),
+            Self::RightPlug => ser.serialize_u8(MSG_WAIT_RIGHT_PLUG),
         }
-        Ok(())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
 pub struct MsgAnimArgs {
     pub flags: u8,
     pub obj: i16,
     pub anim: i32,
-}
-
-impl<R: Read + ?Sized> ReadFrom<R> for MsgAnimArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            flags: reader.read_u8()?,
-            obj: reader.read_i16::<LE>()?,
-            anim: reader.read_i32::<LE>()?,
-        })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for MsgAnimArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_u8(self.flags)?;
-        writer.write_i16::<LE>(self.obj)?;
-        writer.write_i32::<LE>(self.anim)?;
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -502,17 +428,17 @@ pub enum MsgSfxType {
     Unk6,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for MsgSfxType {
+impl DeserializeEvent for MsgSfxType {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let ty = reader.read_i8()?;
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        let ty = de.deserialize_i8()?;
         Ok(match ty as i32 {
             SFX_WAIT => Self::Wait,
             SFX_STOP => Self::Stop,
             SFX_PLAY => Self::Play,
-            SFX_FADE_OUT => Self::FadeOut(reader.read_u16::<LE>()?),
-            SFX_FADE_IN => Self::FadeIn(reader.read_u16::<LE>()?),
-            SFX_FADE => Self::Fade(MsgSfxFadeArgs::read_from(reader)?),
+            SFX_FADE_OUT => Self::FadeOut(de.deserialize_u16()?),
+            SFX_FADE_IN => Self::FadeIn(de.deserialize_u16()?),
+            SFX_FADE => Self::Fade(MsgSfxFadeArgs::deserialize(de)?),
             SFX_UNK_5 => Self::Unk5,
             SFX_UNK_6 => Self::Unk6,
             _ => return Err(Error::UnrecognizedSfx(ty)),
@@ -520,33 +446,33 @@ impl<R: Read + ?Sized> ReadFrom<R> for MsgSfxType {
     }
 }
 
-impl<W: Write + ?Sized> WriteTo<W> for MsgSfxType {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
+impl SerializeEvent for MsgSfxType {
+    type Error = Error;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
         match self {
-            Self::Wait => writer.write_i8(SFX_WAIT as i8)?,
-            Self::Stop => writer.write_i8(SFX_STOP as i8)?,
-            Self::Play => writer.write_i8(SFX_PLAY as i8)?,
+            Self::Wait => ser.serialize_i8(SFX_WAIT as i8)?,
+            Self::Stop => ser.serialize_i8(SFX_STOP as i8)?,
+            Self::Play => ser.serialize_i8(SFX_PLAY as i8)?,
             Self::FadeOut(duration) => {
-                writer.write_i8(SFX_FADE_OUT as i8)?;
-                writer.write_u16::<LE>(*duration)?;
+                ser.serialize_i8(SFX_FADE_OUT as i8)?;
+                ser.serialize_u16(*duration)?;
             }
             Self::FadeIn(duration) => {
-                writer.write_i8(SFX_FADE_IN as i8)?;
-                writer.write_u16::<LE>(*duration)?;
+                ser.serialize_i8(SFX_FADE_IN as i8)?;
+                ser.serialize_u16(*duration)?;
             }
             Self::Fade(arg) => {
-                writer.write_i8(SFX_FADE as i8)?;
-                arg.write_to(writer)?;
+                ser.serialize_i8(SFX_FADE as i8)?;
+                arg.serialize(ser)?;
             }
-            Self::Unk5 => writer.write_i8(SFX_UNK_5 as i8)?,
-            Self::Unk6 => writer.write_i8(SFX_UNK_6 as i8)?,
+            Self::Unk5 => ser.serialize_i8(SFX_UNK_5 as i8)?,
+            Self::Unk6 => ser.serialize_i8(SFX_UNK_6 as i8)?,
         }
         Ok(())
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
 pub struct MsgSfxFadeArgs {
     /// The fade duration.
     pub duration: u16,
@@ -554,23 +480,7 @@ pub struct MsgSfxFadeArgs {
     pub volume: u8,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for MsgSfxFadeArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self { duration: reader.read_u16::<LE>()?, volume: reader.read_u8()? })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for MsgSfxFadeArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_u16::<LE>(self.duration)?;
-        writer.write_u8(self.volume)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
 pub struct DefaultArgs {
     /// Flags which control the meaning of `index`.
     pub flags: DefaultFlags,
@@ -578,29 +488,24 @@ pub struct DefaultArgs {
     pub index: i32,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for DefaultArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            flags: DefaultFlags::from_bits_truncate(reader.read_u8()?),
-            index: reader.read_i32::<LE>()?,
-        })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for DefaultArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_u8(self.flags.bits())?;
-        writer.write_i32::<LE>(self.index)?;
-        Ok(())
-    }
-}
-
 bitflags! {
     pub struct DefaultFlags: u8 {
         /// The `index` is a variable index rather than a constant.
         const VARIABLE = 0x1;
+    }
+}
+
+impl SerializeEvent for DefaultFlags {
+    type Error = SerError;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> SerResult<()> {
+        ser.serialize_u8(self.bits())
+    }
+}
+
+impl DeserializeEvent for DefaultFlags {
+    type Error = SerError;
+    fn deserialize(de: &mut dyn EventDeserializer) -> SerResult<Self> {
+        Ok(Self::from_bits_truncate(de.deserialize_u8()?))
     }
 }
 
@@ -696,7 +601,7 @@ pub enum Icon {
     No = 16,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
 pub struct ShakeArgs {
     /// Flags which describe how to shake characters. Either `WAVE` or `JITTER` must be set.
     pub flags: ShakeFlags,
@@ -704,27 +609,6 @@ pub struct ShakeArgs {
     pub strength: u8,
     /// Shake speed (higher = slower).
     pub speed: u8,
-}
-
-impl<R: Read + ?Sized> ReadFrom<R> for ShakeArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            flags: ShakeFlags::from_bits_truncate(reader.read_u8()?),
-            strength: reader.read_u8()?,
-            speed: reader.read_u8()?,
-        })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for ShakeArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_u8(self.flags.bits())?;
-        writer.write_u8(self.strength)?;
-        writer.write_u8(self.speed)?;
-        Ok(())
-    }
 }
 
 bitflags! {
@@ -744,7 +628,21 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+impl SerializeEvent for ShakeFlags {
+    type Error = SerError;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> SerResult<()> {
+        ser.serialize_u8(self.bits())
+    }
+}
+
+impl DeserializeEvent for ShakeFlags {
+    type Error = SerError;
+    fn deserialize(de: &mut dyn EventDeserializer) -> SerResult<Self> {
+        Ok(Self::from_bits_truncate(de.deserialize_u8()?))
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
 pub struct NumInputArgs {
     /// The number of digits to enter.
     pub digits: u8,
@@ -754,52 +652,12 @@ pub struct NumInputArgs {
     pub selected: u8,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for NumInputArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            digits: reader.read_u8()?,
-            editable: reader.read_u8()?,
-            selected: reader.read_u8()?,
-        })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for NumInputArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_u8(self.digits)?;
-        writer.write_u8(self.editable)?;
-        writer.write_u8(self.selected)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
 pub struct QuestionArgs {
     /// Flags indicating which items (if any) are "no".
     pub flags: QuestionFlags,
     /// The initially-selected item (0 = left, 1 = right).
     pub default: u8,
-}
-
-impl<R: Read + ?Sized> ReadFrom<R> for QuestionArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            flags: QuestionFlags::from_bits_truncate(reader.read_u8()?),
-            default: reader.read_u8()?,
-        })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for QuestionArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_u8(self.flags.bits())?;
-        writer.write_u8(self.default)?;
-        Ok(())
-    }
 }
 
 bitflags! {
@@ -811,12 +669,27 @@ bitflags! {
     }
 }
 
+impl SerializeEvent for QuestionFlags {
+    type Error = SerError;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> SerResult<()> {
+        ser.serialize_u8(self.bits())
+    }
+}
+
+impl DeserializeEvent for QuestionFlags {
+    type Error = SerError;
+    fn deserialize(de: &mut dyn EventDeserializer) -> SerResult<Self> {
+        Ok(Self::from_bits_truncate(de.deserialize_u8()?))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::assert_write_and_read;
+    use crate::assert_reserialize;
     use crate::data::Music;
+    use crate::event::serialize::BinSerializer;
     use std::io::Cursor;
 
     fn msg(command: MsgCommand) -> MsgArgs {
@@ -828,66 +701,66 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_msg() {
+    fn test_reserialize_msg() {
         let sound = Sound::Music(Music::Bgm);
-        assert_write_and_read!(msg(MsgCommand::Speed(1)));
-        assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::Time(1))));
-        assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::AtcMenu)));
-        assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::SuitMenu)));
-        assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::LeftPlug)));
-        assert_write_and_read!(msg(MsgCommand::Wait(MsgWaitType::RightPlug)));
-        assert_write_and_read!(msg(MsgCommand::Anim(MsgAnimArgs { flags: 1, obj: 2, anim: 3 })));
-        assert_write_and_read!(msg(MsgCommand::Sfx(sound, MsgSfxType::Wait)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(sound, MsgSfxType::Stop)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(sound, MsgSfxType::Play)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(sound, MsgSfxType::FadeOut(2))));
-        assert_write_and_read!(msg(MsgCommand::Sfx(sound, MsgSfxType::FadeIn(2))));
-        assert_write_and_read!(msg(MsgCommand::Sfx(
+        assert_reserialize!(msg(MsgCommand::Speed(1)));
+        assert_reserialize!(msg(MsgCommand::Wait(MsgWaitType::Time(1))));
+        assert_reserialize!(msg(MsgCommand::Wait(MsgWaitType::AtcMenu)));
+        assert_reserialize!(msg(MsgCommand::Wait(MsgWaitType::SuitMenu)));
+        assert_reserialize!(msg(MsgCommand::Wait(MsgWaitType::LeftPlug)));
+        assert_reserialize!(msg(MsgCommand::Wait(MsgWaitType::RightPlug)));
+        assert_reserialize!(msg(MsgCommand::Anim(MsgAnimArgs { flags: 1, obj: 2, anim: 3 })));
+        assert_reserialize!(msg(MsgCommand::Sfx(sound, MsgSfxType::Wait)));
+        assert_reserialize!(msg(MsgCommand::Sfx(sound, MsgSfxType::Stop)));
+        assert_reserialize!(msg(MsgCommand::Sfx(sound, MsgSfxType::Play)));
+        assert_reserialize!(msg(MsgCommand::Sfx(sound, MsgSfxType::FadeOut(2))));
+        assert_reserialize!(msg(MsgCommand::Sfx(sound, MsgSfxType::FadeIn(2))));
+        assert_reserialize!(msg(MsgCommand::Sfx(
             sound,
             MsgSfxType::Fade(MsgSfxFadeArgs { duration: 1, volume: 2 })
         )));
-        assert_write_and_read!(msg(MsgCommand::Sfx(sound, MsgSfxType::Unk5)));
-        assert_write_and_read!(msg(MsgCommand::Sfx(sound, MsgSfxType::Unk6)));
-        assert_write_and_read!(msg(MsgCommand::Voice(Voice::Gebah)));
-        assert_write_and_read!(msg(MsgCommand::Default(DefaultArgs {
+        assert_reserialize!(msg(MsgCommand::Sfx(sound, MsgSfxType::Unk5)));
+        assert_reserialize!(msg(MsgCommand::Sfx(sound, MsgSfxType::Unk6)));
+        assert_reserialize!(msg(MsgCommand::Voice(Voice::Gebah)));
+        assert_reserialize!(msg(MsgCommand::Default(DefaultArgs {
             flags: DefaultFlags::VARIABLE,
             index: 1,
         })));
-        assert_write_and_read!(msg(MsgCommand::Newline));
-        assert_write_and_read!(msg(MsgCommand::NewlineVt));
-        assert_write_and_read!(msg(MsgCommand::Format(text("%s"))));
-        assert_write_and_read!(msg(MsgCommand::Size(1)));
-        assert_write_and_read!(msg(MsgCommand::Color(Color::White)));
-        assert_write_and_read!(msg(MsgCommand::Rgba(1)));
-        assert_write_and_read!(msg(MsgCommand::Proportional(false)));
-        assert_write_and_read!(msg(MsgCommand::Proportional(true)));
-        assert_write_and_read!(msg(MsgCommand::Icon(Icon::Moolah)));
-        assert_write_and_read!(msg(MsgCommand::Shake(ShakeArgs {
+        assert_reserialize!(msg(MsgCommand::Newline));
+        assert_reserialize!(msg(MsgCommand::NewlineVt));
+        assert_reserialize!(msg(MsgCommand::Format(text("%s"))));
+        assert_reserialize!(msg(MsgCommand::Size(1)));
+        assert_reserialize!(msg(MsgCommand::Color(Color::White)));
+        assert_reserialize!(msg(MsgCommand::Rgba(1)));
+        assert_reserialize!(msg(MsgCommand::Proportional(false)));
+        assert_reserialize!(msg(MsgCommand::Proportional(true)));
+        assert_reserialize!(msg(MsgCommand::Icon(Icon::Moolah)));
+        assert_reserialize!(msg(MsgCommand::Shake(ShakeArgs {
             flags: ShakeFlags::X | ShakeFlags::JITTER,
             strength: 1,
             speed: 2
         })));
-        assert_write_and_read!(msg(MsgCommand::Center(false)));
-        assert_write_and_read!(msg(MsgCommand::Center(true)));
-        assert_write_and_read!(msg(MsgCommand::Rotate(1)));
-        assert_write_and_read!(msg(MsgCommand::Scale(1, 2)));
-        assert_write_and_read!(msg(MsgCommand::NumInput(NumInputArgs {
+        assert_reserialize!(msg(MsgCommand::Center(false)));
+        assert_reserialize!(msg(MsgCommand::Center(true)));
+        assert_reserialize!(msg(MsgCommand::Rotate(1)));
+        assert_reserialize!(msg(MsgCommand::Scale(1, 2)));
+        assert_reserialize!(msg(MsgCommand::NumInput(NumInputArgs {
             digits: 1,
             editable: 2,
             selected: 3,
         })));
-        assert_write_and_read!(msg(MsgCommand::Question(QuestionArgs {
+        assert_reserialize!(msg(MsgCommand::Question(QuestionArgs {
             flags: QuestionFlags::RIGHT_NO,
             default: 1,
         })));
-        assert_write_and_read!(msg(MsgCommand::Stay));
-        assert_write_and_read!(msg(MsgCommand::Text(text("bunger"))));
-        assert_write_and_read!(msg(MsgCommand::Text(text("\"quoted\""))));
-        assert_write_and_read!(msg(MsgCommand::Text(text("スプラトゥーン"))));
+        assert_reserialize!(msg(MsgCommand::Stay));
+        assert_reserialize!(msg(MsgCommand::Text(text("bunger"))));
+        assert_reserialize!(msg(MsgCommand::Text(text("\"quoted\""))));
+        assert_reserialize!(msg(MsgCommand::Text(text("スプラトゥーン"))));
     }
 
     #[test]
-    fn test_write_and_read_msg_multiple_commands() {
+    fn test_reserialize_msg_multiple_commands() {
         let msg = MsgArgs::from(vec![
             MsgCommand::Speed(5),
             MsgCommand::Shake(ShakeArgs {
@@ -901,18 +774,21 @@ mod tests {
             MsgCommand::Text(text(" bunger")),
             MsgCommand::Wait(MsgWaitType::LeftPlug),
         ]);
-        assert_write_and_read!(msg);
+        assert_reserialize!(msg);
     }
 
     #[test]
-    fn test_write_and_read_none_voice() {
-        assert_write_and_read!(msg(MsgCommand::Voice(Voice::None)));
+    fn test_reserialize_none_voice() {
+        assert_reserialize!(msg(MsgCommand::Voice(Voice::None)));
     }
 
     #[test]
     fn test_write_invalid_char() {
-        let mut cursor = Cursor::new(vec![]);
         let msg = MsgArgs::from(vec![MsgCommand::Text(text("\x01"))]);
-        assert!(matches!(msg.write_to(&mut cursor), Err(Error::InvalidChar(1))));
+        let mut ser = BinSerializer::new(Cursor::new(vec![]));
+        match msg.serialize(&mut ser) {
+            Err(Error::Serialize(e)) => assert!(matches!(*e, SerError::InvalidMsgChar(1))),
+            _ => panic!("not a serialization error"),
+        };
     }
 }

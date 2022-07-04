@@ -1,6 +1,7 @@
 use super::{Error, Result, Script, ScriptLayout};
 use crate::common::{WriteSeek, WriteTo};
 use crate::event::block::{Block, BlockId, DataBlock, Ip, WriteIp};
+use crate::event::serialize::{BinSerializer, SerializeEvent};
 use byteorder::{WriteBytesExt, LE};
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 use std::num::NonZeroU32;
@@ -216,8 +217,9 @@ impl<'a> ScriptWriter<'a> {
         self.mark_visited(block_id);
         blob.begin(block_id);
         let code = self.script.block(block_id).code().expect("Expected a code block");
+        let mut ser = BinSerializer::new(&mut blob.writer);
         for command in &code.commands {
-            command.write_to(&mut blob.writer).map_err(|err| Error::WriteCommand(err.into()))?;
+            command.serialize(&mut ser).map_err(|err| Error::WriteCommand(err.into()))?;
         }
 
         // If execution can flow directly out of this block into another one, it MUST be written next
@@ -231,6 +233,7 @@ impl<'a> ScriptWriter<'a> {
     }
 
     fn write_data(&mut self, blob: &mut Blob, data: &DataBlock) -> Result<()> {
+        let mut ser = BinSerializer::new(&mut blob.writer);
         match data {
             DataBlock::ArrayI8(arr) => {
                 for &x in arr {
@@ -271,10 +274,10 @@ impl<'a> ScriptWriter<'a> {
                 }
             }
             DataBlock::ObjBone(bone) => {
-                bone.write_to(&mut blob.writer)?;
+                bone.serialize(&mut ser)?;
             }
             DataBlock::ObjPair(pair) => {
-                pair.write_to(&mut blob.writer)?;
+                pair.serialize(&mut ser)?;
             }
             DataBlock::String(string) => {
                 string.write_to(&mut blob.writer)?;

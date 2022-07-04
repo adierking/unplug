@@ -4,6 +4,7 @@ use crate::event::analysis::{ArrayKind, ScriptAnalyzer, ValueKind};
 use crate::event::block::{Block, BlockId, CodeBlock, DataBlock, Ip};
 use crate::event::command::{self, Command};
 use crate::event::expr::{self, ObjBone, ObjPair};
+use crate::event::serialize::{self, BinDeserializer, DeserializeEvent};
 use byteorder::{ReadBytesExt, LE};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -315,7 +316,8 @@ impl<'r> ScriptReader<'r> {
                 break;
             }
 
-            let command = match Command::read_from(&mut self.reader) {
+            let mut de = BinDeserializer::new(&mut self.reader);
+            let command = match Command::deserialize(&mut de) {
                 Ok(c) => c,
                 Err(source) if Self::is_known_error(&source, offset) => {
                     debug!("Ignoring block with known invalid code at {:#x}", offset);
@@ -500,10 +502,11 @@ impl<'r> ScriptReader<'r> {
                     max_size
                 );
                 self.reader.seek(SeekFrom::Start(layout.start_offset as u64))?;
+                let mut de = BinDeserializer::new(&mut self.reader);
                 let data = match &layout.ty {
                     DataType::Array(kind) => Self::read_array(self.reader, kind, max_size)?,
-                    DataType::ObjBone => ObjBone::read_from(&mut self.reader)?.into(),
-                    DataType::ObjPair => ObjPair::read_from(&mut self.reader)?.into(),
+                    DataType::ObjBone => ObjBone::deserialize(&mut de)?.into(),
+                    DataType::ObjPair => ObjPair::deserialize(&mut de)?.into(),
                     DataType::String => CString::read_from(&mut self.reader)?.into(),
                 };
                 self.blocks[id.index()] = Block::Data(data);
@@ -587,7 +590,9 @@ impl<'r> ScriptReader<'r> {
         // reading the other blocks in the file.
         if offset == 0x13cf3 {
             if let command::Error::Expr(err) = err {
-                return matches!(**err, expr::Error::UnrecognizedOp(45));
+                if let expr::Error::Serialize(err) = &**err {
+                    return matches!(**err, serialize::Error::UnrecognizedExpr(45));
+                }
             }
         }
         false

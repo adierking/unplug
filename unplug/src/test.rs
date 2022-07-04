@@ -2,6 +2,7 @@ use crate::audio::format::{FormatTag, PcmS16Le, ReadWriteBytes};
 use crate::audio::Samples;
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::block::{Ip, WriteIp};
+use crate::event::serialize::{BinDeserializer, BinSerializer, DeserializeEvent, SerializeEvent};
 use byteorder::{ByteOrder, WriteBytesExt, LE};
 use ctor::ctor;
 use std::fmt::{Debug, Display};
@@ -64,6 +65,15 @@ macro_rules! assert_write_and_read {
     };
 }
 
+/// Asserts that serializing event data to a byte array and reading it back produces the same value.
+#[macro_export]
+macro_rules! assert_reserialize {
+    ($val:expr) => {
+        let val = $val;
+        assert_eq!($crate::test::reserialize(&val), val);
+    };
+}
+
 // Initialize env_logger before each unit test. This sucks.
 #[ctor]
 unsafe fn init_logging() {
@@ -99,6 +109,31 @@ where
 
     cursor.seek(SeekFrom::Start(0)).unwrap();
     let val = read(&mut cursor);
+
+    let offset = cursor.seek(SeekFrom::Current(0)).unwrap();
+    assert_eq!(offset, end_offset);
+    val
+}
+
+/// Serializes event data to a byte array and reads it back.
+/// Use `assert_reserialize!()` instead of calling this directly.
+pub(crate) fn reserialize<T>(val: &T) -> T
+where
+    T: SerializeEvent + DeserializeEvent,
+    <T as SerializeEvent>::Error: Debug,
+    <T as DeserializeEvent>::Error: Debug,
+{
+    let mut cursor = Cursor::new(vec![]);
+    let mut ser = BinSerializer::new(&mut cursor);
+    val.serialize(&mut ser).unwrap();
+
+    let offset = cursor.seek(SeekFrom::Current(0)).unwrap();
+    let end_offset = cursor.seek(SeekFrom::End(0)).unwrap();
+    assert_eq!(offset, end_offset);
+
+    cursor.seek(SeekFrom::Start(0)).unwrap();
+    let mut de = BinDeserializer::new(&mut cursor);
+    let val = T::deserialize(&mut de).unwrap();
 
     let offset = cursor.seek(SeekFrom::Current(0)).unwrap();
     assert_eq!(offset, end_offset);

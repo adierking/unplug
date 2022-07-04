@@ -1,13 +1,13 @@
-use super::block::{Ip, WriteIp};
-use super::opcodes::{ExprOp, Ggte, OpcodeMap, TypeOp};
-use crate::common::{ReadFrom, WriteTo};
+use super::block::Ip;
+use super::opcodes::{ExprOp, TypeOp};
+use super::serialize::{
+    self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
+};
 use crate::data::{Atc, Item, Music, Object, Sfx, Sound};
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Debug};
-use std::io::{self, Read, Write};
 use thiserror::Error;
-use unplug_proc::{ReadFrom, WriteTo};
+use unplug_proc::{DeserializeEvent, SerializeEvent};
 
 /// The result type for expression operations.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -16,20 +16,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
-    #[error("unrecognized expression opcode: {0}")]
-    UnrecognizedOp(u8),
-
-    #[error("unsupported expression: {0:?}")]
-    NotSupported(ExprOp),
-
-    #[error("unrecognized type code: {0}")]
-    UnrecognizedType(i32),
-
-    #[error("unsupported type: {0:?}")]
-    UnsupportedType(TypeOp),
-
     #[error("expression is not a constant: {0:?}")]
-    NonConstant(Box<Expr>),
+    NonConstant(ExprOp),
+
+    #[error("expression is not assignable: {0:?}")]
+    NotAssignable(ExprOp),
 
     #[error("expression is not a valid ATC ID: {0:?}")]
     InvalidAtc(Box<Expr>),
@@ -41,10 +32,10 @@ pub enum Error {
     InvalidObject(Box<Expr>),
 
     #[error(transparent)]
-    Io(Box<io::Error>),
+    Serialize(Box<serialize::Error>),
 }
 
-from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Serialize, serialize::Error);
 
 /// An expression which evaluates to a 32-bit signed integer.
 #[derive(Clone, PartialEq, Eq)]
@@ -373,77 +364,77 @@ impl Expr {
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for Expr {
+impl DeserializeEvent for Expr {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let opcode = reader.read_u8()?;
-        let expr = Ggte::get(opcode).map_err(Error::UnrecognizedOp)?;
-        Ok(match expr {
-            ExprOp::Equal => Self::Equal(BinaryOp::read_from(reader)?.into()),
-            ExprOp::NotEqual => Self::NotEqual(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Less => Self::Less(BinaryOp::read_from(reader)?.into()),
-            ExprOp::LessEqual => Self::LessEqual(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Greater => Self::Greater(BinaryOp::read_from(reader)?.into()),
-            ExprOp::GreaterEqual => Self::GreaterEqual(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Not => Self::Not(Self::read_from(reader)?.into()),
-            ExprOp::Add => Self::Add(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Subtract => Self::Subtract(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Multiply => Self::Multiply(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Divide => Self::Divide(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Modulo => Self::Modulo(BinaryOp::read_from(reader)?.into()),
-            ExprOp::BitAnd => Self::BitAnd(BinaryOp::read_from(reader)?.into()),
-            ExprOp::BitOr => Self::BitOr(BinaryOp::read_from(reader)?.into()),
-            ExprOp::BitXor => Self::BitXor(BinaryOp::read_from(reader)?.into()),
-            ExprOp::AddAssign => Self::AddAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::SubtractAssign => Self::SubtractAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::MultiplyAssign => Self::MultiplyAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::DivideAssign => Self::DivideAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::ModuloAssign => Self::ModuloAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::BitAndAssign => Self::BitAndAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::BitOrAssign => Self::BitOrAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::BitXorAssign => Self::BitXorAssign(BinaryOp::read_from(reader)?.into()),
-            ExprOp::Imm16 => Self::Imm16(reader.read_i16::<LE>()?),
-            ExprOp::Imm32 => Self::Imm32(reader.read_i32::<LE>()?),
-            ExprOp::AddressOf => Self::AddressOf(Ip::read_from(reader)?),
-            ExprOp::Stack => Self::Stack(reader.read_u8()?),
-            ExprOp::ParentStack => Self::ParentStack(reader.read_u8()?),
-            ExprOp::Flag => Self::Flag(Self::read_from(reader)?.into()),
-            ExprOp::Variable => Self::Variable(Self::read_from(reader)?.into()),
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        let expr = de.begin_expr()?;
+        let result = match expr {
+            ExprOp::Equal => Self::Equal(BinaryOp::deserialize(de)?.into()),
+            ExprOp::NotEqual => Self::NotEqual(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Less => Self::Less(BinaryOp::deserialize(de)?.into()),
+            ExprOp::LessEqual => Self::LessEqual(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Greater => Self::Greater(BinaryOp::deserialize(de)?.into()),
+            ExprOp::GreaterEqual => Self::GreaterEqual(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Not => Self::Not(Self::deserialize(de)?.into()),
+            ExprOp::Add => Self::Add(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Subtract => Self::Subtract(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Multiply => Self::Multiply(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Divide => Self::Divide(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Modulo => Self::Modulo(BinaryOp::deserialize(de)?.into()),
+            ExprOp::BitAnd => Self::BitAnd(BinaryOp::deserialize(de)?.into()),
+            ExprOp::BitOr => Self::BitOr(BinaryOp::deserialize(de)?.into()),
+            ExprOp::BitXor => Self::BitXor(BinaryOp::deserialize(de)?.into()),
+            ExprOp::AddAssign => Self::AddAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::SubtractAssign => Self::SubtractAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::MultiplyAssign => Self::MultiplyAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::DivideAssign => Self::DivideAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::ModuloAssign => Self::ModuloAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::BitAndAssign => Self::BitAndAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::BitOrAssign => Self::BitOrAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::BitXorAssign => Self::BitXorAssign(BinaryOp::deserialize(de)?.into()),
+            ExprOp::Imm16 => Self::Imm16(de.deserialize_i16()?),
+            ExprOp::Imm32 => Self::Imm32(de.deserialize_i32()?),
+            ExprOp::AddressOf => Self::AddressOf(Ip::deserialize(de)?),
+            ExprOp::Stack => Self::Stack(de.deserialize_u8()?),
+            ExprOp::ParentStack => Self::ParentStack(de.deserialize_u8()?),
+            ExprOp::Flag => Self::Flag(Self::deserialize(de)?.into()),
+            ExprOp::Variable => Self::Variable(Self::deserialize(de)?.into()),
             ExprOp::Result1 => Self::Result1,
             ExprOp::Result2 => Self::Result2,
-            ExprOp::Pad => Self::Pad(Self::read_from(reader)?.into()),
-            ExprOp::Battery => Self::Battery(Self::read_from(reader)?.into()),
+            ExprOp::Pad => Self::Pad(Self::deserialize(de)?.into()),
+            ExprOp::Battery => Self::Battery(Self::deserialize(de)?.into()),
             ExprOp::Money => Self::Money,
-            ExprOp::Item => Self::Item(Self::read_from(reader)?.into()),
-            ExprOp::Atc => Self::Atc(Self::read_from(reader)?.into()),
+            ExprOp::Item => Self::Item(Self::deserialize(de)?.into()),
+            ExprOp::Atc => Self::Atc(Self::deserialize(de)?.into()),
             ExprOp::Rank => Self::Rank,
             ExprOp::Exp => Self::Exp,
             ExprOp::Level => Self::Level,
             ExprOp::Hold => Self::Hold,
-            ExprOp::Map => Self::Map(Self::read_from(reader)?.into()),
-            ExprOp::ActorName => Self::ActorName(Self::read_from(reader)?.into()),
-            ExprOp::ItemName => Self::ItemName(Self::read_from(reader)?.into()),
-            ExprOp::Time => Self::Time(Self::read_from(reader)?.into()),
+            ExprOp::Map => Self::Map(Self::deserialize(de)?.into()),
+            ExprOp::ActorName => Self::ActorName(Self::deserialize(de)?.into()),
+            ExprOp::ItemName => Self::ItemName(Self::deserialize(de)?.into()),
+            ExprOp::Time => Self::Time(Self::deserialize(de)?.into()),
             ExprOp::CurrentSuit => Self::CurrentSuit,
             ExprOp::Scrap => Self::Scrap,
             ExprOp::CurrentAtc => Self::CurrentAtc,
             ExprOp::Use => Self::Use,
             ExprOp::Hit => Self::Hit,
-            ExprOp::StickerName => Self::StickerName(Self::read_from(reader)?.into()),
-            ExprOp::Obj => Self::Obj(ObjExpr::read_from(reader)?.into()),
-            ExprOp::Random => Self::Random(Self::read_from(reader)?.into()),
-            ExprOp::Sin => Self::Sin(Self::read_from(reader)?.into()),
-            ExprOp::Cos => Self::Cos(Self::read_from(reader)?.into()),
-            ExprOp::ArrayElement => Self::ArrayElement(ArrayElementExpr::read_from(reader)?.into()),
-        })
+            ExprOp::StickerName => Self::StickerName(Self::deserialize(de)?.into()),
+            ExprOp::Obj => Self::Obj(ObjExpr::deserialize(de)?.into()),
+            ExprOp::Random => Self::Random(Self::deserialize(de)?.into()),
+            ExprOp::Sin => Self::Sin(Self::deserialize(de)?.into()),
+            ExprOp::Cos => Self::Cos(Self::deserialize(de)?.into()),
+            ExprOp::ArrayElement => Self::ArrayElement(ArrayElementExpr::deserialize(de)?.into()),
+        };
+        de.end_expr()?;
+        Ok(result)
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Expr {
+impl SerializeEvent for Expr {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        let opcode = Ggte::value(self.opcode()).map_err(Error::NotSupported)?;
-        writer.write_u8(opcode)?;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        ser.begin_expr(self.opcode())?;
         match self {
             Self::Equal(op)
             | Self::NotEqual(op)
@@ -466,7 +457,7 @@ impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Expr {
             | Self::ModuloAssign(op)
             | Self::BitAndAssign(op)
             | Self::BitOrAssign(op)
-            | Self::BitXorAssign(op) => op.write_to(writer),
+            | Self::BitXorAssign(op) => op.serialize(ser)?,
             Self::Not(e)
             | Self::Flag(e)
             | Self::Variable(e)
@@ -481,7 +472,7 @@ impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Expr {
             | Self::StickerName(e)
             | Self::Random(e)
             | Self::Sin(e)
-            | Self::Cos(e) => e.write_to(writer),
+            | Self::Cos(e) => e.serialize(ser)?,
             Self::Result1
             | Self::Result2
             | Self::Money
@@ -493,14 +484,15 @@ impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Expr {
             | Self::Scrap
             | Self::CurrentAtc
             | Self::Use
-            | Self::Hit => Ok(()),
-            Self::Imm16(x) => Ok(writer.write_i16::<LE>(*x)?),
-            Self::Imm32(x) => Ok(writer.write_i32::<LE>(*x)?),
-            Self::AddressOf(ip) => Ok(ip.write_to(writer)?),
-            Self::Stack(x) | Self::ParentStack(x) => Ok(writer.write_u8(*x)?),
-            Self::Obj(e) => e.write_to(writer),
-            Self::ArrayElement(e) => e.write_to(writer),
+            | Self::Hit => (),
+            Self::Imm16(x) => ser.serialize_i16(*x)?,
+            Self::Imm32(x) => ser.serialize_i32(*x)?,
+            Self::AddressOf(ip) => ip.serialize(ser)?,
+            Self::Stack(x) | Self::ParentStack(x) => ser.serialize_u8(*x)?,
+            Self::Obj(e) => e.serialize(ser)?,
+            Self::ArrayElement(e) => e.serialize(ser)?,
         }
+        Ok(ser.end_expr()?)
     }
 }
 
@@ -657,48 +649,48 @@ impl SetExpr {
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for SetExpr {
+impl DeserializeEvent for SetExpr {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let opcode = reader.read_u8()?;
-        let expr = Ggte::get(opcode).map_err(Error::UnrecognizedOp)?;
-        Ok(match expr {
-            ExprOp::Stack => Self::Stack(reader.read_u8()?),
-            ExprOp::Flag => Self::Flag(Expr::read_from(reader)?),
-            ExprOp::Variable => Self::Variable(Expr::read_from(reader)?),
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        let expr = de.begin_expr()?;
+        let result = match expr {
+            ExprOp::Stack => Self::Stack(de.deserialize_u8()?),
+            ExprOp::Flag => Self::Flag(Expr::deserialize(de)?),
+            ExprOp::Variable => Self::Variable(Expr::deserialize(de)?),
             ExprOp::Result1 => Self::Result1,
             ExprOp::Result2 => Self::Result2,
-            ExprOp::Pad => Self::Pad(Expr::read_from(reader)?),
-            ExprOp::Battery => Self::Battery(Expr::read_from(reader)?),
+            ExprOp::Pad => Self::Pad(Expr::deserialize(de)?),
+            ExprOp::Battery => Self::Battery(Expr::deserialize(de)?),
             ExprOp::Money => Self::Money,
-            ExprOp::Item => Self::Item(Expr::read_from(reader)?),
-            ExprOp::Atc => Self::Atc(Expr::read_from(reader)?),
+            ExprOp::Item => Self::Item(Expr::deserialize(de)?),
+            ExprOp::Atc => Self::Atc(Expr::deserialize(de)?),
             ExprOp::Rank => Self::Rank,
             ExprOp::Exp => Self::Exp,
             ExprOp::Level => Self::Level,
-            ExprOp::Time => Self::Time(Expr::read_from(reader)?),
+            ExprOp::Time => Self::Time(Expr::deserialize(de)?),
             ExprOp::CurrentSuit => Self::CurrentSuit,
             ExprOp::Scrap => Self::Scrap,
             ExprOp::CurrentAtc => Self::CurrentAtc,
-            _ => return Err(Error::NotSupported(expr)),
-        })
+            _ => return Err(Error::NotAssignable(expr)),
+        };
+        de.end_expr()?;
+        Ok(result)
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SetExpr {
+impl SerializeEvent for SetExpr {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        let opcode = Ggte::value(self.opcode()).map_err(Error::NotSupported)?;
-        writer.write_u8(opcode)?;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        ser.begin_expr(self.opcode())?;
         match self {
-            Self::Stack(x) => Ok(writer.write_u8(*x)?),
+            Self::Stack(x) => ser.serialize_u8(*x)?,
             Self::Flag(e)
             | Self::Variable(e)
             | Self::Pad(e)
             | Self::Battery(e)
             | Self::Item(e)
             | Self::Atc(e)
-            | Self::Time(e) => e.write_to(writer),
+            | Self::Time(e) => e.serialize(ser)?,
             Self::Result1
             | Self::Result2
             | Self::Money
@@ -707,8 +699,9 @@ impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SetExpr {
             | Self::Level
             | Self::CurrentSuit
             | Self::Scrap
-            | Self::CurrentAtc => Ok(()),
+            | Self::CurrentAtc => (),
         }
+        Ok(ser.end_expr()?)
     }
 }
 
@@ -733,7 +726,7 @@ impl TryFrom<Expr> for SetExpr {
             Expr::CurrentSuit => Self::CurrentSuit,
             Expr::Scrap => Self::Scrap,
             Expr::CurrentAtc => Self::CurrentAtc,
-            _ => return Err(Error::NotSupported(op.opcode())),
+            _ => return Err(Error::NotAssignable(op.opcode())),
         })
     }
 }
@@ -762,9 +755,8 @@ impl Debug for SetExpr {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct BinaryOp {
     /// The right-hand operand.
     pub rhs: Expr,
@@ -807,48 +799,29 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct ObjExprObj {
     pub obj: Expr,
 }
 
 /// A pointer to an `ObjPair`.
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct ObjExprPair {
     pub address: Expr,
 }
 
 /// A pair of objects.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
 pub struct ObjPair {
     pub first: i16,
     pub second: i16,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for ObjPair {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self { first: reader.read_i16::<LE>()?, second: reader.read_i16::<LE>()? })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for ObjPair {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_i16::<LE>(self.first)?;
-        writer.write_i16::<LE>(self.second)?;
-        Ok(())
-    }
-}
-
 /// A pointer to an `ObjBone`.
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct ObjExprBone {
     pub address: Expr,
 }
@@ -860,6 +833,36 @@ pub struct ObjBone {
     /// Each element in this array is the index of the bone at each level in the model hierarchy.
     /// The first level is the level below the root bone.
     pub path: Vec<i16>,
+}
+
+impl DeserializeEvent for ObjBone {
+    type Error = serialize::Error;
+    fn deserialize(de: &mut dyn EventDeserializer) -> serialize::Result<Self> {
+        let obj = de.deserialize_i16()?;
+        let count = de.deserialize_i16()?;
+        let path = if count > 0 {
+            let mut path = vec![0i16; count as usize];
+            for val in &mut path {
+                *val = de.deserialize_i16()?;
+            }
+            path
+        } else {
+            vec![]
+        };
+        Ok(Self { obj, path })
+    }
+}
+
+impl SerializeEvent for ObjBone {
+    type Error = serialize::Error;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> serialize::Result<()> {
+        ser.serialize_i16(self.obj)?;
+        ser.serialize_i16(self.path.len().try_into().expect("Bone size overflow"))?;
+        for &bone in &self.path {
+            ser.serialize_i16(bone)?;
+        }
+        Ok(())
+    }
 }
 
 /// A wrapper which makes it easier to work with expressions that reference sounds.
@@ -940,54 +943,25 @@ impl From<SoundExpr> for Expr {
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for SoundExpr {
+impl DeserializeEvent for SoundExpr {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        Ok(Expr::read_from(reader)?.into())
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        Ok(Expr::deserialize(de)?.into())
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SoundExpr {
+impl SerializeEvent for SoundExpr {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
         match self {
-            Self::None | Self::Sfx(_) | Self::Music(_) => Expr::from(self.clone()).write_to(writer),
-            Self::Expr(expr) => expr.write_to(writer),
+            Self::None | Self::Sfx(_) | Self::Music(_) => Expr::from(self.clone()).serialize(ser),
+            Self::Expr(expr) => expr.serialize(ser),
         }
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for ObjBone {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        let obj = reader.read_i16::<LE>()?;
-        let count = reader.read_i16::<LE>()?;
-        let path = if count > 0 {
-            let mut path = vec![0i16; count as usize];
-            reader.read_i16_into::<LE>(&mut path)?;
-            path
-        } else {
-            vec![]
-        };
-        Ok(Self { obj, path })
-    }
-}
-
-impl<W: Write + ?Sized> WriteTo<W> for ObjBone {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_i16::<LE>(self.obj)?;
-        writer.write_i16::<LE>(self.path.len().try_into().expect("Bone size overflow"))?;
-        for &bone in &self.path {
-            writer.write_i16::<LE>(bone)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct ArrayElementExpr {
     /// The size/type of each element in the array:
     /// * `-4`: Signed 32-bit integer
@@ -1043,7 +1017,7 @@ macro_rules! impl_try_from_expr {
                 if let Some(id) = expr.value() {
                     Ok(Self::try_from(id as $base).map_err(|_| $err(expr.into()))?)
                 } else {
-                    Err(Error::NonConstant(expr.into()))
+                    Err(Error::NonConstant(expr.opcode()))
                 }
             }
         }
@@ -1055,7 +1029,7 @@ macro_rules! impl_try_from_expr {
                 if let Some(id) = expr.value() {
                     Ok(Self::try_from(id as $base).map_err(|_| $err(expr.clone().into()))?)
                 } else {
-                    Err(Error::NonConstant(expr.clone().into()))
+                    Err(Error::NonConstant(expr.opcode()))
                 }
             }
         }
@@ -1069,7 +1043,7 @@ impl_try_from_expr!(Object, i32, Error::InvalidObject);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assert_write_and_read;
+    use crate::assert_reserialize;
 
     fn expr() -> Box<Expr> {
         Box::new(Expr::Imm32(123))
@@ -1202,103 +1176,103 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_expr() {
-        assert_write_and_read!(Expr::Equal(binary_op()));
-        assert_write_and_read!(Expr::NotEqual(binary_op()));
-        assert_write_and_read!(Expr::Less(binary_op()));
-        assert_write_and_read!(Expr::LessEqual(binary_op()));
-        assert_write_and_read!(Expr::Greater(binary_op()));
-        assert_write_and_read!(Expr::GreaterEqual(binary_op()));
-        assert_write_and_read!(Expr::Not(expr()));
-        assert_write_and_read!(Expr::Add(binary_op()));
-        assert_write_and_read!(Expr::Subtract(binary_op()));
-        assert_write_and_read!(Expr::Multiply(binary_op()));
-        assert_write_and_read!(Expr::Divide(binary_op()));
-        assert_write_and_read!(Expr::Modulo(binary_op()));
-        assert_write_and_read!(Expr::BitAnd(binary_op()));
-        assert_write_and_read!(Expr::BitOr(binary_op()));
-        assert_write_and_read!(Expr::BitXor(binary_op()));
-        assert_write_and_read!(Expr::AddAssign(binary_op()));
-        assert_write_and_read!(Expr::SubtractAssign(binary_op()));
-        assert_write_and_read!(Expr::MultiplyAssign(binary_op()));
-        assert_write_and_read!(Expr::DivideAssign(binary_op()));
-        assert_write_and_read!(Expr::ModuloAssign(binary_op()));
-        assert_write_and_read!(Expr::BitAndAssign(binary_op()));
-        assert_write_and_read!(Expr::BitOrAssign(binary_op()));
-        assert_write_and_read!(Expr::BitXorAssign(binary_op()));
-        assert_write_and_read!(Expr::Imm16(123));
-        assert_write_and_read!(Expr::Imm32(123));
-        assert_write_and_read!(Expr::AddressOf(Ip::Offset(123)));
-        assert_write_and_read!(Expr::Stack(123));
-        assert_write_and_read!(Expr::ParentStack(123));
-        assert_write_and_read!(Expr::Flag(expr()));
-        assert_write_and_read!(Expr::Variable(expr()));
-        assert_write_and_read!(Expr::Result1);
-        assert_write_and_read!(Expr::Result2);
-        assert_write_and_read!(Expr::Pad(expr()));
-        assert_write_and_read!(Expr::Battery(expr()));
-        assert_write_and_read!(Expr::Money);
-        assert_write_and_read!(Expr::Item(expr()));
-        assert_write_and_read!(Expr::Atc(expr()));
-        assert_write_and_read!(Expr::Rank);
-        assert_write_and_read!(Expr::Exp);
-        assert_write_and_read!(Expr::Level);
-        assert_write_and_read!(Expr::Hold);
-        assert_write_and_read!(Expr::Map(expr()));
-        assert_write_and_read!(Expr::ActorName(expr()));
-        assert_write_and_read!(Expr::ItemName(expr()));
-        assert_write_and_read!(Expr::Time(expr()));
-        assert_write_and_read!(Expr::CurrentSuit);
-        assert_write_and_read!(Expr::Scrap);
-        assert_write_and_read!(Expr::CurrentAtc);
-        assert_write_and_read!(Expr::Use);
-        assert_write_and_read!(Expr::Hit);
-        assert_write_and_read!(Expr::StickerName(expr()));
-        assert_write_and_read!(Expr::Obj(obj_obj_expr()));
-        assert_write_and_read!(Expr::Obj(obj_pair_expr()));
-        assert_write_and_read!(Expr::Obj(obj_bone_expr()));
-        assert_write_and_read!(Expr::Random(expr()));
-        assert_write_and_read!(Expr::Sin(expr()));
-        assert_write_and_read!(Expr::Cos(expr()));
-        assert_write_and_read!(Expr::ArrayElement(array_element_expr()));
+    fn test_reserialize_expr() {
+        assert_reserialize!(Expr::Equal(binary_op()));
+        assert_reserialize!(Expr::NotEqual(binary_op()));
+        assert_reserialize!(Expr::Less(binary_op()));
+        assert_reserialize!(Expr::LessEqual(binary_op()));
+        assert_reserialize!(Expr::Greater(binary_op()));
+        assert_reserialize!(Expr::GreaterEqual(binary_op()));
+        assert_reserialize!(Expr::Not(expr()));
+        assert_reserialize!(Expr::Add(binary_op()));
+        assert_reserialize!(Expr::Subtract(binary_op()));
+        assert_reserialize!(Expr::Multiply(binary_op()));
+        assert_reserialize!(Expr::Divide(binary_op()));
+        assert_reserialize!(Expr::Modulo(binary_op()));
+        assert_reserialize!(Expr::BitAnd(binary_op()));
+        assert_reserialize!(Expr::BitOr(binary_op()));
+        assert_reserialize!(Expr::BitXor(binary_op()));
+        assert_reserialize!(Expr::AddAssign(binary_op()));
+        assert_reserialize!(Expr::SubtractAssign(binary_op()));
+        assert_reserialize!(Expr::MultiplyAssign(binary_op()));
+        assert_reserialize!(Expr::DivideAssign(binary_op()));
+        assert_reserialize!(Expr::ModuloAssign(binary_op()));
+        assert_reserialize!(Expr::BitAndAssign(binary_op()));
+        assert_reserialize!(Expr::BitOrAssign(binary_op()));
+        assert_reserialize!(Expr::BitXorAssign(binary_op()));
+        assert_reserialize!(Expr::Imm16(123));
+        assert_reserialize!(Expr::Imm32(123));
+        assert_reserialize!(Expr::AddressOf(Ip::Offset(123)));
+        assert_reserialize!(Expr::Stack(123));
+        assert_reserialize!(Expr::ParentStack(123));
+        assert_reserialize!(Expr::Flag(expr()));
+        assert_reserialize!(Expr::Variable(expr()));
+        assert_reserialize!(Expr::Result1);
+        assert_reserialize!(Expr::Result2);
+        assert_reserialize!(Expr::Pad(expr()));
+        assert_reserialize!(Expr::Battery(expr()));
+        assert_reserialize!(Expr::Money);
+        assert_reserialize!(Expr::Item(expr()));
+        assert_reserialize!(Expr::Atc(expr()));
+        assert_reserialize!(Expr::Rank);
+        assert_reserialize!(Expr::Exp);
+        assert_reserialize!(Expr::Level);
+        assert_reserialize!(Expr::Hold);
+        assert_reserialize!(Expr::Map(expr()));
+        assert_reserialize!(Expr::ActorName(expr()));
+        assert_reserialize!(Expr::ItemName(expr()));
+        assert_reserialize!(Expr::Time(expr()));
+        assert_reserialize!(Expr::CurrentSuit);
+        assert_reserialize!(Expr::Scrap);
+        assert_reserialize!(Expr::CurrentAtc);
+        assert_reserialize!(Expr::Use);
+        assert_reserialize!(Expr::Hit);
+        assert_reserialize!(Expr::StickerName(expr()));
+        assert_reserialize!(Expr::Obj(obj_obj_expr()));
+        assert_reserialize!(Expr::Obj(obj_pair_expr()));
+        assert_reserialize!(Expr::Obj(obj_bone_expr()));
+        assert_reserialize!(Expr::Random(expr()));
+        assert_reserialize!(Expr::Sin(expr()));
+        assert_reserialize!(Expr::Cos(expr()));
+        assert_reserialize!(Expr::ArrayElement(array_element_expr()));
     }
 
     #[test]
-    fn test_write_and_read_set_expr() {
-        assert_write_and_read!(SetExpr::Stack(123));
-        assert_write_and_read!(SetExpr::Flag(*expr()));
-        assert_write_and_read!(SetExpr::Variable(*expr()));
-        assert_write_and_read!(SetExpr::Result1);
-        assert_write_and_read!(SetExpr::Result2);
-        assert_write_and_read!(SetExpr::Pad(*expr()));
-        assert_write_and_read!(SetExpr::Battery(*expr()));
-        assert_write_and_read!(SetExpr::Money);
-        assert_write_and_read!(SetExpr::Item(*expr()));
-        assert_write_and_read!(SetExpr::Atc(*expr()));
-        assert_write_and_read!(SetExpr::Rank);
-        assert_write_and_read!(SetExpr::Exp);
-        assert_write_and_read!(SetExpr::Level);
-        assert_write_and_read!(SetExpr::Time(*expr()));
-        assert_write_and_read!(SetExpr::CurrentSuit);
-        assert_write_and_read!(SetExpr::Scrap);
-        assert_write_and_read!(SetExpr::CurrentAtc);
+    fn test_reserialize_set_expr() {
+        assert_reserialize!(SetExpr::Stack(123));
+        assert_reserialize!(SetExpr::Flag(*expr()));
+        assert_reserialize!(SetExpr::Variable(*expr()));
+        assert_reserialize!(SetExpr::Result1);
+        assert_reserialize!(SetExpr::Result2);
+        assert_reserialize!(SetExpr::Pad(*expr()));
+        assert_reserialize!(SetExpr::Battery(*expr()));
+        assert_reserialize!(SetExpr::Money);
+        assert_reserialize!(SetExpr::Item(*expr()));
+        assert_reserialize!(SetExpr::Atc(*expr()));
+        assert_reserialize!(SetExpr::Rank);
+        assert_reserialize!(SetExpr::Exp);
+        assert_reserialize!(SetExpr::Level);
+        assert_reserialize!(SetExpr::Time(*expr()));
+        assert_reserialize!(SetExpr::CurrentSuit);
+        assert_reserialize!(SetExpr::Scrap);
+        assert_reserialize!(SetExpr::CurrentAtc);
     }
 
     #[test]
-    fn test_write_and_read_obj_pair() {
-        assert_write_and_read!(ObjPair { first: 123, second: 456 });
+    fn test_reserialize_obj_pair() {
+        assert_reserialize!(ObjPair { first: 123, second: 456 });
     }
 
     #[test]
-    fn test_write_and_read_obj_bone() {
-        assert_write_and_read!(ObjBone { obj: 123, path: vec![1, 2, 3, 4, 5, 6, 7, 8] });
+    fn test_reserialize_obj_bone() {
+        assert_reserialize!(ObjBone { obj: 123, path: vec![1, 2, 3, 4, 5, 6, 7, 8] });
     }
 
     #[test]
-    fn test_write_and_read_sound_expr() {
-        assert_write_and_read!(SoundExpr::None);
-        assert_write_and_read!(SoundExpr::Sfx(Sfx::KitchenOil));
-        assert_write_and_read!(SoundExpr::Music(Music::BgmNight));
-        assert_write_and_read!(SoundExpr::Expr(Expr::from_var(0).into()));
+    fn test_reserialize_sound_expr() {
+        assert_reserialize!(SoundExpr::None);
+        assert_reserialize!(SoundExpr::Sfx(Sfx::KitchenOil));
+        assert_reserialize!(SoundExpr::Music(Music::BgmNight));
+        assert_reserialize!(SoundExpr::Expr(Expr::from_var(0).into()));
     }
 }

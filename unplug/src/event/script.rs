@@ -7,6 +7,7 @@ pub use writer::{BlockOffsetMap, ScriptWriter};
 use super::analysis::SubroutineEffectsMap;
 use super::block::{Block, BlockId, CodeBlock, Ip};
 use super::command::{self, Command};
+use super::serialize;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::io;
@@ -41,9 +42,13 @@ pub enum Error {
 
     #[error(transparent)]
     Io(Box<io::Error>),
+
+    #[error(transparent)]
+    Serialize(Box<serialize::Error>),
 }
 
 from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Serialize, serialize::Error);
 
 /// Describes the offset and ID of a block.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

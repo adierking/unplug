@@ -5,6 +5,7 @@ pub mod expr;
 pub mod msg;
 pub mod opcodes;
 pub mod script;
+pub mod serialize;
 
 pub use block::{Block, BlockId, CodeBlock, DataBlock, Ip};
 pub use command::Command;

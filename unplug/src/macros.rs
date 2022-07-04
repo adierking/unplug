@@ -161,7 +161,7 @@ macro_rules! expr {
 /// Each enum value can have an optional argument list attached to it, and the argument list can be
 /// specified inline (if entirely composed of `Expr`s) or use an existing type.
 ///
-/// The generated enum will implement `ReadFrom` and `WriteTo` for easy I/O.
+/// The generated enum will implement `SerializeEvent` and `DeserializeEvent` for easy I/O.
 ///
 /// # Examples
 ///
@@ -214,7 +214,8 @@ macro_rules! expr_enum {
         $(#[$meta:meta])*
         $vis:vis enum $name:ident {
             $(
-                $type:ident $( ( $args_type:ident $( { $($arg:ident),* } )? ) )? => $($val:literal)? $($op:path)?
+                $type:ident $( ( $args_type:ident $( { $($arg:ident),* } )? ) )?
+                    => $($val:literal)? $($op:path)?
             ),*
             $(,)*
         }
@@ -227,32 +228,34 @@ macro_rules! expr_enum {
             )*
         }
 
-        impl<R: ::std::io::Read + ?Sized> $crate::common::ReadFrom<R> for $name {
+        impl $crate::event::serialize::DeserializeEvent for $name {
             type Error = $error;
-            fn read_from(reader: &mut R) -> ::std::result::Result<Self, Self::Error> {
-                let expr = $crate::event::Expr::read_from(reader)?;
-                let op = expr.value().ok_or_else(|| $crate::event::expr::Error::NonConstant(expr.into()))?;
-                let ty = expr_enum!(@opmap get(op));
+            fn deserialize(
+                de: &mut dyn $crate::event::serialize::EventDeserializer
+            ) -> ::std::result::Result<Self, Self::Error> {
+                let ty = de.deserialize_type();
                 match ty {
-                    $($(Err($val))? $(Ok($op))? => Ok(Self::$type $( ( $args_type::read_from(reader)? ) )?),)*
-                    _ => Err($crate::event::expr::Error::UnrecognizedType(op).into()),
+                    $($(Err($crate::event::serialize::Error::UnrecognizedType($val)))?
+                    $(Ok($op))? => Ok(Self::$type $( ( $args_type::deserialize(de)? ) )?),)*
+                    Ok(ty) => Err($crate::event::serialize::Error::UnsupportedType(ty).into()),
+                    Err(e) => Err(e.into()),
                 }
             }
         }
 
-        impl<W: ::std::io::Write + $crate::event::block::WriteIp + ?Sized> $crate::common::WriteTo<W> for $name {
+        impl $crate::event::serialize::SerializeEvent for $name {
             type Error = $error;
-            fn write_to(&self, writer: &mut W) -> ::std::result::Result<(), Self::Error> {
+            fn serialize(
+                &self,
+                ser: &mut dyn $crate::event::serialize::EventSerializer
+            ) -> ::std::result::Result<(), Self::Error> {
                 match self {
                     $(
                         expr_enum!(@match $type $(, arg, $args_type)?) => {
-                            let value =
-                                $($val)?
-                                $(expr_enum!(@opmap value($op))
-                                    .map_err($crate::event::expr::Error::UnsupportedType)?)?;
-                            let expr = $crate::event::Expr::Imm32(value);
-                            $crate::common::WriteTo::write_to(&expr, writer)?;
-                            expr_enum!(@write $(writer, arg, $args_type)?);
+                            $($crate::event::serialize::SerializeEvent::serialize(
+                                &$crate::event::Expr::Imm32($val), ser)?;)?
+                            $(ser.serialize_type($op)?;)?
+                            expr_enum!(@serialize $(ser, arg, $args_type)?);
                         }
                     )*
                 }
@@ -266,19 +269,24 @@ macro_rules! expr_enum {
                 $(pub $arg: $crate::event::Expr,)*
             }
 
-            impl<R: ::std::io::Read + ?Sized> $crate::common::ReadFrom<R> for $args_type {
+            impl $crate::event::serialize::DeserializeEvent for $args_type {
                 type Error = $crate::event::expr::Error;
-                fn read_from(reader: &mut R) -> $crate::event::expr::Result<Self> {
+                fn deserialize(
+                    de: &mut dyn $crate::event::serialize::EventDeserializer
+                ) -> $crate::event::expr::Result<Self> {
                     Ok(Self {
-                        $($arg: $crate::event::Expr::read_from(reader)?,)*
+                        $($arg: $crate::event::serialize::DeserializeEvent::deserialize(de)?,)*
                     })
                 }
             }
 
-            impl<W: ::std::io::Write + $crate::event::block::WriteIp + ?Sized> $crate::common::WriteTo<W> for $args_type {
+            impl $crate::event::serialize::SerializeEvent for $args_type {
                 type Error = $crate::event::expr::Error;
-                fn write_to(&self, writer: &mut W) -> $crate::event::expr::Result<()> {
-                    $($crate::common::WriteTo::write_to(&self.$arg, writer)?;)*
+                fn serialize(
+                    &self,
+                    ser: &mut dyn $crate::event::serialize::EventSerializer
+                ) -> $crate::event::expr::Result<()> {
+                    $($crate::event::serialize::SerializeEvent::serialize(&self.$arg, ser)?;)*
                     Ok(())
                 }
             }
@@ -294,15 +302,10 @@ macro_rules! expr_enum {
     };
 
     // Internal rules which let us write the arg object if $args_type is present
-    (@write $writer:ident, $args_var:ident, $args_type:ident) => {
-        $crate::common::WriteTo::write_to($args_var, $writer)?;
+    (@serialize $ser:ident, $args_var:ident, $args_type:ident) => {
+        $crate::event::serialize::SerializeEvent::serialize($args_var, $ser)?
     };
-    (@write) => {};
-
-    // Internal rule for calling an OpcodeMap method
-    (@opmap $func:ident $args:tt) => {
-        <$crate::event::opcodes::Ggte as $crate::event::opcodes::OpcodeMap<$crate::event::opcodes::TypeOp>>::$func $args
-    };
+    (@serialize) => {};
 }
 
 #[cfg(test)]

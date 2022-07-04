@@ -1,15 +1,15 @@
-use super::block::{Ip, WriteIp};
+use super::block::Ip;
 use super::expr::{self, Expr, SetExpr, SoundExpr};
 use super::msg::{self, MsgArgs};
-use super::opcodes::{CmdOp, Ggte, OpcodeMap, TypeOp};
-use crate::common::{ReadFrom, Text, WriteTo};
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use super::opcodes::{CmdOp, TypeOp};
+use super::serialize::{
+    self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
+};
+use crate::common::Text;
 use std::convert::{TryFrom, TryInto};
-use std::ffi::CString;
 use std::fmt;
-use std::io::{self, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
-use unplug_proc::{ReadFrom, WriteTo};
+use unplug_proc::{DeserializeEvent, SerializeEvent};
 
 /// The result type for command operations.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -18,12 +18,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
-    #[error("unrecognized command opcode: {0}")]
-    UnrecognizedOp(u8),
-
-    #[error("unsupported command: {0:?}")]
-    UnsupportedCommand(CmdOp),
-
     #[error(transparent)]
     Expr(Box<expr::Error>),
 
@@ -31,12 +25,12 @@ pub enum Error {
     Msg(Box<msg::Error>),
 
     #[error(transparent)]
-    Io(Box<io::Error>),
+    Serialize(Box<serialize::Error>),
 }
 
 from_error_boxed!(Error::Expr, expr::Error);
 from_error_boxed!(Error::Msg, msg::Error);
-from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Serialize, serialize::Error);
 
 /// A command in an event.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,121 +223,122 @@ impl Command {
     }
 }
 
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for Command {
+impl DeserializeEvent for Command {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let opcode = reader.read_u8()?;
-        let cmd = Ggte::get(opcode).map_err(Error::UnrecognizedOp)?;
-        Ok(match cmd {
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        let cmd = de.begin_command()?;
+        let result = match cmd {
             CmdOp::Abort => Self::Abort,
             CmdOp::Return => Self::Return,
-            CmdOp::Goto => Self::Goto(Ip::read_from(reader)?),
-            CmdOp::Set => Self::Set(SetArgs::read_from(reader)?.into()),
-            CmdOp::If => Self::If(IfArgs::read_from(reader)?.into()),
-            CmdOp::Elif => Self::Elif(IfArgs::read_from(reader)?.into()),
-            CmdOp::EndIf => Self::EndIf(Ip::read_from(reader)?),
-            CmdOp::Case => Self::Case(IfArgs::read_from(reader)?.into()),
-            CmdOp::Expr => Self::Expr(IfArgs::read_from(reader)?.into()),
-            CmdOp::While => Self::While(IfArgs::read_from(reader)?.into()),
-            CmdOp::Break => Self::Break(Ip::read_from(reader)?),
-            CmdOp::Run => Self::Run(Ip::read_from(reader)?),
-            CmdOp::Lib => Self::Lib(reader.read_i16::<LE>()?),
+            CmdOp::Goto => Self::Goto(Ip::deserialize(de)?),
+            CmdOp::Set => Self::Set(SetArgs::deserialize(de)?.into()),
+            CmdOp::If => Self::If(IfArgs::deserialize(de)?.into()),
+            CmdOp::Elif => Self::Elif(IfArgs::deserialize(de)?.into()),
+            CmdOp::EndIf => Self::EndIf(Ip::deserialize(de)?),
+            CmdOp::Case => Self::Case(IfArgs::deserialize(de)?.into()),
+            CmdOp::Expr => Self::Expr(IfArgs::deserialize(de)?.into()),
+            CmdOp::While => Self::While(IfArgs::deserialize(de)?.into()),
+            CmdOp::Break => Self::Break(Ip::deserialize(de)?),
+            CmdOp::Run => Self::Run(Ip::deserialize(de)?),
+            CmdOp::Lib => Self::Lib(de.deserialize_i16()?),
             CmdOp::PushBp => Self::PushBp,
             CmdOp::PopBp => Self::PopBp,
-            CmdOp::SetSp => Self::SetSp(Expr::read_from(reader)?.into()),
-            CmdOp::Anim => Self::Anim(AnimArgs::read_from(reader)?.into()),
-            CmdOp::Anim1 => Self::Anim1(AnimArgs::read_from(reader)?.into()),
-            CmdOp::Anim2 => Self::Anim2(AnimArgs::read_from(reader)?.into()),
-            CmdOp::Attach => Self::Attach(AttachArgs::read_from(reader)?.into()),
-            CmdOp::Born => Self::Born(BornArgs::read_from(reader)?.into()),
-            CmdOp::Call => Self::Call(CallArgs::read_from(reader)?.into()),
-            CmdOp::Camera => Self::Camera(CameraType::read_from(reader)?.into()),
-            CmdOp::Check => Self::Check(CheckType::read_from(reader)?.into()),
-            CmdOp::Color => Self::Color(ColorArgs::read_from(reader)?.into()),
-            CmdOp::Detach => Self::Detach(Expr::read_from(reader)?.into()),
-            CmdOp::Dir => Self::Dir(DirArgs::read_from(reader)?.into()),
-            CmdOp::MDir => Self::MDir(MDirArgs::read_from(reader)?.into()),
-            CmdOp::Disp => Self::Disp(DispArgs::read_from(reader)?.into()),
-            CmdOp::Kill => Self::Kill(Expr::read_from(reader)?.into()),
-            CmdOp::Light => Self::Light(LightArgs::read_from(reader)?.into()),
-            CmdOp::Menu => Self::Menu(MenuType::read_from(reader)?.into()),
-            CmdOp::Move => Self::Move(MoveArgs::read_from(reader)?.into()),
-            CmdOp::MoveTo => Self::MoveTo(MoveToArgs::read_from(reader)?.into()),
-            CmdOp::Msg => Self::Msg(MsgArgs::read_from(reader)?.into()),
-            CmdOp::Pos => Self::Pos(PosArgs::read_from(reader)?.into()),
-            CmdOp::PrintF => Self::PrintF(PrintFArgs::read_from(reader)?.into()),
-            CmdOp::Ptcl => Self::Ptcl(PtclArgs::read_from(reader)?.into()),
-            CmdOp::Read => Self::Read(ReadType::read_from(reader)?.into()),
-            CmdOp::Scale => Self::Scale(ScaleArgs::read_from(reader)?.into()),
-            CmdOp::MScale => Self::MScale(MScaleArgs::read_from(reader)?.into()),
-            CmdOp::Scrn => Self::Scrn(ScrnType::read_from(reader)?.into()),
-            CmdOp::Select => Self::Select(MsgArgs::read_from(reader)?.into()),
-            CmdOp::Sfx => Self::Sfx(SfxArgs::read_from(reader)?.into()),
-            CmdOp::Timer => Self::Timer(TimerArgs::read_from(reader)?.into()),
-            CmdOp::Wait => Self::Wait(CheckType::read_from(reader)?.into()),
-            CmdOp::Warp => Self::Warp(WarpArgs::read_from(reader)?.into()),
-            CmdOp::Win => Self::Win(WinType::read_from(reader)?.into()),
-            CmdOp::Movie => Self::Movie(MovieArgs::read_from(reader)?.into()),
-        })
+            CmdOp::SetSp => Self::SetSp(Expr::deserialize(de)?.into()),
+            CmdOp::Anim => Self::Anim(AnimArgs::deserialize(de)?.into()),
+            CmdOp::Anim1 => Self::Anim1(AnimArgs::deserialize(de)?.into()),
+            CmdOp::Anim2 => Self::Anim2(AnimArgs::deserialize(de)?.into()),
+            CmdOp::Attach => Self::Attach(AttachArgs::deserialize(de)?.into()),
+            CmdOp::Born => Self::Born(BornArgs::deserialize(de)?.into()),
+            CmdOp::Call => Self::Call(CallArgs::deserialize(de)?.into()),
+            CmdOp::Camera => Self::Camera(CameraType::deserialize(de)?.into()),
+            CmdOp::Check => Self::Check(CheckType::deserialize(de)?.into()),
+            CmdOp::Color => Self::Color(ColorArgs::deserialize(de)?.into()),
+            CmdOp::Detach => Self::Detach(Expr::deserialize(de)?.into()),
+            CmdOp::Dir => Self::Dir(DirArgs::deserialize(de)?.into()),
+            CmdOp::MDir => Self::MDir(MDirArgs::deserialize(de)?.into()),
+            CmdOp::Disp => Self::Disp(DispArgs::deserialize(de)?.into()),
+            CmdOp::Kill => Self::Kill(Expr::deserialize(de)?.into()),
+            CmdOp::Light => Self::Light(LightArgs::deserialize(de)?.into()),
+            CmdOp::Menu => Self::Menu(MenuType::deserialize(de)?.into()),
+            CmdOp::Move => Self::Move(MoveArgs::deserialize(de)?.into()),
+            CmdOp::MoveTo => Self::MoveTo(MoveToArgs::deserialize(de)?.into()),
+            CmdOp::Msg => Self::Msg(MsgArgs::deserialize(de)?.into()),
+            CmdOp::Pos => Self::Pos(PosArgs::deserialize(de)?.into()),
+            CmdOp::PrintF => Self::PrintF(PrintFArgs::deserialize(de)?.into()),
+            CmdOp::Ptcl => Self::Ptcl(PtclArgs::deserialize(de)?.into()),
+            CmdOp::Read => Self::Read(ReadType::deserialize(de)?.into()),
+            CmdOp::Scale => Self::Scale(ScaleArgs::deserialize(de)?.into()),
+            CmdOp::MScale => Self::MScale(MScaleArgs::deserialize(de)?.into()),
+            CmdOp::Scrn => Self::Scrn(ScrnType::deserialize(de)?.into()),
+            CmdOp::Select => Self::Select(MsgArgs::deserialize(de)?.into()),
+            CmdOp::Sfx => Self::Sfx(SfxArgs::deserialize(de)?.into()),
+            CmdOp::Timer => Self::Timer(TimerArgs::deserialize(de)?.into()),
+            CmdOp::Wait => Self::Wait(CheckType::deserialize(de)?.into()),
+            CmdOp::Warp => Self::Warp(WarpArgs::deserialize(de)?.into()),
+            CmdOp::Win => Self::Win(WinType::deserialize(de)?.into()),
+            CmdOp::Movie => Self::Movie(MovieArgs::deserialize(de)?.into()),
+        };
+        de.end_command()?;
+        Ok(result)
     }
 }
 
-impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for Command {
+impl SerializeEvent for Command {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        let opcode = Ggte::value(self.opcode()).map_err(Error::UnsupportedCommand)?;
-        writer.write_u8(opcode)?;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        ser.begin_command(self.opcode())?;
         match self {
-            Self::Abort => Ok(()),
-            Self::Return => Ok(()),
-            Self::Goto(ip) => Ok(ip.write_to(writer)?),
-            Self::Set(arg) => arg.write_to(writer),
-            Self::If(arg) => arg.write_to(writer),
-            Self::Elif(arg) => arg.write_to(writer),
-            Self::EndIf(ip) => Ok(ip.write_to(writer)?),
-            Self::Case(arg) => arg.write_to(writer),
-            Self::Expr(arg) => arg.write_to(writer),
-            Self::While(arg) => arg.write_to(writer),
-            Self::Break(ip) => Ok(ip.write_to(writer)?),
-            Self::Run(ip) => Ok(ip.write_to(writer)?),
-            Self::Lib(index) => Ok(writer.write_i16::<LE>(*index)?),
-            Self::PushBp => Ok(()),
-            Self::PopBp => Ok(()),
-            Self::SetSp(arg) => Ok(arg.write_to(writer)?),
-            Self::Anim(arg) => arg.write_to(writer),
-            Self::Anim1(arg) => arg.write_to(writer),
-            Self::Anim2(arg) => arg.write_to(writer),
-            Self::Attach(arg) => arg.write_to(writer),
-            Self::Born(arg) => arg.write_to(writer),
-            Self::Call(arg) => arg.write_to(writer),
-            Self::Camera(arg) => arg.write_to(writer),
-            Self::Check(arg) => arg.write_to(writer),
-            Self::Color(arg) => arg.write_to(writer),
-            Self::Detach(arg) => Ok(arg.write_to(writer)?),
-            Self::Dir(arg) => arg.write_to(writer),
-            Self::MDir(arg) => arg.write_to(writer),
-            Self::Disp(arg) => arg.write_to(writer),
-            Self::Kill(arg) => Ok(arg.write_to(writer)?),
-            Self::Light(arg) => arg.write_to(writer),
-            Self::Menu(arg) => arg.write_to(writer),
-            Self::Move(arg) => arg.write_to(writer),
-            Self::MoveTo(arg) => arg.write_to(writer),
-            Self::Msg(arg) => Ok(arg.write_to(writer)?),
-            Self::Pos(arg) => arg.write_to(writer),
-            Self::PrintF(arg) => Ok(arg.write_to(writer)?),
-            Self::Ptcl(arg) => arg.write_to(writer),
-            Self::Read(arg) => arg.write_to(writer),
-            Self::Scale(arg) => arg.write_to(writer),
-            Self::MScale(arg) => arg.write_to(writer),
-            Self::Scrn(arg) => arg.write_to(writer),
-            Self::Select(arg) => Ok(arg.write_to(writer)?),
-            Self::Sfx(arg) => arg.write_to(writer),
-            Self::Timer(arg) => arg.write_to(writer),
-            Self::Wait(arg) => arg.write_to(writer),
-            Self::Warp(arg) => arg.write_to(writer),
-            Self::Win(arg) => arg.write_to(writer),
-            Self::Movie(arg) => arg.write_to(writer),
+            Self::Abort => (),
+            Self::Return => (),
+            Self::Goto(ip) => ip.serialize(ser)?,
+            Self::Set(arg) => arg.serialize(ser)?,
+            Self::If(arg) => arg.serialize(ser)?,
+            Self::Elif(arg) => arg.serialize(ser)?,
+            Self::EndIf(ip) => ip.serialize(ser)?,
+            Self::Case(arg) => arg.serialize(ser)?,
+            Self::Expr(arg) => arg.serialize(ser)?,
+            Self::While(arg) => arg.serialize(ser)?,
+            Self::Break(ip) => ip.serialize(ser)?,
+            Self::Run(ip) => ip.serialize(ser)?,
+            Self::Lib(index) => index.serialize(ser)?,
+            Self::PushBp => (),
+            Self::PopBp => (),
+            Self::SetSp(arg) => arg.serialize(ser)?,
+            Self::Anim(arg) => arg.serialize(ser)?,
+            Self::Anim1(arg) => arg.serialize(ser)?,
+            Self::Anim2(arg) => arg.serialize(ser)?,
+            Self::Attach(arg) => arg.serialize(ser)?,
+            Self::Born(arg) => arg.serialize(ser)?,
+            Self::Call(arg) => arg.serialize(ser)?,
+            Self::Camera(arg) => arg.serialize(ser)?,
+            Self::Check(arg) => arg.serialize(ser)?,
+            Self::Color(arg) => arg.serialize(ser)?,
+            Self::Detach(arg) => arg.serialize(ser)?,
+            Self::Dir(arg) => arg.serialize(ser)?,
+            Self::MDir(arg) => arg.serialize(ser)?,
+            Self::Disp(arg) => arg.serialize(ser)?,
+            Self::Kill(arg) => arg.serialize(ser)?,
+            Self::Light(arg) => arg.serialize(ser)?,
+            Self::Menu(arg) => arg.serialize(ser)?,
+            Self::Move(arg) => arg.serialize(ser)?,
+            Self::MoveTo(arg) => arg.serialize(ser)?,
+            Self::Msg(arg) => arg.serialize(ser)?,
+            Self::Pos(arg) => arg.serialize(ser)?,
+            Self::PrintF(arg) => arg.serialize(ser)?,
+            Self::Ptcl(arg) => arg.serialize(ser)?,
+            Self::Read(arg) => arg.serialize(ser)?,
+            Self::Scale(arg) => arg.serialize(ser)?,
+            Self::MScale(arg) => arg.serialize(ser)?,
+            Self::Scrn(arg) => arg.serialize(ser)?,
+            Self::Select(arg) => arg.serialize(ser)?,
+            Self::Sfx(arg) => arg.serialize(ser)?,
+            Self::Timer(arg) => arg.serialize(ser)?,
+            Self::Wait(arg) => arg.serialize(ser)?,
+            Self::Warp(arg) => arg.serialize(ser)?,
+            Self::Win(arg) => arg.serialize(ser)?,
+            Self::Movie(arg) => arg.serialize(ser)?,
         }
+        Ok(ser.end_command()?)
     }
 }
 
@@ -366,29 +361,29 @@ impl From<SetArgs> for Command {
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for SetArgs {
+impl DeserializeEvent for SetArgs {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
         // set() has an optimization where in-place assignments (e.g. `a += b`) only store one
         // expression instead of two. The expression for the assignment target is interpreted as
         // both an Expr and an SetExpr.
-        let value = Expr::read_from(reader)?;
+        let value = Expr::deserialize(de)?;
         let target = if value.is_assign() {
             value.lhs().unwrap().clone().try_into()?
         } else {
-            SetExpr::read_from(reader)?
+            SetExpr::deserialize(de)?
         };
         Ok(Self { value, target })
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for SetArgs {
+impl SerializeEvent for SetArgs {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        self.value.write_to(writer)?;
-        // See read_from()
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        self.value.serialize(ser)?;
+        // See deserialize()
         if !self.value.is_assign() {
-            self.target.write_to(writer)?;
+            self.target.serialize(ser)?;
         }
         Ok(())
     }
@@ -401,9 +396,8 @@ impl fmt::Debug for SetArgs {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct IfArgs {
     pub condition: Expr,
     pub else_target: Ip,
@@ -415,13 +409,13 @@ pub struct AnimArgs {
     pub values: Vec<Expr>,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for AnimArgs {
+impl DeserializeEvent for AnimArgs {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let obj = Expr::read_from(reader)?;
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        let obj = Expr::deserialize(de)?;
         let mut values = vec![];
         loop {
-            let val = Expr::read_from(reader)?;
+            let val = Expr::deserialize(de)?;
             if let Some(-1) = val.value() {
                 break;
             }
@@ -431,29 +425,27 @@ impl<R: Read + ?Sized> ReadFrom<R> for AnimArgs {
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for AnimArgs {
+impl SerializeEvent for AnimArgs {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        self.obj.write_to(writer)?;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        self.obj.serialize(ser)?;
         for val in &self.values {
-            val.write_to(writer)?;
+            val.serialize(ser)?;
         }
-        Expr::Imm32(-1).write_to(writer)?;
+        Expr::Imm32(-1).serialize(ser)?;
         Ok(())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct AttachArgs {
     pub obj: Expr,
     pub event: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct BornArgs {
     pub val1: Expr,
     pub val2: Expr,
@@ -473,41 +465,29 @@ pub struct CallArgs {
     pub args: Vec<Expr>,
 }
 
-impl<R: Read + Seek + ?Sized> ReadFrom<R> for CallArgs {
+impl DeserializeEvent for CallArgs {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let start_offset = reader.seek(SeekFrom::Current(0))?;
-        let command_size = reader.read_i16::<LE>()?;
-        let end_offset = start_offset + command_size as u64;
-        let obj = Expr::read_from(reader)?;
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        de.begin_call()?;
+        let obj = Expr::deserialize(de)?;
         let mut args = vec![];
-        while reader.seek(SeekFrom::Current(0))? < end_offset {
-            args.push(Expr::read_from(reader)?);
+        while de.have_call_arg()? {
+            args.push(Expr::deserialize(de)?);
         }
+        de.end_call()?;
         Ok(Self { obj, args })
     }
 }
 
-impl<W: Write + WriteIp + Seek + ?Sized> WriteTo<W> for CallArgs {
+impl SerializeEvent for CallArgs {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        // Write a command size of 0 for now
-        let start_offset = writer.seek(SeekFrom::Current(0))?;
-        writer.write_i16::<LE>(0)?;
-
-        self.obj.write_to(writer)?;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        ser.begin_call()?;
+        self.obj.serialize(ser)?;
         for arg in &self.args {
-            arg.write_to(writer)?;
+            arg.serialize(ser)?;
         }
-
-        // Now go back and fill in the command size
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
-        let command_size =
-            i16::try_from(end_offset - start_offset).expect("CallArgs size overflow");
-        writer.seek(SeekFrom::Start(start_offset))?;
-        writer.write_i16::<LE>(command_size)?;
-        writer.seek(SeekFrom::Start(end_offset))?;
-        Ok(())
+        Ok(ser.end_call()?)
     }
 }
 
@@ -573,16 +553,14 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct CheckSfxArgs {
     sfx: SoundExpr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct ColorArgs {
     pub obj: Expr,
     pub ty: ColorType,
@@ -600,17 +578,15 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct DirArgs {
     pub obj: Expr,
     pub val: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct MDirArgs {
     pub obj: Expr,
     pub ty: MDirType,
@@ -628,17 +604,15 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct DispArgs {
     pub obj: Expr,
     pub disp: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct LightArgs {
     pub val: Expr,
     pub ty: LightType,
@@ -669,9 +643,8 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct MoveArgs {
     pub obj: Expr,
     pub val1: Expr,
@@ -680,9 +653,8 @@ pub struct MoveArgs {
     pub val4: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct MoveToArgs {
     pub obj: Expr,
     pub val1: Expr,
@@ -693,9 +665,8 @@ pub struct MoveToArgs {
     pub val6: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct PosArgs {
     pub obj: Expr,
     pub x: Expr,
@@ -706,19 +677,17 @@ pub struct PosArgs {
 #[derive(Clone, PartialEq, Eq)]
 pub struct PrintFArgs(pub Text);
 
-impl<R: Read + ?Sized> ReadFrom<R> for PrintFArgs {
-    type Error = io::Error;
-    fn read_from(reader: &mut R) -> io::Result<Self> {
-        Ok(Self(CString::read_from(reader)?.into()))
+impl DeserializeEvent for PrintFArgs {
+    type Error = serialize::Error;
+    fn deserialize(de: &mut dyn EventDeserializer) -> serialize::Result<Self> {
+        Ok(Self(de.deserialize_text()?))
     }
 }
 
-impl<W: Write + ?Sized> WriteTo<W> for PrintFArgs {
-    type Error = io::Error;
-    fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_all(self.0.as_bytes())?;
-        writer.write_u8(0)?;
-        Ok(())
+impl SerializeEvent for PrintFArgs {
+    type Error = serialize::Error;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> serialize::Result<()> {
+        self.0.serialize(ser)
     }
 }
 
@@ -728,9 +697,8 @@ impl fmt::Debug for PrintFArgs {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct PtclArgs {
     pub val: Expr,
     pub ty: PtclType,
@@ -752,31 +720,28 @@ pub struct PtclLeadArgs {
     args: Vec<Expr>,
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for PtclLeadArgs {
+impl DeserializeEvent for PtclLeadArgs {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        let obj = Expr::read_from(reader)?;
-        let argc_op = Expr::read_from(reader)?;
-        let argc = match argc_op.value() {
-            Some(x) => x,
-            None => return Err(expr::Error::NonConstant(argc_op.into()).into()),
-        };
+    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+        let obj = Expr::deserialize(de)?;
+        let argc_expr = Expr::deserialize(de)?;
+        let argc = argc_expr.value().ok_or_else(|| expr::Error::NonConstant(argc_expr.opcode()))?;
         let mut args = vec![];
         for _ in 0..argc {
-            args.push(Expr::read_from(reader)?);
+            args.push(Expr::deserialize(de)?);
         }
         Ok(Self { obj, args })
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for PtclLeadArgs {
+impl SerializeEvent for PtclLeadArgs {
     type Error = Error;
-    fn write_to(&self, writer: &mut W) -> Result<()> {
-        self.obj.write_to(writer)?;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+        self.obj.serialize(ser)?;
         let argc = i32::try_from(self.args.len()).expect("PtclLeadArgs size overflow");
-        Expr::Imm32(argc).write_to(writer)?;
+        Expr::Imm32(argc).serialize(ser)?;
         for arg in &self.args {
-            arg.write_to(writer)?;
+            arg.serialize(ser)?;
         }
         Ok(())
     }
@@ -790,9 +755,8 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct ScaleArgs {
     pub obj: Expr,
     pub x: Expr,
@@ -800,9 +764,8 @@ pub struct ScaleArgs {
     pub z: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct MScaleArgs {
     pub obj: Expr,
     pub x: Expr,
@@ -859,9 +822,8 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct SfxArgs {
     pub sfx: SoundExpr,
     pub ty: SfxType,
@@ -881,17 +843,15 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct TimerArgs {
     pub duration: Expr,
     pub event: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct WarpArgs {
     pub stage: Expr,
     pub val: Expr,
@@ -908,9 +868,8 @@ expr_enum! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ReadFrom, WriteTo)]
-#[read_from(error = Error)]
-#[write_to(stream = Write + WriteIp, error = Error)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeEvent, DeserializeEvent)]
+#[serialize(error = Error)]
 pub struct MovieArgs {
     pub path: Expr,
     pub val1: Expr,
@@ -923,7 +882,7 @@ pub struct MovieArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assert_write_and_read;
+    use crate::assert_reserialize;
     use crate::common::Text;
     use crate::data::Music;
     use crate::event::expr::BinaryOp;
@@ -950,47 +909,44 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_command() {
-        assert_write_and_read!(Command::Abort);
-        assert_write_and_read!(Command::Return);
-        assert_write_and_read!(Command::Goto(ip()));
-        assert_write_and_read!(Command::Set(Box::new(SetArgs {
+    fn test_reserialize_command() {
+        assert_reserialize!(Command::Abort);
+        assert_reserialize!(Command::Return);
+        assert_reserialize!(Command::Goto(ip()));
+        assert_reserialize!(Command::Set(Box::new(SetArgs {
             target: SetExpr::from_var(123),
             value: expr(),
         })));
-        assert_write_and_read!(Command::Set(Box::new(SetArgs {
+        assert_reserialize!(Command::Set(Box::new(SetArgs {
             target: SetExpr::from_var(123),
             value: Expr::AddAssign(binary_op(Expr::from_var(123), expr())),
         })));
-        assert_write_and_read!(Command::If(if_args()));
-        assert_write_and_read!(Command::Elif(if_args()));
-        assert_write_and_read!(Command::EndIf(ip()));
-        assert_write_and_read!(Command::Case(if_args()));
-        assert_write_and_read!(Command::Expr(if_args()));
-        assert_write_and_read!(Command::While(if_args()));
-        assert_write_and_read!(Command::Break(ip()));
-        assert_write_and_read!(Command::Run(ip()));
-        assert_write_and_read!(Command::Lib(123));
-        assert_write_and_read!(Command::PushBp);
-        assert_write_and_read!(Command::PopBp);
-        assert_write_and_read!(Command::SetSp(Box::new(expr())));
-        assert_write_and_read!(Command::Anim(Box::new(AnimArgs {
+        assert_reserialize!(Command::If(if_args()));
+        assert_reserialize!(Command::Elif(if_args()));
+        assert_reserialize!(Command::EndIf(ip()));
+        assert_reserialize!(Command::Case(if_args()));
+        assert_reserialize!(Command::Expr(if_args()));
+        assert_reserialize!(Command::While(if_args()));
+        assert_reserialize!(Command::Break(ip()));
+        assert_reserialize!(Command::Run(ip()));
+        assert_reserialize!(Command::Lib(123));
+        assert_reserialize!(Command::PushBp);
+        assert_reserialize!(Command::PopBp);
+        assert_reserialize!(Command::SetSp(Box::new(expr())));
+        assert_reserialize!(Command::Anim(Box::new(AnimArgs {
             obj: expr(),
             values: vec![expr(), expr(), expr(), expr(), expr(), expr()],
         })));
-        assert_write_and_read!(Command::Anim1(Box::new(AnimArgs {
+        assert_reserialize!(Command::Anim1(Box::new(AnimArgs {
             obj: expr(),
             values: vec![expr(), expr(), expr(), expr(), expr(), expr()],
         })));
-        assert_write_and_read!(Command::Anim2(Box::new(AnimArgs {
+        assert_reserialize!(Command::Anim2(Box::new(AnimArgs {
             obj: expr(),
             values: vec![expr(), expr(), expr(), expr(), expr(), expr()],
         })));
-        assert_write_and_read!(Command::Attach(Box::new(AttachArgs {
-            obj: expr(),
-            event: expr(),
-        })));
-        assert_write_and_read!(Command::Born(Box::new(BornArgs {
+        assert_reserialize!(Command::Attach(Box::new(AttachArgs { obj: expr(), event: expr() })));
+        assert_reserialize!(Command::Born(Box::new(BornArgs {
             val1: expr(),
             val2: expr(),
             val3: expr(),
@@ -1002,19 +958,19 @@ mod tests {
             val9: expr(),
             event: expr(),
         })));
-        assert_write_and_read!(Command::Call(Box::new(CallArgs {
+        assert_reserialize!(Command::Call(Box::new(CallArgs {
             obj: expr(),
             args: vec![expr(), expr(), expr()],
         })));
-        assert_write_and_read!(Command::Camera(Box::new(CameraType::Anim(CameraAnimArgs {
+        assert_reserialize!(Command::Camera(Box::new(CameraType::Anim(CameraAnimArgs {
             val1: expr(),
             val2: expr(),
             val3: expr(),
         }))));
-        assert_write_and_read!(Command::Check(Box::new(CheckType::Scale(CheckScaleArgs {
+        assert_reserialize!(Command::Check(Box::new(CheckType::Scale(CheckScaleArgs {
             obj: expr(),
         }))));
-        assert_write_and_read!(Command::Color(Box::new(ColorArgs {
+        assert_reserialize!(Command::Color(Box::new(ColorArgs {
             obj: expr(),
             ty: ColorType::Modulate,
             val1: expr(),
@@ -1022,29 +978,29 @@ mod tests {
             val3: expr(),
             val4: expr(),
         })));
-        assert_write_and_read!(Command::Detach(Box::new(expr())));
-        assert_write_and_read!(Command::Dir(Box::new(DirArgs { obj: expr(), val: expr() })));
-        assert_write_and_read!(Command::MDir(Box::new(MDirArgs {
+        assert_reserialize!(Command::Detach(Box::new(expr())));
+        assert_reserialize!(Command::Dir(Box::new(DirArgs { obj: expr(), val: expr() })));
+        assert_reserialize!(Command::MDir(Box::new(MDirArgs {
             obj: expr(),
             ty: MDirType::Dir(MDirDirArgs { val: expr() }),
             val1: expr(),
             val2: expr(),
         })));
-        assert_write_and_read!(Command::Disp(Box::new(DispArgs { obj: expr(), disp: expr() })));
-        assert_write_and_read!(Command::Kill(Box::new(expr())));
-        assert_write_and_read!(Command::Light(Box::new(LightArgs {
+        assert_reserialize!(Command::Disp(Box::new(DispArgs { obj: expr(), disp: expr() })));
+        assert_reserialize!(Command::Kill(Box::new(expr())));
+        assert_reserialize!(Command::Light(Box::new(LightArgs {
             val: expr(),
             ty: LightType::Pos(LightPosArgs { x: expr(), y: expr(), z: expr() }),
         })));
-        assert_write_and_read!(Command::Menu(Box::new(MenuType::Item)));
-        assert_write_and_read!(Command::Move(Box::new(MoveArgs {
+        assert_reserialize!(Command::Menu(Box::new(MenuType::Item)));
+        assert_reserialize!(Command::Move(Box::new(MoveArgs {
             obj: expr(),
             val1: expr(),
             val2: expr(),
             val3: expr(),
             val4: expr(),
         })));
-        assert_write_and_read!(Command::MoveTo(Box::new(MoveToArgs {
+        assert_reserialize!(Command::MoveTo(Box::new(MoveToArgs {
             obj: expr(),
             val1: expr(),
             val2: expr(),
@@ -1053,64 +1009,64 @@ mod tests {
             val5: expr(),
             val6: expr(),
         })));
-        assert_write_and_read!(Command::Msg(Box::new(MsgArgs::from(text("bunger")))));
-        assert_write_and_read!(Command::Pos(Box::new(PosArgs {
+        assert_reserialize!(Command::Msg(Box::new(MsgArgs::from(text("bunger")))));
+        assert_reserialize!(Command::Pos(Box::new(PosArgs {
             obj: expr(),
             x: expr(),
             y: expr(),
             z: expr(),
         })));
-        assert_write_and_read!(Command::PrintF(Box::new(PrintFArgs(text("bunger")))));
-        assert_write_and_read!(Command::PrintF(Box::new(PrintFArgs(text("スプラトゥーン")))));
-        assert_write_and_read!(Command::Ptcl(Box::new(PtclArgs {
+        assert_reserialize!(Command::PrintF(Box::new(PrintFArgs(text("bunger")))));
+        assert_reserialize!(Command::PrintF(Box::new(PrintFArgs(text("スプラトゥーン")))));
+        assert_reserialize!(Command::Ptcl(Box::new(PtclArgs {
             val: expr(),
             ty: PtclType::Lead(PtclLeadArgs { obj: expr(), args: vec![expr(), expr(), expr()] }),
         })));
-        assert_write_and_read!(Command::Read(Box::new(ReadType::Anim(ReadAnimArgs {
+        assert_reserialize!(Command::Read(Box::new(ReadType::Anim(ReadAnimArgs {
             obj: expr(),
             path: expr(),
         }))));
-        assert_write_and_read!(Command::Scale(Box::new(ScaleArgs {
+        assert_reserialize!(Command::Scale(Box::new(ScaleArgs {
             obj: expr(),
             x: expr(),
             y: expr(),
             z: expr(),
         })));
-        assert_write_and_read!(Command::MScale(Box::new(MScaleArgs {
+        assert_reserialize!(Command::MScale(Box::new(MScaleArgs {
             obj: expr(),
             x: expr(),
             y: expr(),
             z: expr(),
             val: expr(),
         })));
-        assert_write_and_read!(Command::Scrn(Box::new(ScrnType::Unk234(ScrnUnk234Args {
+        assert_reserialize!(Command::Scrn(Box::new(ScrnType::Unk234(ScrnUnk234Args {
             val1: expr(),
             val2: expr(),
             val3: expr(),
             val4: expr(),
             val5: expr(),
         }))));
-        assert_write_and_read!(Command::Select(Box::new(MsgArgs::from(vec![
+        assert_reserialize!(Command::Select(Box::new(MsgArgs::from(vec![
             MsgCommand::Text(text("circle")),
             MsgCommand::Newline,
             MsgCommand::Text(text("middle")),
             MsgCommand::Newline,
             MsgCommand::Text(text("radar")),
         ]))));
-        assert_write_and_read!(Command::Sfx(Box::new(SfxArgs {
+        assert_reserialize!(Command::Sfx(Box::new(SfxArgs {
             sfx: SoundExpr::Music(Music::BgmNight),
             ty: SfxType::Stop
         })));
-        assert_write_and_read!(Command::Timer(Box::new(TimerArgs {
+        assert_reserialize!(Command::Timer(Box::new(TimerArgs {
             duration: expr(),
             event: expr(),
         })));
-        assert_write_and_read!(Command::Wait(Box::new(CheckType::Scale(CheckScaleArgs {
+        assert_reserialize!(Command::Wait(Box::new(CheckType::Scale(CheckScaleArgs {
             obj: expr(),
         }))));
-        assert_write_and_read!(Command::Warp(Box::new(WarpArgs { stage: expr(), val: expr() })));
-        assert_write_and_read!(Command::Win(Box::new(WinType::Unk209)));
-        assert_write_and_read!(Command::Movie(Box::new(MovieArgs {
+        assert_reserialize!(Command::Warp(Box::new(WarpArgs { stage: expr(), val: expr() })));
+        assert_reserialize!(Command::Win(Box::new(WinType::Unk209)));
+        assert_reserialize!(Command::Movie(Box::new(MovieArgs {
             path: expr(),
             val1: expr(),
             val2: expr(),

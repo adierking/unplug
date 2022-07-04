@@ -137,6 +137,17 @@ pub trait WriteIp {
     fn write_rel_offset(&mut self, offset: i32) -> io::Result<()>;
 }
 
+// Blanket implementation for mutable references
+impl<W: WriteIp> WriteIp for &mut W {
+    fn write_ip(&mut self, ip: Ip) -> io::Result<()> {
+        (**self).write_ip(ip)
+    }
+
+    fn write_rel_offset(&mut self, offset: i32) -> io::Result<()> {
+        (**self).write_rel_offset(offset)
+    }
+}
+
 /// A block of data in a script.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Block {
