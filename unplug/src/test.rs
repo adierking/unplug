@@ -1,8 +1,9 @@
 use crate::audio::format::{FormatTag, PcmS16Le, ReadWriteBytes};
 use crate::audio::Samples;
 use crate::common::{ReadFrom, WriteTo};
+use crate::event::bin::{BinDeserializer, BinSerializer};
 use crate::event::block::{Ip, WriteIp};
-use crate::event::serialize::{BinDeserializer, BinSerializer, DeserializeEvent, SerializeEvent};
+use crate::event::serialize::{DeserializeEvent, SerializeEvent};
 use byteorder::{ByteOrder, WriteBytesExt, LE};
 use ctor::ctor;
 use std::fmt::{Debug, Display};

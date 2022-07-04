@@ -689,7 +689,7 @@ mod tests {
 
     use crate::assert_reserialize;
     use crate::data::Music;
-    use crate::event::serialize::BinSerializer;
+    use crate::event::bin::BinSerializer;
     use std::io::Cursor;
 
     fn msg(command: MsgCommand) -> MsgArgs {

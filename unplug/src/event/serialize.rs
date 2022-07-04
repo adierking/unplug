@@ -1,6 +1,3 @@
-mod bin;
-pub use bin::{BinDeserializer, BinSerializer};
-
 use super::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
 use super::Ip;
 use crate::common::Text;

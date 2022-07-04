@@ -1,8 +1,8 @@
-use super::{Error, EventDeserializer, EventSerializer, Result};
+use super::block::{Ip, WriteIp};
+use super::opcodes::{CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap, TypeOp};
+use super::serialize::{Error, EventDeserializer, EventSerializer, Result};
 use crate::common::text::Text;
 use crate::common::{ReadFrom, WriteTo};
-use crate::event::block::{Ip, WriteIp};
-use crate::event::opcodes::{CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap, TypeOp};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use std::ffi::CString;
 use std::io::{Read, Seek, SeekFrom, Write};

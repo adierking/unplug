@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod bin;
 pub mod block;
 pub mod command;
 pub mod expr;

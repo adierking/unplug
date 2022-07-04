@@ -1,10 +1,11 @@
 use super::{Error, Result, Script, ScriptLayout};
 use crate::common::{ReadFrom, ReadSeek};
 use crate::event::analysis::{ArrayKind, ScriptAnalyzer, ValueKind};
+use crate::event::bin::BinDeserializer;
 use crate::event::block::{Block, BlockId, CodeBlock, DataBlock, Ip};
 use crate::event::command::{self, Command};
 use crate::event::expr::{self, ObjBone, ObjPair};
-use crate::event::serialize::{self, BinDeserializer, DeserializeEvent};
+use crate::event::serialize::{self, DeserializeEvent};
 use byteorder::{ReadBytesExt, LE};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
