@@ -2,7 +2,6 @@ use crate::private::Sealed;
 use num_traits::{AsPrimitive, FromPrimitive, NumAssignOps, One, PrimInt, Zero};
 use std::hash::Hash;
 use std::iter::FusedIterator;
-use std::marker::PhantomData;
 
 /// A type of resource ID.
 pub trait Resource: Sealed + Copy + Eq + Hash + Ord + Sized {
@@ -54,7 +53,6 @@ pub struct ResourceIterator<T: Resource> {
     front: T::Value,
     /// Index + 1 of the next element to be returned by `next_back()`
     back: T::Value,
-    _marker: PhantomData<T>,
 }
 
 impl<T: Resource> ResourceIterator<T> {
@@ -62,7 +60,6 @@ impl<T: Resource> ResourceIterator<T> {
         Self {
             front: T::Value::zero(),
             back: T::Value::from_usize(T::COUNT).unwrap(),
-            _marker: PhantomData,
         }
     }
 }
