@@ -308,7 +308,7 @@ impl Label {
                 };
                 name.push_str(&capitalized);
                 capitalize = false;
-            } else if ch.is_digit(10) {
+            } else if ch.is_ascii_digit() {
                 name.push(ch);
                 capitalize = true;
             } else if ch != '\'' {
@@ -334,7 +334,7 @@ impl Label {
             if let Some(next) = chars.peek().copied() {
                 let underscore = next.is_uppercase()
                     || (ch.is_alphabetic() && !next.is_alphabetic())
-                    || (ch.is_digit(10) && !next.is_digit(10));
+                    || (ch.is_ascii_digit() && !next.is_ascii_digit());
                 if underscore {
                     name.push('_');
                 }
@@ -345,7 +345,7 @@ impl Label {
 
     /// Appends a discriminator ID to this label.
     fn append_discriminator(&mut self, id: usize) {
-        if self.0.ends_with(|c: char| c.is_digit(10)) {
+        if self.0.ends_with(|c: char| c.is_ascii_digit()) {
             self.0.push('_');
         }
         write!(self.0, "{}", id).unwrap();
