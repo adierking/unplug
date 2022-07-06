@@ -133,9 +133,6 @@ impl<W: Write + WriteIp + Seek> EventSerializer for BinSerializer<W> {
     fn end_msg(&mut self) -> Result<()> {
         assert!(self.msg_start_offset < u64::MAX, "Message start offset not set");
 
-        // Add a null terminator
-        self.serialize_u8(Ggte::value(MsgOp::End).unwrap())?;
-
         // Ensure we don't overflow the game's message buffer
         let end_offset = self.writer.seek(SeekFrom::Current(0))?;
         let msg_size = end_offset - self.msg_start_offset;

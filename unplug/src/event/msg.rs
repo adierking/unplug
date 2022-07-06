@@ -359,6 +359,7 @@ impl SerializeEvent for MsgArgs {
         if num_chars > MAX_CHARS {
             return Err(Error::TooManyChars { len: num_chars, max: MAX_CHARS });
         }
+        ser.serialize_msg_char(MsgOp::End)?;
         Ok(ser.end_msg()?)
     }
 }
