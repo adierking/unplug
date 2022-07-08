@@ -1,7 +1,11 @@
+use crate::asm::{ProgramBuilder, ProgramWriter};
 use crate::common::find_stage_file;
 use crate::context::Context;
 use crate::io::OutputRedirect;
-use crate::opt::{ScriptCommand, ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt};
+use crate::opt::{
+    ScriptCommand, ScriptDisassembleAllOpt, ScriptDisassembleOpt, ScriptDumpAllOpt,
+    ScriptDumpFlags, ScriptDumpOpt,
+};
 use anyhow::Result;
 use log::info;
 use std::fs::{self, File};
@@ -90,7 +94,7 @@ fn dump_script(script: &Script, flags: &ScriptDumpFlags, mut out: impl Write) ->
 }
 
 /// The `script dump` CLI command.
-pub fn command_script_dump(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
+pub fn command_dump(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
     let file = find_stage_file(&mut ctx, &opt.stage)?;
@@ -103,7 +107,7 @@ pub fn command_script_dump(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
 }
 
 /// The `script dump globals` CLI command.
-pub fn command_script_dump_globals(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
+pub fn command_dump_globals(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
     info!("Dumping script globals");
@@ -112,7 +116,7 @@ pub fn command_script_dump_globals(ctx: Context, opt: ScriptDumpOpt) -> Result<(
 }
 
 /// The `script dump-all` CLI command.
-pub fn command_script_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
+pub fn command_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
     let start_time = Instant::now();
     let mut ctx = ctx.open_read()?;
 
@@ -133,11 +137,52 @@ pub fn command_script_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()
     Ok(())
 }
 
+fn disassemble_stage(stage: &Stage, writer: impl Write) -> Result<()> {
+    let mut builder = ProgramBuilder::new(&stage.script);
+    stage.entry_points().try_for_each(|b| builder.add_event(b))?;
+    let program = builder.finish();
+    ProgramWriter::new(writer, &program).write()?;
+    Ok(())
+}
+
+fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    let out = BufWriter::new(File::create(opt.output)?);
+    let file = find_stage_file(&mut ctx, &opt.stage)?;
+
+    info!("Reading script globals");
+    let libs = ctx.read_globals()?.read_libs()?;
+
+    info!("Disassembling {}", ctx.query_file(&file)?.name);
+    let stage = ctx.read_stage_file(&libs, &file)?;
+    disassemble_stage(&stage, out)?;
+
+    info!("Done!");
+    Ok(())
+}
+
+pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Result<()> {
+    let mut ctx = ctx.open_read()?;
+    info!("Reading script globals");
+    let libs = ctx.read_globals()?.read_libs()?;
+    fs::create_dir_all(&opt.output)?;
+    for id in StageId::iter() {
+        info!("Disassembling {}", id.file_name());
+        let stage = ctx.read_stage(&libs, id)?;
+        let out_path = Path::join(&opt.output, format!("{}.us", id.name()));
+        let writer = BufWriter::new(File::create(out_path)?);
+        disassemble_stage(&stage, writer)?;
+    }
+    Ok(())
+}
+
 /// The `script` CLI command.
 pub fn command(ctx: Context, opt: ScriptCommand) -> Result<()> {
     match opt {
-        ScriptCommand::Dump(opt) if opt.stage == "globals" => command_script_dump_globals(ctx, opt),
-        ScriptCommand::Dump(opt) => command_script_dump(ctx, opt),
-        ScriptCommand::DumpAll(opt) => command_script_dump_all(ctx, opt),
+        ScriptCommand::Dump(opt) if opt.stage == "globals" => command_dump_globals(ctx, opt),
+        ScriptCommand::Dump(opt) => command_dump(ctx, opt),
+        ScriptCommand::DumpAll(opt) => command_dump_all(ctx, opt),
+        ScriptCommand::Disassemble(opt) => command_disassemble(ctx, opt),
+        ScriptCommand::DisassembleAll(opt) => command_disassemble_all(ctx, opt),
     }
 }

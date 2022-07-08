@@ -1,0 +1,32 @@
+{
+    "name": "unplug-vscode",
+    "displayName": "Unplug",
+    "description": "Unplug assembly support",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.68.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "unplug",
+            "aliases": ["Unplug Assembly", "unplug"],
+            "extensions": [".us"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "unplug",
+            "scopeName": "source.unplug",
+            "path": "./syntaxes/unplug.tmLanguage.json"
+        }],
+        "configurationDefaults": {
+            "[unplug]": {
+                "editor.tabSize": 8,
+                "editor.insertSpaces": false,
+                "editor.detectIndentation": false
+            }
+        }
+    }
+}

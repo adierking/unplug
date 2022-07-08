@@ -316,6 +316,10 @@ pub enum ScriptCommand {
     Dump(ScriptDumpOpt),
     /// Dump all script data
     DumpAll(ScriptDumpAllOpt),
+    /// Disassemble a single stage's script
+    Disassemble(ScriptDisassembleOpt),
+    /// Disassemble all scripts
+    DisassembleAll(ScriptDisassembleAllOpt),
 }
 
 #[derive(Args)]
@@ -350,6 +354,23 @@ pub struct ScriptDumpAllOpt {
 
     #[clap(flatten)]
     pub flags: ScriptDumpFlags,
+}
+
+#[derive(Args)]
+pub struct ScriptDisassembleOpt {
+    /// Name of the stage to dump
+    pub stage: String,
+
+    /// Path to the output file
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: PathBuf,
+}
+
+#[derive(Args)]
+pub struct ScriptDisassembleAllOpt {
+    /// Path to the output directory
+    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    pub output: PathBuf,
 }
 
 #[derive(Subcommand)]

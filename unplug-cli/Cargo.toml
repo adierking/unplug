@@ -23,6 +23,7 @@ humansize = "1.1.1"
 indicatif = "0.16.2"
 lazy_static = "1.4.0"
 log = { version = "0.4" }
+phf = { version = "0.10", features = ["macros"] }
 quick-xml = "0.23"
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }

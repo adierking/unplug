@@ -1,0 +1,109 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Unplug Assembly",
+	"patterns": [
+		{ "include": "#comment" },
+		{ "include": "#literal" },
+		{ "include": "#keyword" },
+		{ "include": "#label" }
+	],
+	"repository": {
+		"comment": {
+			"patterns": [
+				{ "include": "#line-comment" },
+				{ "include": "#block-comment" }
+			]
+		},
+		"literal": {
+			"patterns": [
+				{ "include": "#number-literal" },
+				{ "include": "#string-literal" },
+				{ "include": "#type-literal" }
+			]
+		},
+		"keyword": {
+			"patterns": [
+				{ "include": "#control-keyword" },
+				{ "include": "#command-keyword" },
+				{ "include": "#msg-keyword" },
+				{ "include": "#operator-keyword" },
+				{ "include": "#expr-keyword" }
+			]
+		},
+		"label": {
+			"patterns": [
+				{ "include": "#label-decl" },
+				{ "include": "#label-deref" }
+			]
+		},
+		"line-comment": {
+			"name": "comment.line.semicolon.unplug",
+			"begin": ";",
+			"end": "$"
+		},
+		"block-comment": {
+			"name": "comment.block.unplug",
+			"begin": "/\\*",
+			"end": "\\*/"
+		},
+		"number-literal": {
+			"name": "constant.numeric.unplug",
+			"match": "(\\b|-)(\\d+|0x[0-9A-Fa-f]+)(\\.[bwd])?\\b"
+		},
+		"string-literal": {
+			"name": "string.quoted.double.unplug",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.unplug",
+					"match": "(\\$|\\\\n)"
+				},
+				{
+					"name": "constant.other.placeholder.unplug",
+					"match": "%[0-9A-Za-z\\-+ '#.*]+"
+				}
+			]
+		},
+		"type-literal": {
+			"name": "constant.language.unplug",
+			"match": "@[A-Za-z0-9_]+\\b"
+		},
+		"control-keyword": {
+			"name": "keyword.control.unplug",
+			"match": "\\b(abort|return|goto|if|elif|endif|case|expr|while|break)\\b"
+		},
+		"command-keyword": {
+			"name": "entity.name.function.command.unplug",
+			"match": "\\b(set|run|lib|pushbp|popbp|setsp|anim[12]?|attach|born|call|camera|check|color|detach|dir|mdir|disp|kill|light|menu|move|moveto|msg|pos|printf|ptcl|read|scale|mscale|scrn|select|sfx|timer|wait|warp|win|movie)\\b"
+		},
+		"msg-keyword": {
+			"name": "entity.name.function.msg.unplug",
+			"match": "\\b(end|speed|wait|anim|sfx|voice|def|nl|vt|format|size|color|rgba|prop|icon|shake|center|rotate|scale|input|ask|stay|text)\\b"
+		},
+		"operator-keyword": {
+			"name": "keyword.operator.unplug",
+			"match": "\\b(eq|ne|lt|le|gt|ge|not|adda?|suba?|mula?|diva?|moda?|anda?|ora?|xora?)\\b"
+		},
+		"expr-keyword": {
+			"name": "variable.language.expr.unplug",
+			"match": "\\b(i16|i32|addr|sp|bp|flag|var|result2?|pad|battery|money|item|atc|rank|exp|level|hold|map|actor_name|item_name|time|cur_suit|scrap|cur_atc|use|hit|sticker_name|obj|rand|sin|cos|array)\\b"
+		},
+		"label-decl": {
+			"name": "meta.name.label.unplug",
+			"match": "^\\s*([A-Za-z0-9_]+):",
+			"captures": {
+				"1": { "name": "variable.name.label.unplug" }
+			}
+		},
+		"label-deref": {
+			"name": "meta.operator.deref.unplug",
+			"match": "(\\*)([A-Za-z0-9_]+)?",
+			"captures": {
+				"1": { "name": "keyword.operator.deref.unplug" },
+				"2": { "name": "variable.name.label.unplug" }
+			}
+		}
+	},
+	"scopeName": "source.unplug"
+}

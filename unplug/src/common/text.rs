@@ -32,9 +32,7 @@ impl Text {
 
     /// Constructs a `Text` from a raw byte string.
     pub fn with_bytes(bytes: impl Into<Vec<u8>>) -> Self {
-        let mut text = Self { bytes: bytes.into() };
-        text.bytes.shrink_to_fit();
-        text
+        Self { bytes: bytes.into() }
     }
 
     /// Returns a slice over the bytes in the text.
@@ -60,6 +58,16 @@ impl Text {
     /// Returns whether the text is an empty string.
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
+    }
+
+    /// Appends a raw byte onto the end of the text.
+    pub fn push(&mut self, b: u8) {
+        self.bytes.push(b);
+    }
+
+    /// Resets the text to an empty string.
+    pub fn clear(&mut self) {
+        self.bytes.clear()
     }
 
     /// Constructs a `Text` by encoding a UTF-8 string.
@@ -111,5 +119,19 @@ impl From<CString> for Text {
 impl From<Text> for CString {
     fn from(text: Text) -> Self {
         text.into_c_string()
+    }
+}
+
+impl Extend<u8> for Text {
+    fn extend<T: IntoIterator<Item = u8>>(&mut self, iter: T) {
+        self.bytes.extend(iter.into_iter());
+    }
+}
+
+impl Extend<Text> for Text {
+    fn extend<T: IntoIterator<Item = Text>>(&mut self, iter: T) {
+        for text in iter.into_iter() {
+            self.bytes.extend_from_slice(&text.bytes);
+        }
     }
 }

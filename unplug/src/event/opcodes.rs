@@ -2,10 +2,12 @@ mod ggte;
 
 pub use ggte::Ggte;
 
+use std::hash::Hash;
+
 /// Base trait for an opcode enum.
-pub trait Opcode: Copy + Eq + Sized {
+pub trait Opcode: Copy + Eq + Hash + Sized {
     /// The type of a raw opcode value.
-    type Value: Copy + Eq;
+    type Value: Copy + Eq + Hash;
 
     /// Maps an unrecognized value to an opcode.
     fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value>;
