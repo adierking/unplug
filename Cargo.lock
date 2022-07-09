@@ -1877,6 +1877,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simplelog",
+ "slotmap",
  "tempfile",
  "time",
  "toml",

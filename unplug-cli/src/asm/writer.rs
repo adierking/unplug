@@ -1,17 +1,13 @@
 use super::opcodes::{AsmMsgOp, NamedOpcode};
-use super::{Operand, Operation};
+use super::{LabelMap, Operand, Operation};
 use anyhow::Result;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::io::Write;
-use std::rc::Rc;
 use unplug::common::Text;
 use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
 use unplug::event::serialize::{EventSerializer, Result as SerResult, SerializeEvent};
 use unplug::event::{Block, BlockId, DataBlock, Ip, Script};
-
-/// Maps block IDs to label names.
-type LabelMap = HashMap<BlockId, Rc<String>>;
 
 /// Encapsulates command, expr, and message operations into a single type.
 enum AnyOperation {
@@ -127,11 +123,11 @@ impl<'a> AsmSerializer<'a> {
         } else {
             let block = self.script.resolve_ip(ip).unwrap();
             self.asm.refs.push(block);
-            let label = self
-                .labels
-                .entry(block)
-                .or_insert_with(|| Rc::new(format!("loc_{}", block.index())));
-            Operand::Label(Rc::clone(label))
+            Operand::Label(
+                self.labels
+                    .find_block_or_insert(block, || format!("loc_{}", block.index()))
+                    .unwrap(),
+            )
         }
     }
 
@@ -335,9 +331,10 @@ impl<'a> ProgramBuilder<'a> {
 
     /// Adds the script event beginning at `block_id` to the program.
     pub fn add_event(&mut self, block_id: BlockId) -> Result<()> {
-        let label = Rc::new(format!("evt_{}", block_id.index()));
-        self.program.labels.insert(block_id, label);
-        self.add_block(block_id)
+        self.add_block(block_id)?;
+        let name = format!("evt_{}", block_id.index());
+        self.program.labels.rename_or_insert(block_id, name)?;
+        Ok(())
     }
 
     /// Finishes building the program, consumes this builder, and returns the built program.
@@ -362,8 +359,8 @@ impl<'a> ProgramBuilder<'a> {
 
     /// Add the subroutine at `entry_point` to the program.
     fn add_subroutine(&mut self, entry_point: BlockId) -> Result<()> {
-        let label = Rc::new(format!("sub_{}", entry_point.index()));
-        self.program.labels.insert(entry_point, label);
+        let name = format!("sub_{}", entry_point.index());
+        self.program.labels.rename_or_insert(entry_point, name)?;
 
         let order = self.script.reverse_postorder(entry_point);
         let mut subroutine = Subroutine { src_block: entry_point, src_offset: 0, blocks: vec![] };
@@ -449,8 +446,8 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     fn write_block(&mut self, block: &AsmBlock) -> Result<()> {
-        if let Some(label) = self.program.labels.get(&block.src_block) {
-            writeln!(self.writer, "{}:", label)?;
+        if let Some(id) = self.program.labels.find_block(block.src_block) {
+            writeln!(self.writer, "{}:", self.program.labels.get(id).name)?;
         }
         for command in &block.commands {
             self.write_command(command)?;
@@ -503,7 +500,9 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
                 let escaped = decoded.replace('\n', "\\n");
                 write!(self.writer, "\"{}\"", escaped)?
             }
-            Operand::Label(label) => write!(self.writer, "*{}", label)?,
+            Operand::Label(label) => {
+                write!(self.writer, "*{}", self.program.labels.get(*label).name)?
+            }
             Operand::Offset(off) => write!(self.writer, "*0x{:x}", off)?,
             Operand::Type(ty) => write!(self.writer, "@{}", ty.name())?,
             Operand::Expr(expr) => self.write_expr(expr)?,
