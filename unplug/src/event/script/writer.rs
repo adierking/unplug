@@ -236,35 +236,35 @@ impl<'a> ScriptWriter<'a> {
     fn write_data(&mut self, blob: &mut Blob, data: &DataBlock) -> Result<()> {
         let mut ser = BinSerializer::new(&mut blob.writer);
         match data {
-            DataBlock::ArrayI8(arr) => {
+            DataBlock::I8Array(arr) => {
                 for &x in arr {
                     blob.writer.write_i8(x)?;
                 }
             }
-            DataBlock::ArrayU8(arr) => {
+            DataBlock::U8Array(arr) => {
                 blob.writer.write_all(arr)?;
             }
-            DataBlock::ArrayI16(arr) => {
+            DataBlock::I16Array(arr) => {
                 for &x in arr {
                     blob.writer.write_i16::<LE>(x)?;
                 }
             }
-            DataBlock::ArrayU16(arr) => {
+            DataBlock::U16Array(arr) => {
                 for &x in arr {
                     blob.writer.write_u16::<LE>(x)?;
                 }
             }
-            DataBlock::ArrayI32(arr) => {
+            DataBlock::I32Array(arr) => {
                 for &x in arr {
                     blob.writer.write_i32::<LE>(x)?;
                 }
             }
-            DataBlock::ArrayU32(arr) => {
+            DataBlock::U32Array(arr) => {
                 for &x in arr {
                     blob.writer.write_u32::<LE>(x)?;
                 }
             }
-            DataBlock::ArrayPointer(arr) => {
+            DataBlock::PtrArray(arr) => {
                 for &ptr in arr {
                     ptr.write_to(&mut blob.writer)?;
                 }

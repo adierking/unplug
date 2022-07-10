@@ -479,7 +479,7 @@ impl<'r> ScriptReader<'r> {
                     self.process_reference(pending.element_kind.clone(), offset)?;
                 }
 
-                self.blocks[pending.block_id.index()] = DataBlock::ArrayPointer(offsets).into();
+                self.blocks[pending.block_id.index()] = DataBlock::PtrArray(offsets).into();
             }
         }
 

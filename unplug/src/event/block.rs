@@ -253,13 +253,13 @@ impl CodeBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataBlock {
-    ArrayI8(Vec<i8>),
-    ArrayU8(Vec<u8>),
-    ArrayI16(Vec<i16>),
-    ArrayU16(Vec<u16>),
-    ArrayI32(Vec<i32>),
-    ArrayU32(Vec<u32>),
-    ArrayPointer(Vec<Pointer>),
+    I8Array(Vec<i8>),
+    U8Array(Vec<u8>),
+    I16Array(Vec<i16>),
+    U16Array(Vec<u16>),
+    I32Array(Vec<i32>),
+    U32Array(Vec<u32>),
+    PtrArray(Vec<Pointer>),
     ObjBone(ObjBone),
     ObjPair(ObjPair),
     String(CString),
@@ -275,13 +275,13 @@ macro_rules! impl_data_block_from {
     };
 }
 
-impl_data_block_from!(Vec<i8>, ArrayI8);
-impl_data_block_from!(Vec<u8>, ArrayU8);
-impl_data_block_from!(Vec<i16>, ArrayI16);
-impl_data_block_from!(Vec<u16>, ArrayU16);
-impl_data_block_from!(Vec<i32>, ArrayI32);
-impl_data_block_from!(Vec<u32>, ArrayU32);
-impl_data_block_from!(Vec<Pointer>, ArrayPointer);
+impl_data_block_from!(Vec<i8>, I8Array);
+impl_data_block_from!(Vec<u8>, U8Array);
+impl_data_block_from!(Vec<i16>, I16Array);
+impl_data_block_from!(Vec<u16>, U16Array);
+impl_data_block_from!(Vec<i32>, I32Array);
+impl_data_block_from!(Vec<u32>, U32Array);
+impl_data_block_from!(Vec<Pointer>, PtrArray);
 impl_data_block_from!(ObjBone, ObjBone);
 impl_data_block_from!(ObjPair, ObjPair);
 impl_data_block_from!(CString, String);

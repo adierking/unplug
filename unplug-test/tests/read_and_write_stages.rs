@@ -91,7 +91,7 @@ fn compare_commands(a: &Command, b: &Command) -> bool {
 
 fn compare_data(a: &DataBlock, b: &DataBlock) -> bool {
     match (a, b) {
-        (DataBlock::ArrayPointer(a), DataBlock::ArrayPointer(b)) => a.len() == b.len(),
+        (DataBlock::PtrArray(a), DataBlock::PtrArray(b)) => a.len() == b.len(),
         _ => a == b,
     }
 }
