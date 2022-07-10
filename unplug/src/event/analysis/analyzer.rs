@@ -4,7 +4,7 @@ use super::subroutine::{
     SubroutineEffects, SubroutineEffectsMap, SubroutineInfo, SubroutineInfoMap,
 };
 use super::value::{DefId, Definition, DefinitionMap, Label, Value, ValueKind};
-use crate::event::{Block, BlockId, Ip};
+use crate::event::{Block, BlockId, Pointer};
 use arrayvec::ArrayVec;
 use std::collections::{hash_map, HashSet, VecDeque};
 use tracing::debug;
@@ -110,7 +110,7 @@ impl ScriptAnalyzer {
     }
 
     /// Recursively finds all offsets referenced by an entry point.
-    pub fn find_references(&self, entry_point: BlockId) -> Vec<(ValueKind, Ip)> {
+    pub fn find_references(&self, entry_point: BlockId) -> Vec<(ValueKind, Pointer)> {
         let mut references = vec![];
         let mut visited = HashSet::<BlockId>::new();
         self.do_find_references(&mut references, &mut visited, entry_point);
@@ -119,7 +119,7 @@ impl ScriptAnalyzer {
 
     fn do_find_references(
         &self,
-        references: &mut Vec<(ValueKind, Ip)>,
+        references: &mut Vec<(ValueKind, Pointer)>,
         visited: &mut HashSet<BlockId>,
         entry_point: BlockId,
     ) {
@@ -164,10 +164,10 @@ impl ScriptAnalyzer {
         for &id in &sub.postorder {
             let code = id.get(blocks).code().unwrap();
             let mut successors = ArrayVec::new();
-            if let Some(Ip::Block(next_id)) = code.next_block {
+            if let Some(Pointer::Block(next_id)) = code.next_block {
                 self.blocks[next_id].predecessors.push(id);
                 successors.push(next_id);
-                if let Some(Ip::Block(else_id)) = code.else_block {
+                if let Some(Pointer::Block(else_id)) = code.else_block {
                     self.blocks[else_id].predecessors.push(id);
                     successors.push(else_id);
                 }
@@ -304,7 +304,7 @@ impl ScriptAnalyzer {
                 let input_kinds = &mut sub.effects.input_kinds;
                 self.visit_value(block_id, *value, |v| match v {
                     Value::Offset(offset) => {
-                        references.insert((kind.clone(), Ip::Offset(offset)));
+                        references.insert((kind.clone(), Pointer::Offset(offset)));
                     }
                     Value::Undefined(label) => {
                         input_kinds.insert(label, kind.clone());
@@ -395,8 +395,8 @@ mod tests {
 
     #[test]
     fn test_input_kinds() {
-        let offset1 = Ip::Offset(1234);
-        let offset2 = Ip::Offset(2345);
+        let offset1 = Pointer::Offset(1234);
+        let offset2 = Pointer::Offset(2345);
         let blocks: &[Block] = &[
             /* 0 */
             Block::Code(CodeBlock {
@@ -455,9 +455,9 @@ mod tests {
 
     #[test]
     fn test_resolve_output() {
-        let offset1 = Ip::Offset(1234);
-        let offset2 = Ip::Offset(2345);
-        let offset3 = Ip::Offset(3456);
+        let offset1 = Pointer::Offset(1234);
+        let offset2 = Pointer::Offset(2345);
+        let offset3 = Pointer::Offset(3456);
         let blocks: &[Block] = &[
             /* 0 */
             Block::Code(CodeBlock {
@@ -518,9 +518,9 @@ mod tests {
 
     #[test]
     fn test_analyze_lib() {
-        let offset1 = Ip::Offset(1234);
-        let offset2 = Ip::Offset(2345);
-        let offset3 = Ip::Offset(3456);
+        let offset1 = Pointer::Offset(1234);
+        let offset2 = Pointer::Offset(2345);
+        let offset3 = Pointer::Offset(3456);
 
         let lib_blocks: &[Block] = &[
             /* 0 */
@@ -601,8 +601,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ip_array() {
-        let offset = Ip::Offset(1234);
+    fn test_pointer_array() {
+        let offset = Pointer::Offset(1234);
 
         let blocks: &[Block] = &[Block::Code(CodeBlock {
             commands: vec![
@@ -619,7 +619,7 @@ mod tests {
                     SetExpr::from_var(0),
                     Expr::Add(Box::new(BinaryOp {
                         lhs: Expr::from_var(0),
-                        rhs: Expr::AddressOf(Ip::Offset(0)),
+                        rhs: Expr::AddressOf(Pointer::Offset(0)),
                     })),
                 )
                 .into(),
@@ -643,14 +643,14 @@ mod tests {
 
         assert!(sub.references.contains(&(ValueKind::Array(ArrayKind::I32), offset)));
         assert!(sub.references.contains(&(
-            ValueKind::Array(ArrayKind::Ip(ValueKind::Array(ArrayKind::I32).into())),
+            ValueKind::Array(ArrayKind::Pointer(ValueKind::Array(ArrayKind::I32).into())),
             offset
         )));
     }
 
     #[test]
     fn test_set_pad7() {
-        let offset = Ip::Offset(1234);
+        let offset = Pointer::Offset(1234);
 
         let blocks: &[Block] = &[Block::Code(CodeBlock {
             commands: vec![

@@ -1,5 +1,5 @@
 use super::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
-use super::Ip;
+use super::Pointer;
 use crate::common::Text;
 use std::io;
 use thiserror::Error;
@@ -87,8 +87,8 @@ pub trait EventSerializer {
     /// Serializes an unsigned 32-bit integer.
     fn serialize_u32(&mut self, val: u32) -> Result<()>;
 
-    /// Serializes an instruction pointer.
-    fn serialize_ip(&mut self, ip: Ip) -> Result<()>;
+    /// Serializes a pointer.
+    fn serialize_pointer(&mut self, ptr: Pointer) -> Result<()>;
 
     /// Serializes a type expression.
     fn serialize_type(&mut self, ty: TypeOp) -> Result<()>;
@@ -147,8 +147,8 @@ pub trait EventDeserializer {
     /// Deserializes an unsigned 32-bit integer and returns it.
     fn deserialize_u32(&mut self) -> Result<u32>;
 
-    /// Deserializes an instruction pointer and returns it.
-    fn deserialize_ip(&mut self) -> Result<Ip>;
+    /// Deserializes a pointer and returns it.
+    fn deserialize_pointer(&mut self) -> Result<Pointer>;
 
     /// Deserializes a type expression and returns it.
     fn deserialize_type(&mut self) -> Result<TypeOp>;
@@ -231,7 +231,7 @@ impl_serialize!(i16, serialize_i16, deserialize_i16);
 impl_serialize!(u16, serialize_u16, deserialize_u16);
 impl_serialize!(i32, serialize_i32, deserialize_i32);
 impl_serialize!(u32, serialize_u32, deserialize_u32);
-impl_serialize!(Ip, serialize_ip, deserialize_ip);
+impl_serialize!(Pointer, serialize_pointer, deserialize_pointer);
 impl_serialize!(TypeOp, serialize_type, deserialize_type);
 
 impl SerializeEvent for Text {

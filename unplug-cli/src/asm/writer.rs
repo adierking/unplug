@@ -7,7 +7,7 @@ use unplug::common::Text;
 use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
 use unplug::event::serialize::{EventSerializer, Result as SerResult, SerializeEvent};
-use unplug::event::{Block, BlockId, DataBlock, Ip, Script};
+use unplug::event::{Block, BlockId, DataBlock, Pointer, Script};
 
 /// Encapsulates command, expr, and message operations into a single type.
 enum AnyOperation {
@@ -116,12 +116,12 @@ impl<'a> AsmSerializer<'a> {
         self.operation.as_mut().unwrap().push_operand(operand)
     }
 
-    /// Converts `ip` into an operand which references it and declares a new label if necessary.
-    fn make_reference(&mut self, ip: Ip) -> Operand {
-        if ip.is_in_header() {
-            Operand::Offset(ip.offset().unwrap())
+    /// Converts `ptr` into an operand which references it and declares a new label if necessary.
+    fn make_reference(&mut self, ptr: Pointer) -> Operand {
+        if ptr.is_in_header() {
+            Operand::Offset(ptr.offset().unwrap())
         } else {
-            let block = self.script.resolve_ip(ip).unwrap();
+            let block = self.script.resolve_pointer(ptr).unwrap();
             self.asm.refs.push(block);
             let label = self
                 .labels
@@ -185,8 +185,8 @@ impl EventSerializer for AsmSerializer<'_> {
         Ok(())
     }
 
-    fn serialize_ip(&mut self, ip: Ip) -> SerResult<()> {
-        let reference = self.make_reference(ip);
+    fn serialize_pointer(&mut self, ptr: Pointer) -> SerResult<()> {
+        let reference = self.make_reference(ptr);
         self.push_operand(reference);
         Ok(())
     }
@@ -403,7 +403,7 @@ impl<'a> ProgramBuilder<'a> {
 
         // If execution can flow directly out of this block into another one, it MUST be written next
         if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
-            if let Some(Ip::Block(next)) = code.next_block {
+            if let Some(Pointer::Block(next)) = code.next_block {
                 assert!(!self.visited.contains(&next));
                 self.add_code(subroutine, next)?;
             }

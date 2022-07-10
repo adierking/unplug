@@ -53,14 +53,14 @@ impl TryFrom<usize> for BlockId {
     }
 }
 
-/// An instruction pointer which can be read as a file offset and then resolved to a block ID.
+/// A pointer which can be read as a file offset and then resolved to a block ID.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Ip {
+pub enum Pointer {
     Offset(u32),
     Block(BlockId),
 }
 
-impl Ip {
+impl Pointer {
     /// If this is an offset, retrieve it.
     pub fn offset(&self) -> Option<u32> {
         match self {
@@ -86,25 +86,25 @@ impl Ip {
     }
 }
 
-impl From<u32> for Ip {
+impl From<u32> for Pointer {
     fn from(offset: u32) -> Self {
         Self::Offset(offset)
     }
 }
 
-impl From<NonZeroU32> for Ip {
+impl From<NonZeroU32> for Pointer {
     fn from(offset: NonZeroU32) -> Self {
         Self::Offset(offset.get())
     }
 }
 
-impl From<BlockId> for Ip {
+impl From<BlockId> for Pointer {
     fn from(id: BlockId) -> Self {
         Self::Block(id)
     }
 }
 
-impl fmt::Debug for Ip {
+impl fmt::Debug for Pointer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Offset(offset) => write!(f, "Offset({:#x})", offset),
@@ -113,34 +113,34 @@ impl fmt::Debug for Ip {
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for Ip {
+impl<R: Read + ?Sized> ReadFrom<R> for Pointer {
     type Error = io::Error;
     fn read_from(reader: &mut R) -> io::Result<Self> {
         Ok(reader.read_u32::<LE>()?.into())
     }
 }
 
-impl<W: Write + WriteIp + ?Sized> WriteTo<W> for Ip {
+impl<W: Write + WritePointer + ?Sized> WriteTo<W> for Pointer {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_ip(*self)
+        writer.write_pointer(*self)
     }
 }
 
-/// A trait for an object that can write an `Ip`.
-/// This permits the writer to write a placeholder and then fill the actual IP in later.
-pub trait WriteIp {
-    /// Writes an IP to the writer which will be fixed up later.
-    fn write_ip(&mut self, ip: Ip) -> io::Result<()>;
+/// A trait for a stream that can write a `Pointer` even if the offset is not known yet.
+/// This permits the writer to write a placeholder and then fill the actual offset in later.
+pub trait WritePointer {
+    /// Writes a pointer which will be fixed up later.
+    fn write_pointer(&mut self, ptr: Pointer) -> io::Result<()>;
 
     /// Writes an offset computed relative to the current offset.
     fn write_rel_offset(&mut self, offset: i32) -> io::Result<()>;
 }
 
 // Blanket implementation for mutable references
-impl<W: WriteIp> WriteIp for &mut W {
-    fn write_ip(&mut self, ip: Ip) -> io::Result<()> {
-        (**self).write_ip(ip)
+impl<W: WritePointer> WritePointer for &mut W {
+    fn write_pointer(&mut self, ptr: Pointer) -> io::Result<()> {
+        (**self).write_pointer(ptr)
     }
 
     fn write_rel_offset(&mut self, offset: i32) -> io::Result<()> {
@@ -239,9 +239,9 @@ pub struct CodeBlock {
     /// The list of commands in the block.
     pub commands: Vec<Command>,
     /// The ID of the block to jump to after this block, if any.
-    pub next_block: Option<Ip>,
+    pub next_block: Option<Pointer>,
     /// The ID of the block to jump to if the block's condition fails, if any.
-    pub else_block: Option<Ip>,
+    pub else_block: Option<Pointer>,
 }
 
 impl CodeBlock {
@@ -259,7 +259,7 @@ pub enum DataBlock {
     ArrayU16(Vec<u16>),
     ArrayI32(Vec<i32>),
     ArrayU32(Vec<u32>),
-    ArrayIp(Vec<Ip>),
+    ArrayPointer(Vec<Pointer>),
     ObjBone(ObjBone),
     ObjPair(ObjPair),
     String(CString),
@@ -281,7 +281,7 @@ impl_data_block_from!(Vec<i16>, ArrayI16);
 impl_data_block_from!(Vec<u16>, ArrayU16);
 impl_data_block_from!(Vec<i32>, ArrayI32);
 impl_data_block_from!(Vec<u32>, ArrayU32);
-impl_data_block_from!(Vec<Ip>, ArrayIp);
+impl_data_block_from!(Vec<Pointer>, ArrayPointer);
 impl_data_block_from!(ObjBone, ObjBone);
 impl_data_block_from!(ObjPair, ObjPair);
 impl_data_block_from!(CString, String);

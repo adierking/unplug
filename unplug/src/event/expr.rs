@@ -1,4 +1,4 @@
-use super::block::Ip;
+use super::block::Pointer;
 use super::opcodes::{ExprOp, TypeOp};
 use super::serialize::{
     self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
@@ -91,7 +91,7 @@ pub enum Expr {
     /// An immediate 32-bit signed integer.
     Imm32(i32),
     /// Evaluates to the memory address corresponding to an offset in the stage file.
-    AddressOf(Ip),
+    AddressOf(Pointer),
     /// Retrieves a value from the current stack frame (note that the stack grows upwards).
     /// Typically used to retrieve subroutine arguments.
     Stack(u8),
@@ -394,7 +394,7 @@ impl DeserializeEvent for Expr {
             ExprOp::BitXorAssign => Self::BitXorAssign(BinaryOp::deserialize(de)?.into()),
             ExprOp::Imm16 => Self::Imm16(de.deserialize_i16()?),
             ExprOp::Imm32 => Self::Imm32(de.deserialize_i32()?),
-            ExprOp::AddressOf => Self::AddressOf(Ip::deserialize(de)?),
+            ExprOp::AddressOf => Self::AddressOf(Pointer::deserialize(de)?),
             ExprOp::Stack => Self::Stack(de.deserialize_u8()?),
             ExprOp::ParentStack => Self::ParentStack(de.deserialize_u8()?),
             ExprOp::Flag => Self::Flag(Self::deserialize(de)?.into()),
@@ -487,7 +487,7 @@ impl SerializeEvent for Expr {
             | Self::Hit => (),
             Self::Imm16(x) => ser.serialize_i16(*x)?,
             Self::Imm32(x) => ser.serialize_i32(*x)?,
-            Self::AddressOf(ip) => ip.serialize(ser)?,
+            Self::AddressOf(ptr) => ptr.serialize(ser)?,
             Self::Stack(x) | Self::ParentStack(x) => ser.serialize_u8(*x)?,
             Self::Obj(e) => e.serialize(ser)?,
             Self::ArrayElement(e) => e.serialize(ser)?,
@@ -1058,18 +1058,18 @@ mod tests {
     }
 
     fn obj_pair_expr() -> Box<ObjExpr> {
-        Box::new(ObjExpr::Distance(ObjExprPair { address: Expr::AddressOf(Ip::Offset(123)) }))
+        Box::new(ObjExpr::Distance(ObjExprPair { address: Expr::AddressOf(Pointer::Offset(123)) }))
     }
 
     fn obj_bone_expr() -> Box<ObjExpr> {
-        Box::new(ObjExpr::BoneX(ObjExprBone { address: Expr::AddressOf(Ip::Offset(123)) }))
+        Box::new(ObjExpr::BoneX(ObjExprBone { address: Expr::AddressOf(Pointer::Offset(123)) }))
     }
 
     fn array_element_expr() -> Box<ArrayElementExpr> {
         Box::new(ArrayElementExpr {
             element_type: Expr::Imm32(-4),
             index: Expr::Imm32(123),
-            address: Expr::AddressOf(Ip::Offset(123)),
+            address: Expr::AddressOf(Pointer::Offset(123)),
         })
     }
 
@@ -1202,7 +1202,7 @@ mod tests {
         assert_reserialize!(Expr::BitXorAssign(binary_op()));
         assert_reserialize!(Expr::Imm16(123));
         assert_reserialize!(Expr::Imm32(123));
-        assert_reserialize!(Expr::AddressOf(Ip::Offset(123)));
+        assert_reserialize!(Expr::AddressOf(Pointer::Offset(123)));
         assert_reserialize!(Expr::Stack(123));
         assert_reserialize!(Expr::ParentStack(123));
         assert_reserialize!(Expr::Flag(expr()));

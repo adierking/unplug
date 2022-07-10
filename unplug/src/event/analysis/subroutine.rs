@@ -1,6 +1,6 @@
 use super::value::{DefId, Label, Value, ValueKind};
 use crate::event::script::Postorder;
-use crate::event::{Block, BlockId, Command, Ip};
+use crate::event::{Block, BlockId, Command, Pointer};
 use std::collections::{HashMap, HashSet};
 
 pub type SubroutineEffectsMap = HashMap<BlockId, SubroutineEffects>;
@@ -36,7 +36,7 @@ pub struct SubroutineInfo {
     /// The definitions for each of the subroutine's inputs.
     pub inputs: HashSet<DefId>,
     /// The offsets which are referenced by this subroutine.
-    pub references: HashSet<(ValueKind, Ip)>,
+    pub references: HashSet<(ValueKind, Pointer)>,
     /// The entry points of other subroutines called by this subroutine.
     pub calls: Vec<BlockId>,
     /// The subroutine's side effects.
@@ -85,13 +85,13 @@ impl SubroutineInfo {
         for &id in &self.postorder {
             let code = id.get(blocks).code().unwrap();
             for cmd in &code.commands {
-                if let Command::Run(ip) = cmd {
-                    if let Ip::Block(entry_point) = *ip {
+                if let Command::Run(ptr) = cmd {
+                    if let Pointer::Block(entry_point) = *ptr {
                         if !self.calls.contains(&entry_point) {
                             self.calls.push(entry_point);
                         }
                     } else {
-                        panic!("Unresolved subroutine IP: {:?}", ip);
+                        panic!("Unresolved subroutine pointer: {:?}", ptr);
                     }
                 }
             }

@@ -206,8 +206,8 @@ impl<'s> ShopParser<'s> {
         // build up the state of the shop vars under this condition. Then we propagate that state to
         // the slots and add the requirements for this condition to be true.
         let code = self.script.block(block).code().unwrap();
-        let next_block = code.next_block.map(|ip| ip.block().unwrap());
-        let else_block = code.else_block.map(|ip| ip.block().unwrap());
+        let next_block = code.next_block.map(|ptr| ptr.block().unwrap());
+        let else_block = code.else_block.map(|ptr| ptr.block().unwrap());
         let (mut next_condition, mut else_condition) = (None, None);
         let mut vars = VarTable::new();
         for command in &code.commands {
@@ -340,7 +340,7 @@ impl<'s> ShopParser<'s> {
 mod tests {
     use super::*;
     use crate::event::command::IfArgs;
-    use crate::event::{Block, CodeBlock, Ip};
+    use crate::event::{Block, CodeBlock, Pointer};
     use crate::expr;
 
     /// Convenience macro for initializing HashSets
@@ -359,7 +359,9 @@ mod tests {
     }
 
     fn if_(condition: Expr, else_block: u32) -> Command {
-        Command::If(IfArgs { condition, else_target: Ip::Block(BlockId::new(else_block)) }.into())
+        Command::If(
+            IfArgs { condition, else_target: Pointer::Block(BlockId::new(else_block)) }.into(),
+        )
     }
 
     #[test]
@@ -483,7 +485,7 @@ mod tests {
                     // count = 0
                     set(SHOP_COUNT_FIRST + 1, 0),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(1))),
+                next_block: Some(Pointer::Block(BlockId::new(1))),
                 else_block: None,
             }),
             // 1
@@ -494,8 +496,8 @@ mod tests {
                     // if (var[0] < 0)
                     if_(expr![var[0] < 0], 3),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(2))),
-                else_block: Some(Ip::Block(BlockId::new(3))),
+                next_block: Some(Pointer::Block(BlockId::new(2))),
+                else_block: Some(Pointer::Block(BlockId::new(3))),
             }),
             // 2
             Block::Code(CodeBlock {
@@ -503,7 +505,7 @@ mod tests {
                     // vars[0] = 0
                     set(0, 0),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(3))),
+                next_block: Some(Pointer::Block(BlockId::new(3))),
                 else_block: None,
             }),
             // 3
@@ -514,7 +516,7 @@ mod tests {
                     // count = vars[0]
                     set_expr(SHOP_COUNT_FIRST + 2, expr![var[0]]),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(4))),
+                next_block: Some(Pointer::Block(BlockId::new(4))),
                 else_block: None,
             }),
             // 4
@@ -523,8 +525,8 @@ mod tests {
                     // if atc[Toothbrush] == 0 && flag[123]
                     if_(expr![(atc[Atc::Toothbrush] == 0) && flag[123]], 6),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(5))),
-                else_block: Some(Ip::Block(BlockId::new(6))),
+                next_block: Some(Pointer::Block(BlockId::new(5))),
+                else_block: Some(Pointer::Block(BlockId::new(6))),
             }),
             // 5
             Block::Code(CodeBlock {
@@ -533,9 +535,9 @@ mod tests {
                     set(SHOP_ITEM_FIRST + 3, Item::Toothbrush.into()),
                     // count = 1
                     set(SHOP_COUNT_FIRST + 3, 1),
-                    Command::EndIf(Ip::Block(BlockId::new(9))),
+                    Command::EndIf(Pointer::Block(BlockId::new(9))),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(9))),
+                next_block: Some(Pointer::Block(BlockId::new(9))),
                 else_block: None,
             }),
             // 6
@@ -544,8 +546,8 @@ mod tests {
                     // else if atc[Toothbrush] > 0
                     if_(expr![atc[Atc::Toothbrush] > 0], 8),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(7))),
-                else_block: Some(Ip::Block(BlockId::new(8))),
+                next_block: Some(Pointer::Block(BlockId::new(7))),
+                else_block: Some(Pointer::Block(BlockId::new(8))),
             }),
             // 7
             Block::Code(CodeBlock {
@@ -554,9 +556,9 @@ mod tests {
                     set(SHOP_ITEM_FIRST + 3, Item::Toothbrush.into()),
                     // count = 0
                     set(SHOP_COUNT_FIRST + 3, 0),
-                    Command::EndIf(Ip::Block(BlockId::new(9))),
+                    Command::EndIf(Pointer::Block(BlockId::new(9))),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(9))),
+                next_block: Some(Pointer::Block(BlockId::new(9))),
                 else_block: None,
             }),
             // 8
@@ -568,7 +570,7 @@ mod tests {
                     // count = 0
                     set(SHOP_COUNT_FIRST + 3, 0),
                 ],
-                next_block: Some(Ip::Block(BlockId::new(9))),
+                next_block: Some(Pointer::Block(BlockId::new(9))),
                 else_block: None,
             }),
             // 9

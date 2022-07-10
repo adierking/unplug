@@ -1,7 +1,7 @@
 use super::{Error, Result, Script, ScriptLayout};
 use crate::common::{WriteSeek, WriteTo};
 use crate::event::bin::BinSerializer;
-use crate::event::block::{Block, BlockId, DataBlock, Ip, WriteIp};
+use crate::event::block::{Block, BlockId, DataBlock, Pointer, WritePointer};
 use crate::event::serialize::SerializeEvent;
 use byteorder::{WriteBytesExt, LE};
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
@@ -44,13 +44,13 @@ impl BlockOffsetMap {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum Fixup {
     /// An offset to a block should be written.
-    BlockOffset(Ip),
+    BlockOffset(Pointer),
     /// A relative offset should become an absolute offset.
     RelOffset(i32),
 }
 
-/// Wraps a writer with a WriteIp implementation.
-/// When an IP is written, it is saved to a `fixups` list to be filled in later.
+/// Wraps a writer with a WritePointer implementation.
+/// When a pointer is written, it is saved to a `fixups` list to be filled in later.
 struct BlockWriter<W: Write + Seek> {
     writer: W,
     /// A list of (offset, fixup) pairs for offsets which still need to be filled in.
@@ -62,17 +62,17 @@ impl<W: Write + Seek> BlockWriter<W> {
         Self { writer, fixups: vec![] }
     }
 
-    /// Uses the provided `resolve_ip` function to fill in unresolved block offsets.
-    fn fix_offsets<F>(&mut self, mut resolve_ip: F) -> io::Result<()>
+    /// Uses the provided `resolve_pointer` function to fill in unresolved block offsets.
+    fn fix_offsets<F>(&mut self, mut resolve_pointer: F) -> io::Result<()>
     where
-        F: FnMut(Ip) -> u32,
+        F: FnMut(Pointer) -> u32,
     {
         debug!("Applying {} offset fixups", self.fixups.len());
         for (base_offset, fixup) in self.fixups.drain(..) {
             self.writer.seek(SeekFrom::Start(base_offset.into()))?;
             match fixup {
-                Fixup::BlockOffset(ip) => {
-                    self.writer.write_u32::<LE>(resolve_ip(ip))?;
+                Fixup::BlockOffset(ptr) => {
+                    self.writer.write_u32::<LE>(resolve_pointer(ptr))?;
                 }
                 Fixup::RelOffset(offset) => {
                     self.writer.write_u32::<LE>(base_offset.wrapping_add(offset as u32))?;
@@ -104,14 +104,14 @@ impl<W: Write + Seek> Seek for BlockWriter<W> {
     }
 }
 
-impl<W: Write + Seek> WriteIp for BlockWriter<W> {
-    fn write_ip(&mut self, ip: Ip) -> io::Result<()> {
-        if ip.is_in_header() {
+impl<W: Write + Seek> WritePointer for BlockWriter<W> {
+    fn write_pointer(&mut self, ptr: Pointer) -> io::Result<()> {
+        if ptr.is_in_header() {
             // We can just directly write header offsets because they don't have blocks
-            self.writer.write_u32::<LE>(ip.offset().unwrap())
+            self.writer.write_u32::<LE>(ptr.offset().unwrap())
         } else {
             let base_offset = self.writer.seek(SeekFrom::Current(0))?.try_into().unwrap();
-            self.fixups.push((base_offset, Fixup::BlockOffset(ip)));
+            self.fixups.push((base_offset, Fixup::BlockOffset(ptr)));
             self.write_placeholder()
         }
     }
@@ -191,8 +191,8 @@ impl<'a> ScriptWriter<'a> {
             self.write_code(&mut blob, block)?;
         }
         for &(_, fixup) in &blob.writer.fixups {
-            if let Fixup::BlockOffset(ip) = fixup {
-                let block_id = self.script.resolve_ip(ip)?;
+            if let Fixup::BlockOffset(ptr) = fixup {
+                let block_id = self.script.resolve_pointer(ptr)?;
                 self.add_block(block_id)?;
             }
         }
@@ -225,7 +225,7 @@ impl<'a> ScriptWriter<'a> {
 
         // If execution can flow directly out of this block into another one, it MUST be written next
         if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
-            if let Some(Ip::Block(next)) = code.next_block {
+            if let Some(Pointer::Block(next)) = code.next_block {
                 assert!(!self.visited(next));
                 self.write_code(blob, next)?;
             }
@@ -264,13 +264,13 @@ impl<'a> ScriptWriter<'a> {
                     blob.writer.write_u32::<LE>(x)?;
                 }
             }
-            DataBlock::ArrayIp(arr) => {
-                for &ip in arr {
-                    ip.write_to(&mut blob.writer)?;
+            DataBlock::ArrayPointer(arr) => {
+                for &ptr in arr {
+                    ptr.write_to(&mut blob.writer)?;
                 }
                 blob.writer.write_i32::<LE>(0)?;
-                for &ip in arr {
-                    let child_id = self.script.resolve_ip(ip)?;
+                for &ptr in arr {
+                    let child_id = self.script.resolve_pointer(ptr)?;
                     self.add_block(child_id)?;
                 }
             }
@@ -298,10 +298,10 @@ impl<'a> ScriptWriter<'a> {
         let offsets = self.write_blobs(&mut writer)?;
 
         let end_offset = writer.seek(SeekFrom::Current(0))?;
-        writer.fix_offsets(|ip| {
-            let block = match self.script.resolve_ip(ip) {
+        writer.fix_offsets(|ptr| {
+            let block = match self.script.resolve_pointer(ptr) {
                 Ok(id) => id,
-                Err(e) => panic!("Failed to resolve IP {:?}: {}", ip, e),
+                Err(e) => panic!("Failed to resolve pointer {:?}: {}", ptr, e),
             };
             match offsets.try_get(block) {
                 Some(offset) => offset,
@@ -340,8 +340,8 @@ impl<'a> ScriptWriter<'a> {
                 offsets.insert(block, base_offset + offset);
             }
             // Merge in fixups
-            for &(offset, ip) in &blob.writer.fixups {
-                writer.fixups.push((base_offset + offset, ip));
+            for &(offset, ptr) in &blob.writer.fixups {
+                writer.fixups.push((base_offset + offset, ptr));
             }
             let data = blob.writer.writer.get_ref();
             trace!("Write blob offset={:#x} len={:#x}", base_offset, data.len());

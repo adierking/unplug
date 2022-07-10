@@ -6,7 +6,7 @@ use parser::ShopParser;
 
 use crate::data::{Atc, Item};
 use crate::event::analysis::Label;
-use crate::event::{BlockId, Command, Ip, Script, SetExpr};
+use crate::event::{BlockId, Command, Pointer, Script, SetExpr};
 use std::collections::HashSet;
 use thiserror::Error;
 use tracing::debug;
@@ -74,11 +74,11 @@ fn is_shop_setup(script: &Script, block: BlockId, visited: &mut HashSet<BlockId>
             }
         }
     }
-    if let Some(Ip::Block(next_block)) = code.next_block {
+    if let Some(Pointer::Block(next_block)) = code.next_block {
         if is_shop_setup(script, next_block, visited) {
             return true;
         }
-        if let Some(Ip::Block(else_block)) = code.else_block {
+        if let Some(Pointer::Block(else_block)) = code.else_block {
             return is_shop_setup(script, else_block, visited);
         }
     }

@@ -4,7 +4,7 @@ use super::value::{ArrayKind, Definition, DefinitionMap, Label, Value, ValueKind
 use crate::event::command::*;
 use crate::event::expr::{ArrayElementExpr, BinaryOp, Expr, ObjExpr, SetExpr};
 use crate::event::msg::{MsgArgs, MsgCommand};
-use crate::event::{BlockId, Ip};
+use crate::event::{BlockId, Pointer};
 use arrayvec::ArrayVec;
 use std::collections::{hash_map, HashMap, HashSet};
 use tracing::warn;
@@ -142,7 +142,7 @@ impl LiveState {
             | Command::While(arg) => self.analyze_if(arg),
             Command::EndIf(_) => (),
             Command::Break(_) => (),
-            Command::Run(ip) => self.analyze_run(*ip, subs),
+            Command::Run(ptr) => self.analyze_run(*ptr, subs),
             Command::Lib(index) => self.analyze_lib(*index, libs),
             Command::PushBp => self.analyze_push_bp(),
             Command::PopBp => self.analyze_pop_bp(),
@@ -302,8 +302,8 @@ impl LiveState {
         }
     }
 
-    fn analyze_run(&mut self, ip: Ip, subs: &SubroutineInfoMap) {
-        let block_id = ip.block().expect("Unresolved subroutine call");
+    fn analyze_run(&mut self, ptr: Pointer, subs: &SubroutineInfoMap) {
+        let block_id = ptr.block().expect("Unresolved subroutine call");
         let sub = subs.get(&block_id).expect("Unanalyzed subroutine");
         self.analyze_sub_call(&sub.effects);
     }
@@ -372,7 +372,7 @@ impl LiveState {
     /// Analyzes an expression and produces a `LiveValue` for it.
     fn analyze_expr(&mut self, expr: &Expr) -> LiveValue {
         match expr {
-            Expr::AddressOf(ip) => self.analyze_address_of(*ip),
+            Expr::AddressOf(ptr) => self.analyze_address_of(*ptr),
             Expr::Stack(i) => self.resolve_label(self.stack_label(0, *i)),
             Expr::ParentStack(i) => self.resolve_label(self.stack_label(-1, *i)),
             Expr::Variable(index) => self.analyze_variable(index),
@@ -453,8 +453,8 @@ impl LiveState {
         }
     }
 
-    fn analyze_address_of(&mut self, ip: Ip) -> LiveValue {
-        if let Ip::Offset(off) = ip {
+    fn analyze_address_of(&mut self, ptr: Pointer) -> LiveValue {
+        if let Pointer::Offset(off) = ptr {
             LiveValue::Value(Value::Offset(off))
         } else {
             panic!("AddressOf expression does not reference an offset");
@@ -565,8 +565,8 @@ impl LiveState {
                 self.references.extend(values.into_iter().map(|v| (kind.clone(), v)));
             }
             LiveValue::Deref(target) => {
-                // Dereferenced values come from an IP array
-                self.add_reference(ValueKind::Array(ArrayKind::Ip(kind.into())), *target);
+                // Dereferenced values come from a pointer array
+                self.add_reference(ValueKind::Array(ArrayKind::Pointer(kind.into())), *target);
             }
             LiveValue::ArrayElement(arr) => {
                 if let ValueKind::Array(_) = kind {
@@ -622,7 +622,7 @@ mod tests {
     #[test]
     fn test_analyze_offset() {
         let mut state = LiveState::new();
-        let expr = Expr::AddressOf(Ip::Offset(12345678));
+        let expr = Expr::AddressOf(Pointer::Offset(12345678));
         assert_eq!(Value::Offset(12345678), state.analyze_expr(&expr).value());
     }
 
@@ -660,13 +660,16 @@ mod tests {
     #[test]
     fn test_analyze_set() {
         let commands: &[Command] = &[
-            SetArgs::new(SetExpr::Stack(0), Expr::AddressOf(Ip::Offset(123))).into(),
-            SetArgs::new(SetExpr::from_var(2), Expr::AddressOf(Ip::Offset(123))).into(),
-            SetArgs::new(SetExpr::Result1, Expr::AddressOf(Ip::Offset(123))).into(),
-            SetArgs::new(SetExpr::Result2, Expr::AddressOf(Ip::Offset(123))).into(),
+            SetArgs::new(SetExpr::Stack(0), Expr::AddressOf(Pointer::Offset(123))).into(),
+            SetArgs::new(SetExpr::from_var(2), Expr::AddressOf(Pointer::Offset(123))).into(),
+            SetArgs::new(SetExpr::Result1, Expr::AddressOf(Pointer::Offset(123))).into(),
+            SetArgs::new(SetExpr::Result2, Expr::AddressOf(Pointer::Offset(123))).into(),
             SetArgs::new(SetExpr::Exp, Expr::from_var(42)).into(),
-            SetArgs::new(SetExpr::Battery(Expr::from_var(43)), Expr::AddressOf(Ip::Offset(123)))
-                .into(),
+            SetArgs::new(
+                SetExpr::Battery(Expr::from_var(43)),
+                Expr::AddressOf(Pointer::Offset(123)),
+            )
+            .into(),
         ];
 
         let mut state = LiveState::new();
@@ -691,10 +694,10 @@ mod tests {
     #[test]
     fn test_analyze_set_sp() {
         let commands: &[Command] = &[
-            Command::SetSp(Expr::AddressOf(Ip::Offset(123)).into()),
-            Command::SetSp(Expr::AddressOf(Ip::Offset(456)).into()),
+            Command::SetSp(Expr::AddressOf(Pointer::Offset(123)).into()),
+            Command::SetSp(Expr::AddressOf(Pointer::Offset(456)).into()),
             Command::PushBp,
-            Command::SetSp(Expr::AddressOf(Ip::Offset(789)).into()),
+            Command::SetSp(Expr::AddressOf(Pointer::Offset(789)).into()),
             Command::PopBp,
         ];
 
@@ -718,7 +721,7 @@ mod tests {
     fn test_resolve_label() {
         let commands: &[Command] = &[
             Command::Detach(Expr::from_var(42).into()),
-            SetArgs::new(SetExpr::from_var(42), Expr::AddressOf(Ip::Offset(123))).into(),
+            SetArgs::new(SetExpr::from_var(42), Expr::AddressOf(Pointer::Offset(123))).into(),
             Command::Detach(Expr::from_var(42).into()),
         ];
 

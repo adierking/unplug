@@ -2,7 +2,7 @@ use super::{Requirement, Slot, SHOP_COUNT_FIRST, SHOP_ITEM_FIRST};
 
 use crate::data::{Atc, Item};
 use crate::event::command::{IfArgs, SetArgs};
-use crate::event::{Block, BlockId, CodeBlock, Command, Expr, Ip, Script, SetExpr};
+use crate::event::{Block, BlockId, CodeBlock, Command, Expr, Pointer, Script, SetExpr};
 use crate::expr;
 use std::convert::TryFrom;
 use tracing::level_filters::STATIC_MAX_LEVEL;
@@ -150,7 +150,9 @@ impl BlockBuilder {
 
     /// Emits an `If()` command which checks `condition` and jumps to `else_block` if it's false.
     fn emit_if_else(&mut self, condition: Expr, else_block: BlockId) {
-        self.emit(Command::If(IfArgs { condition, else_target: Ip::Block(else_block) }.into()));
+        self.emit(Command::If(
+            IfArgs { condition, else_target: Pointer::Block(else_block) }.into(),
+        ));
     }
 
     /// Emits an `EndIf()` command which jumps to `target`.
@@ -434,7 +436,7 @@ impl<'s> ShopCompiler<'s> {
             block.next_block = Some(*target);
         } else {
             // Next block is the last one emitted
-            block.next_block = self.last_block.map(Ip::from);
+            block.next_block = self.last_block.map(Pointer::from);
             // Else block comes from an ending if() statement
             if let Some(args) = last.if_args() {
                 block.else_block = Some(args.else_target);
@@ -480,7 +482,7 @@ mod tests {
     }
 
     fn if_else(condition: Expr, else_block: BlockId) -> Command {
-        Command::If(IfArgs { condition, else_target: Ip::Block(else_block) }.into())
+        Command::If(IfArgs { condition, else_target: Pointer::Block(else_block) }.into())
     }
 
     fn endif(block: BlockId) -> Command {

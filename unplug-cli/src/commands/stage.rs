@@ -16,7 +16,7 @@ use std::io::{BufReader, BufWriter, Write};
 use std::num::NonZeroI32;
 use std::path::Path;
 use unplug::data::{Item, Object, Resource, Stage as StageId};
-use unplug::event::{BlockId, Command, Expr, Ip, Script};
+use unplug::event::{BlockId, Command, Expr, Pointer, Script};
 use unplug::stage::{ObjectFlags, ObjectPlacement, Stage};
 
 /// Maximum JSON indentation
@@ -352,10 +352,10 @@ fn patch_item_script(
     }
 
     let (next_block, else_block) = (code.next_block, code.else_block);
-    if let Some(Ip::Block(next_block)) = next_block {
+    if let Some(Pointer::Block(next_block)) = next_block {
         success = patch_item_script(script, next_block, item, visited) || success;
     }
-    if let Some(Ip::Block(else_block)) = else_block {
+    if let Some(Pointer::Block(else_block)) = else_block {
         success = patch_item_script(script, else_block, item, visited) || success;
     }
     success

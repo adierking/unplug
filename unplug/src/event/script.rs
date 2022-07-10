@@ -5,7 +5,7 @@ pub use reader::ScriptReader;
 pub use writer::{BlockOffsetMap, ScriptWriter};
 
 use super::analysis::SubroutineEffectsMap;
-use super::block::{Block, BlockId, CodeBlock, Ip};
+use super::block::{Block, BlockId, CodeBlock, Pointer};
 use super::command::{self, Command};
 use super::serialize;
 use std::collections::HashSet;
@@ -241,12 +241,14 @@ impl Script {
         postorder
     }
 
-    /// Looks up the ID of the block corresponding to an `Ip`.
-    pub fn resolve_ip(&self, ip: Ip) -> Result<BlockId> {
-        match ip {
-            Ip::Block(id) if id.index() < self.len() => Ok(id),
-            Ip::Block(id) => Err(Error::InvalidId(id)),
-            Ip::Offset(offset) => self.layout().ok_or(Error::MissingLayout)?.resolve_offset(offset),
+    /// Looks up the ID of the block corresponding to a pointer.
+    pub fn resolve_pointer(&self, ptr: Pointer) -> Result<BlockId> {
+        match ptr {
+            Pointer::Block(id) if id.index() < self.len() => Ok(id),
+            Pointer::Block(id) => Err(Error::InvalidId(id)),
+            Pointer::Offset(offset) => {
+                self.layout().ok_or(Error::MissingLayout)?.resolve_offset(offset)
+            }
         }
     }
 
@@ -483,7 +485,7 @@ impl Iterator for Postorder<'_> {
             } else if let Some(&peek) = self.stack.last() {
                 // If we didn't just come from next_block, then it hasn't been visited yet.
                 let code = peek.get(self.blocks).code().expect("expected code block");
-                if let Some(Ip::Block(next_block)) = code.next_block {
+                if let Some(Pointer::Block(next_block)) = code.next_block {
                     if self.prev != next_block {
                         self.current = Some(next_block);
                         continue;
@@ -522,8 +524,8 @@ mod tests {
     fn tree_block(next_block: Option<u32>, else_block: Option<u32>) -> Block {
         Block::Code(CodeBlock {
             commands: vec![],
-            next_block: next_block.map(|i| Ip::Block(BlockId::new(i))),
-            else_block: else_block.map(|i| Ip::Block(BlockId::new(i))),
+            next_block: next_block.map(|i| Pointer::Block(BlockId::new(i))),
+            else_block: else_block.map(|i| Pointer::Block(BlockId::new(i))),
         })
     }
 
@@ -718,18 +720,18 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_ip() -> Result<()> {
-        assert_eq!(TEST_SCRIPT.resolve_ip(BlockId::new(0).into())?, BlockId::new(0));
-        assert_eq!(TEST_SCRIPT.resolve_ip(BlockId::new(1).into())?, BlockId::new(1));
-        assert_eq!(TEST_SCRIPT.resolve_ip(BlockId::new(2).into())?, BlockId::new(2));
-        assert!(is_id_error(TEST_SCRIPT.resolve_ip(BlockId::new(3).into())));
+    fn test_resolve_pointer() -> Result<()> {
+        assert_eq!(TEST_SCRIPT.resolve_pointer(BlockId::new(0).into())?, BlockId::new(0));
+        assert_eq!(TEST_SCRIPT.resolve_pointer(BlockId::new(1).into())?, BlockId::new(1));
+        assert_eq!(TEST_SCRIPT.resolve_pointer(BlockId::new(2).into())?, BlockId::new(2));
+        assert!(is_id_error(TEST_SCRIPT.resolve_pointer(BlockId::new(3).into())));
 
-        assert_eq!(TEST_SCRIPT.resolve_ip(Ip::Offset(0x123))?, BlockId::new(1));
-        assert_eq!(TEST_SCRIPT.resolve_ip(Ip::Offset(0x456))?, BlockId::new(0));
-        assert_eq!(TEST_SCRIPT.resolve_ip(Ip::Offset(0x789))?, BlockId::new(2));
-        assert!(is_offset_error(TEST_SCRIPT.resolve_ip(Ip::Offset(0x654))));
-        assert!(is_offset_error(TEST_SCRIPT.resolve_ip(Ip::Offset(0x122))));
-        assert!(is_offset_error(TEST_SCRIPT.resolve_ip(Ip::Offset(0x78a))));
+        assert_eq!(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x123))?, BlockId::new(1));
+        assert_eq!(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x456))?, BlockId::new(0));
+        assert_eq!(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x789))?, BlockId::new(2));
+        assert!(is_offset_error(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x654))));
+        assert!(is_offset_error(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x122))));
+        assert!(is_offset_error(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x78a))));
         Ok(())
     }
 

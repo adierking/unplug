@@ -1,4 +1,4 @@
-use super::block::{Ip, WriteIp};
+use super::block::{Pointer, WritePointer};
 use super::opcodes::{CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap, TypeOp};
 use super::serialize::{Error, EventDeserializer, EventSerializer, Result};
 use crate::common::text::Text;
@@ -11,13 +11,13 @@ use std::io::{Read, Seek, SeekFrom, Write};
 const MAX_MSG_SIZE: u64 = 2048;
 
 /// Event serializer for writing events to .bin files.
-pub struct BinSerializer<W: Write + WriteIp + Seek> {
+pub struct BinSerializer<W: Write + WritePointer + Seek> {
     writer: W,
     call_start_offset: u64, // u64::MAX if not set
     msg_start_offset: u64,  // u64::MAX if not set
 }
 
-impl<W: Write + WriteIp + Seek> BinSerializer<W> {
+impl<W: Write + WritePointer + Seek> BinSerializer<W> {
     /// Creates a new `BinSerializer` which wraps `writer`.
     pub fn new(writer: W) -> Self {
         Self { writer, call_start_offset: u64::MAX, msg_start_offset: u64::MAX }
@@ -29,7 +29,7 @@ impl<W: Write + WriteIp + Seek> BinSerializer<W> {
     }
 }
 
-impl<W: Write + WriteIp + Seek> EventSerializer for BinSerializer<W> {
+impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
     fn serialize_i8(&mut self, val: i8) -> Result<()> {
         Ok(self.writer.write_i8(val)?)
     }
@@ -54,8 +54,8 @@ impl<W: Write + WriteIp + Seek> EventSerializer for BinSerializer<W> {
         Ok(self.writer.write_u32::<LE>(val)?)
     }
 
-    fn serialize_ip(&mut self, ip: Ip) -> Result<()> {
-        Ok(ip.write_to(&mut self.writer)?)
+    fn serialize_pointer(&mut self, ptr: Pointer) -> Result<()> {
+        Ok(ptr.write_to(&mut self.writer)?)
     }
 
     fn serialize_type(&mut self, ty: TypeOp) -> Result<()> {
@@ -193,8 +193,8 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
         Ok(self.reader.read_u32::<LE>()?)
     }
 
-    fn deserialize_ip(&mut self) -> Result<Ip> {
-        Ok(Ip::read_from(&mut self.reader)?)
+    fn deserialize_pointer(&mut self) -> Result<Pointer> {
+        Ok(Pointer::read_from(&mut self.reader)?)
     }
 
     fn deserialize_type(&mut self) -> Result<TypeOp> {

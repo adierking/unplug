@@ -55,7 +55,7 @@ pub enum ArrayKind {
     U16,
     I32,
     U32,
-    Ip(Box<ValueKind>),
+    Pointer(Box<ValueKind>),
 }
 
 impl ArrayKind {
@@ -86,13 +86,13 @@ impl ArrayKind {
         match self {
             ArrayKind::I8 | ArrayKind::U8 => 1,
             ArrayKind::I16 | ArrayKind::U16 => 2,
-            ArrayKind::I32 | ArrayKind::U32 | ArrayKind::Ip(_) => 4,
+            ArrayKind::I32 | ArrayKind::U32 | ArrayKind::Pointer(_) => 4,
         }
     }
 
-    /// Returns `true` if each array element is a file offset.
-    pub fn is_ip(&self) -> bool {
-        matches!(self, ArrayKind::Ip(_))
+    /// Returns `true` if each array element is a pointer.
+    pub fn is_pointer(&self) -> bool {
+        matches!(self, ArrayKind::Pointer(_))
     }
 }
 

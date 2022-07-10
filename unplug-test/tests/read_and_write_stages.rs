@@ -6,7 +6,7 @@ use std::mem;
 use unplug::common::WriteTo;
 use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, OpenFile};
-use unplug::event::{Block, BlockId, CodeBlock, Command, DataBlock, Ip, Script};
+use unplug::event::{Block, BlockId, CodeBlock, Command, DataBlock, Pointer, Script};
 use unplug::globals::{GlobalsBuilder, GlobalsReader};
 use unplug::stage::Stage;
 use unplug_test as common;
@@ -56,10 +56,14 @@ fn compare_subroutines(
     let b2 = script2.block(sub2);
     assert!(compare_blocks(b1, b2), "b1 = {:?}, b2 = {:?}", sub1, sub2);
     if let (Block::Code(code1), Block::Code(code2)) = (b1, b2) {
-        if let (Some(Ip::Block(n1)), Some(Ip::Block(n2))) = (code1.next_block, code2.next_block) {
+        if let (Some(Pointer::Block(n1)), Some(Pointer::Block(n2))) =
+            (code1.next_block, code2.next_block)
+        {
             compare_subroutines(script1, n1, script2, n2, visited);
         }
-        if let (Some(Ip::Block(e1)), Some(Ip::Block(e2))) = (code1.else_block, code2.else_block) {
+        if let (Some(Pointer::Block(e1)), Some(Pointer::Block(e2))) =
+            (code1.else_block, code2.else_block)
+        {
             compare_subroutines(script1, e1, script2, e2, visited);
         }
     }
@@ -87,7 +91,7 @@ fn compare_commands(a: &Command, b: &Command) -> bool {
 
 fn compare_data(a: &DataBlock, b: &DataBlock) -> bool {
     match (a, b) {
-        (DataBlock::ArrayIp(a), DataBlock::ArrayIp(b)) => a.len() == b.len(),
+        (DataBlock::ArrayPointer(a), DataBlock::ArrayPointer(b)) => a.len() == b.len(),
         _ => a == b,
     }
 }

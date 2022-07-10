@@ -2,7 +2,7 @@ use crate::audio::format::{FormatTag, PcmS16Le, ReadWriteBytes};
 use crate::audio::Samples;
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::bin::{BinDeserializer, BinSerializer};
-use crate::event::block::{Ip, WriteIp};
+use crate::event::block::{Pointer, WritePointer};
 use crate::event::serialize::{DeserializeEvent, SerializeEvent};
 use byteorder::{ByteOrder, WriteBytesExt, LE};
 use ctor::ctor;
@@ -141,13 +141,13 @@ where
     val
 }
 
-/// WriteIp implementation which just writes an offset directly
-impl WriteIp for Cursor<Vec<u8>> {
-    fn write_ip(&mut self, ip: Ip) -> io::Result<()> {
-        if let Ip::Offset(offset) = ip {
+/// WritePointer implementation which just writes an offset directly
+impl WritePointer for Cursor<Vec<u8>> {
+    fn write_pointer(&mut self, ptr: Pointer) -> io::Result<()> {
+        if let Pointer::Offset(offset) = ptr {
             self.write_u32::<LE>(offset)
         } else {
-            panic!("IP is not an offset: {:?}", ip);
+            panic!("Pointer is not an offset: {:?}", ptr);
         }
     }
 

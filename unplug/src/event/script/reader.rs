@@ -2,7 +2,7 @@ use super::{Error, Result, Script, ScriptLayout};
 use crate::common::{ReadFrom, ReadSeek};
 use crate::event::analysis::{ArrayKind, ScriptAnalyzer, ValueKind};
 use crate::event::bin::BinDeserializer;
-use crate::event::block::{Block, BlockId, CodeBlock, DataBlock, Ip};
+use crate::event::block::{Block, BlockId, CodeBlock, DataBlock, Pointer};
 use crate::event::command::{self, Command};
 use crate::event::expr::{self, ObjBone, ObjPair};
 use crate::event::serialize::{self, DeserializeEvent};
@@ -81,13 +81,13 @@ impl DataLayout {
         if self.ty == *hint {
             true
         } else if let (DataType::Array(current), DataType::Array(new)) = (&self.ty, &hint) {
-            if current.element_size() == 4 && new.is_ip() {
-                // Any 4-byte array type can be upgraded to an IP array
+            if current.element_size() == 4 && new.is_pointer() {
+                // Any 4-byte array type can be upgraded to a pointer array
                 self.ty = hint.clone();
                 true
             } else {
-                // Don't downgrade from IP to another type
-                current.is_ip() && new.element_size() == 4
+                // Don't downgrade from pointers to another type
+                current.is_pointer() && new.element_size() == 4
             }
         } else {
             false
@@ -150,9 +150,9 @@ impl<'r> ScriptReader<'r> {
         self.analyzer.analyze_subroutine(&self.blocks, entry_block);
         let mut references = self.analyzer.find_references(entry_block);
         // References must be sorted to make the block order deterministic
-        references.sort_unstable_by_key(|(_, ip)| *ip);
-        for (kind, ip) in references {
-            self.process_reference(kind, ip)?;
+        references.sort_unstable_by_key(|(_, ptr)| *ptr);
+        for (kind, ptr) in references {
+            self.process_reference(kind, ptr)?;
         }
         Ok(entry_block)
     }
@@ -160,7 +160,7 @@ impl<'r> ScriptReader<'r> {
     /// Finishes reading events and constructs the final script data.
     pub fn finish(mut self) -> Result<Script> {
         let file_size = self.reader.seek(SeekFrom::End(0))? as u32;
-        self.read_ip_arrays(file_size)?;
+        self.read_pointer_arrays(file_size)?;
         self.read_data(file_size)?;
         self.analyzer.log_stats();
         debug!("Read {} script blocks", self.blocks.len());
@@ -218,7 +218,7 @@ impl<'r> ScriptReader<'r> {
         let commands = block.commands.split_off(split_index);
         let command_offsets = layout.command_offsets.split_off(split_index);
 
-        let next_block = block.next_block.replace(Ip::Block(new_id));
+        let next_block = block.next_block.replace(Pointer::Block(new_id));
         let else_block = block.else_block.take();
 
         let new_block = Block::Code(CodeBlock { commands, next_block, else_block });
@@ -230,15 +230,15 @@ impl<'r> ScriptReader<'r> {
     }
 
     /// Processes a block referenced by another block.
-    fn process_reference(&mut self, kind: ValueKind, ip: Ip) -> Result<()> {
+    fn process_reference(&mut self, kind: ValueKind, ptr: Pointer) -> Result<()> {
         // Some scripts read values directly out of the stage header and object table. We don't want
         // to create blocks for these, so just ignore anything up to and including the offset of the
         // object table. This isn't technically correct for the globals script, but that will start
         // with the library table anyway.
-        if ip.is_in_header() {
+        if ptr.is_in_header() {
             return Ok(());
         }
-        let offset = ip.offset().unwrap();
+        let offset = ptr.offset().unwrap();
         match kind {
             ValueKind::Event => {
                 self.read_event(offset)?;
@@ -285,15 +285,15 @@ impl<'r> ScriptReader<'r> {
 
         // Read the blocks immediately following this one
         let mut next_offsets = vec![];
-        if let Some(Ip::Offset(offset)) = new_code.next_block {
+        if let Some(Pointer::Offset(offset)) = new_code.next_block {
             next_offsets.push(offset);
         }
-        if let Some(Ip::Offset(offset)) = new_code.else_block {
+        if let Some(Pointer::Offset(offset)) = new_code.else_block {
             next_offsets.push(offset);
         }
         // If the code calls into any subroutines, read them as well
         for command in &new_code.commands {
-            if let Command::Run(Ip::Offset(offset)) = *command {
+            if let Command::Run(Pointer::Offset(offset)) = *command {
                 next_offsets.push(offset);
             }
         }
@@ -385,16 +385,16 @@ impl<'r> ScriptReader<'r> {
     fn resolve_edges(&mut self, start: BlockId) {
         for block in &mut self.blocks[start.index()..] {
             if let Block::Code(code) = block {
-                if let Some(Ip::Offset(offset)) = code.next_block {
+                if let Some(Pointer::Offset(offset)) = code.next_block {
                     code.next_block = Some(self.offset_map[&offset].into());
                 }
-                if let Some(Ip::Offset(offset)) = code.else_block {
+                if let Some(Pointer::Offset(offset)) = code.else_block {
                     code.else_block = Some(self.offset_map[&offset].into());
                 }
 
                 for command in &mut code.commands {
                     if let Command::Run(target) = command {
-                        if let Ip::Offset(offset) = target {
+                        if let Pointer::Offset(offset) = target {
                             *target = self.offset_map[offset].into();
                         }
                     }
@@ -410,8 +410,8 @@ impl<'r> ScriptReader<'r> {
         }
     }
 
-    /// Reads the data block pointers out of each IP array.
-    fn read_ip_arrays(&mut self, file_size: u32) -> Result<()> {
+    /// Reads the data block pointers out of each pointer array.
+    fn read_pointer_arrays(&mut self, file_size: u32) -> Result<()> {
         struct PendingArray {
             block_id: BlockId,
             offset: u32,
@@ -419,16 +419,16 @@ impl<'r> ScriptReader<'r> {
         }
 
         // The game generally only uses arrays of arrays, but for correctness purposes we support
-        // arrays being able to point to anything, including other IP arrays. Keep looping until
-        // there are no more new data blocks to process.
+        // arrays being able to point to anything, including other pointer arrays. Keep looping
+        // until there are no more new data blocks to process.
         let mut start = 0;
         let mut queue = vec![];
         while start < self.layouts.len() {
             queue.clear();
-            trace!("Searching for IP arrays starting at {}", start);
+            trace!("Searching for pointer arrays starting at {}", start);
             for (index, layout) in self.layouts[start..].iter().enumerate() {
                 if let BlockLayout::Data(data) = layout {
-                    if let DataType::Array(ArrayKind::Ip(kind)) = &data.ty {
+                    if let DataType::Array(ArrayKind::Pointer(kind)) = &data.ty {
                         queue.push(PendingArray {
                             block_id: index.try_into().unwrap(),
                             offset: data.start_offset,
@@ -449,7 +449,11 @@ impl<'r> ScriptReader<'r> {
                 let next_offset =
                     next.map(|id| id.get(&self.layouts).offset()).unwrap_or(file_size);
                 let max_len = ((next_offset - pending.offset) / 4) as usize;
-                trace!("Reading IP array at {:#x} with max length {}", pending.offset, max_len);
+                trace!(
+                    "Reading pointer array at {:#x} with max length {}",
+                    pending.offset,
+                    max_len
+                );
 
                 let mut offsets = Vec::with_capacity(max_len);
                 self.reader.seek(SeekFrom::Start(pending.offset as u64))?;
@@ -461,21 +465,21 @@ impl<'r> ScriptReader<'r> {
                     if offset <= 0 {
                         break;
                     }
-                    offsets.push(Ip::Offset(offset as u32));
+                    offsets.push(Pointer::Offset(offset as u32));
                 }
 
                 // Just process each offset like it's a reference. This gives us free support for
                 // all data types.
                 for &offset in &offsets {
                     trace!(
-                        "Processing IP array reference: {:?} at {:?}",
+                        "Processing pointer array reference: {:?} at {:?}",
                         pending.element_kind,
                         offset
                     );
                     self.process_reference(pending.element_kind.clone(), offset)?;
                 }
 
-                self.blocks[pending.block_id.index()] = DataBlock::ArrayIp(offsets).into();
+                self.blocks[pending.block_id.index()] = DataBlock::ArrayPointer(offsets).into();
             }
         }
 
@@ -554,8 +558,8 @@ impl<'r> ScriptReader<'r> {
                 reader.read_u32_into::<LE>(&mut arr)?;
                 arr.into()
             }
-            ArrayKind::Ip(_) => {
-                panic!("IP arrays must be read before other data");
+            ArrayKind::Pointer(_) => {
+                panic!("Pointer arrays must be read before other data");
             }
         })
     }

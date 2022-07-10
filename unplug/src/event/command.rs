@@ -1,4 +1,4 @@
-use super::block::Ip;
+use super::block::Pointer;
 use super::expr::{self, Expr, SetExpr, SoundExpr};
 use super::msg::{self, MsgArgs};
 use super::opcodes::{CmdOp, TypeOp};
@@ -37,16 +37,16 @@ from_error_boxed!(Error::Serialize, serialize::Error);
 pub enum Command {
     Abort,
     Return,
-    Goto(Ip),
+    Goto(Pointer),
     Set(Box<SetArgs>),
     If(Box<IfArgs>),
     Elif(Box<IfArgs>),
-    EndIf(Ip),
+    EndIf(Pointer),
     Case(Box<IfArgs>),
     Expr(Box<IfArgs>),
     While(Box<IfArgs>),
-    Break(Ip),
-    Run(Ip),
+    Break(Pointer),
+    Run(Pointer),
     Lib(i16),
     PushBp,
     PopBp,
@@ -127,7 +127,7 @@ impl Command {
 
     /// If the command always jumps to another offset, retrieve the target.
     #[must_use]
-    pub fn goto_target(&self) -> Option<&Ip> {
+    pub fn goto_target(&self) -> Option<&Pointer> {
         match self {
             Self::Break(x) => Some(x),
             Self::EndIf(x) => Some(x),
@@ -138,7 +138,7 @@ impl Command {
 
     /// If the command always jumps to another offset, retrieve a mutable reference to the target.
     #[must_use]
-    pub fn goto_target_mut(&mut self) -> Option<&mut Ip> {
+    pub fn goto_target_mut(&mut self) -> Option<&mut Pointer> {
         match self {
             Self::Break(x) => Some(x),
             Self::EndIf(x) => Some(x),
@@ -230,16 +230,16 @@ impl DeserializeEvent for Command {
         let result = match cmd {
             CmdOp::Abort => Self::Abort,
             CmdOp::Return => Self::Return,
-            CmdOp::Goto => Self::Goto(Ip::deserialize(de)?),
+            CmdOp::Goto => Self::Goto(Pointer::deserialize(de)?),
             CmdOp::Set => Self::Set(SetArgs::deserialize(de)?.into()),
             CmdOp::If => Self::If(IfArgs::deserialize(de)?.into()),
             CmdOp::Elif => Self::Elif(IfArgs::deserialize(de)?.into()),
-            CmdOp::EndIf => Self::EndIf(Ip::deserialize(de)?),
+            CmdOp::EndIf => Self::EndIf(Pointer::deserialize(de)?),
             CmdOp::Case => Self::Case(IfArgs::deserialize(de)?.into()),
             CmdOp::Expr => Self::Expr(IfArgs::deserialize(de)?.into()),
             CmdOp::While => Self::While(IfArgs::deserialize(de)?.into()),
-            CmdOp::Break => Self::Break(Ip::deserialize(de)?),
-            CmdOp::Run => Self::Run(Ip::deserialize(de)?),
+            CmdOp::Break => Self::Break(Pointer::deserialize(de)?),
+            CmdOp::Run => Self::Run(Pointer::deserialize(de)?),
             CmdOp::Lib => Self::Lib(de.deserialize_i16()?),
             CmdOp::PushBp => Self::PushBp,
             CmdOp::PopBp => Self::PopBp,
@@ -290,16 +290,16 @@ impl SerializeEvent for Command {
         match self {
             Self::Abort => (),
             Self::Return => (),
-            Self::Goto(ip) => ip.serialize(ser)?,
+            Self::Goto(ptr) => ptr.serialize(ser)?,
             Self::Set(arg) => arg.serialize(ser)?,
             Self::If(arg) => arg.serialize(ser)?,
             Self::Elif(arg) => arg.serialize(ser)?,
-            Self::EndIf(ip) => ip.serialize(ser)?,
+            Self::EndIf(ptr) => ptr.serialize(ser)?,
             Self::Case(arg) => arg.serialize(ser)?,
             Self::Expr(arg) => arg.serialize(ser)?,
             Self::While(arg) => arg.serialize(ser)?,
-            Self::Break(ip) => ip.serialize(ser)?,
-            Self::Run(ip) => ip.serialize(ser)?,
+            Self::Break(ptr) => ptr.serialize(ser)?,
+            Self::Run(ptr) => ptr.serialize(ser)?,
             Self::Lib(index) => index.serialize(ser)?,
             Self::PushBp => (),
             Self::PopBp => (),
@@ -400,7 +400,7 @@ impl fmt::Debug for SetArgs {
 #[serialize(error = Error)]
 pub struct IfArgs {
     pub condition: Expr,
-    pub else_target: Ip,
+    pub else_target: Pointer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -892,8 +892,8 @@ mod tests {
         Expr::Imm32(123)
     }
 
-    fn ip() -> Ip {
-        Ip::Offset(123)
+    fn ptr() -> Pointer {
+        Pointer::Offset(123)
     }
 
     fn binary_op(lhs: Expr, rhs: Expr) -> Box<BinaryOp> {
@@ -901,7 +901,7 @@ mod tests {
     }
 
     fn if_args() -> Box<IfArgs> {
-        Box::new(IfArgs { condition: expr(), else_target: ip() })
+        Box::new(IfArgs { condition: expr(), else_target: ptr() })
     }
 
     fn text(string: &str) -> Text {
@@ -912,7 +912,7 @@ mod tests {
     fn test_reserialize_command() {
         assert_reserialize!(Command::Abort);
         assert_reserialize!(Command::Return);
-        assert_reserialize!(Command::Goto(ip()));
+        assert_reserialize!(Command::Goto(ptr()));
         assert_reserialize!(Command::Set(Box::new(SetArgs {
             target: SetExpr::from_var(123),
             value: expr(),
@@ -923,12 +923,12 @@ mod tests {
         })));
         assert_reserialize!(Command::If(if_args()));
         assert_reserialize!(Command::Elif(if_args()));
-        assert_reserialize!(Command::EndIf(ip()));
+        assert_reserialize!(Command::EndIf(ptr()));
         assert_reserialize!(Command::Case(if_args()));
         assert_reserialize!(Command::Expr(if_args()));
         assert_reserialize!(Command::While(if_args()));
-        assert_reserialize!(Command::Break(ip()));
-        assert_reserialize!(Command::Run(ip()));
+        assert_reserialize!(Command::Break(ptr()));
+        assert_reserialize!(Command::Run(ptr()));
         assert_reserialize!(Command::Lib(123));
         assert_reserialize!(Command::PushBp);
         assert_reserialize!(Command::PopBp);

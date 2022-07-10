@@ -8,7 +8,7 @@ pub mod opcodes;
 pub mod script;
 pub mod serialize;
 
-pub use block::{Block, BlockId, CodeBlock, DataBlock, Ip};
+pub use block::{Block, BlockId, CodeBlock, DataBlock, Pointer};
 pub use command::Command;
 pub use expr::{Expr, SetExpr};
 pub use script::Script;
