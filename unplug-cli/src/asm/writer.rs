@@ -123,11 +123,16 @@ impl<'a> AsmSerializer<'a> {
         } else {
             let block = self.script.resolve_ip(ip).unwrap();
             self.asm.refs.push(block);
-            Operand::Label(
-                self.labels
-                    .find_block_or_insert(block, || format!("loc_{}", block.index()))
-                    .unwrap(),
-            )
+            let label = self
+                .labels
+                .find_block_or_insert(block, || format!("loc_{}", block.index()))
+                .unwrap();
+            // If this command is if-like, use an ElseLabel so that "else" is displayed before it.
+            // This should improve readability because it clarifies what the reference is for.
+            match &self.operation {
+                Some(AnyOperation::Command(c)) if c.opcode.is_if() => Operand::ElseLabel(label),
+                _ => Operand::Label(label),
+            }
         }
     }
 
@@ -502,6 +507,9 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
             }
             Operand::Label(label) => {
                 write!(self.writer, "*{}", self.program.labels.get(*label).name)?
+            }
+            Operand::ElseLabel(label) => {
+                write!(self.writer, "else *{}", self.program.labels.get(*label).name)?
             }
             Operand::Offset(off) => write!(self.writer, "*0x{:x}", off)?,
             Operand::Type(ty) => write!(self.writer, "@{}", ty.name())?,

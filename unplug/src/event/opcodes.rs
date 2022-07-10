@@ -209,6 +209,39 @@ pub enum CmdOp {
     Movie,
 }
 
+impl CmdOp {
+    /// Returns `true` if the command is an `if` statement.
+    #[must_use]
+    pub fn is_if(self) -> bool {
+        matches!(self, Self::If | Self::Elif | Self::Case | Self::Expr | Self::While)
+    }
+
+    /// Returns `true` if the command always jumps to another offset.
+    #[must_use]
+    pub fn is_goto(self) -> bool {
+        matches!(self, Self::Break | Self::EndIf | Self::Goto)
+    }
+
+    /// Returns `true` if the command may jump to another offset or end the event. Function calls are
+    /// not included.
+    #[must_use]
+    pub fn is_control_flow(self) -> bool {
+        matches!(
+            self,
+            Self::Abort
+                | Self::Return
+                | Self::Goto
+                | Self::If
+                | Self::Elif
+                | Self::EndIf
+                | Self::Case
+                | Self::Expr
+                | Self::While
+                | Self::Break
+        )
+    }
+}
+
 impl Opcode for CmdOp {
     type Value = u8;
     fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {

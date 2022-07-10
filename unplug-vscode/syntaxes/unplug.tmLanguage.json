@@ -71,7 +71,7 @@
 		},
 		"control-keyword": {
 			"name": "keyword.control.unplug",
-			"match": "\\b(abort|return|goto|if|elif|endif|case|expr|while|break)\\b"
+			"match": "\\b(abort|return|goto|(el|end)?if|else|case|expr|while|break)\\b"
 		},
 		"command-keyword": {
 			"name": "entity.name.function.command.unplug",

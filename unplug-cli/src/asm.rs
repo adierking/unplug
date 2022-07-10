@@ -172,6 +172,8 @@ pub enum Operand {
     Text(Text),
     /// A label reference.
     Label(LabelId),
+    /// A label reference indicating it is an "else" condition.
+    ElseLabel(LabelId),
     /// A raw file offset reference.
     Offset(u32),
     /// A type expression.
