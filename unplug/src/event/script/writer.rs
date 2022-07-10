@@ -1,7 +1,8 @@
 use super::{Error, Result, Script, ScriptLayout};
 use crate::common::{WriteSeek, WriteTo};
 use crate::event::bin::BinSerializer;
-use crate::event::block::{Block, BlockId, DataBlock, Pointer, WritePointer};
+use crate::event::block::{Block, DataBlock};
+use crate::event::pointer::{BlockId, Pointer, WritePointer};
 use crate::event::serialize::SerializeEvent;
 use byteorder::{WriteBytesExt, LE};
 use std::io::{self, Cursor, Seek, SeekFrom, Write};

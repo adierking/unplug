@@ -1,5 +1,5 @@
-use super::block::{Pointer, WritePointer};
 use super::opcodes::{CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap, TypeOp};
+use super::pointer::{Pointer, WritePointer};
 use super::serialize::{Error, EventDeserializer, EventSerializer, Result};
 use crate::common::text::Text;
 use crate::common::{ReadFrom, WriteTo};

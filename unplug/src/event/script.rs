@@ -5,8 +5,9 @@ pub use reader::ScriptReader;
 pub use writer::{BlockOffsetMap, ScriptWriter};
 
 use super::analysis::SubroutineEffectsMap;
-use super::block::{Block, BlockId, CodeBlock, Pointer};
+use super::block::{Block, CodeBlock};
 use super::command::{self, Command};
+use super::pointer::{BlockId, Pointer};
 use super::serialize;
 use std::collections::HashSet;
 use std::convert::TryInto;

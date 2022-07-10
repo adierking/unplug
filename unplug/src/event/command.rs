@@ -1,7 +1,7 @@
-use super::block::Pointer;
 use super::expr::{self, Expr, SetExpr, SoundExpr};
 use super::msg::{self, MsgArgs};
 use super::opcodes::{CmdOp, TypeOp};
+use super::pointer::Pointer;
 use super::serialize::{
     self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
 };

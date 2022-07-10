@@ -1,5 +1,5 @@
-use super::block::Pointer;
 use super::opcodes::{ExprOp, TypeOp};
+use super::pointer::Pointer;
 use super::serialize::{
     self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
 };

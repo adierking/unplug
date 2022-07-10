@@ -2,7 +2,7 @@ use crate::audio::format::{FormatTag, PcmS16Le, ReadWriteBytes};
 use crate::audio::Samples;
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::bin::{BinDeserializer, BinSerializer};
-use crate::event::block::{Pointer, WritePointer};
+use crate::event::pointer::{Pointer, WritePointer};
 use crate::event::serialize::{DeserializeEvent, SerializeEvent};
 use byteorder::{ByteOrder, WriteBytesExt, LE};
 use ctor::ctor;
