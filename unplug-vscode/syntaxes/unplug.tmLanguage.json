@@ -3,6 +3,7 @@
 	"name": "Unplug Assembly",
 	"patterns": [
 		{ "include": "#comment" },
+		{ "include": "#directive" },
 		{ "include": "#literal" },
 		{ "include": "#keyword" },
 		{ "include": "#label" }
@@ -45,6 +46,10 @@
 			"name": "comment.block.unplug",
 			"begin": "/\\*",
 			"end": "\\*/"
+		},
+		"directive": {
+			"name": "keyword.other.directive.unplug",
+			"match": "\\.d[bwd]\\b"
 		},
 		"number-literal": {
 			"name": "constant.numeric.unplug",

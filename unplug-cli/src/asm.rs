@@ -1,10 +1,10 @@
 mod opcodes;
 mod writer;
 
-pub use writer::{AsmBlock, Program, ProgramBuilder, ProgramWriter, Subroutine};
+pub use opcodes::{AsmMsgOp, DataOp, NamedOpcode};
+pub use writer::{AsmCodeBlock, AsmDataBlock, Program, ProgramBuilder, ProgramWriter, Subroutine};
 
 use anyhow::{ensure, Result};
-use opcodes::{AsmMsgOp, NamedOpcode};
 use slotmap::{new_key_type, SlotMap};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -183,6 +183,26 @@ pub enum Operand {
     /// A message command.
     MsgCommand(Operation<AsmMsgOp>),
 }
+
+macro_rules! impl_operand_from {
+    ($type:ty, $name:ident) => {
+        impl From<$type> for Operand {
+            fn from(x: $type) -> Self {
+                Self::$name(x)
+            }
+        }
+    };
+}
+impl_operand_from!(i8, I8);
+impl_operand_from!(u8, U8);
+impl_operand_from!(i16, I16);
+impl_operand_from!(u16, U16);
+impl_operand_from!(i32, I32);
+impl_operand_from!(u32, U32);
+impl_operand_from!(Text, Text);
+impl_operand_from!(TypeOp, Type);
+impl_operand_from!(Operation<ExprOp>, Expr);
+impl_operand_from!(Operation<AsmMsgOp>, MsgCommand);
 
 #[cfg(test)]
 mod tests {

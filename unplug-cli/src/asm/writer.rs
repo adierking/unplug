@@ -1,5 +1,4 @@
-use super::opcodes::{AsmMsgOp, NamedOpcode};
-use super::{LabelMap, Operand, Operation};
+use super::{AsmMsgOp, DataOp, LabelMap, NamedOpcode, Operand, Operation};
 use anyhow::Result;
 use std::collections::HashSet;
 use std::io::Write;
@@ -11,11 +10,12 @@ use unplug::event::serialize::{
 };
 use unplug::event::{Block, BlockId, DataBlock, Pointer, Script};
 
-/// Encapsulates command, expr, and message operations into a single type.
+/// Encapsulates various operation types.
 enum AnyOperation {
     Command(Operation<CmdOp>),
     Expr(Operation<ExprOp>),
     MsgCommand(Operation<AsmMsgOp>),
+    Data(Operation<DataOp>),
 }
 
 impl AnyOperation {
@@ -25,6 +25,7 @@ impl AnyOperation {
             Self::Command(op) => op.operands.push(operand),
             Self::Expr(op) => op.operands.push(operand),
             Self::MsgCommand(op) => op.operands.push(operand),
+            Self::Data(op) => op.operands.push(operand),
         }
     }
 
@@ -54,6 +55,15 @@ impl AnyOperation {
             _ => panic!("expected a message command"),
         }
     }
+
+    /// Consumes this wrapper and returns the inner data definition.
+    /// ***Panics*** if the operation is not data.
+    fn into_data(self) -> Operation<DataOp> {
+        match self {
+            Self::Data(op) => op,
+            _ => panic!("expected data"),
+        }
+    }
 }
 
 impl From<Operation<CmdOp>> for AnyOperation {
@@ -74,11 +84,19 @@ impl From<Operation<AsmMsgOp>> for AnyOperation {
     }
 }
 
+impl From<Operation<DataOp>> for AnyOperation {
+    fn from(op: Operation<DataOp>) -> Self {
+        Self::Data(op)
+    }
+}
+
 /// Holds assembly code produced by `AsmSerializer`.
 #[derive(Debug, Default, Clone)]
 struct SerializedAsm {
     /// The assembly commands in order of their appearance in the source file.
     commands: Vec<Operation<CmdOp>>,
+    /// Data definitions in order of their appearance in the source file.
+    data: Vec<Operation<DataOp>>,
     /// Block IDs that the commands reference. This may contain duplicates.
     refs: Vec<BlockId>,
 }
@@ -109,7 +127,15 @@ impl<'a> AsmSerializer<'a> {
     }
 
     /// Consumes this serializer, returning the built assembly code.
-    fn finish(self) -> SerializedAsm {
+    fn finish(mut self) -> SerializedAsm {
+        match self.operation {
+            Some(AnyOperation::Data(data)) => self.asm.data.push(data),
+            Some(AnyOperation::Command(_)) => panic!("unterminated command"),
+            Some(AnyOperation::Expr(_)) => panic!("unterminated expression"),
+            Some(AnyOperation::MsgCommand(_)) => panic!("unterminated message command"),
+            None => (),
+        }
+        assert!(self.stack.is_empty());
         self.asm
     }
 
@@ -154,84 +180,132 @@ impl<'a> AsmSerializer<'a> {
         }
         result
     }
+
+    /// If there is no active operation or the current data operation does not match, makes `op` the
+    /// current data operation.
+    fn begin_data(&mut self, op: DataOp) {
+        match &self.operation {
+            Some(AnyOperation::Data(data)) if data.opcode == op => return,
+            Some(AnyOperation::Data(_)) => self.end_data(),
+            Some(_) => return,
+            None => (),
+        }
+        if self.operation.is_none() {
+            self.operation = Some(Operation::new(op).into());
+        }
+    }
+
+    /// Ends the current data operation and appends it to the program.
+    fn end_data(&mut self) {
+        let data = self.end_operation().into_data();
+        self.asm.data.push(data);
+    }
+
+    /// Serializes an array of data values of type `op`.
+    fn serialize_array<T: Copy + Into<Operand>>(&mut self, op: DataOp, arr: &[T]) -> SerResult<()> {
+        self.begin_data(op);
+        if let Some(AnyOperation::Data(data)) = &mut self.operation {
+            arr.iter().for_each(|&x| data.operands.push(x.into()));
+            Ok(())
+        } else {
+            Err(SerError::custom(format!("unexpected {:?} array", op)))
+        }
+    }
 }
 
 impl EventSerializer for AsmSerializer<'_> {
     fn serialize_i8(&mut self, val: i8) -> SerResult<()> {
+        self.begin_data(DataOp::Byte);
         self.push_operand(Operand::I8(val));
         Ok(())
     }
 
     fn serialize_u8(&mut self, val: u8) -> SerResult<()> {
+        self.begin_data(DataOp::Byte);
         self.push_operand(Operand::U8(val));
         Ok(())
     }
 
     fn serialize_i16(&mut self, val: i16) -> SerResult<()> {
+        self.begin_data(DataOp::Word);
         self.push_operand(Operand::I16(val));
         Ok(())
     }
 
     fn serialize_u16(&mut self, val: u16) -> SerResult<()> {
+        self.begin_data(DataOp::Word);
         self.push_operand(Operand::U16(val));
         Ok(())
     }
 
     fn serialize_i32(&mut self, val: i32) -> SerResult<()> {
+        self.begin_data(DataOp::Dword);
         self.push_operand(Operand::I32(val));
         Ok(())
     }
 
     fn serialize_u32(&mut self, val: u32) -> SerResult<()> {
+        self.begin_data(DataOp::Dword);
         self.push_operand(Operand::U32(val));
         Ok(())
     }
 
     fn serialize_pointer(&mut self, ptr: Pointer) -> SerResult<()> {
+        self.begin_data(DataOp::Dword);
         let reference = self.make_reference(ptr);
         self.push_operand(reference);
         Ok(())
     }
 
-    fn serialize_i8_array(&mut self, _arr: &[i8]) -> SerResult<()> {
-        Err(SerError::custom("unexpected i8 array"))
+    fn serialize_i8_array(&mut self, arr: &[i8]) -> SerResult<()> {
+        self.serialize_array(DataOp::Byte, arr)
     }
 
-    fn serialize_u8_array(&mut self, _arr: &[u8]) -> SerResult<()> {
-        Err(SerError::custom("unexpected u8 array"))
+    fn serialize_u8_array(&mut self, arr: &[u8]) -> SerResult<()> {
+        self.serialize_array(DataOp::Byte, arr)
     }
 
-    fn serialize_i16_array(&mut self, _arr: &[i16]) -> SerResult<()> {
-        Err(SerError::custom("unexpected i16 array"))
+    fn serialize_i16_array(&mut self, arr: &[i16]) -> SerResult<()> {
+        self.serialize_array(DataOp::Word, arr)
     }
 
-    fn serialize_u16_array(&mut self, _arr: &[u16]) -> SerResult<()> {
-        Err(SerError::custom("unexpected u16 array"))
+    fn serialize_u16_array(&mut self, arr: &[u16]) -> SerResult<()> {
+        self.serialize_array(DataOp::Word, arr)
     }
 
-    fn serialize_i32_array(&mut self, _arr: &[i32]) -> SerResult<()> {
-        Err(SerError::custom("unexpected i32 array"))
+    fn serialize_i32_array(&mut self, arr: &[i32]) -> SerResult<()> {
+        self.serialize_array(DataOp::Dword, arr)
     }
 
-    fn serialize_u32_array(&mut self, _arr: &[u32]) -> SerResult<()> {
-        Err(SerError::custom("unexpected u32 array"))
+    fn serialize_u32_array(&mut self, arr: &[u32]) -> SerResult<()> {
+        self.serialize_array(DataOp::Dword, arr)
     }
 
-    fn serialize_pointer_array(&mut self, _arr: &[Pointer]) -> SerResult<()> {
-        Err(SerError::custom("unexpected pointer array"))
+    fn serialize_pointer_array(&mut self, arr: &[Pointer]) -> SerResult<()> {
+        self.begin_data(DataOp::Dword);
+        if let Some(AnyOperation::Data(mut data)) = self.operation.take() {
+            arr.iter().for_each(|&ptr| data.operands.push(self.make_reference(ptr)));
+            self.operation = Some(AnyOperation::Data(data));
+            Ok(())
+        } else {
+            Err(SerError::custom("unexpected pointer array"))
+        }
     }
 
     fn serialize_type(&mut self, ty: TypeOp) -> SerResult<()> {
+        self.begin_data(DataOp::Dword);
         self.push_operand(Operand::Type(ty));
         Ok(())
     }
 
     fn serialize_text(&mut self, text: &Text) -> SerResult<()> {
+        self.begin_data(DataOp::Byte);
         self.push_operand(Operand::Text(text.clone()));
         Ok(())
     }
 
     fn serialize_rgba(&mut self, rgba: u32) -> SerResult<()> {
+        self.begin_data(DataOp::Dword);
         self.serialize_u32(rgba)
     }
 
@@ -325,8 +399,8 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 }
 
-/// A block of assembly instructions corresponding to a script block.
-pub struct AsmBlock {
+/// A block of instructions corresponding to a script block.
+pub struct AsmCodeBlock {
     pub src_block: BlockId,
     pub commands: Vec<Operation<CmdOp>>,
 }
@@ -335,13 +409,21 @@ pub struct AsmBlock {
 pub struct Subroutine {
     pub src_block: BlockId,
     pub src_offset: u32,
-    pub blocks: Vec<AsmBlock>,
+    pub blocks: Vec<AsmCodeBlock>,
+}
+
+/// A block of data corresponding to a script block.
+pub struct AsmDataBlock {
+    pub src_block: BlockId,
+    pub src_offset: u32,
+    pub data: Vec<Operation<DataOp>>,
 }
 
 /// An assembly program consisting of subroutines and labels.
 #[derive(Default)]
 pub struct Program {
     pub subroutines: Vec<Subroutine>,
+    pub data: Vec<AsmDataBlock>,
     pub labels: LabelMap,
 }
 
@@ -375,7 +457,7 @@ impl<'a> ProgramBuilder<'a> {
     /// Finishes building the program, consumes this builder, and returns the built program.
     pub fn finish(mut self) -> Program {
         if let Some(layout) = self.script.layout() {
-            self.sort_subroutines(layout);
+            self.sort_blocks(layout);
         }
         self.program
     }
@@ -410,8 +492,20 @@ impl<'a> ProgramBuilder<'a> {
         Ok(())
     }
 
-    fn add_data(&mut self, _block_id: BlockId, _data: &DataBlock) -> Result<()> {
-        // TODO
+    /// Adds the data block at `block_id` to the program.
+    fn add_data(&mut self, block_id: BlockId, data: &DataBlock) -> Result<()> {
+        if !self.visited.insert(block_id) {
+            return Ok(());
+        }
+
+        let mut ser = AsmSerializer::new(self.script, &mut self.program.labels);
+        data.serialize(&mut ser)?;
+
+        let serialized = ser.finish();
+        let block = AsmDataBlock { src_block: block_id, src_offset: 0, data: serialized.data };
+        self.program.data.push(block);
+        self.queue.extend(serialized.refs);
+        assert!(serialized.commands.is_empty());
         Ok(())
     }
 
@@ -427,9 +521,12 @@ impl<'a> ProgramBuilder<'a> {
         for command in &code.commands {
             command.serialize(&mut ser)?;
         }
+
         let serialized = ser.finish();
-        subroutine.blocks.push(AsmBlock { src_block: block_id, commands: serialized.commands });
+        let block = AsmCodeBlock { src_block: block_id, commands: serialized.commands };
+        subroutine.blocks.push(block);
         self.queue.extend(serialized.refs);
+        assert!(serialized.data.is_empty());
 
         // If execution can flow directly out of this block into another one, it MUST be written next
         if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
@@ -441,8 +538,8 @@ impl<'a> ProgramBuilder<'a> {
         Ok(())
     }
 
-    /// Sorts subroutines by offset according to `layout`.
-    fn sort_subroutines(&mut self, layout: &ScriptLayout) {
+    /// Sorts blocks by offset according to `layout`.
+    fn sort_blocks(&mut self, layout: &ScriptLayout) {
         let mut src_offsets = BlockOffsetMap::new(self.script.len());
         for &loc in layout.block_offsets() {
             src_offsets.insert(loc.id, loc.offset);
@@ -452,7 +549,13 @@ impl<'a> ProgramBuilder<'a> {
                 subroutine.src_offset = offset;
             }
         }
+        for data in &mut self.program.data {
+            if let Some(offset) = src_offsets.try_get(data.src_block) {
+                data.src_offset = offset;
+            }
+        }
         self.program.subroutines.sort_by_key(|s| s.src_offset);
+        self.program.data.sort_by_key(|s| s.src_offset);
     }
 }
 
@@ -473,19 +576,36 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
                 write!(self.writer, "\n\n")?;
             }
             for block in &subroutine.blocks {
-                self.write_block(block)?;
+                self.write_code(block)?;
             }
+        }
+        writeln!(self.writer)?;
+        for data in &self.program.data {
+            writeln!(self.writer)?;
+            self.write_data(data)?;
         }
         let _ = self.writer.flush();
         Ok(())
     }
 
-    fn write_block(&mut self, block: &AsmBlock) -> Result<()> {
+    fn write_code(&mut self, block: &AsmCodeBlock) -> Result<()> {
         if let Some(id) = self.program.labels.find_block(block.src_block) {
             writeln!(self.writer, "{}:", self.program.labels.get(id).name)?;
         }
         for command in &block.commands {
             self.write_command(command)?;
+        }
+        Ok(())
+    }
+
+    fn write_data(&mut self, block: &AsmDataBlock) -> Result<()> {
+        if let Some(id) = self.program.labels.find_block(block.src_block) {
+            writeln!(self.writer, "{}:", self.program.labels.get(id).name)?;
+        }
+        for data in &block.data {
+            write!(self.writer, "\t.{}\t", data.opcode.name())?;
+            self.write_operands(&data.operands)?;
+            writeln!(self.writer)?;
         }
         Ok(())
     }

@@ -50,6 +50,24 @@ impl Opcode for AsmMsgOp {
     }
 }
 
+/// A data directive type.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum DataOp {
+    Byte,
+    Word,
+    Dword,
+}
+
+impl Opcode for DataOp {
+    type Value = u8;
+    fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
+        Err(value)
+    }
+    fn map_unsupported(opcode: Self) -> Result<Self::Value, Self> {
+        Err(opcode)
+    }
+}
+
 /// Associates names with opcode enums by implementing `NamedOpcode` for them.
 macro_rules! opcode_names {
     {
@@ -271,5 +289,11 @@ opcode_names! {
         Question => "ask",
         Stay => "stay",
         Text => "text",
+    }
+
+    DataOp {
+        Byte => "db",
+        Word => "dw",
+        Dword => "dd",
     }
 }
