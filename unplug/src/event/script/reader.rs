@@ -1,16 +1,14 @@
 use super::{Error, Result, Script, ScriptLayout};
-use crate::common::{ReadFrom, ReadSeek};
+use crate::common::ReadSeek;
 use crate::event::analysis::{ArrayKind, ScriptAnalyzer, ValueKind};
 use crate::event::bin::BinDeserializer;
 use crate::event::block::{Block, CodeBlock, DataBlock};
 use crate::event::command::{self, Command};
 use crate::event::expr::{self, ObjBone, ObjPair};
 use crate::event::pointer::{BlockId, Pointer};
-use crate::event::serialize::{self, DeserializeEvent};
-use byteorder::{ReadBytesExt, LE};
+use crate::event::serialize::{self, DeserializeEvent, EventDeserializer};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
-use std::ffi::CString;
 use std::io::SeekFrom;
 use tracing::{debug, error, trace};
 
@@ -456,22 +454,13 @@ impl<'r> ScriptReader<'r> {
                     max_len
                 );
 
-                let mut offsets = Vec::with_capacity(max_len);
                 self.reader.seek(SeekFrom::Start(pending.offset as u64))?;
-                while offsets.len() < max_len {
-                    // We don't have any context on how the array is used, so assume that it
-                    // contains nothing but offsets and that it may be terminated by a zero or
-                    // negative value.
-                    let offset = self.reader.read_i32::<LE>()?;
-                    if offset <= 0 {
-                        break;
-                    }
-                    offsets.push(Pointer::Offset(offset as u32));
-                }
+                let mut de = BinDeserializer::new(&mut self.reader);
+                let offsets = de.deserialize_pointer_array(max_len)?;
 
                 // Just process each offset like it's a reference. This gives us free support for
                 // all data types.
-                for &offset in &offsets {
+                for &offset in offsets.iter().filter(|p| !p.is_in_header()) {
                     trace!(
                         "Processing pointer array reference: {:?} at {:?}",
                         pending.element_kind,
@@ -510,10 +499,10 @@ impl<'r> ScriptReader<'r> {
                 self.reader.seek(SeekFrom::Start(layout.start_offset as u64))?;
                 let mut de = BinDeserializer::new(&mut self.reader);
                 let data = match &layout.ty {
-                    DataType::Array(kind) => Self::read_array(self.reader, kind, max_size)?,
+                    DataType::Array(kind) => Self::read_array(&mut de, kind, max_size)?,
                     DataType::ObjBone => ObjBone::deserialize(&mut de)?.into(),
                     DataType::ObjPair => ObjPair::deserialize(&mut de)?.into(),
-                    DataType::String => CString::read_from(&mut self.reader)?.into(),
+                    DataType::String => de.deserialize_text()?.into(),
                 };
                 self.blocks[id.index()] = Block::Data(data);
             }
@@ -523,42 +512,18 @@ impl<'r> ScriptReader<'r> {
 
     /// Reads an array `DataBlock` from a stream.
     fn read_array(
-        reader: &mut dyn ReadSeek,
+        de: &mut dyn EventDeserializer,
         kind: &ArrayKind,
-        max_size: usize,
+        size: usize,
     ) -> Result<DataBlock> {
-        let max_len = max_size / kind.element_size();
+        let len = size / kind.element_size();
         Ok(match kind {
-            ArrayKind::I8 => {
-                let mut arr = vec![0i8; max_len];
-                reader.read_i8_into(&mut arr)?;
-                arr.into()
-            }
-            ArrayKind::U8 => {
-                let mut arr = vec![0u8; max_len];
-                reader.read_exact(&mut arr)?;
-                arr.into()
-            }
-            ArrayKind::I16 => {
-                let mut arr = vec![0i16; max_len];
-                reader.read_i16_into::<LE>(&mut arr)?;
-                arr.into()
-            }
-            ArrayKind::U16 => {
-                let mut arr = vec![0u16; max_len];
-                reader.read_u16_into::<LE>(&mut arr)?;
-                arr.into()
-            }
-            ArrayKind::I32 => {
-                let mut arr = vec![0i32; max_len];
-                reader.read_i32_into::<LE>(&mut arr)?;
-                arr.into()
-            }
-            ArrayKind::U32 => {
-                let mut arr = vec![0u32; max_len];
-                reader.read_u32_into::<LE>(&mut arr)?;
-                arr.into()
-            }
+            ArrayKind::I8 => de.deserialize_i8_array(len)?.into(),
+            ArrayKind::U8 => de.deserialize_u8_array(len)?.into(),
+            ArrayKind::I16 => de.deserialize_i16_array(len)?.into(),
+            ArrayKind::U16 => de.deserialize_u16_array(len)?.into(),
+            ArrayKind::I32 => de.deserialize_i32_array(len)?.into(),
+            ArrayKind::U32 => de.deserialize_u32_array(len)?.into(),
             ArrayKind::Pointer(_) => {
                 panic!("Pointer arrays must be read before other data");
             }

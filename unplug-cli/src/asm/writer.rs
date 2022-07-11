@@ -6,7 +6,9 @@ use std::io::Write;
 use unplug::common::Text;
 use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
-use unplug::event::serialize::{EventSerializer, Result as SerResult, SerializeEvent};
+use unplug::event::serialize::{
+    Error as SerError, EventSerializer, Result as SerResult, SerializeEvent,
+};
 use unplug::event::{Block, BlockId, DataBlock, Pointer, Script};
 
 /// Encapsulates command, expr, and message operations into a single type.
@@ -189,6 +191,34 @@ impl EventSerializer for AsmSerializer<'_> {
         let reference = self.make_reference(ptr);
         self.push_operand(reference);
         Ok(())
+    }
+
+    fn serialize_i8_array(&mut self, _arr: &[i8]) -> SerResult<()> {
+        Err(SerError::custom("unexpected i8 array"))
+    }
+
+    fn serialize_u8_array(&mut self, _arr: &[u8]) -> SerResult<()> {
+        Err(SerError::custom("unexpected u8 array"))
+    }
+
+    fn serialize_i16_array(&mut self, _arr: &[i16]) -> SerResult<()> {
+        Err(SerError::custom("unexpected i16 array"))
+    }
+
+    fn serialize_u16_array(&mut self, _arr: &[u16]) -> SerResult<()> {
+        Err(SerError::custom("unexpected u16 array"))
+    }
+
+    fn serialize_i32_array(&mut self, _arr: &[i32]) -> SerResult<()> {
+        Err(SerError::custom("unexpected i32 array"))
+    }
+
+    fn serialize_u32_array(&mut self, _arr: &[u32]) -> SerResult<()> {
+        Err(SerError::custom("unexpected u32 array"))
+    }
+
+    fn serialize_pointer_array(&mut self, _arr: &[Pointer]) -> SerResult<()> {
+        Err(SerError::custom("unexpected pointer array"))
     }
 
     fn serialize_type(&mut self, ty: TypeOp) -> SerResult<()> {

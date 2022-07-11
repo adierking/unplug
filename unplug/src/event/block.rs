@@ -1,7 +1,8 @@
 use super::command::Command;
 use super::expr::{ObjBone, ObjPair};
 use super::pointer::Pointer;
-use std::ffi::CString;
+use super::serialize::{self, EventSerializer, SerializeEvent};
+use crate::common::Text;
 
 /// A block of data in a script.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,7 +118,7 @@ pub enum DataBlock {
     PtrArray(Vec<Pointer>),
     ObjBone(ObjBone),
     ObjPair(ObjPair),
-    String(CString),
+    String(Text),
 }
 
 macro_rules! impl_data_block_from {
@@ -139,4 +140,22 @@ impl_data_block_from!(Vec<u32>, U32Array);
 impl_data_block_from!(Vec<Pointer>, PtrArray);
 impl_data_block_from!(ObjBone, ObjBone);
 impl_data_block_from!(ObjPair, ObjPair);
-impl_data_block_from!(CString, String);
+impl_data_block_from!(Text, String);
+
+impl SerializeEvent for DataBlock {
+    type Error = serialize::Error;
+    fn serialize(&self, ser: &mut dyn EventSerializer) -> serialize::Result<()> {
+        match self {
+            DataBlock::I8Array(arr) => ser.serialize_i8_array(arr),
+            DataBlock::U8Array(arr) => ser.serialize_u8_array(arr),
+            DataBlock::I16Array(arr) => ser.serialize_i16_array(arr),
+            DataBlock::U16Array(arr) => ser.serialize_u16_array(arr),
+            DataBlock::I32Array(arr) => ser.serialize_i32_array(arr),
+            DataBlock::U32Array(arr) => ser.serialize_u32_array(arr),
+            DataBlock::PtrArray(arr) => ser.serialize_pointer_array(arr),
+            DataBlock::ObjBone(bone) => bone.serialize(ser),
+            DataBlock::ObjPair(pair) => pair.serialize(ser),
+            DataBlock::String(s) => ser.serialize_text(s),
+        }
+    }
+}

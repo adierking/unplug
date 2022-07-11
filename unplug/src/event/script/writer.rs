@@ -1,5 +1,5 @@
 use super::{Error, Result, Script, ScriptLayout};
-use crate::common::{WriteSeek, WriteTo};
+use crate::common::WriteSeek;
 use crate::event::bin::BinSerializer;
 use crate::event::block::{Block, DataBlock};
 use crate::event::pointer::{BlockId, Pointer, WritePointer};
@@ -236,53 +236,11 @@ impl<'a> ScriptWriter<'a> {
 
     fn write_data(&mut self, blob: &mut Blob, data: &DataBlock) -> Result<()> {
         let mut ser = BinSerializer::new(&mut blob.writer);
-        match data {
-            DataBlock::I8Array(arr) => {
-                for &x in arr {
-                    blob.writer.write_i8(x)?;
-                }
-            }
-            DataBlock::U8Array(arr) => {
-                blob.writer.write_all(arr)?;
-            }
-            DataBlock::I16Array(arr) => {
-                for &x in arr {
-                    blob.writer.write_i16::<LE>(x)?;
-                }
-            }
-            DataBlock::U16Array(arr) => {
-                for &x in arr {
-                    blob.writer.write_u16::<LE>(x)?;
-                }
-            }
-            DataBlock::I32Array(arr) => {
-                for &x in arr {
-                    blob.writer.write_i32::<LE>(x)?;
-                }
-            }
-            DataBlock::U32Array(arr) => {
-                for &x in arr {
-                    blob.writer.write_u32::<LE>(x)?;
-                }
-            }
-            DataBlock::PtrArray(arr) => {
-                for &ptr in arr {
-                    ptr.write_to(&mut blob.writer)?;
-                }
-                blob.writer.write_i32::<LE>(0)?;
-                for &ptr in arr {
-                    let child_id = self.script.resolve_pointer(ptr)?;
-                    self.add_block(child_id)?;
-                }
-            }
-            DataBlock::ObjBone(bone) => {
-                bone.serialize(&mut ser)?;
-            }
-            DataBlock::ObjPair(pair) => {
-                pair.serialize(&mut ser)?;
-            }
-            DataBlock::String(string) => {
-                string.write_to(&mut blob.writer)?;
+        data.serialize(&mut ser)?;
+        if let DataBlock::PtrArray(arr) = data {
+            for &ptr in arr.iter().filter(|p| !p.is_in_header()) {
+                let child_id = self.script.resolve_pointer(ptr)?;
+                self.add_block(child_id)?;
             }
         }
         Ok(())

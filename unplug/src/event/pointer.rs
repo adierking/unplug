@@ -81,6 +81,13 @@ impl Pointer {
             _ => false,
         }
     }
+
+    /// Returns `true` if this points to offset 0. Note that these are not necessarily null
+    /// pointers; for example, sometimes script code will use an offset of 0 to get the base
+    /// address for the script.
+    pub fn is_zero(&self) -> bool {
+        matches!(self, Self::Offset(0))
+    }
 }
 
 impl From<u32> for Pointer {

@@ -51,6 +51,9 @@ pub enum Error {
     #[error("message is too large ({len} > {max})")]
     MsgTooLarge { len: u64, max: u64 },
 
+    #[error("{0}")]
+    Custom(String),
+
     #[error(transparent)]
     Io(Box<io::Error>),
 
@@ -62,6 +65,11 @@ impl Error {
     /// Creates an error which wraps an arbitrary error object.
     pub fn other(error: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Other(Box::from(error))
+    }
+
+    /// Creates an error which displays an arbitrary string.
+    pub fn custom(s: impl Into<String>) -> Self {
+        Self::Custom(s.into())
     }
 }
 
@@ -89,6 +97,27 @@ pub trait EventSerializer {
 
     /// Serializes a pointer.
     fn serialize_pointer(&mut self, ptr: Pointer) -> Result<()>;
+
+    /// Serializes an array of signed 8-bit integers.
+    fn serialize_i8_array(&mut self, arr: &[i8]) -> Result<()>;
+
+    /// Serializes an array of unsigned 8-bit integers.
+    fn serialize_u8_array(&mut self, arr: &[u8]) -> Result<()>;
+
+    /// Serializes an array of signed 16-bit integers.
+    fn serialize_i16_array(&mut self, arr: &[i16]) -> Result<()>;
+
+    /// Serializes an array of unsigned 16-bit integers.
+    fn serialize_u16_array(&mut self, arr: &[u16]) -> Result<()>;
+
+    /// Serializes an array of 32-bit integers.
+    fn serialize_i32_array(&mut self, arr: &[i32]) -> Result<()>;
+
+    /// Serializes an array of unsigned 32-bit integers.
+    fn serialize_u32_array(&mut self, arr: &[u32]) -> Result<()>;
+
+    /// Serializes an array of pointers.
+    fn serialize_pointer_array(&mut self, arr: &[Pointer]) -> Result<()>;
 
     /// Serializes a type expression.
     fn serialize_type(&mut self, ty: TypeOp) -> Result<()>;
@@ -150,6 +179,27 @@ pub trait EventDeserializer {
     /// Deserializes a pointer and returns it.
     fn deserialize_pointer(&mut self) -> Result<Pointer>;
 
+    /// Deserializes an array of `len` signed 8-bit integers.
+    fn deserialize_i8_array(&mut self, len: usize) -> Result<Vec<i8>>;
+
+    /// Deserializes an array of `len` unsigned 8-bit integers.
+    fn deserialize_u8_array(&mut self, len: usize) -> Result<Vec<u8>>;
+
+    /// Deserializes an array of `len` signed 16-bit integers.
+    fn deserialize_i16_array(&mut self, len: usize) -> Result<Vec<i16>>;
+
+    /// Deserializes an array of `len` unsigned 16-bit integers.
+    fn deserialize_u16_array(&mut self, len: usize) -> Result<Vec<u16>>;
+
+    /// Deserializes an array of `len` 32-bit integers.
+    fn deserialize_i32_array(&mut self, len: usize) -> Result<Vec<i32>>;
+
+    /// Deserializes an array of `len` unsigned 32-bit integers.
+    fn deserialize_u32_array(&mut self, len: usize) -> Result<Vec<u32>>;
+
+    /// Deserializes an array of up to `max_len` pointers.
+    fn deserialize_pointer_array(&mut self, max_len: usize) -> Result<Vec<Pointer>>;
+
     /// Deserializes a type expression and returns it.
     fn deserialize_type(&mut self) -> Result<TypeOp>;
 
@@ -208,7 +258,7 @@ pub trait DeserializeEvent: Sized {
     fn deserialize(de: &mut dyn EventDeserializer) -> std::result::Result<Self, Self::Error>;
 }
 
-/// Implements serialization for a primitive type.
+/// Implements serialization for a value type.
 macro_rules! impl_serialize {
     ($type:ty, $sfunc:ident, $dfunc:ident) => {
         impl SerializeEvent for $type {

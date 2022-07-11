@@ -58,6 +58,34 @@ impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
         Ok(ptr.write_to(&mut self.writer)?)
     }
 
+    fn serialize_i8_array(&mut self, arr: &[i8]) -> Result<()> {
+        arr.iter().try_for_each(|&x| self.serialize_i8(x))
+    }
+
+    fn serialize_u8_array(&mut self, arr: &[u8]) -> Result<()> {
+        arr.iter().try_for_each(|&x| self.serialize_u8(x))
+    }
+
+    fn serialize_i16_array(&mut self, arr: &[i16]) -> Result<()> {
+        arr.iter().try_for_each(|&x| self.serialize_i16(x))
+    }
+
+    fn serialize_u16_array(&mut self, arr: &[u16]) -> Result<()> {
+        arr.iter().try_for_each(|&x| self.serialize_u16(x))
+    }
+
+    fn serialize_i32_array(&mut self, arr: &[i32]) -> Result<()> {
+        arr.iter().try_for_each(|&x| self.serialize_i32(x))
+    }
+
+    fn serialize_u32_array(&mut self, arr: &[u32]) -> Result<()> {
+        arr.iter().try_for_each(|&x| self.serialize_u32(x))
+    }
+
+    fn serialize_pointer_array(&mut self, arr: &[Pointer]) -> Result<()> {
+        arr.iter().try_for_each(|&x| self.serialize_pointer(x))
+    }
+
     fn serialize_type(&mut self, ty: TypeOp) -> Result<()> {
         let opcode = Ggte::value(ty).map_err(Error::UnsupportedType)?;
         self.begin_expr(ExprOp::Imm32)?;
@@ -195,6 +223,56 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
 
     fn deserialize_pointer(&mut self) -> Result<Pointer> {
         Ok(Pointer::read_from(&mut self.reader)?)
+    }
+
+    fn deserialize_i8_array(&mut self, len: usize) -> Result<Vec<i8>> {
+        let mut arr = vec![0; len];
+        self.reader.read_i8_into(&mut arr)?;
+        Ok(arr)
+    }
+
+    fn deserialize_u8_array(&mut self, len: usize) -> Result<Vec<u8>> {
+        let mut arr = vec![0; len];
+        self.reader.read_exact(&mut arr)?;
+        Ok(arr)
+    }
+
+    fn deserialize_i16_array(&mut self, len: usize) -> Result<Vec<i16>> {
+        let mut arr = vec![0; len];
+        self.reader.read_i16_into::<LE>(&mut arr)?;
+        Ok(arr)
+    }
+
+    fn deserialize_u16_array(&mut self, len: usize) -> Result<Vec<u16>> {
+        let mut arr = vec![0; len];
+        self.reader.read_u16_into::<LE>(&mut arr)?;
+        Ok(arr)
+    }
+
+    fn deserialize_i32_array(&mut self, len: usize) -> Result<Vec<i32>> {
+        let mut arr = vec![0; len];
+        self.reader.read_i32_into::<LE>(&mut arr)?;
+        Ok(arr)
+    }
+
+    fn deserialize_u32_array(&mut self, len: usize) -> Result<Vec<u32>> {
+        let mut arr = vec![0; len];
+        self.reader.read_u32_into::<LE>(&mut arr)?;
+        Ok(arr)
+    }
+
+    fn deserialize_pointer_array(&mut self, max_len: usize) -> Result<Vec<Pointer>> {
+        let mut offsets = Vec::with_capacity(max_len);
+        while offsets.len() < max_len {
+            // We don't have any context on how the array is used, so assume that it
+            // contains nothing but offsets and that it may be terminated by a zero value.
+            let offset = self.reader.read_u32::<LE>()?;
+            offsets.push(Pointer::Offset(offset));
+            if offset == 0 {
+                break;
+            }
+        }
+        Ok(offsets)
     }
 
     fn deserialize_type(&mut self) -> Result<TypeOp> {
