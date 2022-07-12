@@ -4,31 +4,30 @@
 	"patterns": [
 		{ "include": "#comment" },
 		{ "include": "#directive" },
-		{ "include": "#literal" },
 		{ "include": "#keyword" },
-		{ "include": "#label" }
+		{ "include": "#label" },
+		{ "include": "#literal" },
+		{ "include": "#punctuation" }
 	],
 	"repository": {
 		"comment": {
 			"patterns": [
-				{ "include": "#line-comment" },
-				{ "include": "#block-comment" }
+				{ "include": "#comment-block" },
+				{ "include": "#comment-line" }
 			]
 		},
-		"literal": {
+		"directive": {
 			"patterns": [
-				{ "include": "#number-literal" },
-				{ "include": "#string-literal" },
-				{ "include": "#type-literal" }
+				{ "include": "#directive-data" }
 			]
 		},
 		"keyword": {
 			"patterns": [
-				{ "include": "#control-keyword" },
-				{ "include": "#command-keyword" },
-				{ "include": "#msg-keyword" },
-				{ "include": "#operator-keyword" },
-				{ "include": "#expr-keyword" }
+				{ "include": "#keyword-command" },
+				{ "include": "#keyword-control" },
+				{ "include": "#keyword-expr" },
+				{ "include": "#keyword-msg" },
+				{ "include": "#keyword-operator" }
 			]
 		},
 		"label": {
@@ -37,25 +36,79 @@
 				{ "include": "#label-deref" }
 			]
 		},
-		"line-comment": {
-			"name": "comment.line.semicolon.unplug",
-			"begin": ";",
-			"end": "$"
+		"literal": {
+			"patterns": [
+				{ "include": "#literal-number" },
+				{ "include": "#literal-string" },
+				{ "include": "#literal-type" }
+			]
 		},
-		"block-comment": {
+		"punctuation": {
+			"patterns": [
+				{ "include": "#punctuation-comma" },
+				{ "include": "#punctuation-parentheses" }
+			]
+		},
+
+		"comment-block": {
 			"name": "comment.block.unplug",
 			"begin": "/\\*",
 			"end": "\\*/"
 		},
-		"directive": {
+		"comment-line": {
+			"name": "comment.line.semicolon.unplug",
+			"begin": ";",
+			"end": "$"
+		},
+
+		"directive-data": {
 			"name": "keyword.other.directive.unplug",
 			"match": "\\.d[bwd]\\b"
 		},
-		"number-literal": {
+
+		"keyword-command": {
+			"name": "entity.name.function.command.unplug",
+			"match": "\\b(set|run|lib|pushbp|popbp|setsp|anim[12]?|attach|born|call|camera|check|color|detach|dir|mdir|disp|kill|light|menu|move|moveto|msg|pos|printf|ptcl|read|scale|mscale|scrn|select|sfx|timer|wait|warp|win|movie)\\b"
+		},
+		"keyword-control": {
+			"name": "keyword.control.unplug",
+			"match": "\\b(abort|return|goto|(el|end)?if|else|case|expr|while|break)\\b"
+		},
+		"keyword-expr": {
+			"name": "variable.language.expr.unplug",
+			"match": "\\b(i16|i32|addr|sp|bp|flag|var|result2?|pad|battery|money|item|atc|rank|exp|level|hold|map|actor_name|item_name|time|cur_suit|scrap|cur_atc|use|hit|sticker_name|obj|rand|sin|cos|array)\\b"
+		},
+		"keyword-msg": {
+			"name": "entity.name.function.msg.unplug",
+			"match": "\\b(end|speed|wait|anim|sfx|voice|def|nl|vt|format|size|color|rgba|prop|icon|shake|center|rotate|scale|input|ask|stay|text)\\b"
+		},
+		"keyword-operator": {
+			"name": "keyword.operator.unplug",
+			"match": "\\b(eq|ne|lt|le|gt|ge|not|adda?|suba?|mula?|diva?|moda?|anda?|ora?|xora?)\\b"
+		},
+
+		"label-decl": {
+			"name": "meta.name.label.unplug",
+			"match": "^\\s*([A-Za-z0-9_]+)(:)",
+			"captures": {
+				"1": { "name": "variable.name.label.unplug" },
+				"2": { "name": "punctuation.colon.label.unplug" }
+			}
+		},
+		"label-deref": {
+			"name": "meta.operator.deref.unplug",
+			"match": "(\\*)([A-Za-z0-9_]+)?",
+			"captures": {
+				"1": { "name": "keyword.operator.deref.unplug" },
+				"2": { "name": "variable.name.label.unplug" }
+			}
+		},
+
+		"literal-number": {
 			"name": "constant.numeric.unplug",
 			"match": "(\\b|-)(\\d+|0x[0-9A-Fa-f]+)(\\.[bwd])?\\b"
 		},
-		"string-literal": {
+		"literal-string": {
 			"name": "string.quoted.double.unplug",
 			"begin": "\"",
 			"end": "\"",
@@ -70,44 +123,18 @@
 				}
 			]
 		},
-		"type-literal": {
+		"literal-type": {
 			"name": "constant.language.unplug",
 			"match": "@[A-Za-z0-9_]+\\b"
 		},
-		"control-keyword": {
-			"name": "keyword.control.unplug",
-			"match": "\\b(abort|return|goto|(el|end)?if|else|case|expr|while|break)\\b"
+
+		"punctuation-comma": {
+			"name": "punctuation.comma.unplug",
+			"match": ","
 		},
-		"command-keyword": {
-			"name": "entity.name.function.command.unplug",
-			"match": "\\b(set|run|lib|pushbp|popbp|setsp|anim[12]?|attach|born|call|camera|check|color|detach|dir|mdir|disp|kill|light|menu|move|moveto|msg|pos|printf|ptcl|read|scale|mscale|scrn|select|sfx|timer|wait|warp|win|movie)\\b"
-		},
-		"msg-keyword": {
-			"name": "entity.name.function.msg.unplug",
-			"match": "\\b(end|speed|wait|anim|sfx|voice|def|nl|vt|format|size|color|rgba|prop|icon|shake|center|rotate|scale|input|ask|stay|text)\\b"
-		},
-		"operator-keyword": {
-			"name": "keyword.operator.unplug",
-			"match": "\\b(eq|ne|lt|le|gt|ge|not|adda?|suba?|mula?|diva?|moda?|anda?|ora?|xora?)\\b"
-		},
-		"expr-keyword": {
-			"name": "variable.language.expr.unplug",
-			"match": "\\b(i16|i32|addr|sp|bp|flag|var|result2?|pad|battery|money|item|atc|rank|exp|level|hold|map|actor_name|item_name|time|cur_suit|scrap|cur_atc|use|hit|sticker_name|obj|rand|sin|cos|array)\\b"
-		},
-		"label-decl": {
-			"name": "meta.name.label.unplug",
-			"match": "^\\s*([A-Za-z0-9_]+):",
-			"captures": {
-				"1": { "name": "variable.name.label.unplug" }
-			}
-		},
-		"label-deref": {
-			"name": "meta.operator.deref.unplug",
-			"match": "(\\*)([A-Za-z0-9_]+)?",
-			"captures": {
-				"1": { "name": "keyword.operator.deref.unplug" },
-				"2": { "name": "variable.name.label.unplug" }
-			}
+		"punctuation-parentheses": {
+			"name": "punctuation.brackets.round.unplug",
+			"match": "[\\(\\)]"
 		}
 	},
 	"scopeName": "source.unplug"
