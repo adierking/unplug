@@ -23,6 +23,7 @@ humansize = "1.1.1"
 indicatif = "0.16.2"
 lazy_static = "1.4.0"
 log = { version = "0.4" }
+logos = "0.12.1"
 phf = { version = "0.10", features = ["macros"] }
 quick-xml = "0.23"
 regex = "1"
@@ -30,6 +31,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 simplelog = "^0.12.0"
 slotmap = "1.0"
+smol_str = "0.1.23"
 tempfile = "3"
 time = { version = "0.3", features = ["formatting", "macros"] }
 toml = "0.5"

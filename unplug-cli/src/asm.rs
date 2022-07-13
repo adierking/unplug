@@ -1,6 +1,8 @@
+mod lexer;
 mod opcodes;
 mod writer;
 
+pub use lexer::{Number, Token};
 pub use opcodes::{AsmMsgOp, DataOp, NamedOpcode};
 pub use writer::{AsmCodeBlock, AsmDataBlock, Program, ProgramBuilder, ProgramWriter, Subroutine};
 
