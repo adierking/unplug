@@ -19,7 +19,7 @@ runs:
     - name: Install Toolchain
       run: |
         rustup set auto-self-update disable
-        rustup toolchain install 1.56 --component clippy
+        rustup toolchain install 1.56
         rustup toolchain install 1.61 --component llvm-tools-preview
         rustup target add --toolchain 1.56 ${{ inputs.target }}
         rustup target add --toolchain 1.61 ${{ inputs.target }}
