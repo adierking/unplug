@@ -1,10 +1,12 @@
-mod lexer;
-mod opcodes;
-mod writer;
+pub mod lexer;
+pub mod opcodes;
+pub mod parser;
+pub mod writer;
 
 pub use lexer::{Number, Token};
 pub use opcodes::{AsmMsgOp, DataOp, NamedOpcode};
-pub use writer::{AsmCodeBlock, AsmDataBlock, Program, ProgramBuilder, ProgramWriter, Subroutine};
+pub use parser::Ast;
+pub use writer::{ProgramBuilder, ProgramWriter};
 
 use anyhow::{ensure, Result};
 use slotmap::{new_key_type, SlotMap};

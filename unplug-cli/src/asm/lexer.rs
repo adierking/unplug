@@ -2,7 +2,7 @@ use logos::{Filter, Lexer, Logos};
 use smol_str::SmolStr;
 
 /// Tokens which can appear in assembly source files.
-#[derive(Logos, Debug, Clone, PartialEq, Eq)]
+#[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
     #[regex(r"\n")]
     Newline,
@@ -50,12 +50,18 @@ pub enum Token {
     Error,
 }
 
+impl From<Number> for Token {
+    fn from(n: Number) -> Self {
+        Self::Number(n)
+    }
+}
+
 /// Number literal types.
 ///
 /// All types use `u32` so that we don't have to worry about signed vs unsigned. The actual
 /// conversion to the underlying types is done at codegen time so that we can handle auto values the
 /// same as other types.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Number {
     /// An 8-bit integer
     Byte(u32),

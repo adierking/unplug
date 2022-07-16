@@ -1,10 +1,10 @@
 use anyhow::Result;
+use chumsky::{Parser, Stream};
 use log::info;
 use logos::Logos;
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::fs;
 use tempfile::TempDir;
-use unplug_cli::asm::Token;
+use unplug_cli::asm::{Ast, Token};
 use unplug_cli::commands::script;
 use unplug_cli::context::Context;
 use unplug_cli::opt::ScriptDisassembleAllOpt;
@@ -18,17 +18,16 @@ fn test_disassemble_scripts() -> Result<()> {
     let opt = ScriptDisassembleAllOpt { output: out_dir.path().to_owned() };
     script::command_disassemble_all(ctx, opt)?;
 
-    // Validate that every file passes the lexer
-    for entry in fs::read_dir(out_dir.path())? {
-        let entry = entry?;
-        info!("Lexing {}", entry.file_name().to_string_lossy());
-        let mut reader = BufReader::new(File::open(entry.path())?);
-        let mut line = String::new();
-        while reader.read_line(&mut line)? > 0 {
-            let mut lexer = Token::lexer(&line);
-            assert!(lexer.all(|t| t != Token::Error), "{:?}", line);
-            line.clear();
-        }
+    // Validate that every file passes the lexer and parser
+    let mut paths = fs::read_dir(out_dir.path())?.map(|e| e.unwrap().path()).collect::<Vec<_>>();
+    paths.sort_unstable();
+    for path in paths {
+        info!("Parsing {}", path.file_name().unwrap().to_string_lossy());
+        let contents = fs::read_to_string(&path)?;
+        let len = contents.chars().count();
+        let lexer = Token::lexer(&contents);
+        let stream = Stream::from_iter(len..len + 1, lexer.spanned());
+        Ast::parser().parse(stream).unwrap();
     }
     Ok(())
 }
