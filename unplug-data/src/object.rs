@@ -1,5 +1,6 @@
 use crate::private::Sealed;
 use crate::Resource;
+use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use phf::phf_map;
 use std::fmt::{self, Debug, Formatter};
@@ -47,6 +48,100 @@ pub enum ObjectClass {
     Free,
     Unk23,
     Plug,
+}
+
+bitflags! {
+    /// Bitflags which define how an object behaves.
+    pub struct ObjectFlags: u32 {
+        /// The object spawns when the stage loads.
+        const SPAWN = 1 << 0;
+        /// The object can obscure the player without showing any silhouette.
+        const OPAQUE = 1 << 1;
+        /// The object allows blaster projectiles to pass through it.
+        const BLASTTHRU = 1 << 2;
+        /// The radar will point to the object if it is nearby.
+        const RADAR = 1 << 3;
+        /// The object is not solid and other objects can pass through it.
+        const INTANGIBLE = 1 << 4;
+        /// The object is drawn fully transparent. This isn't the same as the object not rendering
+        /// at all because it may still obscure some objects and shadows.
+        const INVISIBLE = 1 << 5;
+        /// The object is lit using a toon effect.
+        const TOON = 1 << 6;
+        /// The object flashes like an item.
+        const FLASH = 1 << 7;
+        /// Possibly not an accurate name, need to look into this more
+        const UNLIT = 1 << 8;
+        /// The object always shows in the utilibot camera window.
+        const BOTCAM = 1 << 9;
+        /// The object can be destroyed with the blaster.
+        const EXPLODE = 1 << 10;
+        /// The object allows other objects to be pushed through it. Some object classes permit this
+        /// by default.
+        const PUSHTHRU = 1 << 11;
+        /// The object will not be prioritized in interactions. If this is not set and the player
+        /// presses A close to the object, they will automatically walk up and interact with it.
+        const LOWPRI = 1 << 12;
+        /// The object shows in the floor reflection.
+        const REFLECT = 1 << 13;
+        /// The object blocks other objects from being pushed through it. Some object classes block
+        /// pushing by default.
+        const PUSHBLOCK = 1 << 14;
+        /// The object is culled when not being looked at. Doesn't work well with large objects.
+        const CULL = 1 << 15;
+        /// The player can lift the object up.
+        const LIFT = 1 << 16;
+        /// The player can climb on the object.
+        const CLIMB = 1 << 17;
+        /// The player can clamber up to surfaces on the object.
+        const CLAMBER = 1 << 18;
+        /// The player can climb up the object as a ladder.
+        const LADDER = 1 << 19;
+        /// The player can climb up the object as a rope.
+        const ROPE = 1 << 20;
+        /// The object is a staircase (i.e. it has internal ledges). The object's data value
+        /// indicates the height of each step.
+        const STAIRS = 1 << 21;
+        /// The object will fall if it is pushed off a ledge.
+        const FALL = 1 << 22;
+        /// The player can grab the object and push/pull it.
+        const GRAB = 1 << 23;
+        /// The object can be interacted with by walking up to it and pressing A.
+        const INTERACT = 1 << 24;
+        /// The object responds to being touched by the player.
+        const TOUCH = 1 << 25;
+        /// The object responds to attachments.
+        const ATC = 1 << 26;
+        /// The object responds to projectiles.
+        const PROJECTILE = 1 << 27;
+        /// Unknown, used only by a few objects
+        const UNK_28 = 1 << 28;
+        /// The object shows in mirrors.
+        const MIRROR = 1 << 29;
+        /// Unknown, not used by any stages
+        const UNK_30 = 1 << 30;
+        /// The object is disabled and cannot be spawned.
+        const DISABLED = 1 << 31;
+    }
+}
+
+/// See `ObjectPlacement` in the main library.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct RawObjectPlacement {
+    pub id: Object,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub rotate_x: i32,
+    pub rotate_y: i32,
+    pub rotate_z: i32,
+    pub scale_x: i32,
+    pub scale_y: i32,
+    pub scale_z: i32,
+    pub data: i32,
+    pub spawn_flag: i32,
+    pub variant: i32,
+    pub flags: ObjectFlags,
 }
 
 // Macro used in the generated object list

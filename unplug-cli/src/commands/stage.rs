@@ -15,9 +15,9 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::num::NonZeroI32;
 use std::path::Path;
-use unplug::data::{Item, Object, Resource, Stage as StageId};
+use unplug::data::{Item, Object, ObjectFlags, Resource, Stage as StageId};
 use unplug::event::{BlockId, Command, Expr, Pointer, Script};
-use unplug::stage::{ObjectFlags, ObjectPlacement, Stage};
+use unplug::stage::{ObjectPlacement, Stage};
 
 /// Maximum JSON indentation
 const MAX_INDENT: usize = 3;

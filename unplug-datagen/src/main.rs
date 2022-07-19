@@ -16,6 +16,7 @@
 )]
 
 use anyhow::{anyhow, bail, Error, Result};
+use bitflags::bitflags;
 use byteorder::{ReadBytesExt, BE};
 use lazy_static::lazy_static;
 use log::{debug, error, info, trace, warn};
@@ -46,7 +47,10 @@ const NUM_MAIN_OBJECTS: usize = 1162;
 
 const INTERNAL_OBJECTS_ADDR: u32 = 0x80223690;
 const NUM_INTERNAL_OBJECTS: usize = 36;
-const INTERNAL_OBJECTS_BASE_ID: u32 = 10000;
+const INTERNAL_OBJECTS_BASE_ID: i32 = 10000;
+
+const SPAWNABLES_ADDR: u32 = 0x80223a80;
+const NUM_SPAWNABLES: usize = 47;
 
 const NUM_SUITS: usize = 8;
 const SUIT_ITEMS_ADDR: u32 = 0x8020a17c;
@@ -118,6 +122,10 @@ const GEN_HEADER_BRSAR: &str = "// Generated with unplug-datagen. DO NOT EDIT.\n
 const OBJECTS_FILE_NAME: &str = "objects.inc.rs";
 const OBJECTS_HEADER: &str = "declare_objects! {\n";
 const OBJECTS_FOOTER: &str = "}\n";
+
+const SPAWNABLES_FILE_NAME: &str = "spawnables.inc.rs";
+const SPAWNABLES_HEADER: &str = "declare_spawnables! {\n";
+const SPAWNABLES_FOOTER: &str = "}\n";
 
 const ITEMS_FILE_NAME: &str = "items.inc.rs";
 const ITEMS_HEADER: &str = "declare_items! {\n";
@@ -392,7 +400,7 @@ enum ObjectClass {
 /// Representation of an object which is written to the generated source.
 #[derive(Debug, Clone)]
 struct ObjectDefinition {
-    id: u32,
+    id: i32,
     label: Label,
     name: Label,
     model_path: String,
@@ -417,7 +425,7 @@ fn read_objects(
         let model_path = read_model_path(dol, reader, raw.model_addr)?;
         let label = Label::pascal_case(&model_path);
         objects.push(ObjectDefinition {
-            id: i as u32,
+            id: i as i32,
             label,
             name: Label::default(),
             model_path,
@@ -490,6 +498,133 @@ fn fixup_labels(objects: &mut [ObjectDefinition]) {
         }
         object.name = Label::snake_case(&label.0);
     }
+}
+
+/// Converts an object ID to an array index.
+fn object_index(object: i32) -> usize {
+    if object >= INTERNAL_OBJECTS_BASE_ID {
+        (object - INTERNAL_OBJECTS_BASE_ID) as usize + NUM_MAIN_OBJECTS
+    } else {
+        object as usize
+    }
+}
+
+// This is mostly copied from the main library; we can't directly use that struct because it uses
+// `Object` instead of a raw ID.
+#[derive(Debug, Copy, Clone)]
+struct ObjectPlacement {
+    id: i32,
+    x: i32,
+    y: i32,
+    z: i32,
+    _rotate_x: i32,
+    _rotate_y: i32,
+    _rotate_z: i32,
+    scale_x: i32,
+    scale_y: i32,
+    scale_z: i32,
+    _data: i32,
+    _spawn_flag: i32,
+    variant: i32,
+    flags: ObjectFlags,
+}
+
+bitflags! {
+    /// Bitflags which define how an object behaves. Copied from the main library.
+    struct ObjectFlags: u32 {
+        const SPAWN = 1 << 0;
+        const OPAQUE = 1 << 1;
+        const BLASTTHRU = 1 << 2;
+        const RADAR = 1 << 3;
+        const INTANGIBLE = 1 << 4;
+        const INVISIBLE = 1 << 5;
+        const TOON = 1 << 6;
+        const FLASH = 1 << 7;
+        const UNLIT = 1 << 8;
+        const BOTCAM = 1 << 9;
+        const EXPLODE = 1 << 10;
+        const PUSHTHRU = 1 << 11;
+        const LOWPRI = 1 << 12;
+        const REFLECT = 1 << 13;
+        const PUSHBLOCK = 1 << 14;
+        const CULL = 1 << 15;
+        const LIFT = 1 << 16;
+        const CLIMB = 1 << 17;
+        const CLAMBER = 1 << 18;
+        const LADDER = 1 << 19;
+        const ROPE = 1 << 20;
+        const STAIRS = 1 << 21;
+        const FALL = 1 << 22;
+        const GRAB = 1 << 23;
+        const INTERACT = 1 << 24;
+        const TOUCH = 1 << 25;
+        const ATC = 1 << 26;
+        const PROJECTILE = 1 << 27;
+        const UNK_28 = 1 << 28;
+        const MIRROR = 1 << 29;
+        const UNK_30 = 1 << 30;
+        const DISABLED = 1 << 31;
+    }
+}
+
+impl<R: Read + ?Sized> ReadFrom<R> for ObjectPlacement {
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        Ok(Self {
+            id: reader.read_i32::<BE>()?,
+            x: reader.read_i32::<BE>()?,
+            y: reader.read_i32::<BE>()?,
+            z: reader.read_i32::<BE>()?,
+            _rotate_x: reader.read_i32::<BE>()?,
+            _rotate_y: reader.read_i32::<BE>()?,
+            _rotate_z: reader.read_i32::<BE>()?,
+            scale_x: reader.read_i32::<BE>()?,
+            scale_y: reader.read_i32::<BE>()?,
+            scale_z: reader.read_i32::<BE>()?,
+            _data: reader.read_i32::<BE>()?,
+            _spawn_flag: reader.read_i32::<BE>()?,
+            variant: reader.read_i32::<BE>()?,
+            flags: ObjectFlags::from_bits_truncate(reader.read_u32::<BE>()?),
+        })
+    }
+}
+
+struct Spawnable {
+    label: Label,
+    name: Label,
+    placement: ObjectPlacement,
+}
+
+/// Reads the spawnables table from the executable.
+fn read_spawnables(
+    dol: &DolHeader,
+    reader: &mut (impl Read + Seek),
+    objects: &[ObjectDefinition],
+) -> Result<Vec<Spawnable>> {
+    let offset = dol.address_to_offset(SPAWNABLES_ADDR)? as u64;
+    reader.seek(SeekFrom::Start(offset))?;
+    let mut spawnables = Vec::with_capacity(NUM_SPAWNABLES);
+    let mut label_counts: HashMap<String, usize> = HashMap::new();
+    for i in 0..NUM_SPAWNABLES {
+        let placement = ObjectPlacement::read_from(reader)?;
+        let object = object_index(placement.id);
+        let mut label = objects[object].label.0.to_owned();
+        if let Some(stripped) = label.strip_prefix(INTERNAL_PREFIX) {
+            label = stripped.into();
+        } else if label.strip_prefix(UNKNOWN_PREFIX).is_some() {
+            label = format!("{}{}", UNKNOWN_PREFIX, i);
+        }
+        *label_counts.entry(label.clone()).or_default() += 1;
+        let name = Label::snake_case(&label);
+        spawnables.push(Spawnable { label: Label(label), name, placement })
+    }
+    for (i, spawnable) in spawnables.iter_mut().enumerate() {
+        if *label_counts.get(&spawnable.label.0).unwrap() > 1 {
+            spawnable.label.append_discriminator(i);
+            spawnable.name = Label::snake_case(&spawnable.label.0);
+        }
+    }
+    Ok(spawnables)
 }
 
 /// Representation of an item which is written to the generated source.
@@ -952,6 +1087,39 @@ fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result
     Ok(())
 }
 
+/// Writes the list of spawnables to the generated file.
+fn write_spawnables(
+    mut writer: impl Write,
+    spawnables: &[Spawnable],
+    objects: &[ObjectDefinition],
+) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, SPAWNABLES_HEADER)?;
+    for (i, spawnable) in spawnables.iter().enumerate() {
+        let placement = spawnable.placement;
+        let object = object_index(placement.id);
+        let object_name = &objects[object].label.0;
+        writeln!(
+            writer,
+            "    {} => {} {{ \"{}\", {}, ({}, {}, {}), ({}, {}, {}), {}, {:?} }},",
+            i,
+            spawnable.label.0,
+            spawnable.name.0,
+            object_name,
+            placement.x,
+            placement.y,
+            placement.z,
+            placement.scale_x,
+            placement.scale_y,
+            placement.scale_z,
+            placement.variant,
+            placement.flags,
+        )?;
+    }
+    write!(writer, "{}", SPAWNABLES_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 /// Writes the list of items to the generated file.
 fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, ITEMS_HEADER)?;
@@ -1130,6 +1298,9 @@ fn run_app() -> Result<()> {
     deduplicate_labels(&mut objects);
     fixup_labels(&mut objects);
 
+    info!("Reading spawnables");
+    let spawnables = read_spawnables(&dol, &mut dol_reader, &objects)?;
+
     info!("Generating item data");
     let items = build_items(&objects, &metadata.items);
 
@@ -1152,6 +1323,11 @@ fn run_app() -> Result<()> {
     info!("Writing {}", objects_path.display());
     let objects_writer = BufWriter::new(File::create(objects_path)?);
     write_objects(objects_writer, &objects)?;
+
+    let spawnables_path = out_dir.join(SPAWNABLES_FILE_NAME);
+    info!("Writing {}", spawnables_path.display());
+    let spawnables_writer = BufWriter::new(File::create(spawnables_path)?);
+    write_spawnables(spawnables_writer, &spawnables, &objects)?;
 
     let items_path = out_dir.join(ITEMS_FILE_NAME);
     info!("Writing {}", items_path.display());

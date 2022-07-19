@@ -23,18 +23,20 @@ mod sfx;
 mod sfx_group;
 mod sfx_sample;
 mod sound;
+mod spawnable;
 mod stage;
 mod suit;
 
 pub use atc::Atc;
 pub use item::{Item, ItemFlags};
 pub use music::Music;
-pub use object::Object;
+pub use object::{Object, ObjectClass, ObjectFlags, RawObjectPlacement};
 pub use resource::{Resource, ResourceIterator};
 pub use sfx::Sfx;
 pub use sfx_group::SfxGroup;
 pub use sfx_sample::SfxSample;
 pub use sound::Sound;
+pub use spawnable::Spawnable;
 pub use stage::Stage;
 pub use suit::Suit;
 
