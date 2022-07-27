@@ -1,5 +1,6 @@
 use logos::{Filter, Lexer, Logos};
 use smol_str::SmolStr;
+use std::fmt::{self, Display, Formatter};
 
 /// Tokens which can appear in assembly source files.
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
@@ -56,6 +57,26 @@ impl From<Number> for Token {
     }
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::Newline => f.write_str("newline"),
+            Token::Comma => f.write_str(","),
+            Token::OpenParen => f.write_str("("),
+            Token::CloseParen => f.write_str(")"),
+            Token::Colon => f.write_str(":"),
+            Token::Deref => f.write_str("*"),
+            Token::Else => f.write_str("else"),
+            Token::Identifier(s) => f.write_str(s.as_str()),
+            Token::Directive(s) => f.write_str(s.as_str()),
+            Token::Type(s) => f.write_str(s.as_str()),
+            Token::String(s) => f.write_str(s.as_str()),
+            Token::Number(n) => n.fmt(f),
+            Token::Error => f.write_str("<error>"),
+        }
+    }
+}
+
 /// Number literal types.
 ///
 /// All types use `u32` so that we don't have to worry about signed vs unsigned. The actual
@@ -71,6 +92,17 @@ pub enum Number {
     Dword(u32),
     /// Select the best storage class based on context
     Auto(u32),
+}
+
+impl Display for Number {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Number::Byte(x) => write!(f, "{}.b", x),
+            Number::Word(x) => write!(f, "{}.w", x),
+            Number::Dword(x) => write!(f, "{}.d", x),
+            Number::Auto(x) => write!(f, "{}", x),
+        }
+    }
 }
 
 /// Callback for identifiers

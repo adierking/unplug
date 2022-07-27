@@ -24,7 +24,7 @@ fn test_disassemble_scripts() -> Result<()> {
     for path in paths {
         info!("Parsing {}", path.file_name().unwrap().to_string_lossy());
         let contents = fs::read_to_string(&path)?;
-        let len = contents.chars().count();
+        let len = contents.len();
         let lexer = Token::lexer(&contents);
         let stream = Stream::from_iter(len..len + 1, lexer.spanned());
         Ast::parser().parse(stream).unwrap();

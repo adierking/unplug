@@ -320,6 +320,8 @@ pub enum ScriptCommand {
     Disassemble(ScriptDisassembleOpt),
     /// Disassemble all scripts
     DisassembleAll(ScriptDisassembleAllOpt),
+    /// Assemble a single stage's script
+    Assemble(ScriptAssembleOpt),
 }
 
 #[derive(Args)]
@@ -371,6 +373,13 @@ pub struct ScriptDisassembleAllOpt {
     /// Path to the output directory
     #[clap(short, value_name("PATH"), parse(from_os_str))]
     pub output: PathBuf,
+}
+
+#[derive(Args)]
+pub struct ScriptAssembleOpt {
+    /// Path to the assembly source
+    #[clap(value_name("PATH"), parse(from_os_str))]
+    pub path: PathBuf,
 }
 
 #[derive(Subcommand)]

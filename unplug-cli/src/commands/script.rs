@@ -1,13 +1,17 @@
-use crate::asm::{ProgramBuilder, ProgramWriter};
+use crate::asm::{Ast, ProgramBuilder, ProgramWriter, Token};
 use crate::common::find_stage_file;
 use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::opt::{
-    ScriptCommand, ScriptDisassembleAllOpt, ScriptDisassembleOpt, ScriptDumpAllOpt,
-    ScriptDumpFlags, ScriptDumpOpt,
+    ScriptAssembleOpt, ScriptCommand, ScriptDisassembleAllOpt, ScriptDisassembleOpt,
+    ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt,
 };
+use anyhow::anyhow;
 use anyhow::Result;
+use chumsky::{Parser, Stream};
+use log::error;
 use log::info;
+use logos::Logos;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -176,6 +180,32 @@ pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Re
     Ok(())
 }
 
+fn command_assemble(_ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
+    let name = opt.path.file_name().unwrap_or_default().to_string_lossy();
+    info!("Parsing {}", name);
+    let source = fs::read_to_string(&opt.path)?;
+    let len = source.len();
+    let lexer = Token::lexer(&source);
+    let stream = Stream::from_iter(len..len + 1, lexer.spanned());
+    let ast = match Ast::parser().parse(stream) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            // TODO: Make this suck less
+            for error in &errors {
+                error!("{}: {}", name, error);
+            }
+            return match errors.len() {
+                1 => Err(anyhow!("1 error found")),
+                e => Err(anyhow!("{} errors found", e)),
+            };
+        }
+    };
+    for item in ast.items {
+        println!("{:?}", item);
+    }
+    Ok(())
+}
+
 /// The `script` CLI command.
 pub fn command(ctx: Context, opt: ScriptCommand) -> Result<()> {
     match opt {
@@ -184,5 +214,6 @@ pub fn command(ctx: Context, opt: ScriptCommand) -> Result<()> {
         ScriptCommand::DumpAll(opt) => command_dump_all(ctx, opt),
         ScriptCommand::Disassemble(opt) => command_disassemble(ctx, opt),
         ScriptCommand::DisassembleAll(opt) => command_disassemble_all(ctx, opt),
+        ScriptCommand::Assemble(opt) => command_assemble(ctx, opt),
     }
 }
