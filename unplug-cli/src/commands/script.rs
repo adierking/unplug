@@ -1,4 +1,3 @@
-use crate::asm::{Ast, ProgramBuilder, ProgramWriter, Token};
 use crate::common::find_stage_file;
 use crate::context::Context;
 use crate::io::OutputRedirect;
@@ -6,12 +5,9 @@ use crate::opt::{
     ScriptAssembleOpt, ScriptCommand, ScriptDisassembleAllOpt, ScriptDisassembleOpt,
     ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt,
 };
-use anyhow::anyhow;
-use anyhow::Result;
-use chumsky::{Parser, Stream};
+use anyhow::{anyhow, Result};
 use log::error;
 use log::info;
-use logos::Logos;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -20,6 +16,9 @@ use unplug::data::{Resource, Stage as StageId};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
+use unplug_asm::lexer::{Logos, Token};
+use unplug_asm::parser::{Ast, Parser, Stream};
+use unplug_asm::writer::{ProgramBuilder, ProgramWriter};
 
 fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
     for (i, id) in libs.entry_points.iter().enumerate() {

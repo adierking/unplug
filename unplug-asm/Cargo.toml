@@ -1,0 +1,15 @@
+[package]
+name = "unplug-asm"
+version = "0.0.0"
+authors = ["Derpky"]
+edition = "2021"
+
+[dependencies]
+chumsky = "0.8.0"
+logos = "0.12.1"
+phf = { version = "0.10", features = ["macros"] }
+slotmap = "1.0"
+smol_str = "0.1.23"
+thiserror = "1.0"
+tracing = { version = "0.1.29", features = ["log"] }
+unplug = { path = "../unplug" }

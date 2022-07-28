@@ -14,7 +14,6 @@
     variant_size_differences
 )]
 
-pub mod asm;
 pub mod commands;
 pub mod common;
 pub mod config;

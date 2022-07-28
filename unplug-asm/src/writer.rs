@@ -1,5 +1,7 @@
-use super::{AsmMsgOp, DataOp, LabelMap, NamedOpcode, Operand, Operation};
-use anyhow::Result;
+use crate::label::LabelMap;
+use crate::opcodes::{AsmMsgOp, DataOp, NamedOpcode};
+use crate::operand::{Operand, Operation};
+use crate::Result;
 use std::collections::HashSet;
 use std::io::Write;
 use unplug::common::Text;

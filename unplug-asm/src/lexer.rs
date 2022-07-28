@@ -1,4 +1,7 @@
-use logos::{Filter, Lexer, Logos};
+// Re-export so consumers don't have to depend on logos
+pub use logos::Logos;
+
+use logos::{Filter, Lexer};
 use smol_str::SmolStr;
 use std::fmt::{self, Display, Formatter};
 

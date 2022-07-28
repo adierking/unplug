@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "unplug",
+    "unplug-asm",
     "unplug-cli",
     "unplug-data",
     "unplug-datagen",
@@ -9,6 +10,7 @@ members = [
 ]
 default-members = [
     "unplug",
+    "unplug-asm",
     "unplug-cli",
     "unplug-data",
     "unplug-test",

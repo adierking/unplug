@@ -1,10 +1,9 @@
 use anyhow::Result;
-use chumsky::{Parser, Stream};
 use log::info;
-use logos::Logos;
 use std::fs;
 use tempfile::TempDir;
-use unplug_cli::asm::{Ast, Token};
+use unplug_asm::lexer::{Logos, Token};
+use unplug_asm::parser::{Ast, Parser, Stream};
 use unplug_cli::commands::script;
 use unplug_cli::context::Context;
 use unplug_cli::opt::ScriptDisassembleAllOpt;

@@ -1,4 +1,7 @@
-use super::{Number, Token};
+// Re-export so consumers don't have to depend on chumsky
+pub use chumsky::{Parser, Stream};
+
+use crate::lexer::{Number, Token};
 use chumsky::prelude::*;
 use smol_str::SmolStr;
 
