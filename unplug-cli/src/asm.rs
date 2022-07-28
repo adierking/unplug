@@ -11,7 +11,7 @@ pub use writer::{ProgramBuilder, ProgramWriter};
 use anyhow::{ensure, Result};
 use slotmap::{new_key_type, SlotMap};
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use unplug::common::Text;
 use unplug::event::opcodes::{ExprOp, TypeOp};
 use unplug::event::BlockId;
@@ -20,19 +20,19 @@ use unplug::event::BlockId;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
     /// The name of the label as it appears in source files.
-    pub name: Rc<str>,
+    pub name: Arc<str>,
     /// The label's corresponding script block (if any).
     pub block: Option<BlockId>,
 }
 
 impl Label {
     /// Creates a label named `name` with no block assigned.
-    pub fn new(name: impl Into<Rc<str>>) -> Self {
+    pub fn new(name: impl Into<Arc<str>>) -> Self {
         Self { name: name.into(), block: None }
     }
 
     /// Creates a label named `name` with `block` assigned.
-    pub fn with_block(name: impl Into<Rc<str>>, block: BlockId) -> Self {
+    pub fn with_block(name: impl Into<Arc<str>>, block: BlockId) -> Self {
         Self { name: name.into(), block: Some(block) }
     }
 }
@@ -47,7 +47,7 @@ new_key_type! {
 pub struct LabelMap {
     slots: SlotMap<LabelId, Label>,
     by_block: HashMap<BlockId, LabelId>,
-    by_name: HashMap<Rc<str>, LabelId>,
+    by_name: HashMap<Arc<str>, LabelId>,
 }
 
 impl LabelMap {
@@ -90,7 +90,7 @@ impl LabelMap {
     /// Changes the name of label `id` to `name`. Label names must be unique or else this will fail.
     pub fn rename<S>(&mut self, id: LabelId, name: S) -> Result<()>
     where
-        S: AsRef<str> + Into<Rc<str>>,
+        S: AsRef<str> + Into<Arc<str>>,
     {
         let label = &mut self.slots[id];
         let name = name.as_ref();
@@ -98,7 +98,7 @@ impl LabelMap {
             ensure!(!self.by_name.contains_key(name), "Duplicate label name: {}", name);
             self.by_name.remove(&label.name);
             label.name = name.into();
-            self.by_name.insert(Rc::clone(&label.name), id);
+            self.by_name.insert(Arc::clone(&label.name), id);
         }
         Ok(())
     }
@@ -107,7 +107,7 @@ impl LabelMap {
     /// Returns the label ID on success, or fails if the new name is not unique.
     pub fn rename_or_insert<S>(&mut self, block: BlockId, name: S) -> Result<LabelId>
     where
-        S: AsRef<str> + Into<Rc<str>>,
+        S: AsRef<str> + Into<Arc<str>>,
     {
         match self.find_block(block) {
             Some(id) => {
@@ -122,18 +122,14 @@ impl LabelMap {
     /// `name_fn()` and returns its ID.
     pub fn find_block_or_insert<S, F>(&mut self, block: BlockId, name_fn: F) -> Result<LabelId>
     where
-        S: AsRef<str> + Into<Rc<str>>,
+        S: Into<Arc<str>>,
         F: FnOnce() -> S,
     {
         match self.find_block(block) {
             Some(id) => Ok(id),
             None => {
-                let name = name_fn();
-                ensure!(
-                    !self.by_name.contains_key(name.as_ref()),
-                    "Duplicate label name: {}",
-                    name.as_ref()
-                );
+                let name = name_fn().into();
+                ensure!(!self.by_name.contains_key(&name), "Duplicate label name: {}", name);
                 let label = Label::with_block(name, block);
                 let id = self.slots.insert(label.clone());
                 self.by_name.insert(label.name, id);
