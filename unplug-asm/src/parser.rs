@@ -4,9 +4,60 @@ pub use chumsky::{Parser, Stream};
 use crate::lexer::{Number, Token};
 use chumsky::prelude::*;
 use smol_str::SmolStr;
+use std::fmt::{self, Debug, Formatter};
+use std::hash::{Hash, Hasher};
+use std::ops::Range;
 
 /// The parser's error type.
 pub type Error = Simple<Token>;
+
+/// An AST node which associates data with its location in the source file. The span is not included
+/// in equality comparisons or hashes.
+#[derive(Clone, Eq)]
+pub struct Node<T> {
+    pub data: T,
+    pub span: Range<usize>,
+}
+
+impl<T> Node<T> {
+    /// Creates a node with `data` and an empty span.
+    pub fn new(data: T) -> Self {
+        Self { data, span: 0..0 }
+    }
+
+    /// Creates a node with `data` and `span`.
+    pub fn with_span(data: T, span: Range<usize>) -> Self {
+        Self { data, span }
+    }
+}
+
+impl<T> From<T> for Node<T> {
+    fn from(data: T) -> Self {
+        Self::new(data)
+    }
+}
+
+impl<T: Debug> Debug for Node<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.span.is_empty() {
+            write!(f, "{:?}", self.data)
+        } else {
+            write!(f, "{:?} @ {}..{}", self.data, self.span.start, self.span.end)
+        }
+    }
+}
+
+impl<T: PartialEq> PartialEq for Node<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
+}
+
+impl<T: Hash> Hash for Node<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+    }
+}
 
 /// A value in an assembly program.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -15,16 +66,16 @@ pub enum Value {
     Number(Number),
     /// A string literal.
     Text(SmolStr),
-    /// A label reference.
-    Label(SmolStr),
-    /// A label reference indicating it is an "else" condition.
-    ElseLabel(SmolStr),
-    /// A raw file offset reference.
-    Offset(Number),
     /// A type expression.
     Type(SmolStr),
+    /// A label reference.
+    Label(Node<SmolStr>),
+    /// A label reference indicating it is an "else" condition.
+    ElseLabel(Node<SmolStr>),
+    /// A raw file offset reference.
+    Offset(Node<Number>),
     /// A function call expression.
-    Function(SmolStr, Vec<Value>),
+    Function(Node<SmolStr>, Vec<Node<Value>>),
 }
 
 impl From<Number> for Value {
@@ -37,17 +88,17 @@ impl From<Number> for Value {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Item {
     /// A label declaration.
-    Label(SmolStr),
+    Label(Node<SmolStr>),
     /// A script command.
-    Command(SmolStr, Vec<Value>),
+    Command(Node<SmolStr>, Vec<Node<Value>>),
     /// An assembler directive.
-    Directive(SmolStr, Vec<Value>),
+    Directive(Node<SmolStr>, Vec<Node<Value>>),
 }
 
 /// An abstract syntax tree of a program.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Ast {
-    pub items: Vec<Item>,
+    pub items: Vec<Node<Item>>,
 }
 
 impl Ast {
@@ -58,15 +109,25 @@ impl Ast {
 
     /// Builds a `Parser` for parsing tokens into an AST.
     pub fn parser() -> BoxedParser<'static, Token, Ast, Error> {
-        let identifier = select! { Token::Identifier(x) => x };
-        let number = select! { Token::Number(x) => x };
+        // IDENTIFIER
+        let identifier = filter_map(|s, t: Token| match t {
+            Token::Identifier(x) => Ok(Node::with_span(x, s)),
+            _ => Err(Error::custom(s, "expected an identifier")),
+        });
+
+        // NUMBER
+        let number = filter_map(|s, t: Token| match t {
+            Token::Number(x) => Ok(Node::with_span(x, s)),
+            _ => Err(Error::custom(s, "expected a number")),
+        });
 
         // NUMBER | STRING | TYPE
-        let literal = select! {
-            Token::Number(x) => Value::Number(x),
-            Token::String(x) => Value::Text(x),
-            Token::Type(x) => Value::Type(x),
-        };
+        let literal = filter_map(|s, t: Token| match t {
+            Token::Number(x) => Ok(Value::Number(x)),
+            Token::String(x) => Ok(Value::Text(x)),
+            Token::Type(x) => Ok(Value::Type(x)),
+            _ => Err(Error::custom(s, "expected a literal")),
+        });
 
         // NL*
         let newlines = just(Token::Newline).ignored().repeated();
@@ -96,7 +157,7 @@ impl Ast {
                 .map(|(i, o)| Value::Function(i, o.unwrap_or_default()));
 
             // literal | function | deref
-            let operand = literal.or(function).or(deref);
+            let operand = literal.or(function).or(deref).map_with_span(Node::with_span);
             // (operand (comma operand)*)?
             operand.separated_by(comma)
         });
@@ -104,9 +165,13 @@ impl Ast {
         // IDENTIFIER operands
         let command = identifier.then(operands.clone()).map(|(i, o)| Item::Command(i, o));
 
+        // DIRECTIVE
+        let directive_identifier = filter_map(|s, t: Token| match t {
+            Token::Directive(x) => Ok(Node::with_span(x, s)),
+            _ => Err(Error::expected_input_found(s, None, Some(t))),
+        });
         // DIRECTIVE operands
-        let directive =
-            select! { Token::Directive(x) => x }.then(operands).map(|(i, o)| Item::Directive(i, o));
+        let directive = directive_identifier.then(operands).map(|(i, o)| Item::Directive(i, o));
 
         // (command | directive) (NL | $)
         let required_newline = just(Token::Newline).ignored().or(end());
@@ -116,7 +181,7 @@ impl Ast {
         let label = identifier.then_ignore(just(Token::Colon)).map(Item::Label);
 
         // op | label
-        let item = op.or(label);
+        let item = op.or(label).map_with_span(Node::with_span);
         // (item (NL* item)*)?
         let items = item.separated_by(newlines.clone());
         // NL* items NL* $
@@ -124,8 +189,8 @@ impl Ast {
     }
 }
 
-impl From<Vec<Item>> for Ast {
-    fn from(items: Vec<Item>) -> Self {
+impl From<Vec<Node<Item>>> for Ast {
+    fn from(items: Vec<Node<Item>>) -> Self {
         Self { items }
     }
 }
@@ -134,8 +199,16 @@ impl From<Vec<Item>> for Ast {
 mod tests {
     use super::*;
 
+    fn node<T>(x: T) -> Node<T> {
+        Node::new(x)
+    }
+
     fn id(s: impl Into<SmolStr>) -> Token {
         Token::Identifier(s.into())
+    }
+
+    fn idn(s: impl Into<SmolStr>) -> Node<SmolStr> {
+        node(s.into())
     }
 
     fn dirid(s: impl Into<SmolStr>) -> Token {
@@ -147,22 +220,22 @@ mod tests {
     }
 
     fn func(opcode: impl Into<SmolStr>, operands: Vec<Value>) -> Value {
-        Value::Function(opcode.into(), operands)
+        Value::Function(node(opcode.into()), operands.into_iter().map(node).collect())
     }
 
-    fn cmd(opcode: impl Into<SmolStr>, operands: Vec<Value>) -> Item {
-        Item::Command(opcode.into(), operands)
+    fn cmd(opcode: impl Into<SmolStr>, operands: Vec<Value>) -> Node<Item> {
+        node(Item::Command(node(opcode.into()), operands.into_iter().map(node).collect()))
     }
 
-    fn label(name: impl Into<SmolStr>) -> Item {
-        Item::Label(name.into())
+    fn label(name: impl Into<SmolStr>) -> Node<Item> {
+        node(Item::Label(node(name.into())))
     }
 
-    fn dir(name: impl Into<SmolStr>, operands: Vec<Value>) -> Item {
-        Item::Directive(name.into(), operands)
+    fn dir(name: impl Into<SmolStr>, operands: Vec<Value>) -> Node<Item> {
+        node(Item::Directive(node(name.into()), operands.into_iter().map(node).collect()))
     }
 
-    fn parse(tokens: Vec<Token>) -> Vec<Item> {
+    fn parse(tokens: Vec<Token>) -> Vec<Node<Item>> {
         Ast::parser().parse(tokens).unwrap().items
     }
 
@@ -275,9 +348,9 @@ mod tests {
                 num(2).into(),
             ]),
             &[
-                cmd("if", vec![num(1).into(), Value::ElseLabel("loc_0".into())]),
-                cmd("if", vec![num(1).into(), Value::Label("loc_1".into())]),
-                cmd("if", vec![num(1).into(), Value::Offset(num(2))]),
+                cmd("if", vec![num(1).into(), Value::ElseLabel(idn("loc_0"))]),
+                cmd("if", vec![num(1).into(), Value::Label(idn("loc_1"))]),
+                cmd("if", vec![num(1).into(), Value::Offset(node(num(2)))]),
             ]
         );
     }
@@ -306,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_parse_label() {
-        assert_eq!(parse(vec![id("loc_0"), Token::Colon]), vec![Item::Label("loc_0".into())]);
+        assert_eq!(parse(vec![id("loc_0"), Token::Colon]), vec![label("loc_0")]);
     }
 
     #[test]
