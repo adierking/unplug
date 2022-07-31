@@ -293,6 +293,25 @@ impl<W: Write + ?Sized> WriteOptionTo<W> for Unk2C {
     }
 }
 
+/// A scripted event in a stage.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Event {
+    /// An event that runs when the stage begins loading.
+    Prologue,
+    /// An event that runs when the stage is finished loading and about to start.
+    Startup,
+    /// An event that runs when the player runs out of battery power.
+    Dead,
+    /// An event that runs when the player presses the pose button.
+    Pose,
+    /// An event that runs when the time of day cycles between day and night.
+    TimeCycle,
+    /// See `on_time_up` in `Stage`.
+    TimeUp,
+    /// An event that runs when an object is interacted with.
+    Interact(i32),
+}
+
 #[derive(Default, Clone)]
 pub struct Stage {
     pub objects: Vec<ObjectPlacement>,
@@ -328,9 +347,19 @@ impl Stage {
         Self::default()
     }
 
-    /// Returns an iterator over the entry points to the stage's script.
-    pub fn entry_points(&self) -> EntryPointIterator<'_> {
-        EntryPointIterator::new(self)
+    /// Returns a reference to the object at `index`, or `None` if it is out-of-bounds.
+    pub fn object(&self, index: i32) -> Option<&ObjectPlacement> {
+        self.objects.get(usize::try_from(index).ok()?)
+    }
+
+    /// Returns a mutable reference to the object at `index`, or `None` if it is out-of-bounds.
+    pub fn object_mut(&mut self, index: i32) -> Option<&mut ObjectPlacement> {
+        self.objects.get_mut(usize::try_from(index).ok()?)
+    }
+
+    /// Returns an iterator over the events in the stage and their corresponding block IDs.
+    pub fn events(&self) -> EventIterator<'_> {
+        EventIterator::new(self)
     }
 
     pub fn read_from<R: ReadSeek + ?Sized>(mut reader: &mut R, libs: &Libs) -> Result<Self> {
@@ -437,7 +466,7 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Stage {
         }
 
         let mut script = ScriptWriter::new(&self.script);
-        self.entry_points().try_for_each(|b| script.add_block(b))?;
+        self.events().try_for_each(|(_, b)| script.add_block(b))?;
         let offsets = script.write_to(&mut writer)?;
         let end_offset = writer.seek(SeekFrom::Current(0))?;
 
@@ -463,9 +492,9 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Stage {
     }
 }
 
-/// Iterator returned by `Stage::entry_points()` which iterates over the entry points to a stage's
-/// script.
-pub struct EntryPointIterator<'a> {
+/// Iterator returned by `Stage::events()` which iterates over the events in a stage and their
+/// corresponding block IDs.
+pub struct EventIterator<'a> {
     stage: &'a Stage,
     /// Virtual index of the next event to check in `next()`
     front: u32,
@@ -473,34 +502,38 @@ pub struct EntryPointIterator<'a> {
     back: u32,
 }
 
-impl<'a> EntryPointIterator<'a> {
+impl<'a> EventIterator<'a> {
     fn new(stage: &'a Stage) -> Self {
         let num_objects = u32::try_from(stage.objects.len()).unwrap();
         Self { stage, front: 0, back: NUM_EVENTS + num_objects }
     }
 
-    fn get(&self, index: u32) -> Option<BlockId> {
+    fn get(&self, index: u32) -> Option<(Event, BlockId)> {
         match index {
-            0 => self.stage.on_prologue,
-            1 => self.stage.on_startup,
-            2 => self.stage.on_dead,
-            3 => self.stage.on_pose,
-            4 => self.stage.on_time_cycle,
-            5 => self.stage.on_time_up,
-            NUM_EVENTS.. => self.stage.objects[(index - NUM_EVENTS) as usize].script,
+            0 => self.stage.on_prologue.map(|x| (Event::Prologue, x)),
+            1 => self.stage.on_startup.map(|x| (Event::Startup, x)),
+            2 => self.stage.on_dead.map(|x| (Event::Dead, x)),
+            3 => self.stage.on_pose.map(|x| (Event::Pose, x)),
+            4 => self.stage.on_time_cycle.map(|x| (Event::TimeCycle, x)),
+            5 => self.stage.on_time_up.map(|x| (Event::TimeUp, x)),
+            NUM_EVENTS.. => {
+                let id = (index - NUM_EVENTS) as i32;
+                let object = self.stage.object(id).unwrap();
+                object.script.map(|x| (Event::Interact(id), x))
+            }
         }
     }
 }
 
-impl Iterator for EntryPointIterator<'_> {
-    type Item = BlockId;
+impl Iterator for EventIterator<'_> {
+    type Item = (Event, BlockId);
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.front < self.back {
-            let block = self.get(self.front);
+            let pair = self.get(self.front);
             self.front += 1;
-            if block.is_some() {
-                return block;
+            if pair.is_some() {
+                return pair;
             }
         }
         None
@@ -512,20 +545,20 @@ impl Iterator for EntryPointIterator<'_> {
     }
 }
 
-impl DoubleEndedIterator for EntryPointIterator<'_> {
+impl DoubleEndedIterator for EventIterator<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while self.back > self.front {
             self.back -= 1;
-            let block = self.get(self.back);
-            if block.is_some() {
-                return block;
+            let pair = self.get(self.back);
+            if pair.is_some() {
+                return pair;
             }
         }
         None
     }
 }
 
-impl FusedIterator for EntryPointIterator<'_> {}
+impl FusedIterator for EventIterator<'_> {}
 
 #[cfg(test)]
 mod tests {
@@ -548,15 +581,33 @@ mod tests {
 
     #[test]
     fn test_entry_points() {
-        let iter = TEST_STAGE.entry_points();
+        let iter = TEST_STAGE.events();
         assert_eq!(iter.size_hint(), (0, Some(9)));
-        let blocks = iter.map(|b| b.index()).collect::<Vec<_>>();
-        assert_eq!(blocks, &[1, 2, 3, 4, 5]);
+        let blocks = iter.collect::<Vec<_>>();
+        assert_eq!(
+            blocks,
+            &[
+                (Event::Prologue, BlockId::new(1)),
+                (Event::Dead, BlockId::new(2)),
+                (Event::TimeUp, BlockId::new(3)),
+                (Event::Interact(0), BlockId::new(4)),
+                (Event::Interact(2), BlockId::new(5)),
+            ]
+        );
     }
 
     #[test]
     fn test_entry_points_rev() {
-        let blocks = TEST_STAGE.entry_points().rev().map(|b| b.index()).collect::<Vec<_>>();
-        assert_eq!(blocks, &[5, 4, 3, 2, 1]);
+        let blocks = TEST_STAGE.events().rev().collect::<Vec<_>>();
+        assert_eq!(
+            blocks,
+            &[
+                (Event::Interact(2), BlockId::new(5)),
+                (Event::Interact(0), BlockId::new(4)),
+                (Event::TimeUp, BlockId::new(3)),
+                (Event::Dead, BlockId::new(2)),
+                (Event::Prologue, BlockId::new(1)),
+            ]
+        );
     }
 }

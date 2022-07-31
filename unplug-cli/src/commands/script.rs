@@ -142,7 +142,7 @@ pub fn command_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
 
 fn disassemble_stage(stage: &Stage, writer: impl Write) -> Result<()> {
     let mut builder = ProgramBuilder::new(&stage.script);
-    stage.entry_points().try_for_each(|b| builder.add_event(b))?;
+    stage.events().try_for_each(|(_, b)| builder.add_event(b))?;
     let program = builder.finish();
     ProgramWriter::new(writer, &program).write()?;
     Ok(())
