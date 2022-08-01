@@ -1,5 +1,6 @@
 use phf::phf_map;
 use unplug::event::opcodes::{CmdOp, ExprOp, Opcode, TypeOp};
+use unplug::stage::Event;
 
 /// An opcode which has an associated name.
 pub trait NamedOpcode: Opcode {
@@ -50,15 +51,37 @@ impl Opcode for AsmMsgOp {
     }
 }
 
-/// A data directive type.
+/// An assembler directive type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum DataOp {
+pub enum DirOp {
     Byte,
     Word,
     Dword,
+    Prologue,
+    Startup,
+    Dead,
+    Pose,
+    TimeCycle,
+    TimeUp,
+    Interact,
 }
 
-impl Opcode for DataOp {
+impl DirOp {
+    /// Returns the `DirOp` corresponding to `event`.
+    pub fn for_event(event: Event) -> Self {
+        match event {
+            Event::Prologue => Self::Prologue,
+            Event::Startup => Self::Startup,
+            Event::Dead => Self::Dead,
+            Event::Pose => Self::Pose,
+            Event::TimeCycle => Self::TimeCycle,
+            Event::TimeUp => Self::TimeUp,
+            Event::Interact(_) => Self::Interact,
+        }
+    }
+}
+
+impl Opcode for DirOp {
     type Value = u8;
     fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
         Err(value)
@@ -291,9 +314,16 @@ opcode_names! {
         Text => "text",
     }
 
-    DataOp {
+    DirOp {
         Byte => "db",
         Word => "dw",
         Dword => "dd",
+        Prologue => "prologue",
+        Startup => "startup",
+        Dead => "dead",
+        Pose => "pose",
+        TimeCycle => "time_cycle",
+        TimeUp => "time_up",
+        Interact => "interact",
     }
 }

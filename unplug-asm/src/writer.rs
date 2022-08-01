@@ -1,8 +1,8 @@
-use crate::label::LabelMap;
-use crate::opcodes::{AsmMsgOp, DataOp, NamedOpcode};
+use crate::label::{LabelId, LabelMap};
+use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::operand::{Operand, Operation};
 use crate::Result;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use unplug::common::Text;
 use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
@@ -11,13 +11,18 @@ use unplug::event::serialize::{
     Error as SerError, EventSerializer, Result as SerResult, SerializeEvent,
 };
 use unplug::event::{Block, BlockId, DataBlock, Pointer, Script};
+use unplug::stage::Event;
+
+/// The optimal tab size for viewing a script, used to determine if a name is too long to fit in
+/// the opcode column. The VSCode extension sets the tab size to 8.
+const TAB_SIZE: usize = 8;
 
 /// Encapsulates various operation types.
 enum AnyOperation {
     Command(Operation<CmdOp>),
     Expr(Operation<ExprOp>),
     MsgCommand(Operation<AsmMsgOp>),
-    Data(Operation<DataOp>),
+    Directive(Operation<DirOp>),
 }
 
 impl AnyOperation {
@@ -27,7 +32,7 @@ impl AnyOperation {
             Self::Command(op) => op.operands.push(operand),
             Self::Expr(op) => op.operands.push(operand),
             Self::MsgCommand(op) => op.operands.push(operand),
-            Self::Data(op) => op.operands.push(operand),
+            Self::Directive(op) => op.operands.push(operand),
         }
     }
 
@@ -58,12 +63,12 @@ impl AnyOperation {
         }
     }
 
-    /// Consumes this wrapper and returns the inner data definition.
-    /// ***Panics*** if the operation is not data.
-    fn into_data(self) -> Operation<DataOp> {
+    /// Consumes this wrapper and returns the inner directive.
+    /// ***Panics*** if the operation is not a directive.
+    fn into_directive(self) -> Operation<DirOp> {
         match self {
-            Self::Data(op) => op,
-            _ => panic!("expected data"),
+            Self::Directive(op) => op,
+            _ => panic!("expected a directive"),
         }
     }
 }
@@ -86,9 +91,9 @@ impl From<Operation<AsmMsgOp>> for AnyOperation {
     }
 }
 
-impl From<Operation<DataOp>> for AnyOperation {
-    fn from(op: Operation<DataOp>) -> Self {
-        Self::Data(op)
+impl From<Operation<DirOp>> for AnyOperation {
+    fn from(op: Operation<DirOp>) -> Self {
+        Self::Directive(op)
     }
 }
 
@@ -97,8 +102,8 @@ impl From<Operation<DataOp>> for AnyOperation {
 struct SerializedAsm {
     /// The assembly commands in order of their appearance in the source file.
     commands: Vec<Operation<CmdOp>>,
-    /// Data definitions in order of their appearance in the source file.
-    data: Vec<Operation<DataOp>>,
+    /// Directives in order of their appearance in the source file.
+    directives: Vec<Operation<DirOp>>,
     /// Block IDs that the commands reference. This may contain duplicates.
     refs: Vec<BlockId>,
 }
@@ -131,7 +136,7 @@ impl<'a> AsmSerializer<'a> {
     /// Consumes this serializer, returning the built assembly code.
     fn finish(mut self) -> SerializedAsm {
         match self.operation {
-            Some(AnyOperation::Data(data)) => self.asm.data.push(data),
+            Some(AnyOperation::Directive(dir)) => self.asm.directives.push(dir),
             Some(AnyOperation::Command(_)) => panic!("unterminated command"),
             Some(AnyOperation::Expr(_)) => panic!("unterminated expression"),
             Some(AnyOperation::MsgCommand(_)) => panic!("unterminated message command"),
@@ -183,12 +188,12 @@ impl<'a> AsmSerializer<'a> {
         result
     }
 
-    /// If there is no active operation or the current data operation does not match, makes `op` the
-    /// current data operation.
-    fn begin_data(&mut self, op: DataOp) {
+    /// If there is no active operation or the current directive does not match, makes `op` the
+    /// current directive.
+    fn begin_directive(&mut self, op: DirOp) {
         match &self.operation {
-            Some(AnyOperation::Data(data)) if data.opcode == op => return,
-            Some(AnyOperation::Data(_)) => self.end_data(),
+            Some(AnyOperation::Directive(dir)) if dir.opcode == op => return,
+            Some(AnyOperation::Directive(_)) => self.end_directive(),
             Some(_) => return,
             None => (),
         }
@@ -197,17 +202,17 @@ impl<'a> AsmSerializer<'a> {
         }
     }
 
-    /// Ends the current data operation and appends it to the program.
-    fn end_data(&mut self) {
-        let data = self.end_operation().into_data();
-        self.asm.data.push(data);
+    /// Ends the current directive and appends it to the program.
+    fn end_directive(&mut self) {
+        let dir = self.end_operation().into_directive();
+        self.asm.directives.push(dir);
     }
 
     /// Serializes an array of data values of type `op`.
-    fn serialize_array<T: Copy + Into<Operand>>(&mut self, op: DataOp, arr: &[T]) -> SerResult<()> {
-        self.begin_data(op);
-        if let Some(AnyOperation::Data(data)) = &mut self.operation {
-            arr.iter().for_each(|&x| data.operands.push(x.into()));
+    fn serialize_array<T: Copy + Into<Operand>>(&mut self, op: DirOp, arr: &[T]) -> SerResult<()> {
+        self.begin_directive(op);
+        if let Some(AnyOperation::Directive(dir)) = &mut self.operation {
+            arr.iter().for_each(|&x| dir.operands.push(x.into()));
             Ok(())
         } else {
             Err(SerError::custom(format!("unexpected {:?} array", op)))
@@ -217,77 +222,77 @@ impl<'a> AsmSerializer<'a> {
 
 impl EventSerializer for AsmSerializer<'_> {
     fn serialize_i8(&mut self, val: i8) -> SerResult<()> {
-        self.begin_data(DataOp::Byte);
+        self.begin_directive(DirOp::Byte);
         self.push_operand(Operand::I8(val));
         Ok(())
     }
 
     fn serialize_u8(&mut self, val: u8) -> SerResult<()> {
-        self.begin_data(DataOp::Byte);
+        self.begin_directive(DirOp::Byte);
         self.push_operand(Operand::U8(val));
         Ok(())
     }
 
     fn serialize_i16(&mut self, val: i16) -> SerResult<()> {
-        self.begin_data(DataOp::Word);
+        self.begin_directive(DirOp::Word);
         self.push_operand(Operand::I16(val));
         Ok(())
     }
 
     fn serialize_u16(&mut self, val: u16) -> SerResult<()> {
-        self.begin_data(DataOp::Word);
+        self.begin_directive(DirOp::Word);
         self.push_operand(Operand::U16(val));
         Ok(())
     }
 
     fn serialize_i32(&mut self, val: i32) -> SerResult<()> {
-        self.begin_data(DataOp::Dword);
+        self.begin_directive(DirOp::Dword);
         self.push_operand(Operand::I32(val));
         Ok(())
     }
 
     fn serialize_u32(&mut self, val: u32) -> SerResult<()> {
-        self.begin_data(DataOp::Dword);
+        self.begin_directive(DirOp::Dword);
         self.push_operand(Operand::U32(val));
         Ok(())
     }
 
     fn serialize_pointer(&mut self, ptr: Pointer) -> SerResult<()> {
-        self.begin_data(DataOp::Dword);
+        self.begin_directive(DirOp::Dword);
         let reference = self.make_reference(ptr);
         self.push_operand(reference);
         Ok(())
     }
 
     fn serialize_i8_array(&mut self, arr: &[i8]) -> SerResult<()> {
-        self.serialize_array(DataOp::Byte, arr)
+        self.serialize_array(DirOp::Byte, arr)
     }
 
     fn serialize_u8_array(&mut self, arr: &[u8]) -> SerResult<()> {
-        self.serialize_array(DataOp::Byte, arr)
+        self.serialize_array(DirOp::Byte, arr)
     }
 
     fn serialize_i16_array(&mut self, arr: &[i16]) -> SerResult<()> {
-        self.serialize_array(DataOp::Word, arr)
+        self.serialize_array(DirOp::Word, arr)
     }
 
     fn serialize_u16_array(&mut self, arr: &[u16]) -> SerResult<()> {
-        self.serialize_array(DataOp::Word, arr)
+        self.serialize_array(DirOp::Word, arr)
     }
 
     fn serialize_i32_array(&mut self, arr: &[i32]) -> SerResult<()> {
-        self.serialize_array(DataOp::Dword, arr)
+        self.serialize_array(DirOp::Dword, arr)
     }
 
     fn serialize_u32_array(&mut self, arr: &[u32]) -> SerResult<()> {
-        self.serialize_array(DataOp::Dword, arr)
+        self.serialize_array(DirOp::Dword, arr)
     }
 
     fn serialize_pointer_array(&mut self, arr: &[Pointer]) -> SerResult<()> {
-        self.begin_data(DataOp::Dword);
-        if let Some(AnyOperation::Data(mut data)) = self.operation.take() {
-            arr.iter().for_each(|&ptr| data.operands.push(self.make_reference(ptr)));
-            self.operation = Some(AnyOperation::Data(data));
+        self.begin_directive(DirOp::Dword);
+        if let Some(AnyOperation::Directive(mut dir)) = self.operation.take() {
+            arr.iter().for_each(|&ptr| dir.operands.push(self.make_reference(ptr)));
+            self.operation = Some(AnyOperation::Directive(dir));
             Ok(())
         } else {
             Err(SerError::custom("unexpected pointer array"))
@@ -295,19 +300,19 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 
     fn serialize_type(&mut self, ty: TypeOp) -> SerResult<()> {
-        self.begin_data(DataOp::Dword);
+        self.begin_directive(DirOp::Dword);
         self.push_operand(Operand::Type(ty));
         Ok(())
     }
 
     fn serialize_text(&mut self, text: &Text) -> SerResult<()> {
-        self.begin_data(DataOp::Byte);
+        self.begin_directive(DirOp::Byte);
         self.push_operand(Operand::Text(text.clone()));
         Ok(())
     }
 
     fn serialize_rgba(&mut self, rgba: u32) -> SerResult<()> {
-        self.begin_data(DataOp::Dword);
+        self.begin_directive(DirOp::Dword);
         self.serialize_u32(rgba)
     }
 
@@ -418,7 +423,7 @@ pub struct Subroutine {
 pub struct AsmDataBlock {
     pub src_block: BlockId,
     pub src_offset: u32,
-    pub data: Vec<Operation<DataOp>>,
+    pub directives: Vec<Operation<DirOp>>,
 }
 
 /// An assembly program consisting of subroutines and labels.
@@ -426,6 +431,7 @@ pub struct AsmDataBlock {
 pub struct Program {
     pub subroutines: Vec<Subroutine>,
     pub data: Vec<AsmDataBlock>,
+    pub events: HashMap<LabelId, Event>,
     pub labels: LabelMap,
 }
 
@@ -448,11 +454,12 @@ impl<'a> ProgramBuilder<'a> {
         Self { script, program: Program::new(), visited: HashSet::new(), queue: vec![] }
     }
 
-    /// Adds the script event beginning at `block_id` to the program.
-    pub fn add_event(&mut self, block_id: BlockId) -> Result<()> {
+    /// Adds a script event of type `event` beginning at `block_id` to the program.
+    pub fn add_event(&mut self, event: Event, block_id: BlockId) -> Result<()> {
         self.add_block(block_id)?;
         let name = format!("evt_{}", block_id.index());
-        self.program.labels.rename_or_insert(block_id, name)?;
+        let label = self.program.labels.rename_or_insert(block_id, name)?;
+        self.program.events.insert(label, event);
         Ok(())
     }
 
@@ -504,7 +511,8 @@ impl<'a> ProgramBuilder<'a> {
         data.serialize(&mut ser)?;
 
         let serialized = ser.finish();
-        let block = AsmDataBlock { src_block: block_id, src_offset: 0, data: serialized.data };
+        let block =
+            AsmDataBlock { src_block: block_id, src_offset: 0, directives: serialized.directives };
         self.program.data.push(block);
         self.queue.extend(serialized.refs);
         assert!(serialized.commands.is_empty());
@@ -528,7 +536,7 @@ impl<'a> ProgramBuilder<'a> {
         let block = AsmCodeBlock { src_block: block_id, commands: serialized.commands };
         subroutine.blocks.push(block);
         self.queue.extend(serialized.refs);
-        assert!(serialized.data.is_empty());
+        assert!(serialized.directives.is_empty());
 
         // If execution can flow directly out of this block into another one, it MUST be written next
         if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
@@ -591,8 +599,12 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     fn write_code(&mut self, block: &AsmCodeBlock) -> Result<()> {
-        if let Some(id) = self.program.labels.find_block(block.src_block) {
-            writeln!(self.writer, "{}:", self.program.labels.get(id).name)?;
+        let label = self.program.labels.find_block(block.src_block);
+        if let Some(label) = label {
+            if let Some(&event) = self.program.events.get(&label) {
+                self.write_event_directive(event, label)?;
+            }
+            writeln!(self.writer, "{}:", self.program.labels.get(label).name)?;
         }
         for command in &block.commands {
             self.write_command(command)?;
@@ -604,10 +616,8 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         if let Some(id) = self.program.labels.find_block(block.src_block) {
             writeln!(self.writer, "{}:", self.program.labels.get(id).name)?;
         }
-        for data in &block.data {
-            write!(self.writer, "\t.{}\t", data.opcode.name())?;
-            self.write_operands(&data.operands)?;
-            writeln!(self.writer)?;
+        for data in &block.directives {
+            self.write_directive(data)?;
         }
         Ok(())
     }
@@ -620,6 +630,30 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
                 CmdOp::Set => self.write_operands(command.operands.iter().rev())?,
                 _ => self.write_operands(&command.operands)?,
             }
+        }
+        writeln!(self.writer)?;
+        Ok(())
+    }
+
+    fn write_event_directive(&mut self, event: Event, label: LabelId) -> Result<()> {
+        let mut dir = Operation::new(DirOp::for_event(event));
+        if let Event::Interact(obj) = event {
+            dir.operands.push(Operand::I32(obj));
+        }
+        dir.operands.push(Operand::Label(label));
+        self.write_directive(&dir)
+    }
+
+    fn write_directive(&mut self, dir: &Operation<DirOp>) -> Result<()> {
+        let name = dir.opcode.name();
+        write!(self.writer, "\t.{}", name)?;
+        if !dir.operands.is_empty() {
+            if name.len() + 1 < TAB_SIZE {
+                write!(self.writer, "\t")?;
+            } else {
+                write!(self.writer, "  ")?;
+            }
+            self.write_operands(&dir.operands)?;
         }
         writeln!(self.writer)?;
         Ok(())
