@@ -5,13 +5,14 @@ use crate::Result;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use unplug::common::Text;
+use unplug::data::Resource;
 use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
 use unplug::event::serialize::{
     Error as SerError, EventSerializer, Result as SerResult, SerializeEvent,
 };
 use unplug::event::{Block, BlockId, DataBlock, Pointer, Script};
-use unplug::stage::Event;
+use unplug::stage::{Event, Stage};
 
 /// The optimal tab size for viewing a script, used to determine if a name is too long to fit in
 /// the opcode column. The VSCode extension sets the tab size to 8.
@@ -444,6 +445,7 @@ impl Program {
 /// Builds up a `Program` from script data.
 pub struct ProgramBuilder<'a> {
     script: &'a Script,
+    stage: Option<&'a Stage>,
     program: Program,
     visited: HashSet<BlockId>,
     queue: Vec<BlockId>,
@@ -451,13 +453,36 @@ pub struct ProgramBuilder<'a> {
 
 impl<'a> ProgramBuilder<'a> {
     pub fn new(script: &'a Script) -> Self {
-        Self { script, program: Program::new(), visited: HashSet::new(), queue: vec![] }
+        Self::new_impl(script, None)
+    }
+
+    pub fn with_stage(stage: &'a Stage) -> Self {
+        Self::new_impl(&stage.script, Some(stage))
+    }
+
+    fn new_impl(script: &'a Script, stage: Option<&'a Stage>) -> Self {
+        Self { script, stage, program: Program::new(), visited: HashSet::new(), queue: vec![] }
     }
 
     /// Adds a script event of type `event` beginning at `block_id` to the program.
     pub fn add_event(&mut self, event: Event, block_id: BlockId) -> Result<()> {
         self.add_block(block_id)?;
-        let name = format!("evt_{}", block_id.index());
+        let name = match event {
+            Event::Prologue => "evt_prologue".to_owned(),
+            Event::Startup => "evt_startup".to_owned(),
+            Event::Dead => "evt_dead".to_owned(),
+            Event::Pose => "evt_pose".to_owned(),
+            Event::TimeCycle => "evt_time_cycle".to_owned(),
+            Event::TimeUp => "evt_time_up".to_owned(),
+            Event::Interact(id) => {
+                if let Some(stage) = self.stage {
+                    let object = stage.object(id).unwrap().id.name();
+                    format!("evt_{}_{}", object, id)
+                } else {
+                    format!("evt_interact_{}", id)
+                }
+            }
+        };
         let label = self.program.labels.rename_or_insert(block_id, name)?;
         self.program.events.insert(label, event);
         Ok(())
