@@ -324,7 +324,7 @@ impl EventSerializer for AsmSerializer<'_> {
 
     fn end_expr(&mut self) -> SerResult<()> {
         let expr = self.end_operation().into_expr();
-        self.push_operand(Operand::Expr(expr));
+        self.push_operand(Operand::Expr(expr.into()));
         Ok(())
     }
 
@@ -364,7 +364,7 @@ impl EventSerializer for AsmSerializer<'_> {
                 }
             }
             let op = self.end_operation().into_msg_command();
-            self.push_operand(Operand::MsgCommand(op));
+            self.push_operand(Operand::MsgCommand(op.into()));
         }
         let cmd = match ch {
             MsgOp::End => AsmMsgOp::End,
@@ -401,7 +401,7 @@ impl EventSerializer for AsmSerializer<'_> {
     fn end_msg(&mut self) -> SerResult<()> {
         if let Some(AnyOperation::MsgCommand(_)) = &self.operation {
             let op = self.end_operation().into_msg_command();
-            self.push_operand(Operand::MsgCommand(op));
+            self.push_operand(Operand::MsgCommand(op.into()));
         }
         Ok(())
     }

@@ -1,5 +1,6 @@
 use crate::label::LabelId;
 use crate::opcodes::{AsmMsgOp, NamedOpcode};
+use smallvec::SmallVec;
 use unplug::common::Text;
 use unplug::event::opcodes::{ExprOp, TypeOp};
 
@@ -7,12 +8,12 @@ use unplug::event::opcodes::{ExprOp, TypeOp};
 #[derive(Debug, Clone)]
 pub struct Operation<T: NamedOpcode> {
     pub opcode: T,
-    pub operands: Vec<Operand>,
+    pub operands: SmallVec<[Operand; 2]>,
 }
 
 impl<T: NamedOpcode> Operation<T> {
     pub fn new(opcode: T) -> Self {
-        Self { opcode, operands: vec![] }
+        Self { opcode, operands: SmallVec::new() }
     }
 }
 
@@ -42,16 +43,16 @@ pub enum Operand {
     /// A type expression.
     Type(TypeOp),
     /// An expression.
-    Expr(Operation<ExprOp>),
+    Expr(Box<Operation<ExprOp>>),
     /// A message command.
-    MsgCommand(Operation<AsmMsgOp>),
+    MsgCommand(Box<Operation<AsmMsgOp>>),
 }
 
 macro_rules! impl_operand_from {
     ($type:ty, $name:ident) => {
         impl From<$type> for Operand {
             fn from(x: $type) -> Self {
-                Self::$name(x)
+                Self::$name(x.into())
             }
         }
     };
