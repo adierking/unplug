@@ -294,7 +294,7 @@ impl<W: Write + ?Sized> WriteOptionTo<W> for Unk2C {
 }
 
 /// A scripted event in a stage.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Event {
     /// An event that runs when the stage begins loading.
     Prologue,

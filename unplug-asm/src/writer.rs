@@ -2,6 +2,7 @@ use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::operand::{Operand, Operation};
 use crate::Result;
+use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use unplug::common::Text;
@@ -11,7 +12,7 @@ use unplug::event::script::{BlockOffsetMap, ScriptLayout};
 use unplug::event::serialize::{
     Error as SerError, EventSerializer, Result as SerResult, SerializeEvent,
 };
-use unplug::event::{Block, BlockId, DataBlock, Pointer, Script};
+use unplug::event::{self, Block, BlockId, Pointer, Script};
 use unplug::stage::{Event, Stage};
 
 /// The optimal tab size for viewing a script, used to determine if a name is too long to fit in
@@ -159,10 +160,14 @@ impl<'a> AsmSerializer<'a> {
         } else {
             let block = self.script.resolve_pointer(ptr).unwrap();
             self.asm.refs.push(block);
-            let label = self
-                .labels
-                .find_block_or_insert(block, || format!("loc_{}", block.index()))
-                .unwrap();
+
+            let label = match self.labels.find_block(block).first() {
+                Some(&label) => label,
+                None => {
+                    self.labels.insert_new(format!("loc_{}", block.index()), Some(block)).unwrap()
+                }
+            };
+
             // If this command is if-like, use an ElseLabel so that "else" is displayed before it.
             // This should improve readability because it clarifies what the reference is for.
             match &self.operation {
@@ -408,31 +413,62 @@ impl EventSerializer for AsmSerializer<'_> {
 }
 
 /// A block of instructions corresponding to a script block.
-pub struct AsmCodeBlock {
-    pub src_block: BlockId,
+pub struct CodeBlock {
+    pub id: BlockId,
     pub commands: Vec<Operation<CmdOp>>,
 }
 
-/// A subroutine made up of multiple `AsmBlock`s.
+impl CodeBlock {
+    /// Creates an empty code block associated with block `id`.
+    pub fn new(id: BlockId) -> Self {
+        Self::with_commands(id, vec![])
+    }
+
+    /// Creates a code block associated with block `id` and populated from `commands`.
+    pub fn with_commands(id: BlockId, commands: impl Into<Vec<Operation<CmdOp>>>) -> Self {
+        Self { id, commands: commands.into() }
+    }
+}
+
+/// A subroutine made up of multiple `CodeBlock`s.
 pub struct Subroutine {
-    pub src_block: BlockId,
-    pub src_offset: u32,
-    pub blocks: Vec<AsmCodeBlock>,
+    pub entry_point: BlockId,
+    pub offset: u32,
+    pub blocks: Vec<CodeBlock>,
+}
+
+impl Subroutine {
+    /// Creates an empty subroutine beginning at `entry_point`.
+    pub fn new(entry_point: BlockId) -> Self {
+        Self { entry_point, offset: 0, blocks: vec![] }
+    }
 }
 
 /// A block of data corresponding to a script block.
-pub struct AsmDataBlock {
-    pub src_block: BlockId,
-    pub src_offset: u32,
+pub struct DataBlock {
+    pub id: BlockId,
+    pub offset: u32,
     pub directives: Vec<Operation<DirOp>>,
+}
+
+impl DataBlock {
+    /// Creates an empty data block associated with block `id`.
+    pub fn new(id: BlockId) -> Self {
+        Self::with_directives(id, vec![])
+    }
+
+    /// Creates a data block associated with block `id` and populated from `directives`.
+    pub fn with_directives(id: BlockId, directives: impl Into<Vec<Operation<DirOp>>>) -> Self {
+        Self { id, offset: 0, directives: directives.into() }
+    }
 }
 
 /// An assembly program consisting of subroutines and labels.
 #[derive(Default)]
 pub struct Program {
     pub subroutines: Vec<Subroutine>,
-    pub data: Vec<AsmDataBlock>,
-    pub events: HashMap<LabelId, Event>,
+    pub data: Vec<DataBlock>,
+    pub events: HashMap<Event, BlockId>,
     pub labels: LabelMap,
 }
 
@@ -447,6 +483,7 @@ pub struct ProgramBuilder<'a> {
     script: &'a Script,
     stage: Option<&'a Stage>,
     program: Program,
+    events: HashSet<BlockId>,
     visited: HashSet<BlockId>,
     queue: Vec<BlockId>,
 }
@@ -461,30 +498,42 @@ impl<'a> ProgramBuilder<'a> {
     }
 
     fn new_impl(script: &'a Script, stage: Option<&'a Stage>) -> Self {
-        Self { script, stage, program: Program::new(), visited: HashSet::new(), queue: vec![] }
+        Self {
+            script,
+            stage,
+            program: Program::new(),
+            events: HashSet::new(),
+            visited: HashSet::new(),
+            queue: vec![],
+        }
     }
 
     /// Adds a script event of type `event` beginning at `block_id` to the program.
     pub fn add_event(&mut self, event: Event, block_id: BlockId) -> Result<()> {
-        self.add_block(block_id)?;
-        let name = match event {
-            Event::Prologue => "evt_prologue".to_owned(),
-            Event::Startup => "evt_startup".to_owned(),
-            Event::Dead => "evt_dead".to_owned(),
-            Event::Pose => "evt_pose".to_owned(),
-            Event::TimeCycle => "evt_time_cycle".to_owned(),
-            Event::TimeUp => "evt_time_up".to_owned(),
-            Event::Interact(id) => {
-                if let Some(stage) = self.stage {
-                    let object = stage.object(id).unwrap().id.name();
-                    format!("evt_{}_{}", object, id)
-                } else {
-                    format!("evt_interact_{}", id)
+        self.add_subroutine(block_id)?;
+        self.program.events.insert(event, block_id);
+        if self.events.insert(block_id) {
+            let name = match event {
+                Event::Prologue => "evt_prologue".to_owned(),
+                Event::Startup => "evt_startup".to_owned(),
+                Event::Dead => "evt_dead".to_owned(),
+                Event::Pose => "evt_pose".to_owned(),
+                Event::TimeCycle => "evt_time_cycle".to_owned(),
+                Event::TimeUp => "evt_time_up".to_owned(),
+                Event::Interact(id) => {
+                    if let Some(stage) = self.stage {
+                        let object = stage.object(id).unwrap().id.name();
+                        format!("evt_{}_{}", object, id)
+                    } else {
+                        format!("evt_interact_{}", id)
+                    }
                 }
-            }
-        };
-        let label = self.program.labels.rename_or_insert(block_id, name)?;
-        self.program.events.insert(label, event);
+            };
+            match self.program.labels.find_block(block_id).first() {
+                Some(&label) => self.program.labels.rename(label, name)?,
+                None => self.program.labels.insert_new(name, Some(block_id))?,
+            };
+        }
         Ok(())
     }
 
@@ -496,48 +545,46 @@ impl<'a> ProgramBuilder<'a> {
         self.program
     }
 
-    /// Add the block at `block_id` to the program.
-    fn add_block(&mut self, block_id: BlockId) -> Result<()> {
-        if self.visited.contains(&block_id) {
+    /// Adds the subroutine at `entry_point` to the program.
+    fn add_subroutine(&mut self, entry_point: BlockId) -> Result<()> {
+        if self.visited.contains(&entry_point) {
             return Ok(());
         }
-        match self.script.block(block_id) {
-            Block::Placeholder => panic!("Block {:?} is a placeholder", block_id),
-            Block::Code(_) => self.add_subroutine(block_id),
-            Block::Data(data) => self.add_data(block_id, data),
-        }
-    }
-
-    /// Add the subroutine at `entry_point` to the program.
-    fn add_subroutine(&mut self, entry_point: BlockId) -> Result<()> {
-        let name = format!("sub_{}", entry_point.index());
-        self.program.labels.rename_or_insert(entry_point, name)?;
 
         let order = self.script.reverse_postorder(entry_point);
-        let mut subroutine = Subroutine { src_block: entry_point, src_offset: 0, blocks: vec![] };
+        let mut subroutine = Subroutine::new(entry_point);
         for block in order {
             self.add_code(&mut subroutine, block)?;
         }
 
+        let name = format!("sub_{}", entry_point.index());
+        match self.program.labels.find_block(entry_point).first() {
+            Some(&label) => self.program.labels.rename(label, name)?,
+            None => self.program.labels.insert_new(name, Some(entry_point))?,
+        };
+
         self.program.subroutines.push(subroutine);
         while let Some(block) = self.queue.pop() {
-            self.add_block(block)?;
+            match self.script.block(block) {
+                Block::Placeholder => panic!("Block {:?} is a placeholder", block),
+                Block::Code(_) => self.add_subroutine(block)?,
+                Block::Data(data) => self.add_data(block, data)?,
+            };
         }
         Ok(())
     }
 
     /// Adds the data block at `block_id` to the program.
-    fn add_data(&mut self, block_id: BlockId, data: &DataBlock) -> Result<()> {
+    fn add_data(&mut self, block_id: BlockId, data: &event::DataBlock) -> Result<()> {
         if !self.visited.insert(block_id) {
             return Ok(());
         }
 
         let mut ser = AsmSerializer::new(self.script, &mut self.program.labels);
         data.serialize(&mut ser)?;
-
         let serialized = ser.finish();
-        let block =
-            AsmDataBlock { src_block: block_id, src_offset: 0, directives: serialized.directives };
+
+        let block = DataBlock::with_directives(block_id, serialized.directives);
         self.program.data.push(block);
         self.queue.extend(serialized.refs);
         assert!(serialized.commands.is_empty());
@@ -556,9 +603,9 @@ impl<'a> ProgramBuilder<'a> {
         for command in &code.commands {
             command.serialize(&mut ser)?;
         }
-
         let serialized = ser.finish();
-        let block = AsmCodeBlock { src_block: block_id, commands: serialized.commands };
+
+        let block = CodeBlock::with_commands(block_id, serialized.commands);
         subroutine.blocks.push(block);
         self.queue.extend(serialized.refs);
         assert!(serialized.directives.is_empty());
@@ -580,29 +627,37 @@ impl<'a> ProgramBuilder<'a> {
             src_offsets.insert(loc.id, loc.offset);
         }
         for subroutine in &mut self.program.subroutines {
-            if let Some(offset) = src_offsets.try_get(subroutine.src_block) {
-                subroutine.src_offset = offset;
+            if let Some(offset) = src_offsets.try_get(subroutine.entry_point) {
+                subroutine.offset = offset;
             }
         }
         for data in &mut self.program.data {
-            if let Some(offset) = src_offsets.try_get(data.src_block) {
-                data.src_offset = offset;
+            if let Some(offset) = src_offsets.try_get(data.id) {
+                data.offset = offset;
             }
         }
-        self.program.subroutines.sort_by_key(|s| s.src_offset);
-        self.program.data.sort_by_key(|s| s.src_offset);
+        self.program.subroutines.sort_by_key(|s| s.offset);
+        self.program.data.sort_by_key(|s| s.offset);
     }
 }
+
+type EventVec = SmallVec<[Event; 1]>;
 
 /// Writes out a program as human-readable assembly code.
 pub struct ProgramWriter<'a, W: Write> {
     writer: W,
     program: &'a Program,
+    block_events: HashMap<BlockId, EventVec>,
 }
 
 impl<'a, W: Write> ProgramWriter<'a, W> {
     pub fn new(writer: W, program: &'a Program) -> Self {
-        Self { writer, program }
+        // Reverse the program's event map
+        let mut block_events: HashMap<BlockId, EventVec> = HashMap::new();
+        for (&event, &block) in &program.events {
+            block_events.entry(block).or_default().push(event);
+        }
+        Self { writer, program, block_events }
     }
 
     pub fn write(mut self) -> Result<()> {
@@ -623,13 +678,18 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_code(&mut self, block: &AsmCodeBlock) -> Result<()> {
-        let label = self.program.labels.find_block(block.src_block);
-        if let Some(label) = label {
-            if let Some(&event) = self.program.events.get(&label) {
-                self.write_event_directive(event, label)?;
+    fn write_code(&mut self, block: &CodeBlock) -> Result<()> {
+        let labels = self.program.labels.find_block(block.id);
+        if !labels.is_empty() {
+            if let Some(mut events) = self.block_events.remove(&block.id) {
+                events.sort_unstable();
+                for &event in &events {
+                    self.write_event_directive(event, labels[0])?;
+                }
             }
-            writeln!(self.writer, "{}:", self.program.labels.get(label).name)?;
+            for &label in labels {
+                writeln!(self.writer, "{}:", self.program.labels.get(label).name)?;
+            }
         }
         for command in &block.commands {
             self.write_command(command)?;
@@ -637,9 +697,9 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_data(&mut self, block: &AsmDataBlock) -> Result<()> {
-        if let Some(id) = self.program.labels.find_block(block.src_block) {
-            writeln!(self.writer, "{}:", self.program.labels.get(id).name)?;
+    fn write_data(&mut self, block: &DataBlock) -> Result<()> {
+        for &label in self.program.labels.find_block(block.id) {
+            writeln!(self.writer, "{}:", self.program.labels.get(label).name)?;
         }
         for data in &block.directives {
             self.write_directive(data)?;

@@ -1,5 +1,6 @@
 use crate::{Error, Result};
 use slotmap::{new_key_type, SlotMap};
+use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::sync::Arc;
 use unplug::event::BlockId;
@@ -30,11 +31,13 @@ new_key_type! {
     pub struct LabelId;
 }
 
+type LabelVec = SmallVec<[LabelId; 1]>;
+
 /// Stores labels in a program and allows fast lookup by ID, name, or block.
 #[derive(Default, Clone)]
 pub struct LabelMap {
     slots: SlotMap<LabelId, Label>,
-    by_block: HashMap<BlockId, LabelId>,
+    by_block: HashMap<BlockId, LabelVec>,
     by_name: HashMap<Arc<str>, LabelId>,
 }
 
@@ -50,9 +53,9 @@ impl LabelMap {
         &self.slots[id]
     }
 
-    /// Finds the label corresponding to `block` and returns its ID.
-    pub fn find_block(&self, block: BlockId) -> Option<LabelId> {
-        self.by_block.get(&block).copied()
+    /// Finds the labels corresponding to `block` and returns a slice of IDs.
+    pub fn find_block(&self, block: BlockId) -> &[LabelId] {
+        self.by_block.get(&block).map(|l| l.as_slice()).unwrap_or_default()
     }
 
     /// Finds the label corresponding to `name` and returns its ID.
@@ -60,27 +63,32 @@ impl LabelMap {
         self.by_name.get(name.as_ref()).copied()
     }
 
-    /// Inserts `label` and returns its ID. The label name and block must each be unique or else
-    /// this will fail.
+    /// Inserts `label` and returns its ID. The label name must be unique or else this will fail.
     pub fn insert(&mut self, label: Label) -> Result<LabelId> {
         if self.by_name.contains_key(&label.name) {
             return Err(Error::DuplicateLabel(Arc::clone(&label.name)));
         }
-        if let Some(block) = label.block {
-            if self.by_block.contains_key(&block) {
-                return Err(Error::BlockHasLabel(block));
-            }
-        }
         let id = self.slots.insert(label.clone());
         self.by_name.insert(label.name, id);
         if let Some(block) = label.block {
-            self.by_block.insert(block, id);
+            self.by_block.entry(block).or_default().push(id);
         }
         Ok(id)
     }
 
+    /// Inserts a new label named `name`, optionally associates it with `block`, and returns its ID.
+    /// The label name must be unique or else this will fail.
+    pub fn insert_new(
+        &mut self,
+        name: impl Into<Arc<str>>,
+        block: Option<BlockId>,
+    ) -> Result<LabelId> {
+        self.insert(Label { name: name.into(), block })
+    }
+
     /// Changes the name of label `id` to `name`. Label names must be unique or else this will fail.
-    pub fn rename<S>(&mut self, id: LabelId, name: S) -> Result<()>
+    /// Returns `id`.
+    pub fn rename<S>(&mut self, id: LabelId, name: S) -> Result<LabelId>
     where
         S: AsRef<str> + Into<Arc<str>>,
     {
@@ -94,45 +102,7 @@ impl LabelMap {
             label.name = name.into();
             self.by_name.insert(Arc::clone(&label.name), id);
         }
-        Ok(())
-    }
-
-    /// If `block` has a corresponding label, renames it to `name`, otherwise inserts a new label.
-    /// Returns the label ID on success, or fails if the new name is not unique.
-    pub fn rename_or_insert<S>(&mut self, block: BlockId, name: S) -> Result<LabelId>
-    where
-        S: AsRef<str> + Into<Arc<str>>,
-    {
-        match self.find_block(block) {
-            Some(id) => {
-                self.rename(id, name)?;
-                Ok(id)
-            }
-            None => Ok(self.insert(Label::with_block(name, block))?),
-        }
-    }
-
-    /// Finds the label corresponding to `block`, and if it is not found, inserts a label named from
-    /// `name_fn()` and returns its ID.
-    pub fn find_block_or_insert<S, F>(&mut self, block: BlockId, name_fn: F) -> Result<LabelId>
-    where
-        S: Into<Arc<str>>,
-        F: FnOnce() -> S,
-    {
-        match self.find_block(block) {
-            Some(id) => Ok(id),
-            None => {
-                let name = name_fn().into();
-                if self.by_name.contains_key(&name) {
-                    return Err(Error::DuplicateLabel(name));
-                }
-                let label = Label::with_block(name, block);
-                let id = self.slots.insert(label.clone());
-                self.by_name.insert(label.name, id);
-                self.by_block.insert(block, id);
-                Ok(id)
-            }
-        }
+        Ok(id)
     }
 }
 
@@ -149,7 +119,7 @@ mod tests {
         assert_eq!(&*label.name, "foo");
         assert_eq!(label.block, Some(block));
         assert_eq!(labels.find_name("foo"), Some(id));
-        assert_eq!(labels.find_block(block), Some(id));
+        assert_eq!(labels.find_block(block), &[id]);
         Ok(())
     }
 
@@ -164,13 +134,14 @@ mod tests {
     }
 
     #[test]
-    fn test_label_map_insert_block_collision() -> Result<()> {
+    fn test_label_map_insert_same_block() -> Result<()> {
         let mut labels = LabelMap::new();
         let block = BlockId::new(123);
-        let id = labels.insert(Label::with_block("foo", block))?;
-        assert!(labels.insert(Label::with_block("bar", block)).is_err());
-        assert_eq!(&*labels.get(id).name, "foo");
-        assert_eq!(labels.find_block(block), Some(id));
+        let id1 = labels.insert(Label::with_block("foo", block))?;
+        let id2 = labels.insert(Label::with_block("bar", block))?;
+        assert_eq!(&*labels.get(id1).name, "foo");
+        assert_eq!(&*labels.get(id2).name, "bar");
+        assert_eq!(labels.find_block(block), &[id1, id2]);
         Ok(())
     }
 
@@ -185,7 +156,7 @@ mod tests {
         assert_eq!(label.block, Some(block));
         assert_eq!(labels.find_name("foo"), None);
         assert_eq!(labels.find_name("bar"), Some(id));
-        assert_eq!(labels.find_block(block), Some(id));
+        assert_eq!(labels.find_block(block), &[id]);
         Ok(())
     }
 
@@ -199,7 +170,7 @@ mod tests {
         assert_eq!(&*label.name, "foo");
         assert_eq!(label.block, Some(block));
         assert_eq!(labels.find_name("foo"), Some(id));
-        assert_eq!(labels.find_block(block), Some(id));
+        assert_eq!(labels.find_block(block), &[id]);
         Ok(())
     }
 
@@ -213,34 +184,6 @@ mod tests {
         assert_eq!(&*labels.get(id2).name, "bar");
         assert_eq!(labels.find_name("foo"), Some(id1));
         assert_eq!(labels.find_name("bar"), Some(id2));
-        Ok(())
-    }
-
-    #[test]
-    fn test_label_map_rename_or_insert() -> Result<()> {
-        let mut labels = LabelMap::new();
-        let block = BlockId::new(123);
-        let id1 = labels.rename_or_insert(block, "foo")?;
-        assert_eq!(&*labels.get(id1).name, "foo");
-        let id2 = labels.rename_or_insert(block, "bar")?;
-        assert_eq!(id1, id2);
-        assert_eq!(&*labels.get(id1).name, "bar");
-        assert_eq!(labels.find_name("foo"), None);
-        assert_eq!(labels.find_name("bar"), Some(id1));
-        Ok(())
-    }
-
-    #[test]
-    fn test_label_map_find_block_or_insert() -> Result<()> {
-        let mut labels = LabelMap::new();
-        let block = BlockId::new(123);
-        let id1 = labels.find_block_or_insert(block, || "foo")?;
-        assert_eq!(&*labels.get(id1).name, "foo");
-        let id2 = labels.find_block_or_insert(block, || "bar")?;
-        assert_eq!(id1, id2);
-        assert_eq!(&*labels.get(id1).name, "foo");
-        assert_eq!(labels.find_name("foo"), Some(id1));
-        assert_eq!(labels.find_name("bar"), None);
         Ok(())
     }
 }
