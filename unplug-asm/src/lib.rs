@@ -17,8 +17,8 @@
 pub mod label;
 pub mod lexer;
 pub mod opcodes;
-pub mod operand;
 pub mod parser;
+pub mod program;
 pub mod writer;
 
 use std::io;

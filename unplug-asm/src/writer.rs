@@ -1,6 +1,6 @@
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
-use crate::operand::{Operand, Operation};
+use crate::program::{AnyOperation, CodeBlock, DataBlock, Operand, Operation, Program, Subroutine};
 use crate::Result;
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
@@ -18,86 +18,6 @@ use unplug::stage::{Event, Stage};
 /// The optimal tab size for viewing a script, used to determine if a name is too long to fit in
 /// the opcode column. The VSCode extension sets the tab size to 8.
 const TAB_SIZE: usize = 8;
-
-/// Encapsulates various operation types.
-enum AnyOperation {
-    Command(Operation<CmdOp>),
-    Expr(Operation<ExprOp>),
-    MsgCommand(Operation<AsmMsgOp>),
-    Directive(Operation<DirOp>),
-}
-
-impl AnyOperation {
-    /// Appends `operand` onto the operation.
-    fn push_operand(&mut self, operand: Operand) {
-        match self {
-            Self::Command(op) => op.operands.push(operand),
-            Self::Expr(op) => op.operands.push(operand),
-            Self::MsgCommand(op) => op.operands.push(operand),
-            Self::Directive(op) => op.operands.push(operand),
-        }
-    }
-
-    /// Consumes this wrapper and returns the inner command.
-    /// ***Panics*** if the operation is not a command.
-    fn into_command(self) -> Operation<CmdOp> {
-        match self {
-            Self::Command(op) => op,
-            _ => panic!("expected a command operation"),
-        }
-    }
-
-    /// Consumes this wrapper and returns the inner expression.
-    /// ***Panics*** if the operation is not an expression.
-    fn into_expr(self) -> Operation<ExprOp> {
-        match self {
-            Self::Expr(op) => op,
-            _ => panic!("expected an expr operation"),
-        }
-    }
-
-    /// Consumes this wrapper and returns the inner message command.
-    /// ***Panics*** if the operation is not a message command.
-    fn into_msg_command(self) -> Operation<AsmMsgOp> {
-        match self {
-            Self::MsgCommand(op) => op,
-            _ => panic!("expected a message command"),
-        }
-    }
-
-    /// Consumes this wrapper and returns the inner directive.
-    /// ***Panics*** if the operation is not a directive.
-    fn into_directive(self) -> Operation<DirOp> {
-        match self {
-            Self::Directive(op) => op,
-            _ => panic!("expected a directive"),
-        }
-    }
-}
-
-impl From<Operation<CmdOp>> for AnyOperation {
-    fn from(op: Operation<CmdOp>) -> Self {
-        Self::Command(op)
-    }
-}
-
-impl From<Operation<ExprOp>> for AnyOperation {
-    fn from(op: Operation<ExprOp>) -> Self {
-        Self::Expr(op)
-    }
-}
-
-impl From<Operation<AsmMsgOp>> for AnyOperation {
-    fn from(op: Operation<AsmMsgOp>) -> Self {
-        Self::MsgCommand(op)
-    }
-}
-
-impl From<Operation<DirOp>> for AnyOperation {
-    fn from(op: Operation<DirOp>) -> Self {
-        Self::Directive(op)
-    }
-}
 
 /// Holds assembly code produced by `AsmSerializer`.
 #[derive(Debug, Default, Clone)]
@@ -412,73 +332,7 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 }
 
-/// A block of instructions corresponding to a script block.
-pub struct CodeBlock {
-    pub id: BlockId,
-    pub commands: Vec<Operation<CmdOp>>,
-}
-
-impl CodeBlock {
-    /// Creates an empty code block associated with block `id`.
-    pub fn new(id: BlockId) -> Self {
-        Self::with_commands(id, vec![])
-    }
-
-    /// Creates a code block associated with block `id` and populated from `commands`.
-    pub fn with_commands(id: BlockId, commands: impl Into<Vec<Operation<CmdOp>>>) -> Self {
-        Self { id, commands: commands.into() }
-    }
-}
-
-/// A subroutine made up of multiple `CodeBlock`s.
-pub struct Subroutine {
-    pub entry_point: BlockId,
-    pub offset: u32,
-    pub blocks: Vec<CodeBlock>,
-}
-
-impl Subroutine {
-    /// Creates an empty subroutine beginning at `entry_point`.
-    pub fn new(entry_point: BlockId) -> Self {
-        Self { entry_point, offset: 0, blocks: vec![] }
-    }
-}
-
-/// A block of data corresponding to a script block.
-pub struct DataBlock {
-    pub id: BlockId,
-    pub offset: u32,
-    pub directives: Vec<Operation<DirOp>>,
-}
-
-impl DataBlock {
-    /// Creates an empty data block associated with block `id`.
-    pub fn new(id: BlockId) -> Self {
-        Self::with_directives(id, vec![])
-    }
-
-    /// Creates a data block associated with block `id` and populated from `directives`.
-    pub fn with_directives(id: BlockId, directives: impl Into<Vec<Operation<DirOp>>>) -> Self {
-        Self { id, offset: 0, directives: directives.into() }
-    }
-}
-
-/// An assembly program consisting of subroutines and labels.
-#[derive(Default)]
-pub struct Program {
-    pub subroutines: Vec<Subroutine>,
-    pub data: Vec<DataBlock>,
-    pub events: HashMap<Event, BlockId>,
-    pub labels: LabelMap,
-}
-
-impl Program {
-    fn new() -> Self {
-        Self::default()
-    }
-}
-
-/// Builds up a `Program` from script data.
+/// Builds up a program from script data.
 pub struct ProgramBuilder<'a> {
     script: &'a Script,
     stage: Option<&'a Stage>,
