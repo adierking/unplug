@@ -82,29 +82,53 @@ impl Display for Token {
 
 /// Number literal types.
 ///
-/// All types use `u32` so that we don't have to worry about signed vs unsigned. The actual
-/// conversion to the underlying types is done at codegen time so that we can handle auto values the
-/// same as other types.
+/// All types use `i32`/`u32` so that we don't have to worry about sizes for the most part. The
+/// actual conversion to the underlying types is done at codegen time so that we can handle auto
+/// values the same as other types.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Number {
-    /// An 8-bit integer
-    Byte(u32),
-    /// A 16-bit integer
-    Word(u32),
-    /// A 32-bit integer
-    Dword(u32),
-    /// Select the best storage class based on context
-    Auto(u32),
+    /// An 8-bit signed integer
+    I8(i32),
+    /// An 8-bit unsigned integer
+    U8(u32),
+    /// A 16-bit signed integer
+    I16(i32),
+    /// A 16-bit unsigned integer
+    U16(u32),
+    /// A 32-bit signed integer
+    I32(i32),
+    /// A 32-bit unsigned integer
+    U32(u32),
+    /// Select the best storage class based on context (signed)
+    IAuto(i32),
+    /// Select the best storage class based on context (unsigned)
+    UAuto(u32),
 }
 
 impl Display for Number {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Number::Byte(x) => write!(f, "{}.b", x),
-            Number::Word(x) => write!(f, "{}.w", x),
-            Number::Dword(x) => write!(f, "{}.d", x),
-            Number::Auto(x) => write!(f, "{}", x),
+            Number::I8(x) => write!(f, "{}.b", x),
+            Number::U8(x) => write!(f, "{}.b", x),
+            Number::I16(x) => write!(f, "{}.w", x),
+            Number::U16(x) => write!(f, "{}.w", x),
+            Number::I32(x) => write!(f, "{}.d", x),
+            Number::U32(x) => write!(f, "{}.d", x),
+            Number::IAuto(x) => write!(f, "{}", x),
+            Number::UAuto(x) => write!(f, "{}", x),
         }
+    }
+}
+
+impl From<i32> for Number {
+    fn from(x: i32) -> Self {
+        Self::IAuto(x)
+    }
+}
+
+impl From<u32> for Number {
+    fn from(x: u32) -> Self {
+        Self::UAuto(x)
     }
 }
 
@@ -132,19 +156,28 @@ fn number(lex: &mut Lexer<'_, Token>, radix: u32, prefix: usize, suffix: usize) 
     let negative = token.starts_with('-');
     let start = if negative { 1 + prefix } else { prefix };
     let end = token.len() - suffix;
-    let mut value = u32::from_str_radix(&token[start..end], radix).ok()?;
+    let value = u32::from_str_radix(&token[start..end], radix).ok()?;
     if negative {
+        // Negative numbers are signed, nonnegative numbers are unsigned
         if value > i32::MIN as u32 {
             return None;
         }
-        value = value.wrapping_neg();
-    }
-    match &token[end..] {
-        "" => Some(Number::Auto(value)),
-        ".b" => Some(Number::Byte(value)),
-        ".w" => Some(Number::Word(value)),
-        ".d" => Some(Number::Dword(value)),
-        _ => None,
+        let signed = value.wrapping_neg() as i32;
+        match &token[end..] {
+            "" => Some(Number::IAuto(signed)),
+            ".b" => Some(Number::I8(signed)),
+            ".w" => Some(Number::I16(signed)),
+            ".d" => Some(Number::I32(signed)),
+            _ => None,
+        }
+    } else {
+        match &token[end..] {
+            "" => Some(Number::UAuto(value)),
+            ".b" => Some(Number::U8(value)),
+            ".w" => Some(Number::U16(value)),
+            ".d" => Some(Number::U32(value)),
+            _ => None,
+        }
     }
 }
 
@@ -197,45 +230,49 @@ mod tests {
 
     #[test]
     fn test_dec_number() {
-        assert_eq!(lex("0"), &[Token::Number(Number::Auto(0))]);
-        assert_eq!(lex("123"), &[Token::Number(Number::Auto(123))]);
-        assert_eq!(lex("1234567890"), &[Token::Number(Number::Auto(1234567890))]);
+        assert_eq!(lex("0"), &[Token::Number(Number::UAuto(0))]);
+        assert_eq!(lex("123"), &[Token::Number(Number::UAuto(123))]);
+        assert_eq!(lex("1234567890"), &[Token::Number(Number::UAuto(1234567890))]);
 
-        assert_eq!(lex("123.b"), &[Token::Number(Number::Byte(123))]);
-        assert_eq!(lex("123.w"), &[Token::Number(Number::Word(123))]);
-        assert_eq!(lex("123.d"), &[Token::Number(Number::Dword(123))]);
+        assert_eq!(lex("123.b"), &[Token::Number(Number::U8(123))]);
+        assert_eq!(lex("123.w"), &[Token::Number(Number::U16(123))]);
+        assert_eq!(lex("123.d"), &[Token::Number(Number::U32(123))]);
 
-        assert_eq!(lex("-0"), &[Token::Number(Number::Auto(0))]);
-        assert_eq!(lex("-123"), &[Token::Number(Number::Auto(-123i32 as u32))]);
-        assert_eq!(lex("-123.b"), &[Token::Number(Number::Byte(-123i32 as u32))]);
+        assert_eq!(lex("-0"), &[Token::Number(Number::IAuto(0))]);
+        assert_eq!(lex("-123"), &[Token::Number(Number::IAuto(-123))]);
+        assert_eq!(lex("-123.b"), &[Token::Number(Number::I8(-123))]);
+        assert_eq!(lex("-123.w"), &[Token::Number(Number::I16(-123))]);
+        assert_eq!(lex("-123.d"), &[Token::Number(Number::I32(-123))]);
 
-        assert_eq!(lex("4294967295"), &[Token::Number(Number::Auto(u32::MAX))]);
+        assert_eq!(lex("4294967295"), &[Token::Number(Number::UAuto(u32::MAX))]);
         assert_eq!(lex("4294967296"), &[Token::Error]);
 
-        assert_eq!(lex("-2147483648"), &[Token::Number(Number::Auto(i32::MIN as u32))]);
+        assert_eq!(lex("-2147483648"), &[Token::Number(Number::IAuto(i32::MIN))]);
         assert_eq!(lex("-2147483649"), &[Token::Error]);
     }
 
     #[test]
     fn test_hex_number() {
-        assert_eq!(lex("0x0"), &[Token::Number(Number::Auto(0))]);
-        assert_eq!(lex("0x1f"), &[Token::Number(Number::Auto(0x1f))]);
-        assert_eq!(lex("0x01234567"), &[Token::Number(Number::Auto(0x01234567))]);
-        assert_eq!(lex("0x89abcdef"), &[Token::Number(Number::Auto(0x89abcdef))]);
-        assert_eq!(lex("0x89ABCDEF"), &[Token::Number(Number::Auto(0x89abcdef))]);
+        assert_eq!(lex("0x0"), &[Token::Number(Number::UAuto(0))]);
+        assert_eq!(lex("0x1f"), &[Token::Number(Number::UAuto(0x1f))]);
+        assert_eq!(lex("0x01234567"), &[Token::Number(Number::UAuto(0x01234567))]);
+        assert_eq!(lex("0x89abcdef"), &[Token::Number(Number::UAuto(0x89abcdef))]);
+        assert_eq!(lex("0x89ABCDEF"), &[Token::Number(Number::UAuto(0x89abcdef))]);
 
-        assert_eq!(lex("0x1f.b"), &[Token::Number(Number::Byte(0x1f))]);
-        assert_eq!(lex("0x1f.w"), &[Token::Number(Number::Word(0x1f))]);
-        assert_eq!(lex("0x1f.d"), &[Token::Number(Number::Dword(0x1f))]);
+        assert_eq!(lex("0x1f.b"), &[Token::Number(Number::U8(0x1f))]);
+        assert_eq!(lex("0x1f.w"), &[Token::Number(Number::U16(0x1f))]);
+        assert_eq!(lex("0x1f.d"), &[Token::Number(Number::U32(0x1f))]);
 
-        assert_eq!(lex("-0x0"), &[Token::Number(Number::Auto(0))]);
-        assert_eq!(lex("-0x1f"), &[Token::Number(Number::Auto(-0x1fi32 as u32))]);
-        assert_eq!(lex("-0x1f.b"), &[Token::Number(Number::Byte(-0x1fi32 as u32))]);
+        assert_eq!(lex("-0x0"), &[Token::Number(Number::IAuto(0))]);
+        assert_eq!(lex("-0x1f"), &[Token::Number(Number::IAuto(-0x1f))]);
+        assert_eq!(lex("-0x1f.b"), &[Token::Number(Number::I8(-0x1f))]);
+        assert_eq!(lex("-0x1f.w"), &[Token::Number(Number::I16(-0x1f))]);
+        assert_eq!(lex("-0x1f.d"), &[Token::Number(Number::I32(-0x1f))]);
 
-        assert_eq!(lex("0xffffffff"), &[Token::Number(Number::Auto(u32::MAX))]);
+        assert_eq!(lex("0xffffffff"), &[Token::Number(Number::UAuto(u32::MAX))]);
         assert_eq!(lex("0x100000000"), &[Token::Error]);
 
-        assert_eq!(lex("-0x80000000"), &[Token::Number(Number::Auto(i32::MIN as u32))]);
+        assert_eq!(lex("-0x80000000"), &[Token::Number(Number::IAuto(i32::MIN))]);
         assert_eq!(lex("-0x80000001"), &[Token::Error]);
     }
 
@@ -289,10 +326,10 @@ mod tests {
                 Token::OpenParen,
                 Token::Identifier("flag".into()),
                 Token::OpenParen,
-                Token::Number(Number::Dword(123)),
+                Token::Number(Number::U32(123)),
                 Token::CloseParen,
                 Token::Comma,
-                Token::Number(Number::Dword(1)),
+                Token::Number(Number::U32(1)),
                 Token::CloseParen,
                 Token::Comma,
                 Token::Else,

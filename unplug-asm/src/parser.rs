@@ -215,8 +215,8 @@ mod tests {
         Token::Directive(s.into())
     }
 
-    fn num(val: i32) -> Number {
-        Number::Auto(val as u32)
+    fn num<T: Into<Number>>(val: T) -> Number {
+        val.into()
     }
 
     fn func(opcode: impl Into<SmolStr>, operands: Vec<Value>) -> Value {
