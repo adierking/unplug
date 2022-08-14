@@ -1,5 +1,6 @@
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
+use bitflags::bitflags;
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use unplug::common::Text;
@@ -71,7 +72,14 @@ impl<T: NamedOpcode> Operation<T> {
     }
 }
 
-/// Encapsulates possible operation types.
+/// A command or directive.
+#[derive(Debug, Clone)]
+pub enum Instruction {
+    Command(Operation<CmdOp>),
+    Directive(Operation<DirOp>),
+}
+
+/// Encapsulates all possible operation types.
 pub enum AnyOperation {
     Command(Operation<CmdOp>),
     Expr(Operation<ExprOp>),
@@ -151,62 +159,72 @@ impl From<Operation<DirOp>> for AnyOperation {
     }
 }
 
-/// A block of instructions corresponding to a script block.
-pub struct CodeBlock {
-    pub id: BlockId,
-    pub commands: Vec<Operation<CmdOp>>,
+bitflags! {
+    /// Flags used to mark blocks with hints for serialization/deserialization.
+    pub struct BlockFlags: u8 {
+        /// The block is the beginning of a subroutine.
+        const SUBROUTINE = 1 << 0;
+        /// The block is associated with at least one event.
+        const EVENT = 1 << 1;
+        /// The block contains data instructions.
+        const DATA = 1 << 2;
+    }
 }
 
-impl CodeBlock {
+/// A block of instructions corresponding to a script block.
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub id: BlockId,
+    pub offset: u32,
+    pub flags: BlockFlags,
+    pub instructions: Vec<Instruction>,
+}
+
+impl Block {
     /// Creates an empty code block associated with block `id`.
     pub fn new(id: BlockId) -> Self {
-        Self::with_commands(id, vec![])
+        Self { id, offset: 0, flags: BlockFlags::empty(), instructions: vec![] }
     }
 
     /// Creates a code block associated with block `id` and populated from `commands`.
-    pub fn with_commands(id: BlockId, commands: impl Into<Vec<Operation<CmdOp>>>) -> Self {
-        Self { id, commands: commands.into() }
-    }
-}
-
-/// A subroutine made up of multiple `CodeBlock`s.
-pub struct Subroutine {
-    pub entry_point: BlockId,
-    pub offset: u32,
-    pub blocks: Vec<CodeBlock>,
-}
-
-impl Subroutine {
-    /// Creates an empty subroutine beginning at `entry_point`.
-    pub fn new(entry_point: BlockId) -> Self {
-        Self { entry_point, offset: 0, blocks: vec![] }
-    }
-}
-
-/// A block of data corresponding to a script block.
-pub struct DataBlock {
-    pub id: BlockId,
-    pub offset: u32,
-    pub directives: Vec<Operation<DirOp>>,
-}
-
-impl DataBlock {
-    /// Creates an empty data block associated with block `id`.
-    pub fn new(id: BlockId) -> Self {
-        Self::with_directives(id, vec![])
+    pub fn with_commands(
+        id: BlockId,
+        commands: impl IntoIterator<Item = Operation<CmdOp>>,
+    ) -> Self {
+        let mut block = Self::new(id);
+        block.extend(commands);
+        block
     }
 
     /// Creates a data block associated with block `id` and populated from `directives`.
-    pub fn with_directives(id: BlockId, directives: impl Into<Vec<Operation<DirOp>>>) -> Self {
-        Self { id, offset: 0, directives: directives.into() }
+    pub fn with_data(id: BlockId, directives: impl IntoIterator<Item = Operation<DirOp>>) -> Self {
+        let mut block = Self::new(id);
+        block.extend(directives);
+        block
+    }
+
+    /// Returns true if there are no instructions in the block.
+    pub fn is_empty(&self) -> bool {
+        self.instructions.is_empty()
     }
 }
 
-/// An assembly program consisting of subroutines and labels.
+impl Extend<Operation<CmdOp>> for Block {
+    fn extend<T: IntoIterator<Item = Operation<CmdOp>>>(&mut self, iter: T) {
+        self.instructions.extend(iter.into_iter().map(Instruction::Command));
+    }
+}
+
+impl Extend<Operation<DirOp>> for Block {
+    fn extend<T: IntoIterator<Item = Operation<DirOp>>>(&mut self, iter: T) {
+        self.instructions.extend(iter.into_iter().map(Instruction::Directive));
+    }
+}
+
+/// An assembly program.
 #[derive(Default)]
 pub struct Program {
-    pub subroutines: Vec<Subroutine>,
-    pub data: Vec<DataBlock>,
+    pub blocks: Vec<Block>,
     pub events: HashMap<Event, BlockId>,
     pub labels: LabelMap,
 }
@@ -215,5 +233,10 @@ impl Program {
     /// Creates an empty program.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Creates a program with blocks populated from `blocks`.
+    pub fn with_blocks(blocks: impl Into<Vec<Block>>) -> Self {
+        Self { blocks: blocks.into(), ..Default::default() }
     }
 }

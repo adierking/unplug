@@ -5,6 +5,7 @@ authors = ["Derpky"]
 edition = "2021"
 
 [dependencies]
+bitflags = "1.2.1"
 chumsky = "0.8.0"
 logos = "0.12.1"
 phf = { version = "0.10", features = ["macros"] }

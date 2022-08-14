@@ -1951,6 +1951,7 @@ dependencies = [
 name = "unplug-asm"
 version = "0.0.0"
 dependencies = [
+ "bitflags",
  "chumsky",
  "logos",
  "phf",
