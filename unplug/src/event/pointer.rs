@@ -76,9 +76,10 @@ impl Pointer {
 
     /// Returns `true` if this points inside the stage header.
     pub fn is_in_header(&self) -> bool {
-        match self {
-            Self::Offset(o) => (*o <= STAGE_OBJECTS_OFFSET),
-            _ => false,
+        if let Self::Offset(o) = *self {
+            o <= STAGE_OBJECTS_OFFSET
+        } else {
+            false
         }
     }
 
