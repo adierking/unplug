@@ -1,5 +1,5 @@
 use crate::label::{LabelId, LabelMap};
-use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
+use crate::opcodes::{AsmMsgOp, NamedOpcode};
 use bitflags::bitflags;
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -67,34 +67,31 @@ pub struct Operation<T: NamedOpcode> {
 }
 
 impl<T: NamedOpcode> Operation<T> {
+    /// Creates an empty operation with `opcode`.
     pub fn new(opcode: T) -> Self {
         Self { opcode, operands: SmallVec::new() }
     }
+
+    /// Creates an empty operation with `opcode` and `operands`.
+    pub fn with_operands(opcode: T, operands: impl IntoIterator<Item = Operand>) -> Self {
+        Self { opcode, operands: operands.into_iter().collect() }
+    }
 }
 
-/// A command or directive.
-#[derive(Debug, Clone)]
-pub enum Instruction {
-    Command(Operation<CmdOp>),
-    Directive(Operation<DirOp>),
-}
-
-/// Encapsulates all possible operation types.
-pub enum AnyOperation {
+/// Encapsulates possible code operation types.
+pub enum CodeOperation {
     Command(Operation<CmdOp>),
     Expr(Operation<ExprOp>),
     MsgCommand(Operation<AsmMsgOp>),
-    Directive(Operation<DirOp>),
 }
 
-impl AnyOperation {
+impl CodeOperation {
     /// Appends `operand` onto the operation.
     pub fn push_operand(&mut self, operand: Operand) {
         match self {
             Self::Command(op) => op.operands.push(operand),
             Self::Expr(op) => op.operands.push(operand),
             Self::MsgCommand(op) => op.operands.push(operand),
-            Self::Directive(op) => op.operands.push(operand),
         }
     }
 
@@ -124,38 +121,23 @@ impl AnyOperation {
             _ => panic!("expected a message command"),
         }
     }
-
-    /// Consumes this wrapper and returns the inner directive.
-    /// ***Panics*** if the operation is not a directive.
-    pub fn into_directive(self) -> Operation<DirOp> {
-        match self {
-            Self::Directive(op) => op,
-            _ => panic!("expected a directive"),
-        }
-    }
 }
 
-impl From<Operation<CmdOp>> for AnyOperation {
+impl From<Operation<CmdOp>> for CodeOperation {
     fn from(op: Operation<CmdOp>) -> Self {
         Self::Command(op)
     }
 }
 
-impl From<Operation<ExprOp>> for AnyOperation {
+impl From<Operation<ExprOp>> for CodeOperation {
     fn from(op: Operation<ExprOp>) -> Self {
         Self::Expr(op)
     }
 }
 
-impl From<Operation<AsmMsgOp>> for AnyOperation {
+impl From<Operation<AsmMsgOp>> for CodeOperation {
     fn from(op: Operation<AsmMsgOp>) -> Self {
         Self::MsgCommand(op)
-    }
-}
-
-impl From<Operation<DirOp>> for AnyOperation {
-    fn from(op: Operation<DirOp>) -> Self {
-        Self::Directive(op)
     }
 }
 
@@ -166,9 +148,14 @@ bitflags! {
         const SUBROUTINE = 1 << 0;
         /// The block is associated with at least one event.
         const EVENT = 1 << 1;
-        /// The block contains data instructions.
-        const DATA = 1 << 2;
     }
+}
+
+/// Contents of a block.
+#[derive(Debug, Clone)]
+pub enum BlockContent {
+    Code(Vec<Operation<CmdOp>>),
+    Data(Vec<Operand>),
 }
 
 /// A block of instructions corresponding to a script block.
@@ -177,47 +164,47 @@ pub struct Block {
     pub id: BlockId,
     pub offset: u32,
     pub flags: BlockFlags,
-    pub instructions: Vec<Instruction>,
+    pub content: Option<BlockContent>,
 }
 
 impl Block {
-    /// Creates an empty code block associated with block `id`.
+    /// Creates an empty block associated with block `id`.
     pub fn new(id: BlockId) -> Self {
-        Self { id, offset: 0, flags: BlockFlags::empty(), instructions: vec![] }
+        Self { id, offset: 0, flags: BlockFlags::empty(), content: None }
+    }
+
+    /// Creates a code block associated with block `id` and containing `content`.
+    pub fn with_content(id: BlockId, content: BlockContent) -> Self {
+        Self { id, offset: 0, flags: BlockFlags::empty(), content: Some(content) }
     }
 
     /// Creates a code block associated with block `id` and populated from `commands`.
-    pub fn with_commands(
-        id: BlockId,
-        commands: impl IntoIterator<Item = Operation<CmdOp>>,
-    ) -> Self {
-        let mut block = Self::new(id);
-        block.extend(commands);
-        block
+    pub fn with_code(id: BlockId, commands: impl IntoIterator<Item = Operation<CmdOp>>) -> Self {
+        Self::with_content(id, BlockContent::Code(commands.into_iter().collect()))
     }
 
-    /// Creates a data block associated with block `id` and populated from `directives`.
-    pub fn with_data(id: BlockId, directives: impl IntoIterator<Item = Operation<DirOp>>) -> Self {
-        let mut block = Self::new(id);
-        block.extend(directives);
-        block
+    /// Creates a data block associated with block `id` and populated from `operands`.
+    pub fn with_data(id: BlockId, operands: impl IntoIterator<Item = Operand>) -> Self {
+        Self::with_content(id, BlockContent::Data(operands.into_iter().collect()))
     }
 
-    /// Returns true if there are no instructions in the block.
+    /// Returns true if there is nothing in the block.
     pub fn is_empty(&self) -> bool {
-        self.instructions.is_empty()
+        match &self.content {
+            None => true,
+            Some(BlockContent::Code(c)) => c.is_empty(),
+            Some(BlockContent::Data(d)) => d.is_empty(),
+        }
     }
-}
 
-impl Extend<Operation<CmdOp>> for Block {
-    fn extend<T: IntoIterator<Item = Operation<CmdOp>>>(&mut self, iter: T) {
-        self.instructions.extend(iter.into_iter().map(Instruction::Command));
+    /// Returns true if the block contains code.
+    pub fn is_code(&self) -> bool {
+        matches!(&self.content, Some(BlockContent::Data(_)))
     }
-}
 
-impl Extend<Operation<DirOp>> for Block {
-    fn extend<T: IntoIterator<Item = Operation<DirOp>>>(&mut self, iter: T) {
-        self.instructions.extend(iter.into_iter().map(Instruction::Directive));
+    /// Returns true if the block contains data.
+    pub fn is_data(&self) -> bool {
+        matches!(&self.content, Some(BlockContent::Data(_)))
     }
 }
 

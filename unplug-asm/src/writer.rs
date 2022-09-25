@@ -1,6 +1,6 @@
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
-use crate::program::{AnyOperation, Block, BlockFlags, Instruction, Operand, Operation, Program};
+use crate::program::{Block, BlockContent, BlockFlags, CodeOperation, Operand, Operation, Program};
 use crate::Result;
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -9,9 +9,7 @@ use unplug::common::Text;
 use unplug::data::Resource;
 use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
-use unplug::event::serialize::{
-    Error as SerError, EventSerializer, Result as SerResult, SerializeEvent,
-};
+use unplug::event::serialize::{EventSerializer, Result as SerResult, SerializeEvent};
 use unplug::event::{self, BlockId, DataBlock, Pointer, Script};
 use unplug::stage::{Event, Stage};
 
@@ -22,10 +20,8 @@ const TAB_SIZE: usize = 8;
 /// Holds assembly code produced by `AsmSerializer`.
 #[derive(Debug, Default, Clone)]
 struct SerializedAsm {
-    /// The assembly commands in order of their appearance in the source file.
-    commands: Vec<Operation<CmdOp>>,
-    /// Directives in order of their appearance in the source file.
-    directives: Vec<Operation<DirOp>>,
+    /// The content of the serialized data.
+    content: Option<BlockContent>,
     /// Block IDs that the commands reference. This may contain duplicates.
     refs: Vec<BlockId>,
 }
@@ -33,6 +29,24 @@ struct SerializedAsm {
 impl SerializedAsm {
     fn new() -> Self {
         Self::default()
+    }
+
+    /// Returns the inner code. ***Panics*** if this is not a code block.
+    fn into_code(self) -> Vec<Operation<CmdOp>> {
+        match self.content {
+            None => vec![],
+            Some(BlockContent::Code(code)) => code,
+            Some(BlockContent::Data(_)) => panic!("Unexpected data"),
+        }
+    }
+
+    /// Returns the inner data. ***Panics*** if this is not a data block.
+    fn into_data(self) -> Vec<Operand> {
+        match self.content {
+            None => vec![],
+            Some(BlockContent::Code(_)) => panic!("Unexpected code"),
+            Some(BlockContent::Data(data)) => data,
+        }
     }
 }
 
@@ -45,9 +59,9 @@ struct AsmSerializer<'a> {
     /// The resulting assembly code.
     asm: SerializedAsm,
     /// The operation to add new operands to.
-    operation: Option<AnyOperation>,
+    operation: Option<CodeOperation>,
     /// The stack to save the current operation to when beginning a sub-operation.
-    stack: Vec<AnyOperation>,
+    stack: Vec<CodeOperation>,
 }
 
 impl<'a> AsmSerializer<'a> {
@@ -56,12 +70,11 @@ impl<'a> AsmSerializer<'a> {
     }
 
     /// Consumes this serializer, returning the built assembly code.
-    fn finish(mut self) -> SerializedAsm {
+    fn finish(self) -> SerializedAsm {
         match self.operation {
-            Some(AnyOperation::Directive(dir)) => self.asm.directives.push(dir),
-            Some(AnyOperation::Command(_)) => panic!("unterminated command"),
-            Some(AnyOperation::Expr(_)) => panic!("unterminated expression"),
-            Some(AnyOperation::MsgCommand(_)) => panic!("unterminated message command"),
+            Some(CodeOperation::Command(_)) => panic!("unterminated command"),
+            Some(CodeOperation::Expr(_)) => panic!("unterminated expression"),
+            Some(CodeOperation::MsgCommand(_)) => panic!("unterminated message command"),
             None => (),
         }
         assert!(self.stack.is_empty());
@@ -70,7 +83,14 @@ impl<'a> AsmSerializer<'a> {
 
     /// Pushes a new operand onto the current operation.
     fn push_operand(&mut self, operand: Operand) {
-        self.operation.as_mut().unwrap().push_operand(operand)
+        if let Some(op) = &mut self.operation {
+            op.push_operand(operand)
+        } else {
+            match self.asm.content.get_or_insert(BlockContent::Data(vec![])) {
+                BlockContent::Data(data) => data.push(operand),
+                _ => panic!("Unexpected operand: {:?}", operand),
+            }
+        }
     }
 
     /// Converts `ptr` into an operand which references it and declares a new label if necessary.
@@ -91,14 +111,14 @@ impl<'a> AsmSerializer<'a> {
             // If this command is if-like, use an ElseLabel so that "else" is displayed before it.
             // This should improve readability because it clarifies what the reference is for.
             match &self.operation {
-                Some(AnyOperation::Command(c)) if c.opcode.is_if() => Operand::ElseLabel(label),
+                Some(CodeOperation::Command(c)) if c.opcode.is_if() => Operand::ElseLabel(label),
                 _ => Operand::Label(label),
             }
         }
     }
 
     /// Makes `op` the current operation, saving the old operation onto the stack.
-    fn begin_operation(&mut self, op: impl Into<AnyOperation>) {
+    fn begin_operation(&mut self, op: impl Into<CodeOperation>) {
         if let Some(prev) = self.operation.take() {
             self.stack.push(prev);
         }
@@ -106,7 +126,7 @@ impl<'a> AsmSerializer<'a> {
     }
 
     /// Returns the current operation and pops the parent operation.
-    fn end_operation(&mut self) -> AnyOperation {
+    fn end_operation(&mut self) -> CodeOperation {
         let result = self.operation.take().unwrap();
         if let Some(prev) = self.stack.pop() {
             self.operation = Some(prev);
@@ -114,131 +134,98 @@ impl<'a> AsmSerializer<'a> {
         result
     }
 
-    /// If there is no active operation or the current directive does not match, makes `op` the
-    /// current directive.
-    fn begin_directive(&mut self, op: DirOp) {
-        match &self.operation {
-            Some(AnyOperation::Directive(dir)) if dir.opcode == op => return,
-            Some(AnyOperation::Directive(_)) => self.end_directive(),
-            Some(_) => return,
-            None => (),
-        }
-        if self.operation.is_none() {
-            self.operation = Some(Operation::new(op).into());
-        }
-    }
-
-    /// Ends the current directive and appends it to the program.
-    fn end_directive(&mut self) {
-        let dir = self.end_operation().into_directive();
-        self.asm.directives.push(dir);
-    }
-
-    /// Serializes an array of data values of type `op`.
-    fn serialize_array<T: Copy + Into<Operand>>(&mut self, op: DirOp, arr: &[T]) -> SerResult<()> {
-        self.begin_directive(op);
-        if let Some(AnyOperation::Directive(dir)) = &mut self.operation {
-            arr.iter().for_each(|&x| dir.operands.push(x.into()));
-            Ok(())
-        } else {
-            Err(SerError::custom(format!("unexpected {:?} array", op)))
-        }
+    /// Serializes an array of data values.
+    fn serialize_array<T: Copy + Into<Operand>>(&mut self, arr: &[T]) {
+        arr.iter().for_each(|&x| self.push_operand(x.into()));
     }
 }
 
 impl EventSerializer for AsmSerializer<'_> {
     fn serialize_i8(&mut self, val: i8) -> SerResult<()> {
-        self.begin_directive(DirOp::Byte);
         self.push_operand(Operand::I8(val));
         Ok(())
     }
 
     fn serialize_u8(&mut self, val: u8) -> SerResult<()> {
-        self.begin_directive(DirOp::Byte);
         self.push_operand(Operand::U8(val));
         Ok(())
     }
 
     fn serialize_i16(&mut self, val: i16) -> SerResult<()> {
-        self.begin_directive(DirOp::Word);
         self.push_operand(Operand::I16(val));
         Ok(())
     }
 
     fn serialize_u16(&mut self, val: u16) -> SerResult<()> {
-        self.begin_directive(DirOp::Word);
         self.push_operand(Operand::U16(val));
         Ok(())
     }
 
     fn serialize_i32(&mut self, val: i32) -> SerResult<()> {
-        self.begin_directive(DirOp::Dword);
         self.push_operand(Operand::I32(val));
         Ok(())
     }
 
     fn serialize_u32(&mut self, val: u32) -> SerResult<()> {
-        self.begin_directive(DirOp::Dword);
         self.push_operand(Operand::U32(val));
         Ok(())
     }
 
     fn serialize_pointer(&mut self, ptr: Pointer) -> SerResult<()> {
-        self.begin_directive(DirOp::Dword);
         let reference = self.make_reference(ptr);
         self.push_operand(reference);
         Ok(())
     }
 
     fn serialize_i8_array(&mut self, arr: &[i8]) -> SerResult<()> {
-        self.serialize_array(DirOp::Byte, arr)
+        self.serialize_array(arr);
+        Ok(())
     }
 
     fn serialize_u8_array(&mut self, arr: &[u8]) -> SerResult<()> {
-        self.serialize_array(DirOp::Byte, arr)
+        self.serialize_array(arr);
+        Ok(())
     }
 
     fn serialize_i16_array(&mut self, arr: &[i16]) -> SerResult<()> {
-        self.serialize_array(DirOp::Word, arr)
+        self.serialize_array(arr);
+        Ok(())
     }
 
     fn serialize_u16_array(&mut self, arr: &[u16]) -> SerResult<()> {
-        self.serialize_array(DirOp::Word, arr)
+        self.serialize_array(arr);
+        Ok(())
     }
 
     fn serialize_i32_array(&mut self, arr: &[i32]) -> SerResult<()> {
-        self.serialize_array(DirOp::Dword, arr)
+        self.serialize_array(arr);
+        Ok(())
     }
 
     fn serialize_u32_array(&mut self, arr: &[u32]) -> SerResult<()> {
-        self.serialize_array(DirOp::Dword, arr)
+        self.serialize_array(arr);
+        Ok(())
     }
 
     fn serialize_pointer_array(&mut self, arr: &[Pointer]) -> SerResult<()> {
-        self.begin_directive(DirOp::Dword);
-        if let Some(AnyOperation::Directive(mut dir)) = self.operation.take() {
-            arr.iter().for_each(|&ptr| dir.operands.push(self.make_reference(ptr)));
-            self.operation = Some(AnyOperation::Directive(dir));
-            Ok(())
-        } else {
-            Err(SerError::custom("unexpected pointer array"))
+        for &ptr in arr {
+            let reference = self.make_reference(ptr);
+            self.push_operand(reference);
         }
+        Ok(())
     }
 
     fn serialize_type(&mut self, ty: TypeOp) -> SerResult<()> {
-        self.begin_directive(DirOp::Dword);
         self.push_operand(Operand::Type(ty));
         Ok(())
     }
 
     fn serialize_text(&mut self, text: &Text) -> SerResult<()> {
-        self.begin_directive(DirOp::Byte);
         self.push_operand(Operand::Text(text.clone()));
         Ok(())
     }
 
     fn serialize_rgba(&mut self, rgba: u32) -> SerResult<()> {
-        self.begin_directive(DirOp::Dword);
         self.serialize_u32(rgba)
     }
 
@@ -260,7 +247,10 @@ impl EventSerializer for AsmSerializer<'_> {
 
     fn end_command(&mut self) -> SerResult<()> {
         let command = self.end_operation().into_command();
-        self.asm.commands.push(command);
+        match self.asm.content.get_or_insert(BlockContent::Code(vec![])) {
+            BlockContent::Code(code) => code.push(command),
+            _ => panic!("Unexpected command"),
+        }
         Ok(())
     }
 
@@ -277,7 +267,7 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 
     fn serialize_msg_char(&mut self, ch: MsgOp) -> SerResult<()> {
-        if let Some(AnyOperation::MsgCommand(cmd)) = &mut self.operation {
+        if let Some(CodeOperation::MsgCommand(cmd)) = &mut self.operation {
             if cmd.opcode == AsmMsgOp::Text {
                 // Coalesce characters into text strings.
                 if let MsgOp::Char(b) = ch {
@@ -324,7 +314,7 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 
     fn end_msg(&mut self) -> SerResult<()> {
-        if let Some(AnyOperation::MsgCommand(_)) = &self.operation {
+        if let Some(CodeOperation::MsgCommand(_)) = &self.operation {
             let op = self.end_operation().into_msg_command();
             self.push_operand(Operand::MsgCommand(op.into()));
         }
@@ -433,10 +423,8 @@ impl<'a> ProgramBuilder<'a> {
         data.serialize(&mut ser)?;
         let serialized = ser.finish();
 
-        assert!(serialized.commands.is_empty());
-        block.extend(serialized.directives);
-        block.flags.insert(BlockFlags::DATA);
-        self.queue.extend(serialized.refs);
+        self.queue.extend_from_slice(&serialized.refs);
+        block.content = Some(BlockContent::Data(serialized.into_data()));
         Ok(())
     }
 
@@ -455,9 +443,8 @@ impl<'a> ProgramBuilder<'a> {
         }
         let serialized = ser.finish();
 
-        assert!(serialized.directives.is_empty());
-        block.extend(serialized.commands);
-        self.queue.extend(serialized.refs);
+        self.queue.extend_from_slice(&serialized.refs);
+        block.content = Some(BlockContent::Code(serialized.into_code()));
 
         // If execution can flow directly out of this block into another one, it MUST be written next
         if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
@@ -484,6 +471,19 @@ impl<'a> ProgramBuilder<'a> {
     }
 }
 
+/// Gets the directive corresponding to a data operand.
+fn operand_type(op: &Operand) -> DirOp {
+    match op {
+        Operand::I8(_) | Operand::U8(_) | Operand::Text(_) => DirOp::Byte,
+        Operand::I16(_) | Operand::U16(_) => DirOp::Word,
+        Operand::I32(_) | Operand::U32(_) | Operand::Type(_) => DirOp::Dword,
+        Operand::Label(_) | Operand::Offset(_) => DirOp::Dword,
+        Operand::ElseLabel(_) | Operand::Expr(_) | Operand::MsgCommand(_) => {
+            panic!("Invalid data operand: {:?}", op);
+        }
+    }
+}
+
 type EventVec = SmallVec<[Event; 1]>;
 
 /// Writes out a program as human-readable assembly code.
@@ -505,7 +505,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
 
     pub fn write(mut self) -> Result<()> {
         for (i, block) in self.program.blocks.iter().enumerate() {
-            if i > 0 && block.flags.intersects(BlockFlags::SUBROUTINE | BlockFlags::DATA) {
+            if i > 0 && (block.flags.contains(BlockFlags::SUBROUTINE) || block.is_data()) {
                 write!(self.writer, "\n\n")?;
             }
             self.write_block(block)?;
@@ -529,11 +529,31 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
                 writeln!(self.writer, "{}:", self.program.labels.get(label).name)?;
             }
         }
-        for instruction in &block.instructions {
-            match instruction {
-                Instruction::Command(cmd) => self.write_command(cmd)?,
-                Instruction::Directive(dir) => self.write_directive(dir)?,
+        match &block.content {
+            None => Ok(()),
+            Some(BlockContent::Code(code)) => self.write_code(code),
+            Some(BlockContent::Data(data)) => self.write_data(data),
+        }
+    }
+
+    fn write_code(&mut self, code: &[Operation<CmdOp>]) -> Result<()> {
+        code.iter().try_for_each(|c| self.write_command(c))
+    }
+
+    fn write_data(&mut self, data: &[Operand]) -> Result<()> {
+        let mut current_op: Option<Operation<DirOp>> = None;
+        for operand in data {
+            let ty = operand_type(operand);
+            let mut op = current_op.get_or_insert_with(|| Operation::new(ty));
+            if op.opcode != ty {
+                self.write_directive(op)?;
+                op.opcode = ty;
+                op.operands.clear();
             }
+            op.operands.push(operand.clone());
+        }
+        if let Some(op) = current_op.take() {
+            self.write_directive(&op)?;
         }
         Ok(())
     }
