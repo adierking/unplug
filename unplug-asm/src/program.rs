@@ -143,6 +143,7 @@ impl From<Operation<AsmMsgOp>> for CodeOperation {
 
 bitflags! {
     /// Flags used to mark blocks with hints for serialization/deserialization.
+    #[derive(Default)]
     pub struct BlockFlags: u8 {
         /// The block is the beginning of a subroutine.
         const SUBROUTINE = 1 << 0;
@@ -159,33 +160,37 @@ pub enum BlockContent {
 }
 
 /// A block of instructions corresponding to a script block.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Block {
-    pub id: BlockId,
+    /// The offset of the block in the original file (if known).
     pub offset: u32,
+    /// Flags describing block properties.
     pub flags: BlockFlags,
+    /// The block's content.
     pub content: Option<BlockContent>,
+    /// The ID of the next block in program order, or `None` if this is the last block.
+    pub next: Option<BlockId>,
 }
 
 impl Block {
-    /// Creates an empty block associated with block `id`.
-    pub fn new(id: BlockId) -> Self {
-        Self { id, offset: 0, flags: BlockFlags::empty(), content: None }
+    /// Creates an empty block.
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// Creates a code block associated with block `id` and containing `content`.
-    pub fn with_content(id: BlockId, content: BlockContent) -> Self {
-        Self { id, offset: 0, flags: BlockFlags::empty(), content: Some(content) }
+    /// Creates a code block containing `content`.
+    pub fn with_content(content: BlockContent) -> Self {
+        Self { content: Some(content), ..Default::default() }
     }
 
-    /// Creates a code block associated with block `id` and populated from `commands`.
-    pub fn with_code(id: BlockId, commands: impl IntoIterator<Item = Operation<CmdOp>>) -> Self {
-        Self::with_content(id, BlockContent::Code(commands.into_iter().collect()))
+    /// Creates a code block populated from `commands`.
+    pub fn with_code(commands: impl IntoIterator<Item = Operation<CmdOp>>) -> Self {
+        Self::with_content(BlockContent::Code(commands.into_iter().collect()))
     }
 
-    /// Creates a data block associated with block `id` and populated from `operands`.
-    pub fn with_data(id: BlockId, operands: impl IntoIterator<Item = Operand>) -> Self {
-        Self::with_content(id, BlockContent::Data(operands.into_iter().collect()))
+    /// Creates a data block populated from `operands`.
+    pub fn with_data(operands: impl IntoIterator<Item = Operand>) -> Self {
+        Self::with_content(BlockContent::Data(operands.into_iter().collect()))
     }
 
     /// Returns true if there is nothing in the block.
@@ -211,8 +216,13 @@ impl Block {
 /// An assembly program.
 #[derive(Default)]
 pub struct Program {
+    /// The blocks making up the program. Each block's ID is its index in this list.
     pub blocks: Vec<Block>,
+    /// The ID of the first block in the program, or `None` if the program is empty.
+    pub first_block: Option<BlockId>,
+    /// Map of event types to block IDs.
     pub events: HashMap<Event, BlockId>,
+    /// Label information.
     pub labels: LabelMap,
 }
 
@@ -223,7 +233,7 @@ impl Program {
     }
 
     /// Creates a program with blocks populated from `blocks`.
-    pub fn with_blocks(blocks: impl Into<Vec<Block>>) -> Self {
-        Self { blocks: blocks.into(), ..Default::default() }
+    pub fn with_blocks(blocks: impl Into<Vec<Block>>, first_block: Option<BlockId>) -> Self {
+        Self { blocks: blocks.into(), first_block, ..Default::default() }
     }
 }

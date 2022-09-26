@@ -340,9 +340,9 @@ impl<'a> ProgramBuilder<'a> {
     }
 
     fn new_impl(script: &'a Script, stage: Option<&'a Stage>) -> Self {
-        let blocks: Vec<_> =
-            (0..script.len()).map(|id| Block::new(BlockId::new(id as u32))).collect();
-        Self { script, stage, program: Program::with_blocks(blocks), queue: vec![] }
+        let blocks = (0..script.len()).map(|_| Block::new()).collect::<Vec<_>>();
+        let program = Program::with_blocks(blocks, None);
+        Self { script, stage, program, queue: vec![] }
     }
 
     /// Adds a script event of type `event` beginning at `block_id` to the program.
@@ -380,6 +380,12 @@ impl<'a> ProgramBuilder<'a> {
     pub fn finish(mut self) -> Program {
         if let Some(layout) = self.script.layout() {
             self.sort_blocks(layout);
+        } else if !self.program.blocks.is_empty() {
+            // Blocks are already in program order
+            self.program.first_block = Some(BlockId::new(0));
+            for (i, block) in self.program.blocks.iter_mut().enumerate().rev().skip(1) {
+                block.next = Some(BlockId::new(i as u32 + 1));
+            }
         }
         self.program
     }
@@ -458,16 +464,28 @@ impl<'a> ProgramBuilder<'a> {
 
     /// Sorts blocks by offset according to `layout`.
     fn sort_blocks(&mut self, layout: &ScriptLayout) {
+        if self.program.blocks.is_empty() {
+            return;
+        }
+
         let mut src_offsets = BlockOffsetMap::new(self.script.len());
         for &loc in layout.block_offsets() {
             src_offsets.insert(loc.id, loc.offset);
         }
-        for block in &mut self.program.blocks {
-            if let Some(offset) = src_offsets.try_get(block.id) {
+
+        for (i, block) in self.program.blocks.iter_mut().enumerate() {
+            if let Some(offset) = src_offsets.try_get(BlockId::new(i as u32)) {
                 block.offset = offset;
             }
         }
-        self.program.blocks.sort_by_key(|b| b.offset);
+
+        let mut order =
+            (0..(self.program.blocks.len() as u32)).map(BlockId::new).collect::<Vec<_>>();
+        order.sort_by_key(|&id| id.get(&self.program.blocks).offset);
+        self.program.first_block = Some(order[0]);
+        for pair in order.windows(2) {
+            pair[0].get_mut(&mut self.program.blocks).next = Some(pair[1]);
+        }
     }
 }
 
@@ -504,21 +522,26 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     pub fn write(mut self) -> Result<()> {
-        for (i, block) in self.program.blocks.iter().enumerate() {
-            if i > 0 && (block.flags.contains(BlockFlags::SUBROUTINE) || block.is_data()) {
+        let mut current = self.program.first_block;
+        let mut first = true;
+        while let Some(id) = current {
+            let block = id.get(&self.program.blocks);
+            if !first && (block.flags.contains(BlockFlags::SUBROUTINE) || block.is_data()) {
                 write!(self.writer, "\n\n")?;
             }
-            self.write_block(block)?;
+            self.write_block(id, block)?;
+            current = block.next;
+            first = false;
         }
         let _ = self.writer.flush();
         Ok(())
     }
 
-    fn write_block(&mut self, block: &Block) -> Result<()> {
-        let labels = self.program.labels.find_block(block.id);
+    fn write_block(&mut self, id: BlockId, block: &Block) -> Result<()> {
+        let labels = self.program.labels.find_block(id);
         if !labels.is_empty() {
             if block.flags.contains(BlockFlags::EVENT) {
-                if let Some(mut events) = self.block_events.remove(&block.id) {
+                if let Some(mut events) = self.block_events.remove(&id) {
                     events.sort_unstable();
                     for &event in &events {
                         self.write_event_directive(event, labels[0])?;
