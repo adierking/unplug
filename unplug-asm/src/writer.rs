@@ -1,6 +1,8 @@
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
-use crate::program::{Block, BlockContent, BlockFlags, CodeOperation, Operand, Operation, Program};
+use crate::program::{
+    Block, BlockContent, BlockFlags, CodeOperation, EntryPoint, Operand, Operation, Program,
+};
 use crate::Result;
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -355,21 +357,22 @@ impl<'a> ProgramBuilder<'a> {
         Self { script, stage, program, queue: vec![] }
     }
 
-    /// Adds a script event of type `event` beginning at `block_id` to the program.
-    pub fn add_event(&mut self, event: Event, block_id: BlockId) -> Result<()> {
+    /// Adds a script entry point of type `kind` beginning at `block_id` to the program.
+    pub fn add_entry_point(&mut self, kind: EntryPoint, block_id: BlockId) -> Result<()> {
         self.add_subroutine(block_id)?;
-        self.program.events.insert(event, block_id);
+        self.program.entry_points.insert(kind, block_id);
         let block = block_id.get_mut(&mut self.program.blocks);
-        if !block.flags.contains(BlockFlags::EVENT) {
-            block.flags.insert(BlockFlags::EVENT);
-            let name = match event {
-                Event::Prologue => "evt_prologue".to_owned(),
-                Event::Startup => "evt_startup".to_owned(),
-                Event::Dead => "evt_dead".to_owned(),
-                Event::Pose => "evt_pose".to_owned(),
-                Event::TimeCycle => "evt_time_cycle".to_owned(),
-                Event::TimeUp => "evt_time_up".to_owned(),
-                Event::Interact(id) => {
+        if !block.flags.contains(BlockFlags::ENTRY_POINT) {
+            block.flags.insert(BlockFlags::ENTRY_POINT);
+            let name = match kind {
+                EntryPoint::Lib(index) => format!("lib_{}", index),
+                EntryPoint::Event(Event::Prologue) => "evt_prologue".to_owned(),
+                EntryPoint::Event(Event::Startup) => "evt_startup".to_owned(),
+                EntryPoint::Event(Event::Dead) => "evt_dead".to_owned(),
+                EntryPoint::Event(Event::Pose) => "evt_pose".to_owned(),
+                EntryPoint::Event(Event::TimeCycle) => "evt_time_cycle".to_owned(),
+                EntryPoint::Event(Event::TimeUp) => "evt_time_up".to_owned(),
+                EntryPoint::Event(Event::Interact(id)) => {
                     if let Some(stage) = self.stage {
                         let object = stage.object(id).unwrap().id.name();
                         format!("evt_{}_{}", object, id)
@@ -512,23 +515,23 @@ fn operand_type(op: &Operand) -> DirOp {
     }
 }
 
-type EventVec = SmallVec<[Event; 1]>;
+type EntryPointVec = SmallVec<[EntryPoint; 1]>;
 
 /// Writes out a program as human-readable assembly code.
 pub struct ProgramWriter<'a, W: Write> {
     writer: W,
     program: &'a Program,
-    block_events: HashMap<BlockId, EventVec>,
+    block_entries: HashMap<BlockId, EntryPointVec>,
 }
 
 impl<'a, W: Write> ProgramWriter<'a, W> {
     pub fn new(writer: W, program: &'a Program) -> Self {
         // Reverse the program's event map
-        let mut block_events: HashMap<BlockId, EventVec> = HashMap::new();
-        for (&event, &block) in &program.events {
-            block_events.entry(block).or_default().push(event);
+        let mut block_entries = HashMap::<BlockId, EntryPointVec>::new();
+        for (&kind, &block) in &program.entry_points {
+            block_entries.entry(block).or_default().push(kind);
         }
-        Self { writer, program, block_events }
+        Self { writer, program, block_entries }
     }
 
     pub fn write(mut self) -> Result<()> {
@@ -550,11 +553,11 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     fn write_block(&mut self, id: BlockId, block: &Block) -> Result<()> {
         let labels = self.program.labels.find_block(id);
         if !labels.is_empty() {
-            if block.flags.contains(BlockFlags::EVENT) {
-                if let Some(mut events) = self.block_events.remove(&id) {
-                    events.sort_unstable();
-                    for &event in &events {
-                        self.write_event_directive(event, labels[0])?;
+            if block.flags.contains(BlockFlags::ENTRY_POINT) {
+                if let Some(mut entry_points) = self.block_entries.remove(&id) {
+                    entry_points.sort_unstable();
+                    for &kind in &entry_points {
+                        self.write_entry_directive(kind, labels[0])?;
                     }
                 }
             }
@@ -604,10 +607,12 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_event_directive(&mut self, event: Event, label: LabelId) -> Result<()> {
-        let mut dir = Operation::new(DirOp::for_event(event));
-        if let Event::Interact(obj) = event {
-            dir.operands.push(Operand::I32(obj));
+    fn write_entry_directive(&mut self, kind: EntryPoint, label: LabelId) -> Result<()> {
+        let mut dir = Operation::new(kind.directive());
+        match kind {
+            EntryPoint::Lib(lib) => dir.operands.push(Operand::I16(lib)),
+            EntryPoint::Event(Event::Interact(obj)) => dir.operands.push(Operand::I32(obj)),
+            _ => (),
         }
         dir.operands.push(Operand::Label(label));
         self.write_directive(&dir)

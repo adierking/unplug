@@ -1,5 +1,5 @@
 use crate::label::{LabelId, LabelMap};
-use crate::opcodes::{AsmMsgOp, NamedOpcode};
+use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use bitflags::bitflags;
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -147,8 +147,8 @@ bitflags! {
     pub struct BlockFlags: u8 {
         /// The block is the beginning of a subroutine.
         const SUBROUTINE = 1 << 0;
-        /// The block is associated with at least one event.
-        const EVENT = 1 << 1;
+        /// The block is associated with at least one entry point.
+        const ENTRY_POINT = 1 << 1;
     }
 }
 
@@ -213,6 +213,32 @@ impl Block {
     }
 }
 
+/// A kind of entry point into a program.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[allow(variant_size_differences)]
+pub enum EntryPoint {
+    /// A global library function.
+    Lib(i16),
+    /// An event in a stage file.
+    Event(Event),
+}
+
+impl EntryPoint {
+    /// Returns the opcode of the directive which declares the entry point.
+    pub fn directive(self) -> DirOp {
+        match self {
+            Self::Lib(_) => DirOp::Lib,
+            Self::Event(Event::Prologue) => DirOp::Prologue,
+            Self::Event(Event::Startup) => DirOp::Startup,
+            Self::Event(Event::Dead) => DirOp::Dead,
+            Self::Event(Event::Pose) => DirOp::Pose,
+            Self::Event(Event::TimeCycle) => DirOp::TimeCycle,
+            Self::Event(Event::TimeUp) => DirOp::TimeUp,
+            Self::Event(Event::Interact(_)) => DirOp::Interact,
+        }
+    }
+}
+
 /// An assembly program.
 #[derive(Default)]
 pub struct Program {
@@ -220,8 +246,8 @@ pub struct Program {
     pub blocks: Vec<Block>,
     /// The ID of the first block in the program, or `None` if the program is empty.
     pub first_block: Option<BlockId>,
-    /// Map of event types to block IDs.
-    pub events: HashMap<Event, BlockId>,
+    /// Map of entry points to block IDs.
+    pub entry_points: HashMap<EntryPoint, BlockId>,
     /// Label information.
     pub labels: LabelMap,
 }

@@ -18,6 +18,7 @@ use unplug::globals::Libs;
 use unplug::stage::Stage;
 use unplug_asm::lexer::{Logos, Token};
 use unplug_asm::parser::{Ast, Parser, Stream};
+use unplug_asm::program::EntryPoint;
 use unplug_asm::writer::{ProgramBuilder, ProgramWriter};
 
 fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
@@ -140,9 +141,21 @@ pub fn command_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
     Ok(())
 }
 
+fn disassemble_globals(globals: &Libs, writer: impl Write) -> Result<()> {
+    let mut builder = ProgramBuilder::new(&globals.script);
+    for (i, &block) in globals.entry_points.iter().enumerate() {
+        builder.add_entry_point(EntryPoint::Lib(i as i16), block)?;
+    }
+    let program = builder.finish();
+    ProgramWriter::new(writer, &program).write()?;
+    Ok(())
+}
+
 fn disassemble_stage(stage: &Stage, writer: impl Write) -> Result<()> {
     let mut builder = ProgramBuilder::with_stage(stage);
-    stage.events().try_for_each(|(e, b)| builder.add_event(e, b))?;
+    for (event, block) in stage.events() {
+        builder.add_entry_point(EntryPoint::Event(event), block)?;
+    }
     let program = builder.finish();
     ProgramWriter::new(writer, &program).write()?;
     Ok(())
@@ -166,9 +179,14 @@ fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
 
 pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    info!("Reading script globals");
-    let libs = ctx.read_globals()?.read_libs()?;
     fs::create_dir_all(&opt.output)?;
+
+    info!("Disassembling script globals");
+    let libs = ctx.read_globals()?.read_libs()?;
+    let libs_out = Path::join(&opt.output, "globals.us");
+    let libs_writer = BufWriter::new(File::create(libs_out)?);
+    disassemble_globals(&libs, libs_writer)?;
+
     for id in StageId::iter() {
         info!("Disassembling {}", id.file_name());
         let stage = ctx.read_stage(&libs, id)?;

@@ -1,6 +1,5 @@
 use phf::phf_map;
 use unplug::event::opcodes::{CmdOp, ExprOp, Opcode, TypeOp};
-use unplug::stage::Event;
 
 /// An opcode which has an associated name.
 pub trait NamedOpcode: Opcode {
@@ -57,6 +56,7 @@ pub enum DirOp {
     Byte,
     Word,
     Dword,
+    Lib,
     Prologue,
     Startup,
     Dead,
@@ -64,21 +64,6 @@ pub enum DirOp {
     TimeCycle,
     TimeUp,
     Interact,
-}
-
-impl DirOp {
-    /// Returns the `DirOp` corresponding to `event`.
-    pub fn for_event(event: Event) -> Self {
-        match event {
-            Event::Prologue => Self::Prologue,
-            Event::Startup => Self::Startup,
-            Event::Dead => Self::Dead,
-            Event::Pose => Self::Pose,
-            Event::TimeCycle => Self::TimeCycle,
-            Event::TimeUp => Self::TimeUp,
-            Event::Interact(_) => Self::Interact,
-        }
-    }
 }
 
 impl Opcode for DirOp {
@@ -318,6 +303,7 @@ opcode_names! {
         Byte => "db",
         Word => "dw",
         Dword => "dd",
+        Lib => "lib",
         Prologue => "prologue",
         Startup => "startup",
         Dead => "dead",
