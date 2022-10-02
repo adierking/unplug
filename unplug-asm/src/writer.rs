@@ -268,7 +268,8 @@ impl EventSerializer for AsmSerializer<'_> {
 
     fn serialize_msg_char(&mut self, ch: MsgOp) -> SerResult<()> {
         if let Some(CodeOperation::MsgCommand(cmd)) = &mut self.operation {
-            if cmd.opcode == AsmMsgOp::Text {
+            let op = cmd.opcode;
+            if op == AsmMsgOp::Text || op == AsmMsgOp::Format {
                 // Coalesce characters into text strings.
                 if let MsgOp::Char(b) = ch {
                     match &mut cmd.operands[0] {
@@ -278,9 +279,16 @@ impl EventSerializer for AsmSerializer<'_> {
                     return Ok(());
                 }
             }
-            let op = self.end_operation().into_msg_command();
-            self.push_operand(Operand::MsgCommand(op.into()));
+            let finished = self.end_operation().into_msg_command();
+            self.push_operand(Operand::MsgCommand(finished.into()));
+
+            // Format text is surrounded by format opcodes. Hide the second one because we push the
+            // text onto the first one as an operand.
+            if op == AsmMsgOp::Format && ch == MsgOp::Format {
+                return Ok(());
+            }
         }
+
         let cmd = match ch {
             MsgOp::End => AsmMsgOp::End,
             MsgOp::Speed => AsmMsgOp::Speed,
@@ -307,8 +315,10 @@ impl EventSerializer for AsmSerializer<'_> {
             MsgOp::Char(_) => AsmMsgOp::Text,
         };
         self.begin_operation(Operation::new(cmd));
-        if let MsgOp::Char(b) = ch {
-            self.push_operand(Operand::Text(Text::with_bytes(vec![b])));
+        match ch {
+            MsgOp::Char(b) => self.push_operand(Operand::Text(Text::with_bytes(vec![b]))),
+            MsgOp::Format => self.push_operand(Operand::Text(Text::new())),
+            _ => (),
         }
         Ok(())
     }
