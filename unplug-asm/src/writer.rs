@@ -140,6 +140,49 @@ impl<'a> AsmSerializer<'a> {
     fn serialize_array<T: Copy + Into<Operand>>(&mut self, arr: &[T]) {
         arr.iter().for_each(|&x| self.push_operand(x.into()));
     }
+
+    /// Postprocess a command.
+    fn postprocess_command(cmd: &mut Operation<CmdOp>) {
+        if cmd.opcode == CmdOp::Set {
+            // set() puts the destination second; reverse the operands
+            cmd.operands.reverse()
+        }
+    }
+
+    /// Postprocess an expression, turning it into an operand.
+    fn postprocess_expr(mut expr: Operation<ExprOp>) -> Operand {
+        match expr.opcode {
+            // We have enough information to determine these from the operand
+            ExprOp::Imm16 | ExprOp::Imm32 | ExprOp::AddressOf => expr.operands.remove(0),
+            // Reverse binary operation order
+            ExprOp::Equal
+            | ExprOp::NotEqual
+            | ExprOp::Less
+            | ExprOp::LessEqual
+            | ExprOp::Greater
+            | ExprOp::GreaterEqual
+            | ExprOp::Add
+            | ExprOp::Subtract
+            | ExprOp::Multiply
+            | ExprOp::Divide
+            | ExprOp::Modulo
+            | ExprOp::BitAnd
+            | ExprOp::BitOr
+            | ExprOp::BitXor
+            | ExprOp::AddAssign
+            | ExprOp::SubtractAssign
+            | ExprOp::MultiplyAssign
+            | ExprOp::DivideAssign
+            | ExprOp::ModuloAssign
+            | ExprOp::BitAndAssign
+            | ExprOp::BitOrAssign
+            | ExprOp::BitXorAssign => {
+                expr.operands.reverse();
+                Operand::Expr(expr.into())
+            }
+            _ => Operand::Expr(expr.into()),
+        }
+    }
 }
 
 impl EventSerializer for AsmSerializer<'_> {
@@ -238,7 +281,7 @@ impl EventSerializer for AsmSerializer<'_> {
 
     fn end_expr(&mut self) -> SerResult<()> {
         let expr = self.end_operation().into_expr();
-        self.push_operand(Operand::Expr(expr.into()));
+        self.push_operand(Self::postprocess_expr(expr));
         Ok(())
     }
 
@@ -248,7 +291,8 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 
     fn end_command(&mut self) -> SerResult<()> {
-        let command = self.end_operation().into_command();
+        let mut command = self.end_operation().into_command();
+        Self::postprocess_command(&mut command);
         match self.asm.content.get_or_insert(BlockContent::Code(vec![])) {
             BlockContent::Code(code) => code.push(command),
             _ => panic!("Unexpected command"),
@@ -598,10 +642,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         write!(self.writer, "\t{}", command.opcode.name())?;
         if !command.operands.is_empty() {
             write!(self.writer, "\t")?;
-            match command.opcode {
-                CmdOp::Set => self.write_operands(command.operands.iter().rev())?,
-                _ => self.write_operands(&command.operands)?,
-            }
+            self.write_operands(&command.operands)?;
         }
         writeln!(self.writer)?;
         Ok(())
@@ -680,45 +721,10 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     fn write_expr(&mut self, expr: &Operation<ExprOp>) -> Result<()> {
-        let mut reverse = false;
-        match expr.opcode {
-            ExprOp::Imm16 | ExprOp::Imm32 | ExprOp::AddressOf => {
-                return self.write_operand(&expr.operands[0])
-            }
-            ExprOp::Equal
-            | ExprOp::NotEqual
-            | ExprOp::Less
-            | ExprOp::LessEqual
-            | ExprOp::Greater
-            | ExprOp::GreaterEqual
-            | ExprOp::Add
-            | ExprOp::Subtract
-            | ExprOp::Multiply
-            | ExprOp::Divide
-            | ExprOp::Modulo
-            | ExprOp::BitAnd
-            | ExprOp::BitOr
-            | ExprOp::BitXor
-            | ExprOp::AddAssign
-            | ExprOp::SubtractAssign
-            | ExprOp::MultiplyAssign
-            | ExprOp::DivideAssign
-            | ExprOp::ModuloAssign
-            | ExprOp::BitAndAssign
-            | ExprOp::BitOrAssign
-            | ExprOp::BitXorAssign => {
-                reverse = true;
-            }
-            _ => (),
-        }
         write!(self.writer, "{}", expr.opcode.name())?;
         if !expr.operands.is_empty() {
             write!(self.writer, "(")?;
-            if reverse {
-                self.write_operands(expr.operands.iter().rev())?;
-            } else {
-                self.write_operands(&expr.operands)?;
-            }
+            self.write_operands(&expr.operands)?;
             write!(self.writer, ")")?;
         }
         Ok(())
