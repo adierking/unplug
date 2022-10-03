@@ -642,7 +642,11 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         write!(self.writer, "\t{}", command.opcode.name())?;
         if !command.operands.is_empty() {
             write!(self.writer, "\t")?;
-            self.write_operands(&command.operands)?;
+            if matches!(command.opcode, CmdOp::Msg | CmdOp::Select) {
+                self.write_msg_operands(&command.operands)?;
+            } else {
+                self.write_operands(&command.operands)?;
+            }
         }
         writeln!(self.writer)?;
         Ok(())
@@ -674,21 +678,20 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_operands<'o>(
-        &mut self,
-        operands: impl IntoIterator<Item = &'o Operand>,
-    ) -> Result<()> {
-        let mut wrap = false;
-        for (i, operand) in operands.into_iter().enumerate() {
+    fn write_operands(&mut self, operands: &[Operand]) -> Result<()> {
+        self.write_operands_impl(operands, ", ")
+    }
+
+    fn write_msg_operands(&mut self, operands: &[Operand]) -> Result<()> {
+        self.write_operands_impl(operands, ",\n\t\t")
+    }
+
+    fn write_operands_impl(&mut self, operands: &[Operand], separator: &str) -> Result<()> {
+        for (i, operand) in operands.iter().enumerate() {
             if i > 0 {
-                if wrap {
-                    write!(self.writer, ",\n\t\t")?;
-                } else {
-                    write!(self.writer, ", ")?;
-                }
+                write!(self.writer, "{}", separator)?;
             }
             self.write_operand(operand)?;
-            wrap = matches!(operand, Operand::MsgCommand(_));
         }
         Ok(())
     }
