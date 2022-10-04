@@ -115,7 +115,7 @@
 			"patterns": [
 				{
 					"name": "constant.character.escape.unplug",
-					"match": "(\\$|\\\\n)"
+					"match": "(\\$|\\\\n|\\\\v)"
 				},
 				{
 					"name": "constant.other.placeholder.unplug",

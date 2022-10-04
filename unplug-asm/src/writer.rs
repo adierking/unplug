@@ -19,6 +19,9 @@ use unplug::stage::{Event, Stage};
 /// the opcode column. The VSCode extension sets the tab size to 8.
 const TAB_SIZE: usize = 8;
 
+/// Vertical tab character (`\v`).
+const VT: char = '\x0b';
+
 /// Holds assembly code produced by `AsmSerializer`.
 #[derive(Debug, Default, Clone)]
 struct SerializedAsm {
@@ -312,17 +315,29 @@ impl EventSerializer for AsmSerializer<'_> {
         Ok(())
     }
 
-    fn serialize_msg_char(&mut self, ch: MsgOp) -> SerResult<()> {
+    fn serialize_msg_char(&mut self, mut ch: MsgOp) -> SerResult<()> {
+        // For readability purposes, consider newlines to be part of text operands rather than being
+        // separate commands.
+        ch = match ch {
+            MsgOp::Newline => MsgOp::Char(b'\n'),
+            MsgOp::NewlineVt => MsgOp::Char(11),
+            _ => ch,
+        };
+
         if let Some(CodeOperation::MsgCommand(cmd)) = &mut self.operation {
             let op = cmd.opcode;
             if op == AsmMsgOp::Text || op == AsmMsgOp::Format {
-                // Coalesce characters into text strings.
+                // Coalesce characters into newline-terminated text strings.
                 if let MsgOp::Char(b) = ch {
-                    match &mut cmd.operands[0] {
-                        Operand::Text(text) => text.push(b),
-                        _ => panic!("text command does not have a text operand"),
+                    if let Operand::Text(text) = &mut cmd.operands[0] {
+                        let last = text.as_bytes().last().copied().unwrap_or(0);
+                        if last != b'\n' && last != VT as u8 {
+                            text.push(b);
+                            return Ok(());
+                        }
+                    } else {
+                        panic!("text command does not have a text operand");
                     }
-                    return Ok(());
                 }
             }
             let finished = self.end_operation().into_msg_command();
@@ -343,8 +358,6 @@ impl EventSerializer for AsmSerializer<'_> {
             MsgOp::Sfx => AsmMsgOp::Sfx,
             MsgOp::Voice => AsmMsgOp::Voice,
             MsgOp::Default => AsmMsgOp::Default,
-            MsgOp::Newline => AsmMsgOp::Newline,
-            MsgOp::NewlineVt => AsmMsgOp::NewlineVt,
             MsgOp::Format => AsmMsgOp::Format,
             MsgOp::Size => AsmMsgOp::Size,
             MsgOp::Color => AsmMsgOp::Color,
@@ -358,7 +371,7 @@ impl EventSerializer for AsmSerializer<'_> {
             MsgOp::NumInput => AsmMsgOp::NumInput,
             MsgOp::Question => AsmMsgOp::Question,
             MsgOp::Stay => AsmMsgOp::Stay,
-            MsgOp::Char(_) => AsmMsgOp::Text,
+            MsgOp::Char(_) | MsgOp::Newline | MsgOp::NewlineVt => AsmMsgOp::Text,
         };
         self.begin_operation(Operation::new(cmd));
         match ch {
@@ -706,7 +719,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
             Operand::U32(i) => write!(self.writer, "{}.d", i)?,
             Operand::Text(text) => {
                 let decoded = text.decode().unwrap();
-                let escaped = decoded.replace('\n', "\\n");
+                let escaped = decoded.replace('\n', "\\n").replace(VT, "\\v");
                 write!(self.writer, "\"{}\"", escaped)?
             }
             Operand::Label(label) => {
