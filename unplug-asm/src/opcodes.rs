@@ -15,7 +15,6 @@ pub trait NamedOpcode: Opcode {
 /// We don't use `MsgOp` directly because we want full text strings rather than single characters.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum AsmMsgOp {
-    End,
     Speed,
     Wait,
     Anim,
@@ -272,7 +271,6 @@ opcode_names! {
     }
 
     AsmMsgOp {
-        End => "end",
         Speed => "speed",
         Wait => "wait",
         Anim => "anim",

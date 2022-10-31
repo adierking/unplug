@@ -351,7 +351,7 @@ impl EventSerializer for AsmSerializer<'_> {
         }
 
         let cmd = match ch {
-            MsgOp::End => AsmMsgOp::End,
+            MsgOp::End => return Ok(()),
             MsgOp::Speed => AsmMsgOp::Speed,
             MsgOp::Wait => AsmMsgOp::Wait,
             MsgOp::Anim => AsmMsgOp::Anim,
