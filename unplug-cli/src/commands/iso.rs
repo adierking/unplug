@@ -3,7 +3,7 @@ use crate::context::Context;
 use crate::fst::{extract_file, list_files};
 use crate::opt::{IsoCommand, IsoExtractAllOpt, IsoExtractOpt, IsoListOpt, IsoReplaceOpt};
 use anyhow::{bail, Result};
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, BINARY};
 use log::info;
 use std::fs::{self, File};
 use unplug::common::io::BUFFER_SIZE;
@@ -32,8 +32,8 @@ fn command_info(ctx: Context) -> Result<()> {
     let total = disc.total_size() as u64;
     println!(
         "Disc Usage: {} / {} ({}%)",
-        used.file_size(file_size_opts::CONVENTIONAL).unwrap(),
-        total.file_size(file_size_opts::CONVENTIONAL).unwrap(),
+        used.format_size(BINARY),
+        total.format_size(BINARY),
         used * 100 / total
     );
 

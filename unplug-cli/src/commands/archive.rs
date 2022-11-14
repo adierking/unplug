@@ -6,7 +6,7 @@ use crate::opt::{
     QpCommand,
 };
 use anyhow::{bail, Result};
-use humansize::{file_size_opts, FileSize};
+use humansize::{FormatSize, BINARY};
 use log::{debug, info};
 use std::fs::{self, File};
 use std::io::{Seek, SeekFrom};
@@ -24,7 +24,7 @@ fn command_info(ctx: Context, path: &str) -> Result<()> {
     let info = ctx.query_file(&file)?;
     let archive = ArchiveReader::open(ctx.open_file(&file)?)?;
     println!("{}: U8 archive", &info.name);
-    println!("Size: {}", info.size.file_size(file_size_opts::CONVENTIONAL).unwrap());
+    println!("Size: {}", info.size.format_size(BINARY));
     println!("File Entries: {}", archive.files.len());
     Ok(())
 }
