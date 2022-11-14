@@ -378,7 +378,7 @@ impl LiveState {
             Expr::Variable(index) => self.analyze_variable(index),
             Expr::Result1 => self.resolve_label(Label::Result1),
             Expr::Result2 => self.resolve_label(Label::Result2),
-            Expr::Obj(obj) => self.analyze_obj(&**obj),
+            Expr::Obj(obj) => self.analyze_obj(obj),
             Expr::ArrayElement(arr) => self.analyze_array_element(arr),
 
             Expr::Equal(op)

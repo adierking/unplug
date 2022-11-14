@@ -26,7 +26,7 @@ fn write_labels_impl(
         let start = (cue.start as f64) / (sample_rate as f64);
         let end = ((cue.start + cue.duration()) as f64) / (sample_rate as f64);
         let name = match cue.kind {
-            CueKind::Loop => cue::add_loop_prefix(&*cue.name),
+            CueKind::Loop => cue::add_loop_prefix(&cue.name),
             CueKind::Point | CueKind::Range(_) => Cow::from(&*cue.name),
         };
         write!(writer, "{:.6}\t{:.6}\t{}\r\n", start, end, name)?;

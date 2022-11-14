@@ -32,7 +32,7 @@ fn test_edit_disc_file() -> Result<()> {
 
 fn check_resize_qp(copy_path: &Path, new_size: u32, expected_offset: u32) -> Result<()> {
     info!("Opening {}", copy_path.display());
-    let file = OpenOptions::new().read(true).write(true).open(&copy_path)?;
+    let file = OpenOptions::new().read(true).write(true).open(copy_path)?;
     let mut iso = DiscStream::open(file)?;
     common::check_iso(&iso)?;
 
@@ -45,7 +45,7 @@ fn check_resize_qp(copy_path: &Path, new_size: u32, expected_offset: u32) -> Res
 
     info!("Comparing ISOs");
     let mut old_iso = common::open_iso()?;
-    let mut new_iso = DiscStream::open(File::open(&copy_path)?)?;
+    let mut new_iso = DiscStream::open(File::open(copy_path)?)?;
     let old_qp = old_iso.files.file_at("qp.bin")?;
     let new_qp = new_iso.files.file_at("qp.bin")?;
     assert_eq!(old_qp.offset, OLD_QP_OFFSET);
@@ -61,7 +61,7 @@ fn check_resize_qp(copy_path: &Path, new_size: u32, expected_offset: u32) -> Res
 
 fn check_move_file(copy_path: &Path, new_offset: u32) -> Result<()> {
     info!("Opening {}", copy_path.display());
-    let file = OpenOptions::new().read(true).write(true).open(&copy_path)?;
+    let file = OpenOptions::new().read(true).write(true).open(copy_path)?;
     let mut iso = DiscStream::open(file)?;
     common::check_iso(&iso)?;
 
@@ -73,7 +73,7 @@ fn check_move_file(copy_path: &Path, new_offset: u32) -> Result<()> {
 
     info!("Comparing ISOs");
     let mut old_iso = common::open_iso()?;
-    let mut new_iso = DiscStream::open(File::open(&copy_path)?)?;
+    let mut new_iso = DiscStream::open(File::open(copy_path)?)?;
     let old_qp = old_iso.files.file_at("qp.bin")?;
     let new_qp = new_iso.files.file_at("qp.bin")?;
     assert_eq!(old_qp.offset, OLD_QP_OFFSET);
@@ -86,7 +86,7 @@ fn check_move_file(copy_path: &Path, new_offset: u32) -> Result<()> {
 
 fn check_edit_file(copy_path: &Path) -> Result<()> {
     info!("Opening {}", copy_path.display());
-    let file = OpenOptions::new().read(true).write(true).open(&copy_path)?;
+    let file = OpenOptions::new().read(true).write(true).open(copy_path)?;
     let mut iso = DiscStream::open(file)?;
     common::check_iso(&iso)?;
 
@@ -101,7 +101,7 @@ fn check_edit_file(copy_path: &Path) -> Result<()> {
 
 fn check_replace_file(copy_path: &Path) -> Result<()> {
     info!("Opening {}", copy_path.display());
-    let file = OpenOptions::new().read(true).write(true).open(&copy_path)?;
+    let file = OpenOptions::new().read(true).write(true).open(copy_path)?;
     let mut iso = DiscStream::open(file)?;
     common::check_iso(&iso)?;
 
@@ -110,7 +110,7 @@ fn check_replace_file(copy_path: &Path) -> Result<()> {
     drop(iso);
 
     info!("Checking updated file");
-    let mut iso = DiscStream::open(File::open(&copy_path)?)?;
+    let mut iso = DiscStream::open(File::open(copy_path)?)?;
     let reader = iso.open_file_at("qp.bin")?;
     assert!(common::compare_streams(reader, Cursor::new(b"Hello, world!"))?);
     Ok(())

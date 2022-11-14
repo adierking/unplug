@@ -186,7 +186,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
             });
             // Loop cues are stored with the loop prefix so they can be loaded back
             let name = match cue.kind {
-                CueKind::Loop => cue::add_loop_prefix(&*cue.name),
+                CueKind::Loop => cue::add_loop_prefix(&cue.name),
                 CueKind::Point | CueKind::Range(_) => Cow::from(&*cue.name),
             };
             let text = CString::new(&*name).unwrap();

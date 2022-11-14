@@ -455,7 +455,7 @@ fn export_bank_impl<T: ReadSeek>(
     let bank = ctx.read_bank_file(file)?;
     // Omit names for unusable banks (sfx_hori.ssm)
     let have_names = have_sample_names(&bank);
-    fs::create_dir_all(&dir)?;
+    fs::create_dir_all(dir)?;
     let progress = progress_bar(bank.len() as u64);
     for (i, _) in bank.samples().enumerate() {
         let name = sfx_name(&bank, i, have_names);

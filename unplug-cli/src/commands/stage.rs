@@ -466,7 +466,7 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
     info!("Updating game files");
     let mut update = ctx.begin_update();
     for (id, stage) in updated {
-        update = update.write_stage(id, &*stage)?;
+        update = update.write_stage(id, &stage)?;
     }
     update.commit()?;
     Ok(())

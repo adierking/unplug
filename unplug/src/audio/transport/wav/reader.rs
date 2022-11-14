@@ -246,7 +246,7 @@ impl<'a> WavReader<'a> {
         for (id, cue) in &mut cues {
             if cue.name.is_empty() {
                 cue.name = format!("{}", id).into();
-            } else if cue::has_loop_prefix(&*cue.name) {
+            } else if cue::has_loop_prefix(&cue.name) {
                 cue.kind = CueKind::Loop;
             }
         }

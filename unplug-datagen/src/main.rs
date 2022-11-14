@@ -213,7 +213,7 @@ lazy_static! {
     ].into_iter().collect();
 
     /// Regexes matching sound names to discard because they are duplicates.
-    static ref DUPLICATE_SOUND_DISCARDS: RegexSet = RegexSet::new(&[
+    static ref DUPLICATE_SOUND_DISCARDS: RegexSet = RegexSet::new([
         r"^none$",
         r"^robo_waik$",
         r"^robo_charge2$",

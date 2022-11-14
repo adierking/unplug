@@ -168,8 +168,8 @@ mod tests {
     ];
 
     fn do_glob(mode: GlobMode, glob_str: &str) -> Vec<String> {
-        let glob = Glob::new(mode, &[glob_str]);
-        glob.find(&*TEST_TREE).into_iter().map(|(p, _)| p).collect()
+        let glob = Glob::new(mode, [glob_str]);
+        glob.find(&TEST_TREE).into_iter().map(|(p, _)| p).collect()
     }
 
     fn do_common_globs(mode: GlobMode) {

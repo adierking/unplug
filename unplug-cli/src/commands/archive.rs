@@ -46,7 +46,7 @@ fn command_extract(ctx: Context, path: &str, opt: ArchiveExtractOpt) -> Result<(
         bail!("Nothing to extract");
     }
     let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), files.len() > 1);
-    fs::create_dir_all(&out_dir)?;
+    fs::create_dir_all(out_dir)?;
     let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
     for (path, entry) in files {
         extract_file(&mut archive, entry, &path, out_dir, out_name.as_deref(), &mut io_buf)?;
@@ -59,7 +59,7 @@ fn command_extract_all(ctx: Context, path: &str, opt: ArchiveExtractAllOpt) -> R
     let mut ctx = ctx.open_read()?;
     let mut archive = ArchiveReader::open(ctx.open_file_at(path)?)?;
     let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
-    fs::create_dir_all(&out_dir)?;
+    fs::create_dir_all(out_dir)?;
     let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
     let root = archive.files.root();
     extract_file(&mut archive, root, "/", out_dir, out_name.as_deref(), &mut io_buf)?;
