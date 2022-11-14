@@ -8,6 +8,7 @@ edition = "2021"
 bitflags = "1.2.1"
 chumsky = "0.8.0"
 logos = "0.12.1"
+num-traits = "0.2"
 phf = { version = "0.10", features = ["macros"] }
 slotmap = "1.0"
 smallvec = { version = "1.9.0", features = ["union"] }

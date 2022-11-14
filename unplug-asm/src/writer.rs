@@ -457,6 +457,7 @@ impl<'a> ProgramBuilder<'a> {
                 block.next = Some(BlockId::new(i as u32 + 1));
             }
         }
+        self.program.mark_subroutines();
         self.program
     }
 
@@ -470,7 +471,6 @@ impl<'a> ProgramBuilder<'a> {
         for &block in &order {
             self.add_code(block)?;
         }
-        entry_point.get_mut(&mut self.program.blocks).flags.insert(BlockFlags::SUBROUTINE);
 
         let name = format!("sub_{}", entry_point.index());
         match self.program.labels.find_block(entry_point).first() {

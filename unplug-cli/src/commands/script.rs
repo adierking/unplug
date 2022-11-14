@@ -9,13 +9,14 @@ use anyhow::{anyhow, Result};
 use log::error;
 use log::info;
 use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 use unplug::data::{Resource, Stage as StageId};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
+use unplug_asm::assembler::ProgramAssembler;
 use unplug_asm::lexer::{Logos, Token};
 use unplug_asm::parser::{Ast, Parser, Stream};
 use unplug_asm::program::EntryPoint;
@@ -217,9 +218,9 @@ fn command_assemble(_ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
             };
         }
     };
-    for item in ast.items {
-        println!("{:?}", item);
-    }
+    let program = ProgramAssembler::new(&ast).assemble()?;
+    let stdout = BufWriter::new(io::stdout().lock());
+    ProgramWriter::new(stdout, &program).write()?;
     Ok(())
 }
 

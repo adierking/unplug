@@ -2,6 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::fs;
 use tempfile::TempDir;
+use unplug_asm::assembler::ProgramAssembler;
 use unplug_asm::lexer::{Logos, Token};
 use unplug_asm::parser::{Ast, Parser, Stream};
 use unplug_cli::commands::script;
@@ -21,12 +22,15 @@ fn test_disassemble_scripts() -> Result<()> {
     let mut paths = fs::read_dir(out_dir.path())?.map(|e| e.unwrap().path()).collect::<Vec<_>>();
     paths.sort_unstable();
     for path in paths {
-        info!("Parsing {}", path.file_name().unwrap().to_string_lossy());
+        let name = path.file_name().unwrap().to_string_lossy();
+        info!("Parsing {}", name);
         let contents = fs::read_to_string(&path)?;
         let len = contents.len();
         let lexer = Token::lexer(&contents);
         let stream = Stream::from_iter(len..len + 1, lexer.spanned());
-        Ast::parser().parse(stream).unwrap();
+        let ast = Ast::parser().parse(stream).unwrap();
+        info!("Assembling {}", name);
+        ProgramAssembler::new(&ast).assemble()?;
     }
     Ok(())
 }

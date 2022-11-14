@@ -29,6 +29,14 @@ impl<T> Node<T> {
     pub fn with_span(data: T, span: Range<usize>) -> Self {
         Self { data, span }
     }
+
+    /// Calls a function to map the value of this node to a new one with the same span.
+    pub fn map<U, F>(&self, func: F) -> Node<U>
+    where
+        F: FnOnce(&T) -> U,
+    {
+        Node::with_span(func(&self.data), self.span.clone())
+    }
 }
 
 impl<T> From<T> for Node<T> {

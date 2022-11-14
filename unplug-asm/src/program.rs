@@ -1,12 +1,22 @@
 use crate::label::{LabelId, LabelMap};
+use crate::lexer::Number;
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
+use crate::{Error, Result};
 use bitflags::bitflags;
+use num_traits::NumCast;
 use smallvec::SmallVec;
+use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::{self, Display, Formatter};
 use unplug::common::Text;
-use unplug::event::opcodes::{CmdOp, ExprOp, TypeOp};
+use unplug::event::opcodes::{CmdOp, ExprOp, Opcode, TypeOp};
 use unplug::event::BlockId;
 use unplug::stage::Event;
+
+mod private {
+    pub trait Sealed {}
+}
+use private::Sealed;
 
 /// Data which can be operated on.
 #[derive(Debug, Clone)]
@@ -39,11 +49,38 @@ pub enum Operand {
     MsgCommand(Box<Operation<AsmMsgOp>>),
 }
 
+impl Operand {
+    /// Casts the operand to an integer type. Returns the integer on success, and returns an
+    /// appropriate error on failure.
+    pub fn cast<T: CastOperand>(&self) -> Result<T> {
+        let result = match *self {
+            Operand::I8(x) => T::from(x).ok_or_else(|| Number::I8(x.into())),
+            Operand::U8(x) => T::from(x).ok_or_else(|| Number::U8(x.into())),
+            Operand::I16(x) => T::from(x).ok_or_else(|| Number::I16(x.into())),
+            Operand::U16(x) => T::from(x).ok_or_else(|| Number::U16(x.into())),
+            Operand::I32(x) => T::from(x).ok_or(Number::I32(x)),
+            Operand::U32(x) => T::from(x).ok_or(Number::U32(x)),
+            _ => return Err(Error::ExpectedInteger),
+        };
+        result.map_err(T::error)
+    }
+
+    /// If the operand is a `Label`, returns the label ID, otherwise returns an appropriate error.
+    pub fn label(&self) -> Result<LabelId> {
+        match *self {
+            Operand::Label(id) => Ok(id),
+            Operand::ElseLabel(_) => Err(Error::UnexpectedElseLabel),
+            _ => Err(Error::ExpectedLabel),
+        }
+    }
+}
+
+// `From` implementations for `Operand`
 macro_rules! impl_operand_from {
-    ($type:ty, $name:ident) => {
+    ($type:ty, $variant:ident) => {
         impl From<$type> for Operand {
             fn from(x: $type) -> Self {
-                Self::$name(x.into())
+                Self::$variant(x.into())
             }
         }
     };
@@ -58,6 +95,95 @@ impl_operand_from!(Text, Text);
 impl_operand_from!(TypeOp, Type);
 impl_operand_from!(Operation<ExprOp>, Expr);
 impl_operand_from!(Operation<AsmMsgOp>, MsgCommand);
+
+/// Trait for a primitive type which an operand can be cast to.
+pub trait CastOperand: NumCast + Sealed {
+    /// Maps `num` to an error corresponding to this type.
+    fn error(num: Number) -> Error;
+}
+
+// `CastOperand` implementations
+macro_rules! impl_cast_operand {
+    ($type:ty, $err:path) => {
+        impl Sealed for $type {}
+        impl CastOperand for $type {
+            fn error(num: Number) -> Error {
+                $err(num)
+            }
+        }
+    };
+}
+impl_cast_operand!(i8, Error::CannotConvertToI8);
+impl_cast_operand!(u8, Error::CannotConvertToU8);
+impl_cast_operand!(i16, Error::CannotConvertToI16);
+impl_cast_operand!(u16, Error::CannotConvertToU16);
+impl_cast_operand!(i32, Error::CannotConvertToI32);
+impl_cast_operand!(u32, Error::CannotConvertToU32);
+
+/// Operand type hints.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum OperandType {
+    /// The operand may be any type.
+    Unknown,
+    /// The operand must be a byte.
+    Byte,
+    /// The operand must be a word.
+    Word,
+    /// The operand must be a dword.
+    Dword,
+    /// The operand must be a message command.
+    Message,
+}
+
+impl Display for OperandType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(match *self {
+            OperandType::Unknown => "unknown",
+            OperandType::Byte => "byte",
+            OperandType::Word => "word",
+            OperandType::Dword => "dword",
+            OperandType::Message => "message",
+        })
+    }
+}
+
+/// Trait for getting an operand type hint from an opcode.
+pub trait TypeHint: Opcode {
+    /// Returns the operand type hint corresponding to this opcode.
+    fn type_hint(self) -> OperandType;
+}
+
+impl TypeHint for CmdOp {
+    fn type_hint(self) -> OperandType {
+        match self {
+            CmdOp::Msg | CmdOp::Select => OperandType::Message,
+            _ => OperandType::Unknown,
+        }
+    }
+}
+
+impl TypeHint for ExprOp {
+    fn type_hint(self) -> OperandType {
+        OperandType::Unknown
+    }
+}
+
+impl TypeHint for DirOp {
+    fn type_hint(self) -> OperandType {
+        match self {
+            DirOp::Byte => OperandType::Byte,
+            DirOp::Word => OperandType::Word,
+            DirOp::Dword => OperandType::Dword,
+            _ => OperandType::Unknown,
+        }
+    }
+}
+
+impl TypeHint for AsmMsgOp {
+    fn type_hint(self) -> OperandType {
+        OperandType::Unknown
+    }
+}
 
 /// An operation consisting of an opcode and zero or more operands.
 #[derive(Debug, Clone)]
@@ -211,6 +337,24 @@ impl Block {
     pub fn is_data(&self) -> bool {
         matches!(&self.content, Some(BlockContent::Data(_)))
     }
+
+    /// Appends a command to the end of a code block. If the block is empty, it will become a code
+    /// block. ***Panics*** if the block already contains data.
+    pub fn push_command(&mut self, command: Operation<CmdOp>) {
+        match self.content.get_or_insert(BlockContent::Code(vec![])) {
+            BlockContent::Code(c) => c.push(command),
+            BlockContent::Data(_) => panic!("cannot append a command to a data block"),
+        }
+    }
+
+    /// Appends data to the end of a data block. If the block is empty, it will become a data block.
+    /// ***Panics*** if the block already contains code.
+    pub fn push_data(&mut self, data: impl IntoIterator<Item = Operand>) {
+        match self.content.get_or_insert(BlockContent::Data(vec![])) {
+            BlockContent::Code(_) => panic!("cannot append a command to a data block"),
+            BlockContent::Data(d) => d.extend(data),
+        }
+    }
 }
 
 /// A kind of entry point into a program.
@@ -261,5 +405,59 @@ impl Program {
     /// Creates a program with blocks populated from `blocks`.
     pub fn with_blocks(blocks: impl Into<Vec<Block>>, first_block: Option<BlockId>) -> Self {
         Self { blocks: blocks.into(), first_block, ..Default::default() }
+    }
+
+    /// Inserts `block` after `after_id` in program order and returns the new block's ID.
+    /// If `after_id` is `None`, the block will be inserted at the beginning of the program.
+    pub fn insert_after(&mut self, after_id: Option<BlockId>, mut block: Block) -> BlockId {
+        let new_id = BlockId::new(self.blocks.len() as u32);
+        let next = match after_id {
+            Some(id) => id.get(&self.blocks).next,
+            None => self.first_block,
+        };
+        block.next = next;
+        self.blocks.push(block);
+        match after_id {
+            Some(id) => id.get_mut(&mut self.blocks).next = Some(new_id),
+            None => self.first_block = Some(new_id),
+        };
+        new_id
+    }
+
+    /// Scans through commands in the program and marks subroutines and entry points with the
+    /// correct block flags.
+    pub fn mark_subroutines(&mut self) {
+        for index in 0..self.blocks.len() {
+            // We can't get a mutable reference to self.blocks inside the operand loop, so
+            // split it into (before, block, after) instead
+            let (before, right) = self.blocks.split_at_mut(index);
+            let (block, after) = right.split_first_mut().unwrap();
+            if let Some(BlockContent::Code(code)) = &block.content {
+                for cmd in code {
+                    // Assume any top-level label reference operand which is not part of a control
+                    // flow command refers to a subroutine
+                    if !cmd.operands.is_empty() && !cmd.opcode.is_control_flow() {
+                        for operand in &cmd.operands {
+                            if let Operand::Label(label) = operand {
+                                let target_id = self.labels.get(*label).block.unwrap();
+                                let target_index = target_id.index();
+                                let flags = match target_index.cmp(&index) {
+                                    Ordering::Less => &mut before[target_index].flags,
+                                    Ordering::Equal => &mut block.flags,
+                                    Ordering::Greater => &mut after[target_index - index - 1].flags,
+                                };
+                                flags.insert(BlockFlags::SUBROUTINE);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Entry points are also subroutines
+        for block_id in self.entry_points.values() {
+            let block = block_id.get_mut(&mut self.blocks);
+            block.flags.insert(BlockFlags::ENTRY_POINT | BlockFlags::SUBROUTINE);
+        }
     }
 }

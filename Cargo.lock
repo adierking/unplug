@@ -1954,6 +1954,7 @@ dependencies = [
  "bitflags",
  "chumsky",
  "logos",
+ "num-traits",
  "phf",
  "slotmap",
  "smallvec",

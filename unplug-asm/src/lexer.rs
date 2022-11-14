@@ -120,17 +120,21 @@ impl Display for Number {
     }
 }
 
-impl From<i32> for Number {
-    fn from(x: i32) -> Self {
-        Self::IAuto(x)
-    }
+macro_rules! impl_number_from {
+    ($from:ty, $variant:ident) => {
+        impl From<$from> for Number {
+            fn from(x: $from) -> Self {
+                Self::$variant(x.into())
+            }
+        }
+    };
 }
-
-impl From<u32> for Number {
-    fn from(x: u32) -> Self {
-        Self::UAuto(x)
-    }
-}
+impl_number_from!(i8, I8);
+impl_number_from!(u8, U8);
+impl_number_from!(i16, I16);
+impl_number_from!(u16, U16);
+impl_number_from!(i32, I32);
+impl_number_from!(u32, U32);
 
 /// Callback for identifiers
 fn identifier(lex: &mut Lexer<'_, Token>) -> SmolStr {
