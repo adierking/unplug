@@ -219,8 +219,9 @@ fn command_assemble(_ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
         }
     };
     let program = ProgramAssembler::new(&ast).assemble()?;
-    let stdout = BufWriter::new(io::stdout().lock());
-    ProgramWriter::new(stdout, &program).write()?;
+    let stdout = io::stdout();
+    let out = BufWriter::new(stdout.lock());
+    ProgramWriter::new(out, &program).write()?;
     Ok(())
 }
 
