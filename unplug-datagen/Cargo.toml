@@ -1,17 +1,18 @@
 [package]
 name = "unplug-datagen"
 version = "0.0.0"
-authors = ["Derpky"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-anyhow = "1.0"
-bitflags = "1.2.1"
-byteorder = "1"
-lazy_static = "1.4.0"
-log = { version = "0.4", features = ["release_max_level_debug"] }
-num_enum = "0.5.1"
-regex = "1"
-simplelog = "^0.12.0"
-time = { version = "0.3", features = ["formatting", "macros"] }
+anyhow.workspace = true
+bitflags.workspace = true
+byteorder.workspace = true
+lazy_static.workspace = true
+log = { workspace = true, features = ["release_max_level_debug"] }
+num_enum.workspace = true
+regex.workspace = true
+simplelog.workspace = true
+time.workspace = true
 unplug = { path = "../unplug" }

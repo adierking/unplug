@@ -1,18 +1,19 @@
 [package]
 name = "unplug-asm"
 version = "0.0.0"
-authors = ["Derpky"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-bitflags = "1.2.1"
-chumsky = "0.8.0"
-logos = "0.12.1"
-num-traits = "0.2"
-phf = { version = "0.10", features = ["macros"] }
-slotmap = "1.0"
-smallvec = { version = "1.9.0", features = ["union"] }
-smol_str = "0.1.23"
-thiserror = "1.0"
-tracing = { version = "0.1.29", features = ["log"] }
+bitflags.workspace = true
+chumsky.workspace = true
+logos.workspace = true
+num-traits.workspace = true
+phf.workspace = true
+slotmap.workspace = true
+smallvec.workspace = true
+smol_str.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
 unplug = { path = "../unplug" }

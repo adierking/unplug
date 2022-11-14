@@ -1,14 +1,15 @@
 [package]
 name = "unplug-data"
 version = "0.0.0"
-authors = ["Derpky"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-bitflags = "1.2.1"
-num_enum = "0.5.1"
-num-traits = "0.2"
-phf = { version = "0.10", features = ["macros"] }
-phf_macros = { version = "0.10", features = ["unicase"] }
-thiserror = "1.0"
-unicase = "2.6"
+bitflags.workspace = true
+num_enum.workspace = true
+num-traits.workspace = true
+phf.workspace = true
+phf_macros.workspace = true
+thiserror.workspace = true
+unicase.workspace = true

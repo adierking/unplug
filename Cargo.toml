@@ -16,6 +16,66 @@ default-members = [
     "unplug-test",
 ]
 
+[workspace.package]
+authors = ["Derpky <a@dierking.me>"]
+edition = "2021"
+rust-version = "1.65"
+version = "0.4.0"
+
+[workspace.dependencies]
+anyhow = "1.0"
+arrayvec = "0.7"
+bitflags = "1.2.1"
+byte-slice-cast = "1.1.0"
+byteorder = "1"
+cfg-if = "1.0"
+chumsky = "0.8.0"
+clap = { version = "3.2.5", features = ["derive", "unicode"] }
+claxon = "0.4.3"
+console = { version = "0.15.0", default-features = false }
+cpal = "0.13.4"
+criterion = { version = "0.3", features = ["html_reports"] }
+crossterm = "0.23.2"
+ctor = "0.1.21"
+dirs = "4.0"
+encoding_rs = "0.8.26"
+env_logger = "0.9"
+float-cmp = { version = "0.9.0", default_features = false, features = ["std"] }
+humansize = "1.1.1"
+indicatif = "0.16.2"
+lazy_static = "1.4.0"
+lewton = "0.10.2"
+libsamplerate-sys = "0.1.10"
+log = { version = "0.4" }
+logos = "0.12.1"
+minimp3 = "0.5"
+num_enum = "0.5.1"
+num-traits = "0.2"
+phf = { version = "0.10", features = ["macros"] }
+phf_macros = { version = "0.10", features = ["unicase"] }
+proc-macro2 = "1.0"
+quick-xml = "0.23"
+quote = "1.0"
+regex = "1"
+seahash = "4.1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serial_test = "*"
+simplelog = "^0.12.0"
+slotmap = "1.0"
+smallvec = { version = "1.9.0", features = ["union"] }
+smol_str = "0.1.23"
+syn = "1.0"
+tempfile = "3"
+thiserror = "1.0"
+time = { version = "0.3", features = ["formatting", "macros"] }
+toml = "0.5"
+tracing = { version = "0.1.35", features = ["log"] }
+tracing-appender = "0.2"
+tracing-flame = "0.2"
+tracing-subscriber = "0.3.11"
+unicase = "2.6"
+
 [profile.bench]
 debug = true
 

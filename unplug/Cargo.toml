@@ -1,29 +1,30 @@
 [package]
 name = "unplug"
-version = "0.4.0"
-authors = ["Derpky"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
-arrayvec = "0.7"
-bitflags = "1.2.1"
-byte-slice-cast = "1.1.0"
-byteorder = "1"
-claxon = "0.4.3"
-encoding_rs = "0.8.26"
-float-cmp = { version = "0.9.0", default_features = false, features = ["std"] }
-lewton = "0.10.2"
-libsamplerate-sys = "0.1.10"
-minimp3 = "0.5"
-num_enum = "0.5.1"
-regex = "1"
-slotmap = "1.0"
-thiserror = "1.0"
-tracing = { version = "0.1.29", features = ["log"] }
+arrayvec.workspace = true
+bitflags.workspace = true
+byte-slice-cast.workspace = true
+byteorder.workspace = true
+claxon.workspace = true
+encoding_rs.workspace = true
+float-cmp.workspace = true
+lewton.workspace = true
+libsamplerate-sys.workspace = true
+minimp3.workspace = true
+num_enum.workspace = true
+regex.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
 unplug-data = { path = "../unplug-data" }
 unplug-proc = { path = "../unplug-proc" }
 
 [dev-dependencies]
-ctor = "0.1.21"
-env_logger = "0.9"
-lazy_static = "1.4.0"
+ctor.workspace = true
+env_logger.workspace = true
+lazy_static.workspace = true

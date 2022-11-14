@@ -48,7 +48,7 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Check
-        run: cargo +1.56 check --workspace --all-targets --target ${{ matrix.target }}
+        run: cargo check --workspace --all-targets --target ${{ matrix.target }}
 
       - name: Build CLI
         run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
