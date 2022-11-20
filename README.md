@@ -4,7 +4,7 @@
 
 [![Release](https://img.shields.io/github/v/release/adierking/unplug)](https://github.com/adierking/unplug/releases)
 [![Build Status](https://img.shields.io/github/workflow/status/adierking/unplug/Rust)](https://github.com/adierking/unplug/actions)
-[![Test Coverage](https://img.shields.io/coveralls/github/adierking/unplug)](https://coveralls.io/github/adierking/unplug)
+[![Test Coverage](https://img.shields.io/coverallsCoverage/github/adierking/unplug)](https://coveralls.io/github/adierking/unplug)
 [![License](https://img.shields.io/github/license/adierking/unplug)](COPYING)
 
 :satellite: [Download](https://github.com/adierking/unplug/releases)<br>
