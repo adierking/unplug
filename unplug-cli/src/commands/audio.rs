@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Cursor, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 use unplug::audio::format::PcmS16Le;
@@ -376,7 +376,10 @@ fn command_export(ctx: Context, opt: AudioExportOpt) -> Result<()> {
 fn command_export_bank(ctx: Context, opt: AudioExportBankOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let file = find_bank(&mut ctx, &opt.name)?;
-    export_bank_impl(&mut ctx, &opt.settings, &file, &opt.output, "")?;
+    let name = ctx.query_file(&file)?.name;
+    let dir =
+        opt.output.unwrap_or_else(|| PathBuf::from(name.rsplit_once('.').unwrap_or((&name, "")).0));
+    export_bank_impl(&mut ctx, &opt.settings, &file, &dir, "")?;
     Ok(())
 }
 

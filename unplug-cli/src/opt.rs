@@ -1,7 +1,7 @@
 #![allow(trivial_numeric_casts, variant_size_differences)]
 
 use anyhow::{anyhow, Result};
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand};
 use std::path::PathBuf;
 
 /// The minimum accepted volume level for playback.
@@ -18,12 +18,12 @@ pub struct Opt {
     /// Show debug logs
     ///
     /// Use -vv in non-distribution builds to show trace logs as well
-    #[clap(short, long, parse(from_occurrences), global(true))]
-    pub verbose: u64,
+    #[clap(short, long, action = ArgAction::Count, global(true))]
+    pub verbose: u8,
 
     /// Capture inferno trace data to a file (for developers)
     #[cfg(feature = "trace")]
-    #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
+    #[clap(long, value_name("PATH"), global(true))]
     pub trace: Option<PathBuf>,
 
     #[clap(flatten)]
@@ -39,7 +39,7 @@ pub struct Opt {
 #[derive(Args)]
 pub struct ConfigOpt {
     /// Path to the config file to use (will be created if necessary)
-    #[clap(long, value_name("PATH"), parse(from_os_str), global(true))]
+    #[clap(long, value_name("PATH"), global(true))]
     pub config: Option<PathBuf>,
 
     /// Ignore the config file and use default settings instead
@@ -50,7 +50,7 @@ pub struct ConfigOpt {
 #[derive(Args)]
 pub struct ContextOpt {
     /// Run the command on an ISO
-    #[clap(long, value_name("PATH"), parse(from_os_str), global(true), group("context"))]
+    #[clap(long, value_name("PATH"), global(true), group("context"))]
     pub iso: Option<PathBuf>,
 
     /// Run the command on the default ISO
@@ -121,6 +121,9 @@ pub enum Command {
     #[clap(subcommand)]
     /// Debugging commands (development builds only)
     Debug(DebugCommand),
+
+    #[cfg(test)]
+    Test,
 }
 
 #[derive(Subcommand)]
@@ -188,7 +191,6 @@ pub struct ProjectInfoOpt {
 #[derive(Args)]
 pub struct ProjectAddOpt {
     /// Path to the project file(s)
-    #[clap(parse(from_os_str))]
     pub path: PathBuf,
 
     /// The project name (defaults to the filename)
@@ -214,11 +216,11 @@ pub struct ProjectNewOpt {
     pub name: String,
 
     /// Path to the ISO to copy from
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub source: Option<PathBuf>,
 
     /// Path of the new ISO
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 
     /// Allow overwriting existing projects/files
@@ -341,7 +343,7 @@ pub struct ScriptDumpOpt {
     pub stage: String,
 
     /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 
     #[clap(flatten)]
@@ -351,7 +353,7 @@ pub struct ScriptDumpOpt {
 #[derive(Args)]
 pub struct ScriptDumpAllOpt {
     /// Path to the output directory
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: PathBuf,
 
     #[clap(flatten)]
@@ -364,21 +366,21 @@ pub struct ScriptDisassembleOpt {
     pub stage: String,
 
     /// Path to the output file
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: PathBuf,
 }
 
 #[derive(Args)]
 pub struct ScriptDisassembleAllOpt {
     /// Path to the output directory
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: PathBuf,
 }
 
 #[derive(Args)]
 pub struct ScriptAssembleOpt {
     /// Path to the assembly source
-    #[clap(value_name("PATH"), parse(from_os_str))]
+    #[clap(value_name("PATH"))]
     pub path: PathBuf,
 }
 
@@ -393,14 +395,13 @@ pub enum MessagesCommand {
 #[derive(Args)]
 pub struct MessagesExportOpt {
     /// Path to the output XML file
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: PathBuf,
 }
 
 #[derive(Args)]
 pub struct MessagesImportOpt {
     /// Path to the input XML file
-    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
@@ -421,21 +422,20 @@ pub struct GlobalsExportOpt {
     pub compact: bool,
 
     /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 }
 
 #[derive(Args)]
 pub struct GlobalsImportOpt {
     /// Path to the input JSON file
-    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
 #[derive(Args)]
 pub struct GlobalsDumpCollidersOpt {
     /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 }
 
@@ -454,14 +454,13 @@ pub struct ShopExportOpt {
     pub compact: bool,
 
     /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 }
 
 #[derive(Args)]
 pub struct ShopImportOpt {
     /// Path to the input JSON file
-    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
@@ -506,21 +505,22 @@ pub struct AudioInfoOpt {
 pub struct AudioExportOpt {
     /// If extracting one audio resource, the path of the .wav file to write, otherwise the
     /// directory to write the audio files to
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 
     #[clap(flatten)]
     pub settings: AudioExportSettings,
 
     /// Names or paths of the audio resources to export
+    #[clap(required = true)]
     pub names: Vec<String>,
 }
 
 #[derive(Args)]
 pub struct AudioExportBankOpt {
     /// The directory to write the bank's .wav files to (defaults to the bank name)
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
-    pub output: PathBuf,
+    #[clap(short, value_name("PATH"))]
+    pub output: Option<PathBuf>,
 
     #[clap(flatten)]
     pub settings: AudioExportSettings,
@@ -532,7 +532,7 @@ pub struct AudioExportBankOpt {
 #[derive(Args)]
 pub struct AudioExportAllOpt {
     /// The directory to write files to
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: PathBuf,
 
     #[clap(flatten)]
@@ -548,11 +548,10 @@ pub struct AudioImportOpt {
     pub settings: AudioImportSettings,
 
     /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
-    #[clap(parse(from_os_str))]
     pub path: PathBuf,
 }
 
-/// `try_from_str` parser for parsing a playback volume
+/// Clap value parser for parsing a playback volume
 fn parse_volume(s: &str) -> Result<f64> {
     let volume = s.parse::<i32>()?;
     if (MIN_VOLUME..=MAX_VOLUME).contains(&volume) {
@@ -568,7 +567,7 @@ pub struct AudioPlayOpt {
     pub name: String,
 
     /// Volume level as a percentage (0-100, default 80)
-    #[clap(long, default_value = "80", parse(try_from_str = parse_volume))]
+    #[clap(long, default_value = "80", allow_hyphen_values = true, value_parser = parse_volume)]
     pub volume: f64,
 }
 
@@ -610,7 +609,7 @@ pub struct IsoListOpt {
 pub struct IsoExtractOpt {
     /// If extracting one file, the path of the output file, otherwise the
     /// directory to extract files to
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 
     /// Paths of files to extract
@@ -620,7 +619,7 @@ pub struct IsoExtractOpt {
 #[derive(Args)]
 pub struct IsoExtractAllOpt {
     /// The directory to extract files to
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 }
 
@@ -631,7 +630,7 @@ pub struct IsoReplaceOpt {
     pub dest_path: String,
 
     /// Path to the file to replace it with
-    #[clap(value_name("src"), parse(from_os_str))]
+    #[clap(value_name("src"))]
     pub src_path: PathBuf,
 }
 
@@ -685,7 +684,7 @@ pub struct ArchiveListOpt {
 pub struct ArchiveExtractOpt {
     /// If extracting one file, the path of the output file, otherwise the
     /// directory to extract files to
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 
     /// Paths of files to extract
@@ -695,7 +694,7 @@ pub struct ArchiveExtractOpt {
 #[derive(Args)]
 pub struct ArchiveExtractAllOpt {
     /// The directory to extract files to
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 }
 
@@ -706,7 +705,7 @@ pub struct ArchiveReplaceOpt {
     pub dest_path: String,
 
     /// Path to the file to replace it with
-    #[clap(value_name("src"), parse(from_os_str))]
+    #[clap(value_name("src"))]
     pub src_path: PathBuf,
 }
 
@@ -749,14 +748,14 @@ pub struct StageExportOpt {
     pub stage: String,
 
     /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: Option<PathBuf>,
 }
 
 #[derive(Args)]
 pub struct StageExportAllOpt {
     /// Path to the output directory
-    #[clap(short, value_name("PATH"), parse(from_os_str))]
+    #[clap(short, value_name("PATH"))]
     pub output: PathBuf,
 }
 
@@ -766,17 +765,814 @@ pub struct StageImportOpt {
     pub stage: String,
 
     /// Path to the input JSON file
-    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 }
 
 #[derive(Args)]
 pub struct StageImportAllOpt {
     /// Path to the input directory
-    #[clap(parse(from_os_str))]
     pub input: PathBuf,
 
     /// Always import a stage even if it hasn't changed
     #[clap(short, long)]
     pub force: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::{ErrorKind, Parser};
+    use std::ffi::OsString;
+    use std::iter;
+    use std::path::Path;
+
+    /// Generates a mapping function which pattern-matches a parsed command
+    macro_rules! mapper {
+        ($p:pat => $out:expr) => {
+            |a: Opt| {
+                let $p = a.command else { panic!() };
+                $out
+            }
+        };
+    }
+
+    /// Parses `args` using an argument parser, maps the results using `mapper`, and passes the
+    /// final value to `predicate`.
+    fn parse<O, S, I, M, A, F>(args: I, mapper: M, predicate: F)
+    where
+        O: Parser,
+        S: Into<OsString> + Clone,
+        I: IntoIterator<Item = S>,
+        M: FnOnce(O) -> A,
+        F: FnOnce(A),
+    {
+        let opt = O::try_parse_from(
+            iter::once(OsString::new()).chain(args.into_iter().map(|a| a.into())),
+        )
+        .unwrap();
+        predicate(mapper(opt));
+    }
+
+    /// Parses each list of arguments in `argsets` using an argument parser, maps each result using
+    /// `mapper`, and calls `predicate` for each value.
+    fn multiparse<O, S, I, J, M, A, F>(argsets: J, mapper: M, predicate: F)
+    where
+        O: Parser,
+        S: Into<OsString> + Clone,
+        I: IntoIterator<Item = S>,
+        J: IntoIterator<Item = I>,
+        M: Fn(O) -> A,
+        F: Fn(A),
+    {
+        for args in argsets {
+            let opt = O::try_parse_from(
+                iter::once(OsString::new()).chain(args.into_iter().map(|a| a.into())),
+            )
+            .unwrap();
+            predicate(mapper(opt));
+        }
+    }
+
+    fn error(args: impl IntoIterator<Item = &'static str>) -> ErrorKind {
+        Opt::try_parse_from(iter::once("unplug").chain(args)).err().expect("error").kind()
+    }
+
+    #[test]
+    fn test_cli_empty() {
+        assert_eq!(error([]), ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand);
+    }
+
+    #[test]
+    fn test_cli_global_options() {
+        let map = std::convert::identity::<Opt>;
+        parse(["-v", "test"], map, |opt| {
+            assert_eq!(opt.verbose, 1);
+        });
+        parse(["-vv", "test"], map, |opt| {
+            assert_eq!(opt.verbose, 2);
+        });
+        parse(["--config", "foo", "test"], map, |opt| {
+            assert_eq!(opt.config.config.as_deref(), Some(Path::new("foo")));
+        });
+        parse(["--no-config", "test"], map, |opt| {
+            assert!(opt.config.no_config);
+        });
+        assert_eq!(error(["--config", "foo", "--no-config", "test"]), ErrorKind::ArgumentConflict);
+        parse(["--iso", "foo", "test"], map, |opt| {
+            assert_eq!(opt.context.iso.as_deref(), Some(Path::new("foo")));
+        });
+        parse(["--default-iso", "test"], map, |opt| {
+            assert!(opt.context.default_iso);
+        });
+        multiparse([["-p", "foo", "test"], ["--project", "foo", "test"]], map, |opt| {
+            assert_eq!(opt.context.project.as_deref(), Some("foo"));
+        });
+        assert_eq!(error(["--iso", "foo", "--default-iso", "test"]), ErrorKind::ArgumentConflict);
+        assert_eq!(error(["--iso", "foo", "-p", "bar", "test"]), ErrorKind::ArgumentConflict);
+        assert_eq!(error(["--default-iso", "-p", "bar", "test"]), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn test_cli_list_opt() {
+        #[derive(Parser)]
+        struct ListOptParser {
+            #[clap(flatten)]
+            inner: ListOpt,
+        }
+        let map = |o: ListOptParser| o.inner;
+        parse(["--reverse"], map, |opt| {
+            assert!(opt.reverse);
+        });
+        multiparse([["-l"], ["--long"]], map, |opt| {
+            assert!(opt.long);
+        });
+        multiparse(
+            [&["--by-name"][..], &["--by-offset", "--by-name"], &["--by-size", "--by-name"]],
+            map,
+            |opt| {
+                assert!(opt.by_name);
+                assert!(!opt.by_offset);
+                assert!(!opt.by_size);
+            },
+        );
+        multiparse(
+            [&["--by-offset"][..], &["--by-name", "--by-offset"], &["--by-size", "--by-offset"]],
+            map,
+            |opt| {
+                assert!(!opt.by_name);
+                assert!(opt.by_offset);
+                assert!(!opt.by_size);
+            },
+        );
+        multiparse(
+            [&["--by-size"][..], &["--by-name", "--by-size"], &["--by-offset", "--by-size"]],
+            map,
+            |opt| {
+                assert!(!opt.by_name);
+                assert!(!opt.by_offset);
+                assert!(opt.by_size);
+            },
+        );
+    }
+
+    #[test]
+    fn test_cli_list_ids_opt() {
+        #[derive(Parser)]
+        struct ListIdsOptParser {
+            #[clap(flatten)]
+            inner: ListIdsOpt,
+        }
+        let map = |o: ListIdsOptParser| o.inner;
+        parse(["--reverse"], map, |opt| {
+            assert!(opt.reverse);
+        });
+        multiparse([&["--by-name"][..], &["--by-id", "--by-name"]], map, |opt| {
+            assert!(opt.by_name);
+            assert!(!opt.by_id);
+        });
+        multiparse([&["--by-id"][..], &["--by-name", "--by-id"]], map, |opt| {
+            assert!(!opt.by_name);
+            assert!(opt.by_id);
+        });
+    }
+
+    #[test]
+    fn test_cli_archive_info() {
+        let map = mapper!(Command::Archive(ArchiveCommand::Info { path }) => path);
+        parse(["archive", "info", "foo"], map, |path| {
+            assert_eq!(path, "foo");
+        });
+        assert_eq!(error(["archive", "info"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_archive_list() {
+        let map = mapper!(Command::Archive(ArchiveCommand::List { path, opt }) => (path, opt));
+        parse(["archive", "list", "qp.bin"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert!(opt.paths.is_empty());
+        });
+        parse(["archive", "list", "qp.bin", "foo"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert_eq!(opt.paths, ["foo"]);
+        });
+        parse(["archive", "list", "qp.bin", "foo", "bar", "--long"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert_eq!(opt.paths, ["foo", "bar"]);
+            assert!(opt.settings.long);
+        });
+        assert_eq!(error(["archive", "list"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_archive_extract() {
+        let map = mapper!(Command::Archive(ArchiveCommand::Extract { path, opt }) => (path, opt));
+        parse(["archive", "extract", "qp.bin"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert_eq!(opt.output, None);
+            assert!(opt.paths.is_empty());
+        });
+        parse(["archive", "extract", "qp.bin", "-o", "out", "foo", "bar"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert_eq!(opt.output, Some("out".into()));
+            assert_eq!(opt.paths, ["foo", "bar"]);
+        });
+        assert_eq!(error(["archive", "extract"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_archive_extract_all() {
+        let map =
+            mapper!(Command::Archive(ArchiveCommand::ExtractAll { path, opt }) => (path, opt));
+        parse(["archive", "extract-all", "qp.bin"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert_eq!(opt.output, None);
+        });
+        parse(["archive", "extract-all", "qp.bin", "-o", "out"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert_eq!(opt.output, Some("out".into()));
+        });
+        assert_eq!(error(["archive", "extract-all"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_archive_replace() {
+        let map = mapper!(Command::Archive(ArchiveCommand::Replace { path, opt }) => (path, opt));
+        parse(["archive", "replace", "qp.bin", "foo", "bar"], map, |(path, opt)| {
+            assert_eq!(path, "qp.bin");
+            assert_eq!(opt.dest_path, "foo");
+            assert_eq!(opt.src_path, Path::new("bar"));
+        });
+        assert_eq!(error(["archive", "replace"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["archive", "replace", "qp.bin"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(
+            error(["archive", "replace", "qp.bin", "foo"]),
+            ErrorKind::MissingRequiredArgument
+        );
+    }
+
+    #[test]
+    fn test_cli_audio_info() {
+        let map = mapper!(Command::Audio(AudioCommand::Info(opt)) => opt);
+        parse(["audio", "info", "foo"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+        });
+        assert_eq!(error(["audio", "info"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_audio_export() {
+        let map = mapper!(Command::Audio(AudioCommand::Export(opt)) => opt);
+        parse(["audio", "export", "foo"], map, |opt| {
+            assert_eq!(opt.output, None);
+            assert_eq!(opt.names, ["foo"]);
+        });
+        parse(["audio", "export", "foo", "bar", "baz"], map, |opt| {
+            assert_eq!(opt.output, None);
+            assert_eq!(opt.names, ["foo", "bar", "baz"]);
+        });
+        parse(["audio", "export", "-o", "out", "--labels", "foo"], map, |opt| {
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+            assert!(opt.settings.labels);
+            assert_eq!(opt.names, ["foo"]);
+        });
+        assert_eq!(error(["audio", "export"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_audio_export_bank() {
+        let map = mapper!(Command::Audio(AudioCommand::ExportBank(opt)) => opt);
+        parse(["audio", "export-bank", "foo"], map, |opt| {
+            assert_eq!(opt.output, None);
+            assert_eq!(opt.name, "foo");
+        });
+        parse(["audio", "export-bank", "-o", "out", "--labels", "foo"], map, |opt| {
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+            assert!(opt.settings.labels);
+            assert_eq!(opt.name, "foo");
+        });
+        assert_eq!(error(["audio", "export-bank"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["audio", "export-bank", "foo", "bar"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_audio_export_all() {
+        let map = mapper!(Command::Audio(AudioCommand::ExportAll(opt)) => opt);
+        parse(["audio", "export-all", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output, Path::new("out"));
+            assert!(!opt.settings.labels);
+        });
+        parse(["audio", "export-all", "-o", "out", "--labels"], map, |opt| {
+            assert_eq!(opt.output, Path::new("out"));
+            assert!(opt.settings.labels);
+        });
+        assert_eq!(error(["audio", "export-all"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_audio_import() {
+        let map = mapper!(Command::Audio(AudioCommand::Import(opt)) => opt);
+        parse(["audio", "import", "foo", "bar"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert_eq!(opt.path, Path::new("bar"));
+            assert!(!opt.settings.labels);
+        });
+        parse(["audio", "import", "foo", "bar", "--labels"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert_eq!(opt.path, Path::new("bar"));
+            assert!(opt.settings.labels);
+        });
+        assert_eq!(error(["audio", "import"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["audio", "import", "foo"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["audio", "import", "foo", "bar", "baz"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_audio_play() {
+        let map = mapper!(Command::Audio(AudioCommand::Play(opt)) => opt);
+        parse(["audio", "play", "foo"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert_eq!(opt.volume, 0.8);
+        });
+        parse(["audio", "play", "foo", "--volume", "0"], map, |opt| {
+            assert_eq!(opt.volume, 0.0);
+        });
+        parse(["audio", "play", "foo", "--volume", "50"], map, |opt| {
+            assert_eq!(opt.volume, 0.5);
+        });
+        parse(["audio", "play", "foo", "--volume", "100"], map, |opt| {
+            assert_eq!(opt.volume, 1.0);
+        });
+        assert_eq!(error(["audio", "play"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["audio", "play", "foo", "bar"]), ErrorKind::UnknownArgument);
+        assert_eq!(error(["audio", "play", "foo", "--volume", "-1"]), ErrorKind::ValueValidation);
+        assert_eq!(error(["audio", "play", "foo", "--volume", "101"]), ErrorKind::ValueValidation);
+    }
+
+    #[test]
+    fn test_cli_config() {
+        let map = std::convert::identity;
+        parse(["config", "clear"], map, |a: Opt| {
+            assert!(matches!(a.command, Command::Config(ConfigCommand::Clear)));
+        });
+        parse(["config", "path"], map, |a: Opt| {
+            assert!(matches!(a.command, Command::Config(ConfigCommand::Path)));
+        });
+        parse(["config", "get", "default-iso"], map, |a: Opt| {
+            let Command::Config(ConfigCommand::Get(opt)) = a.command else { panic!() };
+            assert!(matches!(opt, GetSetting::DefaultIso));
+        });
+        parse(["config", "get", "dolphin-path"], map, |a: Opt| {
+            let Command::Config(ConfigCommand::Get(opt)) = a.command else { panic!() };
+            assert!(matches!(opt, GetSetting::DolphinPath));
+        });
+        parse(["config", "set", "default-iso"], map, |a: Opt| {
+            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command else { panic!() };
+            assert_eq!(path, None);
+        });
+        parse(["config", "set", "default-iso", "foo"], map, |a: Opt| {
+            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command else { panic!() };
+            assert_eq!(path.as_deref(), Some("foo"));
+        });
+        parse(["config", "set", "dolphin-path"], map, |a: Opt| {
+            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command else { panic!() };
+            assert_eq!(path, None);
+        });
+        parse(["config", "set", "dolphin-path", "foo"], map, |a: Opt| {
+            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command else { panic!() };
+            assert_eq!(path.as_deref(), Some("foo"));
+        });
+        assert_eq!(error(["config", "get"]), ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand);
+        assert_eq!(error(["config", "set"]), ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand);
+    }
+
+    #[test]
+    fn test_cli_dolphin() {
+        let map = mapper!(Command::Dolphin(opt) => opt);
+        parse(["dolphin"], map, |opt| {
+            assert!(!opt.wait);
+            assert!(!opt.ui);
+        });
+        parse(["dolphin", "--ui"], map, |opt| {
+            assert!(opt.ui);
+        });
+        multiparse([["dolphin", "-w"], ["dolphin", "--wait"]], map, |opt| {
+            assert!(opt.wait);
+        });
+    }
+
+    #[test]
+    fn test_cli_globals_export() {
+        let map = mapper!(Command::Globals(GlobalsCommand::Export(opt)) => opt);
+        parse(["globals", "export"], map, |opt| {
+            assert!(!opt.compact);
+            assert_eq!(opt.output, None);
+        });
+        multiparse([["globals", "export", "-c"], ["globals", "export", "--compact"]], map, |opt| {
+            assert!(opt.compact);
+        });
+        parse(["globals", "export", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+    }
+
+    #[test]
+    fn test_cli_globals_import() {
+        let map = mapper!(Command::Globals(GlobalsCommand::Import(opt)) => opt);
+        parse(["globals", "import", "foo"], map, |opt| {
+            assert_eq!(opt.input, Path::new("foo"));
+        });
+        assert_eq!(error(["globals", "import"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_globals_dump_colliders() {
+        let map = mapper!(Command::Globals(GlobalsCommand::DumpColliders(opt)) => opt);
+        parse(["globals", "dump-colliders"], map, |opt| {
+            assert_eq!(opt.output, None);
+        });
+        parse(["globals", "dump-colliders", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+    }
+
+    #[test]
+    fn test_cli_iso_info() {
+        let map = mapper!(Command::Iso(c) => c);
+        parse(["iso", "info"], map, |c| {
+            assert!(matches!(c, IsoCommand::Info));
+        });
+    }
+
+    #[test]
+    fn test_cli_iso_list() {
+        let map = mapper!(Command::Iso(IsoCommand::List(opt)) => opt);
+        parse(["iso", "list"], map, |opt| {
+            assert!(opt.paths.is_empty());
+        });
+        parse(["iso", "list", "foo", "bar", "--long"], map, |opt| {
+            assert_eq!(opt.paths, ["foo", "bar"]);
+            assert!(opt.settings.long);
+        });
+    }
+
+    #[test]
+    fn test_cli_iso_extract() {
+        let map = mapper!(Command::Iso(IsoCommand::Extract(opt)) => opt);
+        parse(["iso", "extract"], map, |opt| {
+            assert_eq!(opt.output, None);
+            assert!(opt.paths.is_empty());
+        });
+        parse(["iso", "extract", "foo", "bar", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+            assert_eq!(opt.paths, ["foo", "bar"]);
+        });
+    }
+
+    #[test]
+    fn test_cli_iso_extract_all() {
+        let map = mapper!(Command::Iso(IsoCommand::ExtractAll(opt)) => opt);
+        parse(["iso", "extract-all"], map, |opt| {
+            assert_eq!(opt.output, None);
+        });
+        parse(["iso", "extract-all", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+    }
+
+    #[test]
+    fn test_cli_iso_replace() {
+        let map = mapper!(Command::Iso(IsoCommand::Replace(opt)) => opt);
+        parse(["iso", "replace", "foo", "bar"], map, |opt| {
+            assert_eq!(opt.dest_path, "foo");
+            assert_eq!(opt.src_path, Path::new("bar"));
+        });
+        assert_eq!(error(["iso", "replace"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["iso", "replace", "foo"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["iso", "replace", "foo", "bar", "baz"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_list() {
+        let map = mapper!(Command::List(c) => c);
+        parse(["list", "items"], map, |c| {
+            let ListCommand::Items(opt) = c else { panic!() };
+            assert!(!opt.show_unknown);
+        });
+        parse(["list", "items", "--show-unknown"], map, |c| {
+            let ListCommand::Items(opt) = c else { panic!() };
+            assert!(opt.show_unknown);
+        });
+        parse(["list", "equipment"], map, |c| {
+            let ListCommand::Equipment(opt) = c else { panic!() };
+            assert!(!opt.show_unknown);
+        });
+        parse(["list", "equipment", "--show-unknown"], map, |c| {
+            let ListCommand::Equipment(opt) = c else { panic!() };
+            assert!(opt.show_unknown);
+        });
+        parse(["list", "stages"], map, |c| {
+            assert!(matches!(c, ListCommand::Stages(_)));
+        });
+        parse(["list", "objects"], map, |c| {
+            assert!(matches!(c, ListCommand::Objects(_)));
+        });
+        parse(["list", "music"], map, |c| {
+            assert!(matches!(c, ListCommand::Music(_)));
+        });
+        parse(["list", "sounds"], map, |c| {
+            assert!(matches!(c, ListCommand::Sounds(_)));
+        });
+    }
+
+    #[test]
+    fn test_cli_messages() {
+        let map = mapper!(Command::Messages(c) => c);
+        parse(["messages", "export", "-o", "out"], map, |c| {
+            let MessagesCommand::Export(opt) = c else { panic!() };
+            assert_eq!(opt.output, Path::new("out"));
+        });
+        parse(["messages", "import", "foo"], map, |c| {
+            let MessagesCommand::Import(opt) = c else { panic!() };
+            assert_eq!(opt.input, Path::new("foo"));
+        });
+    }
+
+    #[test]
+    fn test_cli_project_info() {
+        let map = mapper!(Command::Project(ProjectCommand::Info(opt)) => opt);
+        parse(["project", "info"], map, |opt| {
+            assert_eq!(opt.name, None);
+        });
+        parse(["project", "info", "foo"], map, |opt| {
+            assert_eq!(opt.name.as_deref(), Some("foo"));
+        });
+    }
+
+    #[test]
+    fn test_cli_project_list() {
+        let map = std::convert::identity;
+        parse(["project", "list"], map, |opt: Opt| {
+            assert!(matches!(opt.command, Command::Project(ProjectCommand::List)));
+        });
+        assert_eq!(error(["project", "list", "foo"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_project_new() {
+        let map = mapper!(Command::Project(ProjectCommand::New(opt)) => opt);
+        parse(["project", "new", "foo"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert_eq!(opt.source, None);
+            assert_eq!(opt.output, None);
+            assert!(!opt.force);
+        });
+        parse(["project", "new", "foo", "-s", "src"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert_eq!(opt.source.as_deref(), Some(Path::new("src")));
+        });
+        parse(["project", "new", "foo", "-o", "out"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+        multiparse(
+            [["project", "new", "foo", "-f"], ["project", "new", "foo", "--force"]],
+            map,
+            |opt| {
+                assert_eq!(opt.name, "foo");
+                assert!(opt.force);
+            },
+        );
+        assert_eq!(error(["project", "new"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_project_wipe() {
+        let map = mapper!(Command::Project(ProjectCommand::Wipe(opt)) => opt);
+        parse(["project", "wipe", "foo"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert!(!opt.force);
+        });
+        multiparse(
+            [["project", "wipe", "foo", "-f"], ["project", "wipe", "foo", "--force"]],
+            map,
+            |opt| {
+                assert_eq!(opt.name, "foo");
+                assert!(opt.force);
+            },
+        );
+        assert_eq!(error(["project", "wipe"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_project_add() {
+        let map = mapper!(Command::Project(ProjectCommand::Add(opt)) => opt);
+        parse(["project", "add", "foo"], map, |opt| {
+            assert_eq!(opt.path, Path::new("foo"));
+            assert_eq!(opt.name, None);
+        });
+        multiparse(
+            [["project", "add", "foo", "-n", "bar"], ["project", "add", "foo", "--name", "bar"]],
+            map,
+            |opt| {
+                assert_eq!(opt.path, Path::new("foo"));
+                assert_eq!(opt.name.as_deref(), Some("bar"));
+            },
+        );
+        assert_eq!(error(["project", "add"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_project_forget() {
+        let map = mapper!(Command::Project(ProjectCommand::Forget(opt)) => opt);
+        parse(["project", "forget", "foo"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+        });
+        assert_eq!(error(["project", "forget"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["project", "forget", "foo", "bar"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_project_open() {
+        let map = mapper!(Command::Project(ProjectCommand::Open(opt)) => opt);
+        parse(["project", "open", "foo"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+        });
+        assert_eq!(error(["project", "open"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["project", "open", "foo", "bar"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_project_close() {
+        let map = mapper!(Command::Project(c) => c);
+        parse(["project", "close"], map, |c| {
+            assert!(matches!(c, ProjectCommand::Close));
+        });
+        assert_eq!(error(["project", "close", "foo"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_qp() {
+        let map = mapper!(Command::Qp(c) => c);
+        parse(["qp", "info"], map, |c| {
+            assert!(matches!(c, QpCommand::Info));
+        });
+        parse(["qp", "list"], map, |c| {
+            assert!(matches!(c, QpCommand::List(_)));
+        });
+        parse(["qp", "extract"], map, |c| {
+            assert!(matches!(c, QpCommand::Extract(_)));
+        });
+        parse(["qp", "extract-all"], map, |c| {
+            assert!(matches!(c, QpCommand::ExtractAll(_)));
+        });
+        parse(["qp", "replace", "foo", "bar"], map, |c| {
+            assert!(matches!(c, QpCommand::Replace(_)));
+        });
+    }
+
+    #[test]
+    fn test_cli_script_dump() {
+        let map = mapper!(Command::Script(ScriptCommand::Dump(opt)) => opt);
+        parse(["script", "dump", "foo"], map, |opt| {
+            assert_eq!(opt.stage, "foo");
+            assert_eq!(opt.output, None);
+            assert!(!opt.flags.dump_unknown);
+            assert!(!opt.flags.no_offsets);
+        });
+        parse(["script", "dump", "foo", "-o", "out"], map, |opt| {
+            assert_eq!(opt.stage, "foo");
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+        parse(["script", "dump", "foo", "--dump-unknown", "--no-offsets"], map, |opt| {
+            assert_eq!(opt.stage, "foo");
+            assert_eq!(opt.output, None);
+            assert!(opt.flags.dump_unknown);
+            assert!(opt.flags.no_offsets);
+        });
+    }
+
+    #[test]
+    fn test_cli_script_dump_all() {
+        let map = mapper!(Command::Script(ScriptCommand::DumpAll(opt)) => opt);
+        parse(["script", "dump-all", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output, Path::new("out"));
+        });
+        parse(["script", "dump-all", "-o", "out", "--dump-unknown", "--no-offsets"], map, |opt| {
+            assert_eq!(opt.output, Path::new("out"));
+            assert!(opt.flags.dump_unknown);
+            assert!(opt.flags.no_offsets);
+        });
+        assert_eq!(error(["script", "dump-all"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_script_disassemble() {
+        let map = mapper!(Command::Script(ScriptCommand::Disassemble(opt)) => opt);
+        parse(["script", "disassemble", "foo", "-o", "out"], map, |opt| {
+            assert_eq!(opt.stage, "foo");
+            assert_eq!(opt.output, Path::new("out"));
+        });
+    }
+
+    #[test]
+    fn test_cli_script_disassemble_all() {
+        let map = mapper!(Command::Script(ScriptCommand::DisassembleAll(opt)) => opt);
+        parse(["script", "disassemble-all", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output, Path::new("out"));
+        });
+    }
+
+    #[test]
+    fn test_cli_script_assemble() {
+        let map = mapper!(Command::Script(ScriptCommand::Assemble(opt)) => opt);
+        parse(["script", "assemble", "foo"], map, |opt| {
+            assert_eq!(opt.path, Path::new("foo"));
+        });
+    }
+
+    #[test]
+    fn test_cli_shop_export() {
+        let map = mapper!(Command::Shop(ShopCommand::Export(opt)) => opt);
+        parse(["shop", "export"], map, |opt| {
+            assert!(!opt.compact);
+            assert_eq!(opt.output, None);
+        });
+        parse(["shop", "export", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+        multiparse([["shop", "export", "-c"], ["shop", "export", "--compact"]], map, |opt| {
+            assert!(opt.compact);
+        });
+    }
+
+    #[test]
+    fn test_cli_shop_import() {
+        let map = mapper!(Command::Shop(ShopCommand::Import(opt)) => opt);
+        parse(["shop", "import", "foo"], map, |opt| {
+            assert_eq!(opt.input, Path::new("foo"));
+        });
+        assert_eq!(error(["shop", "import"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_stage_export() {
+        let map = mapper!(Command::Stage(StageCommand::Export(opt)) => opt);
+        parse(["stage", "export", "foo"], map, |opt| {
+            assert_eq!(opt.stage, "foo");
+            assert_eq!(opt.output, None);
+        });
+        parse(["stage", "export", "foo", "-o", "out"], map, |opt| {
+            assert_eq!(opt.stage, "foo");
+            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+        assert_eq!(error(["stage", "export"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_stage_export_all() {
+        let map = mapper!(Command::Stage(StageCommand::ExportAll(opt)) => opt);
+        parse(["stage", "export-all", "-o", "out"], map, |opt| {
+            assert_eq!(opt.output, Path::new("out"));
+        });
+        assert_eq!(error(["stage", "export-all"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_stage_import() {
+        let map = mapper!(Command::Stage(StageCommand::Import(opt)) => opt);
+        parse(["stage", "import", "foo", "bar"], map, |opt| {
+            assert_eq!(opt.stage, "foo");
+            assert_eq!(opt.input, Path::new("bar"));
+        });
+        assert_eq!(error(["stage", "import"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["stage", "import", "foo"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn test_cli_stage_import_all() {
+        let map = mapper!(Command::Stage(StageCommand::ImportAll(opt)) => opt);
+        parse(["stage", "import-all", "foo"], map, |opt| {
+            assert_eq!(opt.input, Path::new("foo"));
+            assert!(!opt.force);
+        });
+        multiparse(
+            [["stage", "import-all", "foo", "-f"], ["stage", "import-all", "foo", "--force"]],
+            map,
+            |opt| {
+                assert_eq!(opt.input, Path::new("foo"));
+                assert!(opt.force);
+            },
+        );
+        assert_eq!(error(["stage", "import-all"]), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[cfg(feature = "debug")]
+    #[test]
+    fn test_debug() {
+        let map = mapper!(Command::Debug(c) => c);
+        parse(["debug", "rebuild-scripts"], map, |c| {
+            assert!(matches!(c, DebugCommand::RebuildScripts));
+        });
+    }
 }

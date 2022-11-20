@@ -36,5 +36,7 @@ pub fn execute(ctx: Context, command: Command) -> Result<()> {
         Command::Stage(opt) => stage::command(ctx, opt),
         #[cfg(feature = "debug")]
         Command::Debug(opt) => debug::command(ctx, opt),
+        #[cfg(test)]
+        Command::Test => Ok(()),
     }
 }

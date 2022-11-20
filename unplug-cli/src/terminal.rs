@@ -162,7 +162,7 @@ pub fn disable_raw_mode() {
 }
 
 /// Initializes logging to the terminal.
-pub fn init_logging(verbosity: u64) {
+pub fn init_logging(verbosity: u8) {
     let filter = if verbosity >= 2 {
         // Note: trace logs are compiled out in release builds
         LevelFilter::Trace
