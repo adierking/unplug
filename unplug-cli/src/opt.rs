@@ -12,7 +12,6 @@ const MAX_VOLUME: i32 = 100;
 #[derive(Parser)]
 #[clap(name = "Unplug", version)]
 #[clap(about = "Chibi-Robo! Plug Into Adventure! Modding Toolkit")]
-#[clap(subcommand_value_name = "COMMAND", subcommand_help_heading = "COMMANDS")]
 #[clap(help_expected = true, infer_subcommands = true)]
 pub struct Opt {
     /// Show debug logs
@@ -245,15 +244,15 @@ pub struct ListOpt {
     pub long: bool,
 
     /// Sort files by name (default)
-    #[clap(long, overrides_with_all(&["by-offset", "by-size"]))]
+    #[clap(long, overrides_with_all(&["by_offset", "by_size"]))]
     pub by_name: bool,
 
     /// Sort files by offset
-    #[clap(long, overrides_with_all(&["by-name", "by-size"]))]
+    #[clap(long, overrides_with_all(&["by_name", "by_size"]))]
     pub by_offset: bool,
 
     /// Sort files by size
-    #[clap(long, overrides_with_all(&["by-name", "by-offset"]))]
+    #[clap(long, overrides_with_all(&["by_name", "by_offset"]))]
     pub by_size: bool,
 
     /// Sort in reverse order
@@ -264,11 +263,11 @@ pub struct ListOpt {
 #[derive(Args)]
 pub struct ListIdsOpt {
     /// Sort by name (default)
-    #[clap(long, overrides_with_all(&["by-id"]))]
+    #[clap(long, overrides_with_all(&["by_id"]))]
     pub by_name: bool,
 
     /// Sort by ID number
-    #[clap(long, overrides_with_all(&["by-name"]))]
+    #[clap(long, overrides_with_all(&["by_name"]))]
     pub by_id: bool,
 
     /// Sort in reverse order
@@ -781,7 +780,7 @@ pub struct StageImportAllOpt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::{ErrorKind, Parser};
+    use clap::error::ErrorKind;
     use std::ffi::OsString;
     use std::iter;
     use std::path::Path;
