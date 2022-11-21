@@ -80,7 +80,7 @@ impl Config {
     pub fn load_from(&mut self, path: PathBuf) -> Result<()> {
         if path.exists() {
             let contents = fs::read_to_string(&path)?;
-            *self = toml::from_str(&contents)?;
+            *self = toml_edit::easy::from_str(&contents)?;
             self.path = path;
             debug!("Configuration loaded from {}", self.path.display());
             trace!("{:?}", self);
@@ -94,7 +94,7 @@ impl Config {
 
     /// Saves the configuration back to the path it was loaded from.
     pub fn save(&self) -> Result<()> {
-        let contents = toml::to_string_pretty(self)?;
+        let contents = toml_edit::easy::to_string_pretty(self)?;
         if !self.is_loaded() {
             bail!("No config file is loaded");
         }
