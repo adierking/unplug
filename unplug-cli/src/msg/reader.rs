@@ -73,7 +73,7 @@ impl<R: BufRead> MessageReader<R> {
         loop {
             match self.read_event()? {
                 Event::Start(e) => {
-                    let name = str::from_utf8(e.name())?;
+                    let name = str::from_utf8(e.name().into_inner())?;
                     ensure!(name == ELEM_MESSAGES, "Unexpected element: {}", name);
                     return Ok(());
                 }
@@ -99,7 +99,7 @@ impl<R: BufRead> MessageReader<R> {
         loop {
             match self.read_event()?.into_owned() {
                 Event::Start(e) => {
-                    let name = str::from_utf8(e.name())?;
+                    let name = str::from_utf8(e.name().into_inner())?;
                     ensure!(name == ELEM_MESSAGE, "Unexpected element: {}", name);
                     for attr in e.attributes() {
                         let (key, value) = self.decode_attribute(attr?)?;
@@ -111,7 +111,7 @@ impl<R: BufRead> MessageReader<R> {
                     break;
                 }
                 Event::End(e) => {
-                    let name = str::from_utf8(e.name())?;
+                    let name = str::from_utf8(e.name().into_inner())?;
                     ensure!(name == ELEM_MESSAGES, "Unexpected end element: {}", name);
                     return Ok(None);
                 }
@@ -139,9 +139,9 @@ impl<R: BufRead> MessageReader<R> {
     /// Reads a message command from the file using `buf` as the internal buffer.
     fn read_command_buffered(&mut self, buf: &mut Vec<u8>) -> Result<Option<MsgCommand>> {
         loop {
-            match self.reader.read_event(buf)? {
+            match self.reader.read_event_into(buf)? {
                 Event::Start(e) => {
-                    let name = str::from_utf8(e.name())?;
+                    let name = str::from_utf8(e.name().into_inner())?;
 
                     if self.in_text {
                         let command = match name {
@@ -181,17 +181,16 @@ impl<R: BufRead> MessageReader<R> {
 
                 Event::Text(text) if self.in_text => {
                     // Any raw text maps to a `Text` command
-                    let unescaped_bytes = text.unescaped()?;
-                    let unescaped_str = str::from_utf8(&unescaped_bytes)?;
-                    if unescaped_str.is_empty() {
+                    let unescaped = text.unescape()?;
+                    if unescaped.is_empty() {
                         continue;
                     }
-                    let msg_text = Text::encode(unescaped_str)?;
+                    let msg_text = Text::encode(&unescaped)?;
                     return Ok(Some(MsgCommand::Text(msg_text)));
                 }
 
                 Event::End(e) => {
-                    let name = str::from_utf8(e.name())?;
+                    let name = str::from_utf8(e.name().into_inner())?;
                     if self.in_text && name == ELEM_TEXT {
                         self.in_text = false;
                     } else if !self.in_text && name == ELEM_MESSAGE {
@@ -276,19 +275,19 @@ impl<R: BufRead> MessageReader<R> {
 
     fn read_format(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
         if let Some(attr) = elem.attributes().next() {
-            bail!("Unexpected attribute: {}", str::from_utf8(attr?.key)?);
+            bail!("Unexpected attribute: {}", str::from_utf8(attr?.key.into_inner())?);
         }
-        let mut bytes = vec![];
+        let mut value = String::new();
         loop {
             match self.read_event()? {
                 Event::Text(text) => {
-                    bytes.extend_from_slice(&text.unescaped()?);
+                    value.push_str(&text.unescape()?);
                 }
                 Event::End(_) => break,
                 e => Self::unhandled_event(e)?,
             }
         }
-        Ok(MsgCommand::Format(Text::encode(str::from_utf8(&bytes)?)?))
+        Ok(MsgCommand::Format(Text::encode(&value)?))
     }
 
     fn read_icon(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
@@ -459,7 +458,7 @@ impl<R: BufRead> MessageReader<R> {
     /// Reads a message command which takes no attributes or inner text and returns `command`.
     fn read_simple(&mut self, elem: BytesStart<'_>, command: MsgCommand) -> Result<MsgCommand> {
         if let Some(attr) = elem.attributes().next() {
-            bail!("Unexpected attribute: {}", str::from_utf8(attr?.key)?);
+            bail!("Unexpected attribute: {}", str::from_utf8(attr?.key.into_inner())?);
         }
         Ok(command)
     }
@@ -467,20 +466,19 @@ impl<R: BufRead> MessageReader<R> {
     /// Reads an XML event, clearing the internal buffer first.
     fn read_event(&mut self) -> Result<Event<'_>> {
         self.buf.clear();
-        Ok(self.reader.read_event(&mut self.buf)?)
+        Ok(self.reader.read_event_into(&mut self.buf)?)
     }
 
     /// Decodes an XML attribute into key and value strings.
     fn decode_attribute(&mut self, attr: Attribute<'_>) -> Result<(&str, &str)> {
-        let key = str::from_utf8(attr.key)?;
+        let key = str::from_utf8(attr.key.into_inner())?;
         let key_len = key.len();
-        let value_bytes = attr.unescaped_value()?;
-        let value = str::from_utf8(&value_bytes)?;
+        let value = attr.unescape_value()?;
         // Storing the key and value in our internal attribute buffer reduces the number of
         // allocations we have to make
         self.attr_buf.clear();
         self.attr_buf.push_str(key);
-        self.attr_buf.push_str(value);
+        self.attr_buf.push_str(&value);
         Ok((&self.attr_buf[..key_len], &self.attr_buf[key_len..]))
     }
 
@@ -498,11 +496,11 @@ impl<R: BufRead> MessageReader<R> {
     fn unhandled_event(e: Event<'_>) -> Result<()> {
         match e {
             Event::Start(e) | Event::Empty(e) => {
-                let name = String::from_utf8_lossy(e.name());
+                let name = String::from_utf8_lossy(e.name().into_inner());
                 bail!("Unexpected element: {}", name);
             }
             Event::End(e) => {
-                let name = String::from_utf8_lossy(e.name());
+                let name = String::from_utf8_lossy(e.name().into_inner());
                 bail!("Unexpected end element: {}", name);
             }
             Event::Decl(_) => {
@@ -518,14 +516,14 @@ impl<R: BufRead> MessageReader<R> {
                 bail!("Unexpected end of file");
             }
             Event::Text(t) => Self::ensure_text_empty(t),
-            Event::CData(d) => Self::ensure_text_empty(d.escape()),
+            Event::CData(d) => Self::ensure_text_empty(d.escape()?),
             Event::Comment(_) => Ok(()), // Ignore comments
         }
     }
 
     /// Validates that a text element is empty.
     fn ensure_text_empty(t: BytesText<'_>) -> Result<()> {
-        let text = String::from_utf8_lossy(t.escaped());
+        let text = String::from_utf8_lossy(&t);
         let trimmed = text.trim();
         ensure!(trimmed.is_empty(), "Unexpected text: \"{}\"", trimmed);
         Ok(())

@@ -52,7 +52,7 @@ impl<W: Write> MessageWriter<W> {
     pub fn new(writer: W) -> Self {
         Self {
             writer: Writer::new(writer),
-            root: BytesStart::owned_name(ELEM_MESSAGES),
+            root: BytesStart::new(ELEM_MESSAGES),
             first_message: true,
             new_line: false,
             in_text: false,
@@ -65,9 +65,9 @@ impl<W: Write> MessageWriter<W> {
             Some(XML_ENCODING),
             None,
         )))?;
-        self.writer.write(b"\n")?;
-        self.writer.write_event(Event::Start(self.root.to_borrowed()))?;
-        self.writer.write(b"\n")?;
+        self.writer.inner().write_all(b"\n")?;
+        self.writer.write_event(Event::Start(self.root.borrow()))?;
+        self.writer.inner().write_all(b"\n")?;
         Ok(())
     }
 
@@ -82,25 +82,25 @@ impl<W: Write> MessageWriter<W> {
         if self.first_message {
             self.first_message = false;
         } else {
-            self.writer.write(b"\n")?;
+            self.writer.inner().write_all(b"\n")?;
         }
-        self.writer.write(b"\t")?;
-        let mut tag = BytesStart::owned_name(ELEM_MESSAGE);
+        self.writer.inner().write_all(b"\t")?;
+        let mut tag = BytesStart::new(ELEM_MESSAGE);
         tag.push_attribute((ATTR_ID, id.to_string().as_ref()));
-        self.writer.write_event(Event::Start(tag.to_borrowed()))?;
-        self.writer.write(b"\n")?;
+        self.writer.write_event(Event::Start(tag.borrow()))?;
+        self.writer.inner().write_all(b"\n")?;
         self.new_line = true;
         self.write_commands(&msg.commands)?;
         self.next_line()?;
-        self.writer.write(b"\t")?;
+        self.writer.inner().write_all(b"\t")?;
         self.writer.write_event(Event::End(tag.to_end()))?;
-        self.writer.write(b"\n")?;
+        self.writer.inner().write_all(b"\n")?;
         Ok(())
     }
 
     pub fn finish(&mut self) -> Result<()> {
         self.writer.write_event(Event::End(self.root.to_end()))?;
-        self.writer.write(b"\n")?;
+        self.writer.inner().write_all(b"\n")?;
         self.writer.inner().flush()?;
         Ok(())
     }
@@ -130,7 +130,7 @@ impl<W: Write> MessageWriter<W> {
 
         // Indent if this is the first command on the line
         if self.new_line {
-            self.writer.write(b"\t\t")?;
+            self.writer.inner().write_all(b"\t\t")?;
         }
         if is_text {
             // Open a <text> tag
@@ -139,13 +139,13 @@ impl<W: Write> MessageWriter<W> {
 
         match command {
             MsgCommand::Speed(speed) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_SPEED, speed.to_string().as_ref()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Wait(ty) => {
-                let mut tag = BytesStart::owned_name(ELEM_WAIT);
+                let mut tag = BytesStart::new(ELEM_WAIT);
                 match ty {
                     MsgWaitType::Time(time) => {
                         tag.push_attribute((ATTR_TYPE, WAIT_TIME));
@@ -160,7 +160,7 @@ impl<W: Write> MessageWriter<W> {
             }
 
             MsgCommand::Anim(anim) => {
-                let mut tag = BytesStart::owned_name(ELEM_ANIM);
+                let mut tag = BytesStart::new(ELEM_ANIM);
                 tag.push_attribute((ATTR_FLAGS, anim.flags.to_string().as_ref()));
                 tag.push_attribute((ATTR_OBJ, anim.obj.to_string().as_ref()));
                 tag.push_attribute((ATTR_ID, anim.anim.to_string().as_ref()));
@@ -168,7 +168,7 @@ impl<W: Write> MessageWriter<W> {
             }
 
             MsgCommand::Sfx(id, ty) => {
-                let mut tag = BytesStart::owned_name(ELEM_SFX);
+                let mut tag = BytesStart::new(ELEM_SFX);
                 tag.push_attribute((ATTR_NAME, id.name()));
                 match ty {
                     MsgSfxType::Wait => tag.push_attribute((ATTR_CMD, SFX_WAIT)),
@@ -194,13 +194,13 @@ impl<W: Write> MessageWriter<W> {
             }
 
             MsgCommand::Voice(voice) => {
-                let mut tag = BytesStart::owned_name(ELEM_VOICE);
+                let mut tag = BytesStart::new(ELEM_VOICE);
                 tag.push_attribute((ATTR_ID, voice.to_id()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Default(arg) => {
-                let mut tag = BytesStart::owned_name(ELEM_DEFAULT);
+                let mut tag = BytesStart::new(ELEM_DEFAULT);
                 if arg.flags.contains(DefaultFlags::VARIABLE) {
                     tag.push_attribute((ATTR_VAR, arg.index.to_string().as_ref()));
                 } else {
@@ -210,55 +210,55 @@ impl<W: Write> MessageWriter<W> {
             }
 
             MsgCommand::Newline => {
-                let tag = BytesStart::owned_name(ELEM_NEWLINE);
+                let tag = BytesStart::new(ELEM_NEWLINE);
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::NewlineVt => {
-                let tag = BytesStart::owned_name(ELEM_NEWLINE_VT);
+                let tag = BytesStart::new(ELEM_NEWLINE_VT);
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Format(text) => {
-                let tag = BytesStart::owned_name(ELEM_FORMAT);
-                self.writer.write_event(Event::Start(tag.to_borrowed()))?;
+                let tag = BytesStart::new(ELEM_FORMAT);
+                self.writer.write_event(Event::Start(tag.borrow()))?;
                 let decoded = text_to_xml(text)?;
-                self.writer.write_event(Event::Text(BytesText::from_escaped_str(decoded)))?;
+                self.writer.write_event(Event::Text(BytesText::from_escaped(decoded)))?;
                 self.writer.write_event(Event::End(tag.to_end()))?;
             }
 
             MsgCommand::Size(size) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_SIZE, size.to_string().as_ref()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Color(color) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_COLOR, color.to_id()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Rgba(rgba) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_COLOR, format!("#{:08x}", rgba).as_ref()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Proportional(b) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_MONO, (!b).to_string().as_ref()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Icon(icon) => {
-                let mut tag = BytesStart::owned_name(ELEM_ICON);
+                let mut tag = BytesStart::new(ELEM_ICON);
                 tag.push_attribute((ATTR_ID, icon.to_id()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Shake(arg) => {
-                let mut tag = BytesStart::owned_name(ELEM_SHAKE);
+                let mut tag = BytesStart::new(ELEM_SHAKE);
                 let ty = if arg.flags.contains(ShakeFlags::JITTER) {
                     SHAKE_JITTER
                 } else if arg.flags.contains(ShakeFlags::WAVE) {
@@ -283,25 +283,25 @@ impl<W: Write> MessageWriter<W> {
             }
 
             MsgCommand::Center(center) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_ALIGN, if *center { ALIGN_CENTER } else { ALIGN_LEFT }));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Rotate(rotation) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_ROTATION, rotation.to_string().as_ref()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::Scale(x, y) => {
-                let mut tag = BytesStart::owned_name(ELEM_FONT);
+                let mut tag = BytesStart::new(ELEM_FONT);
                 tag.push_attribute((ATTR_SCALE, format!("{},{}", x, y).as_ref()));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
             MsgCommand::NumInput(arg) => {
-                let mut tag = BytesStart::owned_name(ELEM_NUM_INPUT);
+                let mut tag = BytesStart::new(ELEM_NUM_INPUT);
                 tag.push_attribute((ATTR_DIGITS, arg.digits.to_string().as_ref()));
                 tag.push_attribute((ATTR_EDITABLE, arg.editable.to_string().as_ref()));
                 tag.push_attribute((ATTR_SELECTED, arg.selected.to_string().as_ref()));
@@ -309,7 +309,7 @@ impl<W: Write> MessageWriter<W> {
             }
 
             MsgCommand::Question(arg) => {
-                let mut tag = BytesStart::owned_name(ELEM_QUESTION);
+                let mut tag = BytesStart::new(ELEM_QUESTION);
                 let yn = |f| if arg.flags.contains(f) { QUESTION_NO } else { QUESTION_YES };
                 tag.push_attribute((ATTR_LEFT, yn(QuestionFlags::LEFT_NO).to_string().as_ref()));
                 tag.push_attribute((ATTR_RIGHT, yn(QuestionFlags::RIGHT_NO).to_string().as_ref()));
@@ -318,12 +318,12 @@ impl<W: Write> MessageWriter<W> {
             }
 
             MsgCommand::Stay => {
-                self.writer.write_event(Event::Empty(BytesStart::owned_name(ELEM_STAY)))?;
+                self.writer.write_event(Event::Empty(BytesStart::new(ELEM_STAY)))?;
             }
 
             MsgCommand::Text(text) => {
                 let decoded = text_to_xml(text)?;
-                self.writer.write_event(Event::Text(BytesText::from_escaped_str(decoded)))?;
+                self.writer.write_event(Event::Text(BytesText::from_escaped(decoded)))?;
             }
         }
 
@@ -342,7 +342,7 @@ impl<W: Write> MessageWriter<W> {
 
     fn begin_text(&mut self) -> Result<()> {
         if !self.in_text {
-            let tag = BytesStart::owned_name(ELEM_TEXT);
+            let tag = BytesStart::new(ELEM_TEXT);
             self.writer.write_event(Event::Start(tag))?;
             self.in_text = true;
         }
@@ -351,7 +351,7 @@ impl<W: Write> MessageWriter<W> {
 
     fn end_text(&mut self) -> Result<()> {
         if self.in_text {
-            let tag = BytesStart::owned_name(ELEM_TEXT);
+            let tag = BytesStart::new(ELEM_TEXT);
             self.writer.write_event(Event::End(tag.to_end()))?;
             self.in_text = false;
         }
@@ -360,7 +360,7 @@ impl<W: Write> MessageWriter<W> {
 
     fn next_line(&mut self) -> Result<()> {
         if !self.new_line {
-            self.writer.write(b"\n")?;
+            self.writer.inner().write_all(b"\n")?;
             self.new_line = true;
         }
         Ok(())

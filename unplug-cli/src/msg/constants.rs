@@ -1,7 +1,7 @@
 #![allow(unreachable_pub)]
 
-pub const XML_VERSION: &[u8] = b"1.0";
-pub const XML_ENCODING: &[u8] = b"UTF-8";
+pub const XML_VERSION: &str = "1.0";
+pub const XML_ENCODING: &str = "UTF-8";
 
 pub const ELEM_MESSAGES: &str = "messages";
 

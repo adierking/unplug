@@ -53,7 +53,7 @@ num_enum = "0.5.7"
 num-traits = "0.2"
 phf = { version = "0.11.1", features = ["macros", "unicase"] }
 proc-macro2 = "1.0"
-quick-xml = "0.23"
+quick-xml = "0.26.0"
 quote = "1.0"
 regex = "1"
 seahash = "4.1.0"
