@@ -383,9 +383,20 @@ impl EntryPoint {
     }
 }
 
+/// A target specifier indicating the purpose of a script.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Target {
+    /// The script defines global library functions.
+    Globals,
+    /// The script is for the stage with the given name (no extension).
+    Stage(String),
+}
+
 /// An assembly program.
 #[derive(Default)]
 pub struct Program {
+    /// An optional target specifier.
+    pub target: Option<Target>,
     /// The blocks making up the program. Each block's ID is its index in this list.
     pub blocks: Vec<Block>,
     /// The ID of the first block in the program, or `None` if the program is empty.
@@ -404,7 +415,7 @@ impl Program {
 
     /// Creates a program with blocks populated from `blocks`.
     pub fn with_blocks(blocks: impl Into<Vec<Block>>, first_block: Option<BlockId>) -> Self {
-        Self { blocks: blocks.into(), first_block, ..Default::default() }
+        Self { target: None, blocks: blocks.into(), first_block, ..Default::default() }
     }
 
     /// Inserts `block` after `after_id` in program order and returns the new block's ID.

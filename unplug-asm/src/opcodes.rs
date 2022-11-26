@@ -50,6 +50,8 @@ impl Opcode for AsmMsgOp {
 /// An assembler directive type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum DirOp {
+    Globals,
+    Stage,
     Byte,
     Word,
     Dword,
@@ -294,6 +296,8 @@ opcode_names! {
     }
 
     DirOp {
+        Globals => "globals",
+        Stage => "stage",
         Byte => "db",
         Word => "dw",
         Dword => "dd",

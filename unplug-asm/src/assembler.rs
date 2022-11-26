@@ -3,7 +3,7 @@ use crate::lexer::Number;
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::parser::{Ast, Item, Node, Value};
 use crate::program::{
-    Block, BlockContent, EntryPoint, Operand, OperandType, Operation, Program, TypeHint,
+    Block, BlockContent, EntryPoint, Operand, OperandType, Operation, Program, Target, TypeHint,
 };
 use crate::{Error, Result};
 use smol_str::SmolStr;
@@ -151,6 +151,19 @@ impl<'a> ProgramAssembler<'a> {
         dir: Operation<DirOp>,
     ) -> Result<BlockId> {
         match dir.opcode {
+            DirOp::Globals => {
+                if self.program.target.replace(Target::Globals).is_some() {
+                    return Err(Error::DuplicateTarget);
+                }
+            }
+            DirOp::Stage => {
+                let name_op = dir.operands.get(0).ok_or(Error::ExpectedText)?;
+                let Operand::Text(name_text) = name_op else { return Err(Error::ExpectedText) };
+                let name = name_text.decode()?.into_owned();
+                if self.program.target.replace(Target::Stage(name)).is_some() {
+                    return Err(Error::DuplicateTarget);
+                }
+            }
             DirOp::Byte | DirOp::Word | DirOp::Dword => {
                 // Data
                 let block = block_id.get_mut(&mut self.program.blocks);

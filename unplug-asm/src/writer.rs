@@ -1,7 +1,7 @@
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::program::{
-    Block, BlockContent, BlockFlags, CodeOperation, EntryPoint, Operand, Operation, Program,
+    Block, BlockContent, BlockFlags, CodeOperation, EntryPoint, Operand, Operation, Program, Target,
 };
 use crate::Result;
 use smallvec::SmallVec;
@@ -400,17 +400,18 @@ pub struct ProgramBuilder<'a> {
 }
 
 impl<'a> ProgramBuilder<'a> {
-    pub fn new(script: &'a Script) -> Self {
-        Self::new_impl(script, None)
+    pub fn new(target: Option<Target>, script: &'a Script) -> Self {
+        Self::new_impl(target, script, None)
     }
 
-    pub fn with_stage(stage: &'a Stage) -> Self {
-        Self::new_impl(&stage.script, Some(stage))
+    pub fn with_stage(name: impl Into<String>, stage: &'a Stage) -> Self {
+        Self::new_impl(Some(Target::Stage(name.into())), &stage.script, Some(stage))
     }
 
-    fn new_impl(script: &'a Script, stage: Option<&'a Stage>) -> Self {
+    fn new_impl(target: Option<Target>, script: &'a Script, stage: Option<&'a Stage>) -> Self {
         let blocks = (0..script.len()).map(|_| Block::new()).collect::<Vec<_>>();
-        let program = Program::with_blocks(blocks, None);
+        let mut program = Program::with_blocks(blocks, None);
+        program.target = target;
         Self { script, stage, program, queue: vec![] }
     }
 
@@ -592,6 +593,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     pub fn write(mut self) -> Result<()> {
+        self.write_target()?;
         let mut current = self.program.first_block;
         let mut first = true;
         while let Some(id) = current {
@@ -604,6 +606,19 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
             first = false;
         }
         let _ = self.writer.flush();
+        Ok(())
+    }
+
+    fn write_target(&mut self) -> Result<()> {
+        let op = match &self.program.target {
+            Some(Target::Globals) => Operation::new(DirOp::Globals),
+            Some(Target::Stage(path)) => {
+                Operation::with_operands(DirOp::Stage, [Text::encode(path)?.into()])
+            }
+            None => return Ok(()),
+        };
+        self.write_directive(&op)?;
+        write!(self.writer, "\n\n")?;
         Ok(())
     }
 

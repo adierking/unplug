@@ -63,7 +63,7 @@
 
 		"directive-name": {
 			"name": "keyword.other.directive.unplug",
-			"match": "\\.(d[bwd]|prologue|startup|dead|pose|time_(cycle|up)|interact)\\b"
+			"match": "\\.(d[bwd]|prologue|startup|dead|pose|time_(cycle|up)|interact|globals|stage)\\b"
 		},
 
 		"keyword-command": {

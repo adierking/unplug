@@ -65,6 +65,9 @@ pub enum Error {
     #[error("label is defined more than once: \"{0}\"")]
     DuplicateLabel(Arc<str>),
 
+    #[error("the program target is defined more than once")]
+    DuplicateTarget,
+
     #[error("expected an integer")]
     ExpectedInteger,
 
@@ -73,6 +76,9 @@ pub enum Error {
 
     #[error("expected an object index")]
     ExpectedObjectIndex,
+
+    #[error("expected a text string")]
+    ExpectedText,
 
     #[error("invalid 8-bit integer: {0}")]
     Invalid8(Number),

@@ -19,7 +19,7 @@ use unplug::stage::Stage;
 use unplug_asm::assembler::ProgramAssembler;
 use unplug_asm::lexer::{Logos, Token};
 use unplug_asm::parser::{Ast, Parser, Stream};
-use unplug_asm::program::EntryPoint;
+use unplug_asm::program::{EntryPoint, Target};
 use unplug_asm::writer::{ProgramBuilder, ProgramWriter};
 
 fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
@@ -143,7 +143,7 @@ pub fn command_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
 }
 
 fn disassemble_globals(globals: &Libs, writer: impl Write) -> Result<()> {
-    let mut builder = ProgramBuilder::new(&globals.script);
+    let mut builder = ProgramBuilder::new(Some(Target::Globals), &globals.script);
     for (i, &block) in globals.entry_points.iter().enumerate() {
         builder.add_entry_point(EntryPoint::Lib(i as i16), block)?;
     }
@@ -152,8 +152,8 @@ fn disassemble_globals(globals: &Libs, writer: impl Write) -> Result<()> {
     Ok(())
 }
 
-fn disassemble_stage(stage: &Stage, writer: impl Write) -> Result<()> {
-    let mut builder = ProgramBuilder::with_stage(stage);
+fn disassemble_stage(name: &str, stage: &Stage, writer: impl Write) -> Result<()> {
+    let mut builder = ProgramBuilder::with_stage(name, stage);
     for (event, block) in stage.events() {
         builder.add_entry_point(EntryPoint::Event(event), block)?;
     }
@@ -166,13 +166,15 @@ fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(File::create(opt.output)?);
     let file = find_stage_file(&mut ctx, &opt.stage)?;
+    let info = ctx.query_file(&file)?;
 
     info!("Reading script globals");
     let libs = ctx.read_globals()?.read_libs()?;
 
     info!("Disassembling {}", ctx.query_file(&file)?.name);
     let stage = ctx.read_stage_file(&libs, &file)?;
-    disassemble_stage(&stage, out)?;
+    let name = info.name.rsplit_once('.').unwrap_or((&info.name, "")).0;
+    disassemble_stage(name, &stage, out)?;
 
     info!("Done!");
     Ok(())
@@ -193,7 +195,7 @@ pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Re
         let stage = ctx.read_stage(&libs, id)?;
         let out_path = Path::join(&opt.output, format!("{}.us", id.name()));
         let writer = BufWriter::new(File::create(out_path)?);
-        disassemble_stage(&stage, writer)?;
+        disassemble_stage(id.name(), &stage, writer)?;
     }
     Ok(())
 }
