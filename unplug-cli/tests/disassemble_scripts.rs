@@ -2,6 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::fs;
 use tempfile::TempDir;
+use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
 use unplug_asm::lexer::{Logos, Token};
 use unplug_asm::parser::{Ast, Parser, Stream};
@@ -30,7 +31,9 @@ fn test_disassemble_scripts() -> Result<()> {
         let stream = Stream::from_iter(len..len + 1, lexer.spanned());
         let ast = Ast::parser().parse(stream).unwrap();
         info!("Assembling {}", name);
-        ProgramAssembler::new(&ast).assemble()?;
+        let program = ProgramAssembler::new(&ast).assemble()?;
+        info!("Compiling {}", name);
+        asm::compile(&program)?;
     }
     Ok(())
 }

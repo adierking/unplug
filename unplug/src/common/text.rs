@@ -70,6 +70,11 @@ impl Text {
         self.bytes.clear()
     }
 
+    /// Returns an iterator over the bytes in the text.
+    pub fn iter(&self) -> impl Iterator<Item = u8> + '_ {
+        self.bytes.iter().copied()
+    }
+
     /// Constructs a `Text` by encoding a UTF-8 string.
     pub fn encode(string: &str) -> Result<Self> {
         let (bytes, _, unmappable) = SHIFT_JIS.encode(string);
@@ -133,5 +138,13 @@ impl Extend<Text> for Text {
         for text in iter.into_iter() {
             self.bytes.extend_from_slice(&text.bytes);
         }
+    }
+}
+
+impl IntoIterator for Text {
+    type Item = u8;
+    type IntoIter = std::vec::IntoIter<u8>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.bytes.into_iter()
     }
 }

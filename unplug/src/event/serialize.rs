@@ -42,6 +42,9 @@ pub enum Error {
     #[error("unsupported message character: {0:?}")]
     UnsupportedMsgChar(MsgOp),
 
+    #[error("unexpected end of data")]
+    EndOfData,
+
     #[error("message end offset ({end:#x}) is before the start offset ({start:#x})")]
     InvalidMsgOffset { start: u64, end: u64 },
 

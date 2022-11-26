@@ -15,12 +15,15 @@
 )]
 
 pub mod assembler;
+pub mod compiler;
 pub mod label;
 pub mod lexer;
 pub mod opcodes;
 pub mod parser;
 pub mod program;
 pub mod writer;
+
+pub use compiler::compile;
 
 use lexer::Number;
 use program::{EntryPoint, OperandType};
@@ -30,6 +33,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use unplug::common::text;
 use unplug::event::command;
+use unplug::event::script;
 use unplug::event::serialize;
 use unplug::from_error_boxed;
 
@@ -68,11 +72,20 @@ pub enum Error {
     #[error("the program target is defined more than once")]
     DuplicateTarget,
 
+    #[error("expected a command")]
+    ExpectedCommand,
+
+    #[error("expected an expression")]
+    ExpectedExpr,
+
     #[error("expected an integer")]
     ExpectedInteger,
 
     #[error("expected a label")]
     ExpectedLabel,
+
+    #[error("expected a message operand")]
+    ExpectedMessage,
 
     #[error("expected an object index")]
     ExpectedObjectIndex,
@@ -101,6 +114,15 @@ pub enum Error {
     #[error("else labels can only appear in conditionals")]
     UnexpectedElseLabel,
 
+    #[error("unexpected end of operand list")]
+    UnexpectedEnd,
+
+    #[error("unexpected expression")]
+    UnexpectedExpr,
+
+    #[error("unexpected message command")]
+    UnexpectedMessage,
+
     #[error("unrecognized command: \"{0}\"")]
     UnrecognizedCommand(SmolStr),
 
@@ -123,12 +145,16 @@ pub enum Error {
     Io(Box<io::Error>),
 
     #[error(transparent)]
+    Script(Box<script::Error>),
+
+    #[error(transparent)]
     Serialize(Box<serialize::Error>),
 }
 
 from_error_boxed!(Error::Command, command::Error);
 from_error_boxed!(Error::Encoding, text::Error);
 from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Script, script::Error);
 from_error_boxed!(Error::Serialize, serialize::Error);
 
 impl From<Error> for serialize::Error {

@@ -16,6 +16,7 @@ use unplug::data::{Resource, Stage as StageId};
 use unplug::event::{Block, Script};
 use unplug::globals::Libs;
 use unplug::stage::Stage;
+use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
 use unplug_asm::lexer::{Logos, Token};
 use unplug_asm::parser::{Ast, Parser, Stream};
@@ -215,15 +216,19 @@ fn command_assemble(_ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
                 error!("{}: {}", name, error);
             }
             return match errors.len() {
-                1 => Err(anyhow!("1 error found")),
-                e => Err(anyhow!("{} errors found", e)),
+                1 => Err(anyhow!("1 syntax error found")),
+                e => Err(anyhow!("{} syntax errors found", e)),
             };
         }
     };
+    info!("Assembling program");
     let program = ProgramAssembler::new(&ast).assemble()?;
+    info!("Compiling script data");
+    let script = asm::compile(&program)?;
+    let flags = ScriptDumpFlags { dump_unknown: false, no_offsets: true };
     let stdout = io::stdout();
     let out = BufWriter::new(stdout.lock());
-    ProgramWriter::new(out, &program).write()?;
+    dump_script(&script, &flags, out)?;
     Ok(())
 }
 
