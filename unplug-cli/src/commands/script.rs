@@ -5,16 +5,17 @@ use crate::opt::{
     ScriptAssembleOpt, ScriptCommand, ScriptDisassembleAllOpt, ScriptDisassembleOpt,
     ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
+use asm::program::Program;
 use log::error;
 use log::info;
 use std::fs::{self, File};
-use std::io::{self, BufWriter, Write};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 use unplug::data::{Resource, Stage as StageId};
-use unplug::event::{Block, Script};
-use unplug::globals::Libs;
+use unplug::event::{Block, BlockId, Script};
+use unplug::globals::{GlobalsBuilder, Libs, NUM_LIBS};
 use unplug::stage::Stage;
 use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
@@ -176,8 +177,6 @@ fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
     let stage = ctx.read_stage_file(&libs, &file)?;
     let name = info.name.rsplit_once('.').unwrap_or((&info.name, "")).0;
     disassemble_stage(name, &stage, out)?;
-
-    info!("Done!");
     Ok(())
 }
 
@@ -201,7 +200,46 @@ pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Re
     Ok(())
 }
 
-fn command_assemble(_ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
+/// Turns `script` into a global library using entry point information from `program`.
+fn compile_libs(program: &Program, script: Script) -> Result<Libs> {
+    let mut entry_points: Vec<Option<BlockId>> = vec![None; NUM_LIBS];
+    for (&entry_point, &block) in &program.entry_points {
+        let EntryPoint::Lib(index) = entry_point else {
+            bail!("Globals scripts cannot define event entry points");
+        };
+        if index < 0 || index > NUM_LIBS as i16 {
+            bail!("Invalid library function index: {index}");
+        }
+        entry_points[index as usize] = Some(block);
+    }
+    Ok(Libs {
+        script,
+        entry_points: entry_points
+            .into_iter()
+            .enumerate()
+            .map(|(i, e)| e.ok_or_else(|| anyhow!("Library function {i} is not defined")))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_boxed_slice(),
+    })
+}
+
+/// Replaces `stage`'s script with `script` using entry point information from `program`.
+fn compile_stage(stage: &mut Stage, program: &Program, script: Script) -> Result<()> {
+    stage.clear_events();
+    stage.script = script;
+    for (&entry_point, &block) in &program.entry_points {
+        match entry_point {
+            EntryPoint::Event(event) => stage.set_event(event, Some(block))?,
+            EntryPoint::Lib(_) => bail!("Stage scripts cannot define library entry points"),
+        }
+    }
+    Ok(())
+}
+
+/// The `script assemble` CLI command.
+fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
+    let mut ctx = ctx.open_read_write()?;
+
     let name = opt.path.file_name().unwrap_or_default().to_string_lossy();
     info!("Parsing {}", name);
     let source = fs::read_to_string(&opt.path)?;
@@ -221,14 +259,32 @@ fn command_assemble(_ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
             };
         }
     };
-    info!("Assembling program");
+
+    info!("Assembling script");
     let program = ProgramAssembler::new(&ast).assemble()?;
-    info!("Compiling script data");
     let script = asm::compile(&program)?;
-    let flags = ScriptDumpFlags { dump_unknown: false, no_offsets: true };
-    let stdout = io::stdout();
-    let out = BufWriter::new(stdout.lock());
-    dump_script(&script, &flags, out)?;
+    let update = match &program.target {
+        Some(Target::Globals) => {
+            let libs = compile_libs(&program, script)?;
+            let mut globals = ctx.read_globals()?;
+            ctx.begin_update()
+                .write_globals(GlobalsBuilder::new().base(&mut globals).libs(&libs))?
+        }
+        Some(Target::Stage(stage_name)) => {
+            let stage_id = StageId::find(stage_name)
+                .ok_or_else(|| anyhow!("Unknown stage \"{stage_name}\""))?;
+            let libs = ctx.read_globals()?.read_libs()?;
+            let mut stage = ctx.read_stage(&libs, stage_id)?;
+            compile_stage(&mut stage, &program, script)?;
+            ctx.begin_update().write_stage(stage_id, &stage)?
+        }
+        None => {
+            bail!("The script does not have a .globals or .stage directive");
+        }
+    };
+
+    info!("Updating game files");
+    update.commit()?;
     Ok(())
 }
 
