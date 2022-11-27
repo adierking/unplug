@@ -347,19 +347,65 @@ impl Stage {
         Self::default()
     }
 
-    /// Returns a reference to the object at `index`, or `None` if it is out-of-bounds.
-    pub fn object(&self, index: i32) -> Option<&ObjectPlacement> {
-        self.objects.get(usize::try_from(index).ok()?)
+    /// Returns a reference to the object at `index`, or an error if the index is invalid.
+    pub fn object(&self, index: i32) -> Result<&ObjectPlacement> {
+        let uindex = usize::try_from(index).map_err(|_| Error::InvalidObjectIndex(index))?;
+        self.objects.get(uindex).ok_or(Error::InvalidObjectIndex(index))
     }
 
-    /// Returns a mutable reference to the object at `index`, or `None` if it is out-of-bounds.
-    pub fn object_mut(&mut self, index: i32) -> Option<&mut ObjectPlacement> {
-        self.objects.get_mut(usize::try_from(index).ok()?)
+    /// Returns a mutable reference to the object at `index`, or an error if the index is invalid.
+    pub fn object_mut(&mut self, index: i32) -> Result<&mut ObjectPlacement> {
+        let uindex = usize::try_from(index).map_err(|_| Error::InvalidObjectIndex(index))?;
+        self.objects.get_mut(uindex).ok_or(Error::InvalidObjectIndex(index))
     }
 
     /// Returns an iterator over the events in the stage and their corresponding block IDs.
     pub fn events(&self) -> EventIterator<'_> {
         EventIterator::new(self)
+    }
+
+    /// Returns the block assigned to the entry point for `event`, if any.
+    ///
+    /// This can fail if the event references an invalid object index.
+    pub fn event(&self, event: Event) -> Result<Option<BlockId>> {
+        Ok(match event {
+            Event::Prologue => self.on_prologue,
+            Event::Startup => self.on_startup,
+            Event::Dead => self.on_dead,
+            Event::Pose => self.on_pose,
+            Event::TimeCycle => self.on_time_cycle,
+            Event::TimeUp => self.on_time_up,
+            Event::Interact(index) => self.object(index)?.script,
+        })
+    }
+
+    /// Assigns `block` to the entry point for `event`.
+    ///
+    /// This can fail if the event references an invalid object index.
+    pub fn set_event(&mut self, event: Event, block: Option<BlockId>) -> Result<()> {
+        match event {
+            Event::Prologue => self.on_prologue = block,
+            Event::Startup => self.on_startup = block,
+            Event::Dead => self.on_dead = block,
+            Event::Pose => self.on_pose = block,
+            Event::TimeCycle => self.on_time_cycle = block,
+            Event::TimeUp => self.on_time_up = block,
+            Event::Interact(index) => self.object_mut(index)?.script = block,
+        }
+        Ok(())
+    }
+
+    /// Resets every event entry point to `None`.
+    pub fn clear_events(&mut self) {
+        self.on_prologue = None;
+        self.on_startup = None;
+        self.on_dead = None;
+        self.on_pose = None;
+        self.on_time_cycle = None;
+        self.on_time_up = None;
+        for object in &mut self.objects {
+            object.script = None;
+        }
     }
 
     pub fn read_from<R: ReadSeek + ?Sized>(mut reader: &mut R, libs: &Libs) -> Result<Self> {
@@ -580,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn test_entry_points() {
+    fn test_events() {
         let iter = TEST_STAGE.events();
         assert_eq!(iter.size_hint(), (0, Some(9)));
         let blocks = iter.collect::<Vec<_>>();
@@ -597,7 +643,7 @@ mod tests {
     }
 
     #[test]
-    fn test_entry_points_rev() {
+    fn test_events_rev() {
         let blocks = TEST_STAGE.events().rev().collect::<Vec<_>>();
         assert_eq!(
             blocks,
@@ -609,5 +655,65 @@ mod tests {
                 (Event::Prologue, BlockId::new(1)),
             ]
         );
+    }
+
+    #[test]
+    fn test_set_and_get_events() {
+        let mut stage = Stage::new();
+
+        stage.set_event(Event::Prologue, Some(BlockId::new(1))).unwrap();
+        stage.set_event(Event::Startup, Some(BlockId::new(2))).unwrap();
+        stage.set_event(Event::Dead, Some(BlockId::new(3))).unwrap();
+        stage.set_event(Event::Pose, Some(BlockId::new(4))).unwrap();
+        stage.set_event(Event::TimeCycle, Some(BlockId::new(5))).unwrap();
+        stage.set_event(Event::TimeUp, Some(BlockId::new(6))).unwrap();
+
+        assert_eq!(stage.event(Event::Prologue).unwrap(), Some(BlockId::new(1)));
+        assert_eq!(stage.event(Event::Startup).unwrap(), Some(BlockId::new(2)));
+        assert_eq!(stage.event(Event::Dead).unwrap(), Some(BlockId::new(3)));
+        assert_eq!(stage.event(Event::Pose).unwrap(), Some(BlockId::new(4)));
+        assert_eq!(stage.event(Event::TimeCycle).unwrap(), Some(BlockId::new(5)));
+        assert_eq!(stage.event(Event::TimeUp).unwrap(), Some(BlockId::new(6)));
+
+        stage.objects.push(ObjectPlacement::new(Object::NpcFrog));
+        stage.objects.push(ObjectPlacement::new(Object::NpcFrog));
+        stage.set_event(Event::Interact(0), Some(BlockId::new(7))).unwrap();
+        stage.set_event(Event::Interact(1), Some(BlockId::new(8))).unwrap();
+        assert_eq!(stage.event(Event::Interact(0)).unwrap(), Some(BlockId::new(7)));
+        assert_eq!(stage.event(Event::Interact(1)).unwrap(), Some(BlockId::new(8)));
+
+        assert!(matches!(stage.event(Event::Interact(2)), Err(Error::InvalidObjectIndex(2))));
+        assert!(matches!(stage.event(Event::Interact(-1)), Err(Error::InvalidObjectIndex(-1))));
+        assert!(matches!(
+            stage.set_event(Event::Interact(2), None),
+            Err(Error::InvalidObjectIndex(2))
+        ));
+        assert!(matches!(
+            stage.set_event(Event::Interact(-1), None),
+            Err(Error::InvalidObjectIndex(-1))
+        ));
+    }
+
+    #[test]
+    fn test_clear_events() {
+        let mut stage = Stage::new();
+        stage.on_prologue = Some(BlockId::new(1));
+        stage.on_startup = Some(BlockId::new(2));
+        stage.on_dead = Some(BlockId::new(3));
+        stage.on_pose = Some(BlockId::new(4));
+        stage.on_time_cycle = Some(BlockId::new(5));
+        stage.on_time_up = Some(BlockId::new(6));
+        stage.objects.push(ObjectPlacement::with_script(Object::NpcFrog, BlockId::new(4)));
+        stage.objects.push(ObjectPlacement::with_script(Object::NpcFrog, BlockId::new(5)));
+        stage.clear_events();
+        assert!(stage.on_prologue.is_none());
+        assert!(stage.on_startup.is_none());
+        assert!(stage.on_dead.is_none());
+        assert!(stage.on_pose.is_none());
+        assert!(stage.on_time_cycle.is_none());
+        assert!(stage.on_time_up.is_none());
+        for object in &stage.objects {
+            assert!(object.script.is_none());
+        }
     }
 }

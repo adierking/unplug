@@ -19,6 +19,9 @@ pub enum Error {
     #[error("invalid stage header")]
     InvalidHeader,
 
+    #[error("invalid object index: {0}")]
+    InvalidObjectIndex(i32),
+
     #[error("unrecognized object id: {0}")]
     UnrecognizedObject(i32),
 
