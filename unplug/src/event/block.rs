@@ -107,18 +107,33 @@ impl CodeBlock {
     }
 }
 
+/// A block of data in an event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataBlock {
+    /// The block is an array of signed 8-bit integers.
     I8Array(Vec<i8>),
+    /// The block is an array of unsigned 8-bit integers.
     U8Array(Vec<u8>),
+    /// The block is an array of signed 16-bit integers.
     I16Array(Vec<i16>),
+    /// The block is an array of unsigned 16-bit integers.
     U16Array(Vec<u16>),
+    /// The block is an array of signed 32-bit integers.
     I32Array(Vec<i32>),
+    /// The block is an array of unsigned 32-bit integers.
     U32Array(Vec<u32>),
+    /// The block is an array of pointers, usually terminated by a null pointer.
     PtrArray(Vec<Pointer>),
+    /// The block is a path to a bone.
     ObjBone(ObjBone),
+    /// The block is a pair of object IDs.
     ObjPair(ObjPair),
+    /// The block is text data.
     String(Text),
+    /// The block is a contiguous stream of varying data types.
+    ///
+    /// These blocks are not used by the game and currently cannot be read back in correctly.
+    Variable(Vec<DataBlock>),
 }
 
 macro_rules! impl_data_block_from {
@@ -141,6 +156,7 @@ impl_data_block_from!(Vec<Pointer>, PtrArray);
 impl_data_block_from!(ObjBone, ObjBone);
 impl_data_block_from!(ObjPair, ObjPair);
 impl_data_block_from!(Text, String);
+impl_data_block_from!(Vec<DataBlock>, Variable);
 
 impl SerializeEvent for DataBlock {
     type Error = serialize::Error;
@@ -156,6 +172,7 @@ impl SerializeEvent for DataBlock {
             DataBlock::ObjBone(bone) => bone.serialize(ser),
             DataBlock::ObjPair(pair) => pair.serialize(ser),
             DataBlock::String(s) => ser.serialize_text(s),
+            DataBlock::Variable(data) => data.iter().try_for_each(|x| x.serialize(ser)),
         }
     }
 }
