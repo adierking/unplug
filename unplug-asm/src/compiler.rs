@@ -570,11 +570,17 @@ fn compile_code(program: &Program, block: &Block) -> Result<ScriptBlock> {
             .map_err(|e| ScriptError::WriteCommand(e.into()))?;
         code.commands.push(cmd);
     }
-    code.next_block = block.next.map(Pointer::Block);
     if let Some(last) = code.commands.last() {
         if let Some(args) = last.if_args() {
+            code.next_block = block.next.map(Pointer::Block);
             code.else_block = Some(args.else_target);
+        } else if let Some(next_id) = last.goto_target() {
+            code.next_block = Some(*next_id);
+        } else if !last.is_control_flow() {
+            code.next_block = block.next.map(Pointer::Block);
         }
+    } else {
+        code.next_block = block.next.map(Pointer::Block);
     }
     Ok(ScriptBlock::Code(code))
 }

@@ -330,7 +330,7 @@ impl Block {
 
     /// Returns true if the block contains code.
     pub fn is_code(&self) -> bool {
-        matches!(&self.content, Some(BlockContent::Data(_)))
+        matches!(&self.content, Some(BlockContent::Code(_)))
     }
 
     /// Returns true if the block contains data.
