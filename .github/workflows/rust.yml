@@ -137,3 +137,13 @@ jobs:
         with:
           github-token: ${{ secrets.github_token }}
           parallel-finished: true
+
+  vscode-package:
+    name: "VSCode Package"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload VSCode Extension
+        uses: actions/upload-artifact@v3
+        with:
+          name: unplug-vscode
+          path: unplug-vscode/
