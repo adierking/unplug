@@ -6,8 +6,8 @@ use crate::opt::{
     StageCommand, StageExportAllOpt, StageExportOpt, StageImportAllOpt, StageImportOpt,
 };
 use crate::serde_list_wrapper;
-use anyhow::{anyhow, bail, Error, Result};
-use log::{debug, error, info, warn};
+use anyhow::{bail, Result};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::ser::Serializer;
 use std::collections::HashSet;
@@ -117,26 +117,6 @@ mod object_flags {
     }
 }
 
-/// Serialize/Deserialize implementation for `Option<BlockId>`
-mod script {
-    use super::*;
-    use serde::{Deserializer, Serializer};
-
-    pub(super) fn serialize<S: Serializer>(
-        script: &Option<BlockId>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        script.map(|id| id.index()).serialize(serializer)
-    }
-
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<BlockId>, D::Error> {
-        let val = Option::<usize>::deserialize(deserializer)?;
-        Ok(val.map(|id| BlockId::new(id as u32)))
-    }
-}
-
 /// Serializable 3D vector which stores integers.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Vec3I {
@@ -189,8 +169,6 @@ struct ObjectPlacementDef {
     variant: i32,
     #[serde(with = "object_flags")]
     flags: ObjectFlags,
-    #[serde(with = "script")]
-    script: Option<BlockId>,
 }
 
 serde_list_wrapper!(ObjectPlacementWrapper, ObjectPlacementDef);
@@ -206,7 +184,6 @@ impl From<ObjectPlacement> for ObjectPlacementDef {
             spawn_flag: obj.spawn_flag,
             variant: obj.variant,
             flags: obj.flags,
-            script: obj.script,
         }
     }
 }
@@ -230,7 +207,7 @@ impl From<ObjectPlacementDef> for ObjectPlacement {
             spawn_flag: obj.spawn_flag,
             variant: obj.variant,
             flags: obj.flags,
-            script: obj.script,
+            script: None,
         }
     }
 }
@@ -303,31 +280,6 @@ pub fn command_export_all(ctx: Context, opt: StageExportAllOpt) -> Result<()> {
     Ok(())
 }
 
-fn is_script_modified(old: &[ObjectPlacement], new: &[ObjectPlacement]) -> bool {
-    let num_objects = old.len().max(new.len());
-    for i in 0..num_objects {
-        if i < old.len() && i < new.len() {
-            // Script differs between two objects
-            if old[i].script != new[i].script {
-                return true;
-            }
-        } else if i < old.len() {
-            // Script in old but not new
-            if old[i].script.is_some() {
-                return true;
-            }
-        } else if new[i].script.is_some() {
-            // Script in new but not old
-            return true;
-        }
-    }
-    false
-}
-
-fn script_modified_error() -> Error {
-    anyhow!("Editing object scripts is not supported yet")
-}
-
 /// Patches an item script to change the item ID and returns true if a patch was made.
 fn patch_item_script(
     script: &mut Script,
@@ -365,13 +317,11 @@ fn patch_item_script(
 fn patch_scripts(
     script: &mut Script,
     old_objects: &[ObjectPlacement],
-    new_objects: &[ObjectPlacement],
+    new_objects: &mut [ObjectPlacement],
 ) {
     for (i, (old, new)) in old_objects.iter().zip(new_objects).enumerate() {
-        let obj_script = match new.script {
-            Some(s) => s,
-            None => continue,
-        };
+        new.script = old.script;
+        let Some(obj_script) = old.script else { continue };
         let (old_item, new_item) = match (Item::try_from(old.id), Item::try_from(new.id)) {
             (Ok(o), Ok(n)) => (o, n),
             _ => continue,
@@ -394,7 +344,7 @@ fn command_import(ctx: Context, opt: StageImportOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
 
     info!("Reading input JSON");
-    let imported = read_stage(&opt.input)?;
+    let mut imported = read_stage(&opt.input)?;
 
     let file = find_stage_file(&mut ctx, &opt.stage)?;
     let info = ctx.query_file(&file)?;
@@ -402,15 +352,7 @@ fn command_import(ctx: Context, opt: StageImportOpt) -> Result<()> {
     let libs = ctx.read_globals()?.read_libs()?;
     let mut stage = ctx.read_stage_file(&libs, &file)?;
 
-    // The issue with supporting script swapping is that it means block IDs would change after the
-    // stage is written. This would make it impossible to import over an already-edited stage, which
-    // is necessary to make it easy for modders to iterate on things. A potential solution is to
-    // store the script data in the JSON somehow.
-    if is_script_modified(&stage.objects, &imported.objects) {
-        return Err(script_modified_error());
-    }
-
-    patch_scripts(&mut stage.script, &stage.objects, &imported.objects);
+    patch_scripts(&mut stage.script, &stage.objects, &mut imported.objects);
     stage.objects = imported.objects;
     ctx.begin_update().write_stage_file(&file, &stage)?.commit()?;
     Ok(())
@@ -441,20 +383,14 @@ pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
     info!("Checking stage data");
     let libs = ctx.read_globals()?.read_libs()?;
     let mut updated: Vec<(StageId, Box<Stage>)> = vec![];
-    for (id, imported) in jsons {
+    for (id, mut imported) in jsons {
         let mut stage = ctx.read_stage(&libs, id)?;
         if !opt.force && stage.objects == imported.objects {
             continue;
         }
 
         info!("Patching {}", id.file_name());
-        if is_script_modified(&stage.objects, &imported.objects) {
-            // See command_import()
-            error!("{}'s script does not match", id.file_name());
-            return Err(script_modified_error());
-        }
-
-        patch_scripts(&mut stage.script, &stage.objects, &imported.objects);
+        patch_scripts(&mut stage.script, &stage.objects, &mut imported.objects);
         stage.objects = imported.objects;
         updated.push((id, Box::from(stage)));
     }
