@@ -532,7 +532,7 @@ expr_enum! {
     type Error = Error;
     pub enum CheckType {
         Time(CheckTimeArgs { duration }) => TypeOp::Time,
-        Unk201 => TypeOp::Unk201,
+        Fade => TypeOp::Fade,
         Wipe => TypeOp::Wipe,
         Unk203 => TypeOp::Unk203,
         Anim(CheckAnimArgs { obj, val }) => TypeOp::Anim,
@@ -543,10 +543,10 @@ expr_enum! {
         Real(CheckRealArgs { val }) => TypeOp::Real,
         Cam => TypeOp::Cam,
         Read(CheckReadArgs { obj }) => TypeOp::Read,
-        Unk234 => TypeOp::Unk234,
-        Unk239 => TypeOp::Unk239,
-        Unk241 => TypeOp::Unk241,
-        Unk242 => TypeOp::Unk242,
+        ZBlur => TypeOp::ZBlur,
+        Letterbox => TypeOp::Letterbox,
+        Shake => TypeOp::Shake,
+        Mono => TypeOp::Mono,
         Scale(CheckScaleArgs { obj }) => TypeOp::Scale,
         Cue => TypeOp::Cue,
         Unk246(CheckUnk246Args { val }) => TypeOp::Unk246,
@@ -777,33 +777,34 @@ pub struct MScaleArgs {
 expr_enum! {
     type Error = Error;
     pub enum ScrnType {
-        Unk201(ScrnUnk201Args {
-            val1, val2, val3, val4, val5, val6, val7, val8, val9
-        }) => TypeOp::Unk201,
+        Fade(ScrnFadeArgs {
+            from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration
+        }) => TypeOp::Fade,
         Wipe(ScrnWipeArgs {
-            val1, val2, val3, val4, val5, val6, val7, val8, val9, val10,
-            val11, val12, val13, val14, val15, val16, val17
+            // valid modes: 0 (circle), 1 (square), 1000 (???), 2000 (many circles)
+            mode, direction, x, y, from_width, from_height, from_r, from_g, from_b, from_a,
+            to_width, to_height, to_r, to_g, to_b, to_a, duration
         }) => TypeOp::Wipe,
-        Unk226(ScrnUnk226Type) => TypeOp::Unk226,
-        Unk234(ScrnUnk234Args { val1, val2, val3, val4, val5 }) => TypeOp::Unk234,
-        Unk239(ScrnUnk239Args {
-            val1, val2, val3, val4, val5, val6, val7, val8, val9, val10
-        }) => TypeOp::Unk239,
-        Unk241(ScrnUnk241Args { val1, val2, val3, val4, val5, val6, val7 }) => TypeOp::Unk241,
-        Unk242(ScrnUnk242Args {
-            val1, val2, val3, val4, val5, val6, val7, val8, val9
-        }) => TypeOp::Unk242,
+        Hud(ScrnHudType) => TypeOp::Hud,
+        ZBlur(ScrnZBlurArgs { from, to, x_scale, y_scale, duration }) => TypeOp::ZBlur,
+        Letterbox(ScrnLetterboxArgs {
+            direction, from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration
+        }) => TypeOp::Letterbox,
+        Shake(ScrnShakeArgs { from_x, from_y, from_z, to_x, to_y, to_z, duration }) => TypeOp::Shake,
+        Mono(ScrnMonoArgs {
+            from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration
+        }) => TypeOp::Mono,
     }
 }
 
 expr_enum! {
     type Error = Error;
     #[allow(variant_size_differences)]
-    pub enum ScrnUnk226Type {
-        Unk0(ScrnUnk226Unk0Args { val }) => 0,
-        Unk1(ScrnUnk226Unk1Args { val }) => 1,
-        Unk2(ScrnUnk226Unk2Args { val }) => 2,
-        Unk3(ScrnUnk226Unk3Args { val1, val2, val3, val4 }) => 3,
+    pub enum ScrnHudType {
+        Battery(ScrnBatteryArgs { command }) => 0,
+        Clock(ScrnClockArgs { command }) => 1,
+        Score(ScrnScoreArgs { command }) => 2,
+        Unk3(ScrnHudUnk3Args { val1, val2, val3, val4 }) => 3,
         Timer(ScrnTimerCommand) => 4,
     }
 }
@@ -864,7 +865,7 @@ expr_enum! {
         Obj(WinObjArgs { obj, val1, val2, val3 }) => TypeOp::Obj,
         Unk209 => TypeOp::Unk209,
         Color(WinColorArgs { val1, val2, val3, val4 }) => TypeOp::Color,
-        Unk239 => TypeOp::Unk239,
+        Letterbox => TypeOp::Letterbox,
     }
 }
 
@@ -1039,12 +1040,12 @@ mod tests {
             z: expr(),
             val: expr(),
         })));
-        assert_reserialize!(Command::Scrn(Box::new(ScrnType::Unk234(ScrnUnk234Args {
-            val1: expr(),
-            val2: expr(),
-            val3: expr(),
-            val4: expr(),
-            val5: expr(),
+        assert_reserialize!(Command::Scrn(Box::new(ScrnType::ZBlur(ScrnZBlurArgs {
+            from: expr(),
+            to: expr(),
+            x_scale: expr(),
+            y_scale: expr(),
+            duration: expr(),
         }))));
         assert_reserialize!(Command::Select(Box::new(MsgArgs::from(vec![
             MsgCommand::Text(text("circle")),

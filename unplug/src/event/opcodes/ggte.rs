@@ -128,7 +128,7 @@ opcodes! {
 
     TypeOp {
         Time = 200, // c8
-        Unk201 = 201, // c9
+        Fade = 201, // c9
         Wipe = 202, // ca
         Unk203 = 203, // cb
         Anim = 204, // cc
@@ -153,7 +153,7 @@ opcodes! {
         Blend = 223, // df
         Real = 224, // e0
         Cam = 225, // e1
-        Unk226 = 226, // e2
+        Hud = 226, // e2
         Unk227 = 227, // e3
         Distance = 228, // e4
         Unk229 = 229, // e5
@@ -161,15 +161,15 @@ opcodes! {
         Unk231 = 231, // e7
         Unk232 = 232, // e8
         Read = 233, // e9
-        Unk234 = 234, // ea
+        ZBlur = 234, // ea
         Unk235 = 235, // eb
         Unk236 = 236, // ec
         Unk237 = 237, // ed
         Unk238 = 238, // ee
-        Unk239 = 239, // ef
+        Letterbox = 239, // ef
         Unk240 = 240, // f0
-        Unk241 = 241, // f1
-        Unk242 = 242, // f2
+        Shake = 241, // f1
+        Mono = 242, // f2
         Unk243 = 243, // f3
         Scale = 244, // f4
         Cue = 245, // f5
