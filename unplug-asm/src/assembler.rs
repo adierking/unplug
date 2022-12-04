@@ -13,6 +13,9 @@ use unplug::event::opcodes::{CmdOp, ExprOp, TypeOp};
 use unplug::event::BlockId;
 use unplug::stage::Event;
 
+/// Vertical tab character (`\v`).
+const VT: &str = "\x0b";
+
 /// Assembles a `Program` from an AST.
 pub struct ProgramAssembler<'a> {
     ast: &'a Ast,
@@ -294,7 +297,7 @@ impl<'a> ProgramAssembler<'a> {
             return Err(Error::OperandTypeExpected(ty));
         }
         // TODO: This is lazy
-        let unescaped = text.replace(r"\n", "\n");
+        let unescaped = text.replace(r"\n", "\n").replace(r"\v", VT);
         let encoded = Text::encode(&unescaped)?;
         Ok(Operand::Text(encoded))
     }
