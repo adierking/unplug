@@ -2115,6 +2115,7 @@ dependencies = [
 name = "unplug-asm"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "bitflags",
  "chumsky",
  "logos",
@@ -2126,6 +2127,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "unplug",
+ "unplug-test",
 ]
 
 [[package]]

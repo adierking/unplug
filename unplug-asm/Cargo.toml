@@ -17,3 +17,7 @@ smol_str.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 unplug = { path = "../unplug" }
+
+[dev-dependencies]
+anyhow.workspace = true
+unplug-test = { path = "../unplug-test" }
