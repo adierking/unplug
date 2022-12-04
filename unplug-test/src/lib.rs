@@ -1,3 +1,6 @@
+mod compare_scripts;
+pub use compare_scripts::assert_scripts_match;
+
 use anyhow::{bail, ensure, Result};
 use log::{info, warn};
 use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
