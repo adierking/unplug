@@ -1,8 +1,11 @@
 use crate::opcodes::{AsmMsgOp, NamedOpcode};
-use crate::program::{Block, BlockContent, CastOperand, Operand, Operation, Program};
+use crate::program::{
+    Block, BlockContent, CastOperand, EntryPoint, Operand, Operation, Program, Target,
+};
 use crate::{Error, Result};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ops::Deref;
 use unplug::common::Text;
 use unplug::event::analysis::SubroutineEffectsMap;
@@ -12,7 +15,9 @@ use unplug::event::script::{Error as ScriptError, Script, ScriptLayout};
 use unplug::event::serialize::{
     DeserializeEvent, Error as SerError, EventDeserializer, Result as SerResult,
 };
-use unplug::event::{CodeBlock, Command, DataBlock, Pointer};
+use unplug::event::{BlockId, CodeBlock, Command, DataBlock, Pointer};
+use unplug::globals::{Libs, NUM_LIBS};
+use unplug::stage::Stage;
 
 /// Differentiates cursor types and stores the underlying opcode.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -673,7 +678,7 @@ fn compile_data(program: &Program, data: &[Operand]) -> Result<ScriptBlock> {
 }
 
 /// Compiles a program into an event script.
-pub fn compile(program: &Program) -> Result<Script> {
+pub fn compile(program: &Program) -> Result<CompiledScript> {
     // Compile each block individually
     let mut script_blocks = vec![];
     for block in &program.blocks {
@@ -696,5 +701,61 @@ pub fn compile(program: &Program) -> Result<Script> {
     }
 
     let layout = ScriptLayout::new(block_offsets, SubroutineEffectsMap::new());
-    Ok(Script::with_blocks_and_layout(script_blocks, layout))
+    let script = Script::with_blocks_and_layout(script_blocks, layout);
+    Ok(CompiledScript {
+        script,
+        target: program.target.clone(),
+        entry_points: program.entry_points.clone(),
+    })
+}
+
+/// Compiled script information.
+#[derive(Clone)]
+pub struct CompiledScript {
+    /// The compiled script data.
+    pub script: Script,
+    /// The original program's target specifier.
+    pub target: Option<Target>,
+    /// The original program's entry points.
+    pub entry_points: HashMap<EntryPoint, BlockId>,
+}
+
+impl CompiledScript {
+    /// Makes a global library script.
+    pub fn into_libs(self) -> Result<Libs> {
+        let mut entry_points: Vec<Option<BlockId>> = vec![None; NUM_LIBS];
+        for (entry_point, block) in self.entry_points {
+            let EntryPoint::Lib(index) = entry_point else {
+                return Err(Error::EventInGlobals);
+            };
+            if index < 0 || index > NUM_LIBS as i16 {
+                return Err(Error::InvalidLibIndex(index));
+            }
+            entry_points[index as usize] = Some(block);
+        }
+        Ok(Libs {
+            script: self.script,
+            entry_points: entry_points
+                .into_iter()
+                .enumerate()
+                .map(|(i, e)| e.ok_or(Error::LibNotDefined(i as i16)))
+                .collect::<Result<Vec<_>>>()?
+                .into_boxed_slice(),
+        })
+    }
+
+    /// Makes a stage using non-script data from `base`.
+    pub fn into_stage(self, mut base: Stage) -> Result<Stage> {
+        base.clear_events();
+        base.script = self.script;
+        for (entry_point, block) in self.entry_points {
+            match entry_point {
+                EntryPoint::Event(event) => base
+                    .set_event(event, Some(block))
+                    .map_err(|_| Error::InvalidStageEvent(event))?,
+                EntryPoint::Lib(_) => return Err(Error::LibInStage),
+            }
+        }
+        Ok(base)
+    }
 }

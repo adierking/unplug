@@ -6,7 +6,6 @@ use crate::opt::{
     ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt,
 };
 use anyhow::{anyhow, bail, Result};
-use asm::program::Program;
 use log::error;
 use log::info;
 use std::fs::{self, File};
@@ -14,15 +13,14 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Instant;
 use unplug::data::{Resource, Stage as StageId};
-use unplug::event::{Block, BlockId, Script};
-use unplug::globals::{GlobalsBuilder, Libs, NUM_LIBS};
+use unplug::event::{Block, Script};
+use unplug::globals::{GlobalsBuilder, Libs};
 use unplug::stage::Stage;
 use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
 use unplug_asm::lexer::{Logos, Token};
 use unplug_asm::parser::{Ast, Parser, Stream};
-use unplug_asm::program::{EntryPoint, Target};
-use unplug_asm::writer::{ProgramBuilder, ProgramWriter};
+use unplug_asm::program::Target;
 
 fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
     for (i, id) in libs.entry_points.iter().enumerate() {
@@ -144,26 +142,6 @@ pub fn command_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
     Ok(())
 }
 
-fn disassemble_globals(globals: &Libs, writer: impl Write) -> Result<()> {
-    let mut builder = ProgramBuilder::new(Some(Target::Globals), &globals.script);
-    for (i, &block) in globals.entry_points.iter().enumerate() {
-        builder.add_entry_point(EntryPoint::Lib(i as i16), block)?;
-    }
-    let program = builder.finish();
-    ProgramWriter::new(writer, &program).write()?;
-    Ok(())
-}
-
-fn disassemble_stage(name: &str, stage: &Stage, writer: impl Write) -> Result<()> {
-    let mut builder = ProgramBuilder::with_stage(name, stage);
-    for (event, block) in stage.events() {
-        builder.add_entry_point(EntryPoint::Event(event), block)?;
-    }
-    let program = builder.finish();
-    ProgramWriter::new(writer, &program).write()?;
-    Ok(())
-}
-
 fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(File::create(opt.output)?);
@@ -176,7 +154,8 @@ fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
     info!("Disassembling {}", ctx.query_file(&file)?.name);
     let stage = ctx.read_stage_file(&libs, &file)?;
     let name = info.name.rsplit_once('.').unwrap_or((&info.name, "")).0;
-    disassemble_stage(name, &stage, out)?;
+    let program = asm::disassemble_stage(&stage, name)?;
+    asm::write_program(&program, out)?;
     Ok(())
 }
 
@@ -188,50 +167,16 @@ pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Re
     let libs = ctx.read_globals()?.read_libs()?;
     let libs_out = Path::join(&opt.output, "globals.us");
     let libs_writer = BufWriter::new(File::create(libs_out)?);
-    disassemble_globals(&libs, libs_writer)?;
+    let libs_program = asm::disassemble_globals(&libs)?;
+    asm::write_program(&libs_program, libs_writer)?;
 
     for id in StageId::iter() {
         info!("Disassembling {}", id.file_name());
         let stage = ctx.read_stage(&libs, id)?;
         let out_path = Path::join(&opt.output, format!("{}.us", id.name()));
         let writer = BufWriter::new(File::create(out_path)?);
-        disassemble_stage(id.name(), &stage, writer)?;
-    }
-    Ok(())
-}
-
-/// Turns `script` into a global library using entry point information from `program`.
-fn compile_libs(program: &Program, script: Script) -> Result<Libs> {
-    let mut entry_points: Vec<Option<BlockId>> = vec![None; NUM_LIBS];
-    for (&entry_point, &block) in &program.entry_points {
-        let EntryPoint::Lib(index) = entry_point else {
-            bail!("Globals scripts cannot define event entry points");
-        };
-        if index < 0 || index > NUM_LIBS as i16 {
-            bail!("Invalid library function index: {index}");
-        }
-        entry_points[index as usize] = Some(block);
-    }
-    Ok(Libs {
-        script,
-        entry_points: entry_points
-            .into_iter()
-            .enumerate()
-            .map(|(i, e)| e.ok_or_else(|| anyhow!("Library function {i} is not defined")))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_boxed_slice(),
-    })
-}
-
-/// Replaces `stage`'s script with `script` using entry point information from `program`.
-fn compile_stage(stage: &mut Stage, program: &Program, script: Script) -> Result<()> {
-    stage.clear_events();
-    stage.script = script;
-    for (&entry_point, &block) in &program.entry_points {
-        match entry_point {
-            EntryPoint::Event(event) => stage.set_event(event, Some(block))?,
-            EntryPoint::Lib(_) => bail!("Stage scripts cannot define library entry points"),
-        }
+        let program = asm::disassemble_stage(&stage, id.name())?;
+        asm::write_program(&program, writer)?;
     }
     Ok(())
 }
@@ -262,10 +207,10 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
 
     info!("Assembling script");
     let program = ProgramAssembler::new(&ast).assemble()?;
-    let script = asm::compile(&program)?;
-    let update = match &program.target {
+    let compiled = asm::compile(&program)?;
+    let update = match &compiled.target {
         Some(Target::Globals) => {
-            let libs = compile_libs(&program, script)?;
+            let libs = compiled.into_libs()?;
             let mut globals = ctx.read_globals()?;
             ctx.begin_update()
                 .write_globals(GlobalsBuilder::new().base(&mut globals).libs(&libs))?
@@ -275,7 +220,7 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
                 .ok_or_else(|| anyhow!("Unknown stage \"{stage_name}\""))?;
             let libs = ctx.read_globals()?.read_libs()?;
             let mut stage = ctx.read_stage(&libs, stage_id)?;
-            compile_stage(&mut stage, &program, script)?;
+            stage = compiled.into_stage(stage)?;
             ctx.begin_update().write_stage(stage_id, &stage)?
         }
         None => {

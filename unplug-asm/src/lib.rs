@@ -24,6 +24,7 @@ pub mod program;
 pub mod writer;
 
 pub use compiler::compile;
+pub use writer::{disassemble_globals, disassemble_stage, write_program};
 
 use lexer::Number;
 use program::{EntryPoint, OperandType};
@@ -36,6 +37,7 @@ use unplug::event::command;
 use unplug::event::script;
 use unplug::event::serialize;
 use unplug::from_error_boxed;
+use unplug::stage::Event;
 
 /// The result type for ASM operations.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -72,6 +74,9 @@ pub enum Error {
     #[error("the program target is defined more than once")]
     DuplicateTarget,
 
+    #[error("globals scripts cannot define event entry points")]
+    EventInGlobals,
+
     #[error("expected a command")]
     ExpectedCommand,
 
@@ -98,6 +103,18 @@ pub enum Error {
 
     #[error("invalid 16-bit integer: {0}")]
     Invalid16(Number),
+
+    #[error("invalid library function index: {0}")]
+    InvalidLibIndex(i16),
+
+    #[error("invalid stage event: {0:?}")]
+    InvalidStageEvent(Event),
+
+    #[error("stage scripts cannot define library entry points")]
+    LibInStage,
+
+    #[error("library function {0} is not defined")]
+    LibNotDefined(i16),
 
     #[error("not enough operands for \"{name}\" (expected {expected}, got {actual})")]
     NotEnoughOperands { name: &'static str, expected: usize, actual: usize },

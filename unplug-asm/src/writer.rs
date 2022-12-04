@@ -6,13 +6,14 @@ use crate::program::{
 use crate::Result;
 use smallvec::SmallVec;
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{self, Write};
 use unplug::common::Text;
 use unplug::data::Resource;
 use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
 use unplug::event::serialize::{EventSerializer, Result as SerResult, SerializeEvent};
 use unplug::event::{self, BlockId, DataBlock, Pointer, Script};
+use unplug::globals::Libs;
 use unplug::stage::{Event, Stage};
 
 /// The optimal tab size for viewing a script, used to determine if a name is too long to fit in
@@ -576,14 +577,14 @@ fn operand_type(op: &Operand) -> DirOp {
 type EntryPointVec = SmallVec<[EntryPoint; 1]>;
 
 /// Writes out a program as human-readable assembly code.
-pub struct ProgramWriter<'a, W: Write> {
+struct ProgramWriter<'a, W: Write> {
     writer: W,
     program: &'a Program,
     block_entries: HashMap<BlockId, EntryPointVec>,
 }
 
 impl<'a, W: Write> ProgramWriter<'a, W> {
-    pub fn new(writer: W, program: &'a Program) -> Self {
+    fn new(writer: W, program: &'a Program) -> Self {
         // Reverse the program's event map
         let mut block_entries = HashMap::<BlockId, EntryPointVec>::new();
         for (&kind, &block) in &program.entry_points {
@@ -592,7 +593,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Self { writer, program, block_entries }
     }
 
-    pub fn write(mut self) -> Result<()> {
+    fn write(mut self) -> io::Result<()> {
         self.write_target()?;
         let mut current = self.program.first_block;
         let mut first = true;
@@ -609,11 +610,11 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_target(&mut self) -> Result<()> {
+    fn write_target(&mut self) -> io::Result<()> {
         let op = match &self.program.target {
             Some(Target::Globals) => Operation::new(DirOp::Globals),
             Some(Target::Stage(path)) => {
-                Operation::with_operands(DirOp::Stage, [Text::encode(path)?.into()])
+                Operation::with_operands(DirOp::Stage, [Text::encode(path).unwrap().into()])
             }
             None => return Ok(()),
         };
@@ -622,7 +623,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_block(&mut self, id: BlockId, block: &Block) -> Result<()> {
+    fn write_block(&mut self, id: BlockId, block: &Block) -> io::Result<()> {
         let labels = self.program.labels.find_block(id);
         if !labels.is_empty() {
             if block.flags.contains(BlockFlags::ENTRY_POINT) {
@@ -644,11 +645,11 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         }
     }
 
-    fn write_code(&mut self, code: &[Operation<CmdOp>]) -> Result<()> {
+    fn write_code(&mut self, code: &[Operation<CmdOp>]) -> io::Result<()> {
         code.iter().try_for_each(|c| self.write_command(c))
     }
 
-    fn write_data(&mut self, data: &[Operand]) -> Result<()> {
+    fn write_data(&mut self, data: &[Operand]) -> io::Result<()> {
         let mut current_op: Option<Operation<DirOp>> = None;
         for operand in data {
             let ty = operand_type(operand);
@@ -666,7 +667,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_command(&mut self, command: &Operation<CmdOp>) -> Result<()> {
+    fn write_command(&mut self, command: &Operation<CmdOp>) -> io::Result<()> {
         write!(self.writer, "\t{}", command.opcode.name())?;
         if !command.operands.is_empty() {
             write!(self.writer, "\t")?;
@@ -680,7 +681,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_entry_directive(&mut self, kind: EntryPoint, label: LabelId) -> Result<()> {
+    fn write_entry_directive(&mut self, kind: EntryPoint, label: LabelId) -> io::Result<()> {
         let mut dir = Operation::new(kind.directive());
         match kind {
             EntryPoint::Lib(lib) => dir.operands.push(Operand::I16(lib)),
@@ -691,7 +692,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         self.write_directive(&dir)
     }
 
-    fn write_directive(&mut self, dir: &Operation<DirOp>) -> Result<()> {
+    fn write_directive(&mut self, dir: &Operation<DirOp>) -> io::Result<()> {
         let name = dir.opcode.name();
         write!(self.writer, "\t.{}", name)?;
         if !dir.operands.is_empty() {
@@ -706,15 +707,15 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_operands(&mut self, operands: &[Operand]) -> Result<()> {
+    fn write_operands(&mut self, operands: &[Operand]) -> io::Result<()> {
         self.write_operands_impl(operands, ", ")
     }
 
-    fn write_msg_operands(&mut self, operands: &[Operand]) -> Result<()> {
+    fn write_msg_operands(&mut self, operands: &[Operand]) -> io::Result<()> {
         self.write_operands_impl(operands, ",\n\t\t")
     }
 
-    fn write_operands_impl(&mut self, operands: &[Operand], separator: &str) -> Result<()> {
+    fn write_operands_impl(&mut self, operands: &[Operand], separator: &str) -> io::Result<()> {
         for (i, operand) in operands.iter().enumerate() {
             if i > 0 {
                 write!(self.writer, "{}", separator)?;
@@ -724,7 +725,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_operand(&mut self, operand: &Operand) -> Result<()> {
+    fn write_operand(&mut self, operand: &Operand) -> io::Result<()> {
         match operand {
             Operand::I8(i) => write!(self.writer, "{}.b", i)?,
             Operand::U8(i) => write!(self.writer, "{}.b", i)?,
@@ -751,7 +752,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_expr(&mut self, expr: &Operation<ExprOp>) -> Result<()> {
+    fn write_expr(&mut self, expr: &Operation<ExprOp>) -> io::Result<()> {
         write!(self.writer, "{}", expr.opcode.name())?;
         if !expr.operands.is_empty() {
             write!(self.writer, "(")?;
@@ -761,7 +762,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_msg_command(&mut self, cmd: &Operation<AsmMsgOp>) -> Result<()> {
+    fn write_msg_command(&mut self, cmd: &Operation<AsmMsgOp>) -> io::Result<()> {
         match cmd.opcode {
             AsmMsgOp::Text => self.write_operand(&cmd.operands[0])?,
             _ => {
@@ -775,4 +776,31 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         }
         Ok(())
     }
+}
+
+/// Disassembles the script for `globals` into a `Program`.
+pub fn disassemble_globals(globals: &Libs) -> Result<Program> {
+    let mut builder = ProgramBuilder::new(Some(Target::Globals), &globals.script);
+    for (i, &block) in globals.entry_points.iter().enumerate() {
+        builder.add_entry_point(EntryPoint::Lib(i as i16), block)?;
+    }
+    Ok(builder.finish())
+}
+
+/// Disassembles the script for a `stage` named `name` into a `Program`.
+pub fn disassemble_stage(stage: &Stage, name: &str) -> Result<Program> {
+    let mut builder = ProgramBuilder::with_stage(name, stage);
+    for (event, block) in stage.events() {
+        builder.add_entry_point(EntryPoint::Event(event), block)?;
+    }
+    Ok(builder.finish())
+}
+
+/// Writes `program` as assembly program text to `writer`.
+pub fn write_program(program: &Program, mut writer: impl Write) -> io::Result<()> {
+    write_program_impl(program, &mut writer)
+}
+
+fn write_program_impl(program: &Program, writer: &mut dyn Write) -> io::Result<()> {
+    ProgramWriter::new(writer, program).write()
 }
