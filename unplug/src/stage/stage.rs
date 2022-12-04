@@ -408,6 +408,30 @@ impl Stage {
         }
     }
 
+    /// Clones the stage without cloning any of the script data. The new stage will have an empty
+    /// script with no entry points set.
+    pub fn clone_without_script(&self) -> Self {
+        let mut cloned = Self {
+            objects: self.objects.clone(),
+            actors: self.actors.clone(),
+            script: Script::new(),
+            on_prologue: None,
+            on_startup: None,
+            on_dead: None,
+            on_pose: None,
+            on_time_cycle: None,
+            on_time_up: None,
+            settings: self.settings.clone(),
+            unk_28: self.unk_28.clone(),
+            unk_2c: self.unk_2c.clone(),
+            unk_30: self.unk_30.clone(),
+        };
+        for object in &mut cloned.objects {
+            object.script = None;
+        }
+        cloned
+    }
+
     pub fn read_from<R: ReadSeek + ?Sized>(mut reader: &mut R, libs: &Libs) -> Result<Self> {
         let header = Header::read_from(reader)?;
 
