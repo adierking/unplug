@@ -11,25 +11,16 @@ use unplug::event::BlockId;
 pub struct Label {
     /// The name of the label as it appears in source files.
     pub name: Arc<str>,
-    /// The label's corresponding script block (if any).
-    pub block: Option<BlockId>,
+    /// The label's corresponding script block.
+    pub block: BlockId,
     /// The span for the label's declaration.
     pub span: Span,
 }
 
 impl Label {
-    /// Creates a label named `name` with no block or span assigned.
-    pub fn new(name: impl Into<Arc<str>>) -> Self {
-        Self { name: name.into(), block: None, span: Span::EMPTY }
-    }
-
-    /// Creates a label named `name` with `block` but no span assigned.
-    pub fn with_block(name: impl Into<Arc<str>>, block: BlockId) -> Self {
-        Self { name: name.into(), block: Some(block), span: Span::EMPTY }
-    }
-
-    pub fn with_block_and_span(name: impl Into<Arc<str>>, block: BlockId, span: Span) -> Self {
-        Self { name: name.into(), block: Some(block), span }
+    /// Creates a new label.
+    pub fn new(name: impl Into<Arc<str>>, block: BlockId, span: Span) -> Self {
+        Self { name: name.into(), block, span }
     }
 }
 
@@ -77,18 +68,16 @@ impl LabelMap {
         }
         let id = self.slots.insert(label.clone());
         self.by_name.insert(label.name, id);
-        if let Some(block) = label.block {
-            self.by_block.entry(block).or_default().push(id);
-        }
+        self.by_block.entry(label.block).or_default().push(id);
         Ok(id)
     }
 
-    /// Inserts a new label named `name`, optionally associates it with `block`, and returns its ID.
+    /// Creates and inserts a new label and returns its ID.
     /// The label name must be unique or else this will fail.
     pub fn insert_new(
         &mut self,
         name: impl Into<Arc<str>>,
-        block: Option<BlockId>,
+        block: BlockId,
         span: Span,
     ) -> Result<LabelId> {
         self.insert(Label { name: name.into(), block, span })
@@ -122,10 +111,10 @@ mod tests {
     fn test_label_map_insert() -> Result<()> {
         let mut labels = LabelMap::new();
         let block = BlockId::new(123);
-        let id = labels.insert(Label::with_block("foo", block))?;
+        let id = labels.insert(Label::new("foo", block, Span::EMPTY))?;
         let label = labels.get(id);
         assert_eq!(&*label.name, "foo");
-        assert_eq!(label.block, Some(block));
+        assert_eq!(label.block, block);
         assert_eq!(labels.find_name("foo"), Some(id));
         assert_eq!(labels.find_block(block), &[id]);
         Ok(())
@@ -134,8 +123,8 @@ mod tests {
     #[test]
     fn test_label_map_insert_name_collision() -> Result<()> {
         let mut labels = LabelMap::new();
-        let id = labels.insert(Label::new("foo"))?;
-        assert!(labels.insert(Label::new("foo")).is_err());
+        let id = labels.insert(Label::new("foo", BlockId::new(0), Span::EMPTY))?;
+        assert!(labels.insert(Label::new("foo", BlockId::new(1), Span::EMPTY)).is_err());
         assert_eq!(&*labels.get(id).name, "foo");
         assert_eq!(labels.find_name("foo"), Some(id));
         Ok(())
@@ -145,8 +134,8 @@ mod tests {
     fn test_label_map_insert_same_block() -> Result<()> {
         let mut labels = LabelMap::new();
         let block = BlockId::new(123);
-        let id1 = labels.insert(Label::with_block("foo", block))?;
-        let id2 = labels.insert(Label::with_block("bar", block))?;
+        let id1 = labels.insert(Label::new("foo", block, Span::EMPTY))?;
+        let id2 = labels.insert(Label::new("bar", block, Span::EMPTY))?;
         assert_eq!(&*labels.get(id1).name, "foo");
         assert_eq!(&*labels.get(id2).name, "bar");
         assert_eq!(labels.find_block(block), &[id1, id2]);
@@ -157,11 +146,11 @@ mod tests {
     fn test_label_map_rename() -> Result<()> {
         let mut labels = LabelMap::new();
         let block = BlockId::new(123);
-        let id = labels.insert(Label::with_block("foo", block))?;
+        let id = labels.insert(Label::new("foo", block, Span::EMPTY))?;
         labels.rename(id, "bar")?;
         let label = labels.get(id);
         assert_eq!(&*label.name, "bar");
-        assert_eq!(label.block, Some(block));
+        assert_eq!(label.block, block);
         assert_eq!(labels.find_name("foo"), None);
         assert_eq!(labels.find_name("bar"), Some(id));
         assert_eq!(labels.find_block(block), &[id]);
@@ -172,11 +161,11 @@ mod tests {
     fn test_label_map_rename_same() -> Result<()> {
         let mut labels = LabelMap::new();
         let block = BlockId::new(123);
-        let id = labels.insert(Label::with_block("foo", block))?;
+        let id = labels.insert(Label::new("foo", block, Span::EMPTY))?;
         labels.rename(id, "foo")?;
         let label = labels.get(id);
         assert_eq!(&*label.name, "foo");
-        assert_eq!(label.block, Some(block));
+        assert_eq!(label.block, block);
         assert_eq!(labels.find_name("foo"), Some(id));
         assert_eq!(labels.find_block(block), &[id]);
         Ok(())
@@ -185,8 +174,8 @@ mod tests {
     #[test]
     fn test_label_map_rename_collision() -> Result<()> {
         let mut labels = LabelMap::new();
-        let id1 = labels.insert(Label::new("foo"))?;
-        let id2 = labels.insert(Label::new("bar"))?;
+        let id1 = labels.insert(Label::new("foo", BlockId::new(0), Span::EMPTY))?;
+        let id2 = labels.insert(Label::new("bar", BlockId::new(1), Span::EMPTY))?;
         assert!(labels.rename(id1, "bar").is_err());
         assert_eq!(&*labels.get(id1).name, "foo");
         assert_eq!(&*labels.get(id2).name, "bar");

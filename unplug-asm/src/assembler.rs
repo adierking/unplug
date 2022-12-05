@@ -53,11 +53,7 @@ impl<'a> ProgramAssembler<'a> {
                     // Labels right after each other refer to the same block
                     new_block = false;
                 }
-                self.program.labels.insert_new(
-                    label.name.as_str(),
-                    Some(block_id),
-                    label.name.span(),
-                )?;
+                self.program.labels.insert_new(label.name.as_str(), block_id, label.name.span())?;
             } else {
                 // There's content in this block, so the next label starts a new one
                 new_block = true;
@@ -76,8 +72,7 @@ impl<'a> ProgramAssembler<'a> {
                     let id = labels
                         .find_name(label.name.as_str())
                         .expect("label does not have an associated ID");
-                    block_id =
-                        labels.get(id).block.expect("label does not have an associated block");
+                    block_id = labels.get(id).block;
                 }
                 Item::Command(cmd) => match cmd.name.class() {
                     IdentClass::Default => {
@@ -223,7 +218,7 @@ impl<'a> ProgramAssembler<'a> {
             _ => panic!("directive is not an event: {:?}", dir),
         };
         let label = label_op.ok_or(Error::ExpectedLabel)?.label()?;
-        let block = labels.get(label).block.unwrap();
+        let block = labels.get(label).block;
         match entry_points.insert(entry_point, block) {
             Some(_) => Err(Error::DuplicateEntryPoint(entry_point)),
             None => Ok(()),

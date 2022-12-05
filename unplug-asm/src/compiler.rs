@@ -379,7 +379,7 @@ impl EventDeserializer for AsmDeserializer<'_> {
         match *self.next_operand().ok_or(SerError::EndOfData)? {
             Operand::Label(label) | Operand::ElseLabel(label) => {
                 // TODO: Only allow else labels in conditionals
-                Ok(Pointer::Block(self.program.labels.get(label).block.unwrap()))
+                Ok(Pointer::Block(self.program.labels.get(label).block))
             }
             Operand::Offset(o) => Ok(Pointer::Offset(o)),
             _ => Err(Error::ExpectedLabel.into()),
@@ -602,7 +602,7 @@ fn into_data(program: &Program, value: &Located<Operand>) -> Result<DataBlock> {
         Operand::U32(x) => Ok(DataBlock::U32Array(vec![*x])),
         Operand::Text(text) => Ok(DataBlock::String(text.clone())),
         Operand::Label(label) => {
-            let block = program.labels.get(*label).block.unwrap();
+            let block = program.labels.get(*label).block;
             Ok(DataBlock::PtrArray(vec![Pointer::Block(block)]))
         }
         Operand::Offset(x) => Ok(DataBlock::PtrArray(vec![Pointer::Offset(*x)])),
@@ -643,7 +643,7 @@ fn try_append_data(program: &Program, block: &mut DataBlock, value: &Operand) ->
         }
         DataBlock::PtrArray(array) => {
             let ptr = match *value {
-                Operand::Label(label) => Pointer::Block(program.labels.get(label).block.unwrap()),
+                Operand::Label(label) => Pointer::Block(program.labels.get(label).block),
                 Operand::Offset(offset) => Pointer::Offset(offset),
                 _ => return false,
             };

@@ -512,7 +512,7 @@ impl Program {
                     if !cmd.operands.is_empty() && !cmd.opcode.is_control_flow() {
                         for operand in &cmd.operands {
                             if let Operand::Label(label) = **operand {
-                                let target_id = self.labels.get(label).block.unwrap();
+                                let target_id = self.labels.get(label).block;
                                 let target_index = target_id.index();
                                 let flags = match target_index.cmp(&index) {
                                     Ordering::Less => &mut before[target_index].flags,

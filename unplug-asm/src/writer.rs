@@ -113,7 +113,7 @@ impl<'a> AsmSerializer<'a> {
                 Some(&label) => label,
                 None => self
                     .labels
-                    .insert_new(format!("loc_{}", block.index()), Some(block), Span::EMPTY)
+                    .insert_new(format!("loc_{}", block.index()), block, Span::EMPTY)
                     .unwrap(),
             };
 
@@ -447,7 +447,7 @@ impl<'a> ProgramBuilder<'a> {
             };
             match self.program.labels.find_block(block_id).first() {
                 Some(&label) => self.program.labels.rename(label, name)?,
-                None => self.program.labels.insert_new(name, Some(block_id), Span::EMPTY)?,
+                None => self.program.labels.insert_new(name, block_id, Span::EMPTY)?,
             };
         }
         Ok(())
@@ -482,7 +482,7 @@ impl<'a> ProgramBuilder<'a> {
         let name = format!("sub_{}", entry_point.index());
         match self.program.labels.find_block(entry_point).first() {
             Some(&label) => self.program.labels.rename(label, name)?,
-            None => self.program.labels.insert_new(name, Some(entry_point), Span::EMPTY)?,
+            None => self.program.labels.insert_new(name, entry_point, Span::EMPTY)?,
         };
 
         while let Some(block) = self.queue.pop() {
