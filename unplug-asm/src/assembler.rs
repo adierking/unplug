@@ -2,8 +2,10 @@ use crate::ast::{self, Ast, Expr, IdentClass, IntValue, Item};
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::program::{
-    Block, BlockContent, EntryPoint, Operand, OperandType, Operation, Program, Target, TypeHint,
+    Block, BlockContent, EntryPoint, Located, Operand, OperandType, Operation, Program, Target,
+    TypeHint,
 };
+use crate::span::Spanned;
 use crate::{Error, Result};
 use std::collections::HashMap;
 use unplug::common::Text;
@@ -51,7 +53,11 @@ impl<'a> ProgramAssembler<'a> {
                     // Labels right after each other refer to the same block
                     new_block = false;
                 }
-                self.program.labels.insert_new(label.name.as_str(), Some(block_id))?;
+                self.program.labels.insert_new(
+                    label.name.as_str(),
+                    Some(block_id),
+                    label.name.span(),
+                )?;
             } else {
                 // There's content in this block, so the next label starts a new one
                 new_block = true;
@@ -151,7 +157,7 @@ impl<'a> ProgramAssembler<'a> {
         mut block_id: BlockId,
         dir: Operation<DirOp>,
     ) -> Result<BlockId> {
-        match dir.opcode {
+        match *dir.opcode {
             DirOp::Globals => {
                 if self.program.target.replace(Target::Globals).is_some() {
                     return Err(Error::DuplicateTarget);
@@ -159,7 +165,7 @@ impl<'a> ProgramAssembler<'a> {
             }
             DirOp::Stage => {
                 let name_op = dir.operands.get(0).ok_or(Error::ExpectedText)?;
-                let Operand::Text(name_text) = name_op else { return Err(Error::ExpectedText) };
+                let Operand::Text(name_text) = &**name_op else { return Err(Error::ExpectedText) };
                 let name = name_text.decode()?.into_owned();
                 if self.program.target.replace(Target::Stage(name)).is_some() {
                     return Err(Error::DuplicateTarget);
@@ -194,12 +200,12 @@ impl<'a> ProgramAssembler<'a> {
     fn process_entry_point(
         entry_points: &mut HashMap<EntryPoint, BlockId>,
         labels: &LabelMap,
-        dir: DirOp,
-        operands: &[Operand],
+        dir: Located<DirOp>,
+        operands: &[Located<Operand>],
     ) -> Result<()> {
         // `.interact` and `.lib` take an argument which comes before the label opcode, so we have
         // to match the opcode to know where the label is
-        let (entry_point, label_op) = match dir {
+        let (entry_point, label_op) = match *dir {
             DirOp::Prologue => (EntryPoint::Event(Event::Prologue), operands.get(0)),
             DirOp::Startup => (EntryPoint::Event(Event::Startup), operands.get(0)),
             DirOp::Dead => (EntryPoint::Event(Event::Dead), operands.get(0)),
@@ -227,14 +233,16 @@ impl<'a> ProgramAssembler<'a> {
     /// Parses an opcode and operands into an `Operation`.
     fn parse_operation<T: NamedOpcode + TypeHint>(
         &self,
-        opcode: T,
+        opcode: Located<T>,
         operands: &[ast::Operand],
     ) -> Result<Operation<T>> {
         let mut operation = Operation::new(opcode);
         operation.operands.reserve(operands.len());
         let ty = opcode.type_hint();
         for operand in operands {
-            operation.operands.push(self.parse_operand(ty, operand)?);
+            operation
+                .operands
+                .push(Located::with_span(self.parse_operand(ty, operand)?, operand.span()));
         }
         Ok(operation)
     }
@@ -319,7 +327,7 @@ impl<'a> ProgramAssembler<'a> {
                 }
             }
             IdentClass::Directive => return Err(Error::UnexpectedDirective),
-            IdentClass::Type => Operand::Type(Self::parse_type_opcode(id)?),
+            IdentClass::Type => Operand::Type(*Self::parse_type_opcode(id)?),
         })
     }
 
@@ -361,27 +369,37 @@ impl<'a> ProgramAssembler<'a> {
     }
 
     /// Parses a command name.
-    fn parse_command_opcode(id: &ast::Ident) -> Result<CmdOp> {
-        CmdOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedCommand(id.as_str().into()))
+    fn parse_command_opcode(id: &ast::Ident) -> Result<Located<CmdOp>> {
+        CmdOp::get(id.as_str())
+            .map(|op| Located::with_span(op, id.span()))
+            .ok_or_else(|| Error::UnrecognizedCommand(id.as_str().into()))
     }
 
     /// Parses a directive name.
-    fn parse_directive_opcode(id: &ast::Ident) -> Result<DirOp> {
-        DirOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedCommand(id.as_str().into()))
+    fn parse_directive_opcode(id: &ast::Ident) -> Result<Located<DirOp>> {
+        DirOp::get(id.as_str())
+            .map(|op| Located::with_span(op, id.span()))
+            .ok_or_else(|| Error::UnrecognizedDirective(id.as_str().into()))
     }
 
     /// Parses a @type name.
-    fn parse_type_opcode(id: &ast::Ident) -> Result<TypeOp> {
-        TypeOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedType(id.as_str().into()))
+    fn parse_type_opcode(id: &ast::Ident) -> Result<Located<TypeOp>> {
+        TypeOp::get(id.as_str())
+            .map(|op| Located::with_span(op, id.span()))
+            .ok_or_else(|| Error::UnrecognizedType(id.as_str().into()))
     }
 
     /// Parses an expression name.
-    fn parse_expr_opcode(id: &ast::Ident) -> Result<ExprOp> {
-        ExprOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedFunction(id.as_str().into()))
+    fn parse_expr_opcode(id: &ast::Ident) -> Result<Located<ExprOp>> {
+        ExprOp::get(id.as_str())
+            .map(|op| Located::with_span(op, id.span()))
+            .ok_or_else(|| Error::UnrecognizedFunction(id.as_str().into()))
     }
 
     /// Parses a message command name.
-    fn parse_msg_opcode(id: &ast::Ident) -> Result<AsmMsgOp> {
-        AsmMsgOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedFunction(id.as_str().into()))
+    fn parse_msg_opcode(id: &ast::Ident) -> Result<Located<AsmMsgOp>> {
+        AsmMsgOp::get(id.as_str())
+            .map(|op| Located::with_span(op, id.span()))
+            .ok_or_else(|| Error::UnrecognizedFunction(id.as_str().into()))
     }
 }

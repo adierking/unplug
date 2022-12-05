@@ -1,3 +1,4 @@
+use crate::span::Span;
 use crate::{Error, Result};
 use slotmap::{new_key_type, SlotMap};
 use smallvec::SmallVec;
@@ -12,17 +13,23 @@ pub struct Label {
     pub name: Arc<str>,
     /// The label's corresponding script block (if any).
     pub block: Option<BlockId>,
+    /// The span for the label's declaration.
+    pub span: Span,
 }
 
 impl Label {
-    /// Creates a label named `name` with no block assigned.
+    /// Creates a label named `name` with no block or span assigned.
     pub fn new(name: impl Into<Arc<str>>) -> Self {
-        Self { name: name.into(), block: None }
+        Self { name: name.into(), block: None, span: Span::EMPTY }
     }
 
-    /// Creates a label named `name` with `block` assigned.
+    /// Creates a label named `name` with `block` but no span assigned.
     pub fn with_block(name: impl Into<Arc<str>>, block: BlockId) -> Self {
-        Self { name: name.into(), block: Some(block) }
+        Self { name: name.into(), block: Some(block), span: Span::EMPTY }
+    }
+
+    pub fn with_block_and_span(name: impl Into<Arc<str>>, block: BlockId, span: Span) -> Self {
+        Self { name: name.into(), block: Some(block), span }
     }
 }
 
@@ -82,8 +89,9 @@ impl LabelMap {
         &mut self,
         name: impl Into<Arc<str>>,
         block: Option<BlockId>,
+        span: Span,
     ) -> Result<LabelId> {
-        self.insert(Label { name: name.into(), block })
+        self.insert(Label { name: name.into(), block, span })
     }
 
     /// Changes the name of label `id` to `name`. Label names must be unique or else this will fail.

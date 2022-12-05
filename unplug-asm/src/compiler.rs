@@ -1,6 +1,6 @@
 use crate::opcodes::{AsmMsgOp, NamedOpcode};
 use crate::program::{
-    Block, BlockContent, CastOperand, EntryPoint, Operand, Operation, Program, Target,
+    Block, BlockContent, CastOperand, EntryPoint, Located, Operand, Operation, Program, Target,
 };
 use crate::{Error, Result};
 use smallvec::SmallVec;
@@ -119,13 +119,13 @@ impl MatchCursorKind for AsmMsgOp {
 #[derive(Debug, Clone)]
 #[allow(variant_size_differences)]
 enum CursorData<'a> {
-    Borrowed(&'a [Operand]),
-    Owned(SmallVec<[Operand; 2]>),
+    Borrowed(&'a [Located<Operand>]),
+    Owned(SmallVec<[Located<Operand>; 2]>),
 }
 
 impl<'a> CursorData<'a> {
     /// Returns the underlying operand slice iff it is borrowed.
-    fn ensure_borrowed(&self) -> Option<&'a [Operand]> {
+    fn ensure_borrowed(&self) -> Option<&'a [Located<Operand>]> {
         match self {
             Self::Borrowed(operands) => Some(operands),
             Self::Owned(_) => None,
@@ -134,7 +134,7 @@ impl<'a> CursorData<'a> {
 }
 
 impl<'a> Deref for CursorData<'a> {
-    type Target = [Operand];
+    type Target = [Located<Operand>];
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Borrowed(data) => data,
@@ -146,7 +146,7 @@ impl<'a> Deref for CursorData<'a> {
 /// A cursor which iterates over an operand list of any kind.
 struct OperandCursor<'a> {
     /// The cursor kind and opcode of the current operation.
-    kind: CursorKind,
+    kind: Located<CursorKind>,
     /// The operand list, which may be generated or borrowed from the program.
     operands: CursorData<'a>,
     /// The position of the cursor in the operand list.
@@ -162,7 +162,7 @@ impl<'a> OperandCursor<'a> {
     where
         T: NamedOpcode + Into<CursorKind>,
     {
-        let kind = op.opcode.into();
+        let kind = Located::map(op.opcode, |o| o.into());
         Self {
             kind,
             operands: CursorData::Borrowed(&op.operands),
@@ -176,7 +176,7 @@ impl<'a> OperandCursor<'a> {
     where
         T: NamedOpcode + Into<CursorKind>,
     {
-        let kind = op.opcode.into();
+        let kind = Located::map(op.opcode, |o| o.into());
         Self {
             kind,
             operands: CursorData::Owned(op.operands),
@@ -187,7 +187,7 @@ impl<'a> OperandCursor<'a> {
 
     /// If the cursor is for an opcode of type `T`, returns it, otherwise returns an error.
     fn opcode<T: MatchCursorKind>(&self) -> Result<T> {
-        T::match_cursor(self.kind)
+        T::match_cursor(*self.kind)
     }
 
     /// Returns true if the cursor has another operand.
@@ -221,55 +221,56 @@ impl<'a> OperandCursor<'a> {
     /// Descends into an expression, returning the opcode and subcursor.
     fn enter_expr(&mut self) -> Result<(ExprOp, Self)> {
         let Some(index) = self.index() else { return Err(Error::ExpectedExpr) };
-        if !matches!(self.kind, CursorKind::Command(_) | CursorKind::Expr(_)) {
+        if !matches!(*self.kind, CursorKind::Command(_) | CursorKind::Expr(_)) {
             return Err(Error::ExpectedExpr);
         }
         let operands = self.operands.ensure_borrowed().ok_or(Error::ExpectedExpr)?;
         let operand = &operands[index];
-        let (opcode, cursor) = match operand {
+        let (opcode, cursor) = match &**operand {
             Operand::I8(_) | Operand::U8(_) | Operand::I16(_) | Operand::U16(_) => {
-                let op = Operation::with_operands(ExprOp::Imm16, [operand.clone()]);
+                let op = Operation::with_operands(Located::new(ExprOp::Imm16), [operand.clone()]);
                 (op.opcode, Self::with_owned(op))
             }
             Operand::I32(_) | Operand::U32(_) | Operand::Type(_) => {
-                let op = Operation::with_operands(ExprOp::Imm32, [operand.clone()]);
+                let op = Operation::with_operands(Located::new(ExprOp::Imm32), [operand.clone()]);
                 (op.opcode, Self::with_owned(op))
             }
             Operand::Label(_) | Operand::ElseLabel(_) | Operand::Offset(_) => {
-                let op = Operation::with_operands(ExprOp::AddressOf, [operand.clone()]);
+                let op =
+                    Operation::with_operands(Located::new(ExprOp::AddressOf), [operand.clone()]);
                 (op.opcode, Self::with_owned(op))
             }
             Operand::Expr(expr) => (expr.opcode, Self::with_borrowed(expr)),
             Operand::Text(_) | Operand::MsgCommand(_) => return Err(Error::ExpectedExpr),
         };
         self.position += 1;
-        Ok((opcode, cursor))
+        Ok((*opcode, cursor))
     }
 
     /// Descends into a message command, returning the opcode and subcursor.
     fn enter_msg_command(&mut self) -> Result<(AsmMsgOp, Self)> {
         let Some(index) = self.index() else { return Err(Error::ExpectedExpr) };
-        if !matches!(self.kind, CursorKind::Command(_)) {
+        if !matches!(*self.kind, CursorKind::Command(_)) {
             return Err(Error::ExpectedMessage);
         }
         let operands = self.operands.ensure_borrowed().ok_or(Error::ExpectedMessage)?;
         let operand = &operands[index];
-        let (opcode, cursor) = match operand {
+        let (opcode, cursor) = match &**operand {
             Operand::Text(_) => {
-                let op = Operation::with_operands(AsmMsgOp::Text, [operand.clone()]);
+                let op = Operation::with_operands(Located::new(AsmMsgOp::Text), [operand.clone()]);
                 (op.opcode, Self::with_owned(op))
             }
             Operand::MsgCommand(op) => (op.opcode, Self::with_borrowed(op)),
             _ => return Err(Error::ExpectedMessage),
         };
         self.position += 1;
-        Ok((opcode, cursor))
+        Ok((*opcode, cursor))
     }
 
     /// Consumes the cursor, also validating that the opcode matches `T` and all operands were
     /// consumed.
     fn leave<T: MatchCursorKind>(self) -> Result<()> {
-        T::match_cursor(self.kind)?;
+        T::match_cursor(*self.kind)?;
         if self.has_next() {
             Err(Error::TooManyOperands {
                 name: self.kind.name(),
@@ -467,7 +468,7 @@ impl EventDeserializer for AsmDeserializer<'_> {
         };
         let command = code.get(self.command_index).ok_or(SerError::EndOfData)?;
         self.cursor = Some(OperandCursor::with_borrowed(command));
-        Ok(command.opcode)
+        Ok(*command.opcode)
     }
 
     fn end_command(&mut self) -> SerResult<()> {
@@ -591,8 +592,8 @@ fn compile_code(program: &Program, block: &Block) -> Result<ScriptBlock> {
 }
 
 /// Converts an operand into a data block.
-fn into_data(program: &Program, value: &Operand) -> Result<DataBlock> {
-    match value {
+fn into_data(program: &Program, value: &Located<Operand>) -> Result<DataBlock> {
+    match &**value {
         Operand::I8(x) => Ok(DataBlock::I8Array(vec![*x])),
         Operand::U8(x) => Ok(DataBlock::U8Array(vec![*x])),
         Operand::I16(x) => Ok(DataBlock::I16Array(vec![*x])),
@@ -660,7 +661,7 @@ fn try_append_data(program: &Program, block: &mut DataBlock, value: &Operand) ->
 }
 
 /// Compiles a data block.
-fn compile_data(program: &Program, data: &[Operand]) -> Result<ScriptBlock> {
+fn compile_data(program: &Program, data: &[Located<Operand>]) -> Result<ScriptBlock> {
     let mut blocks: Vec<DataBlock> = vec![];
     for value in data {
         if let Some(last) = blocks.last_mut() {

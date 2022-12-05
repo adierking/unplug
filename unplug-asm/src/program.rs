@@ -1,12 +1,16 @@
+use crate::ast::IntValue;
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
+use crate::span::{Span, Spanned};
 use crate::{Error, Result};
 use bitflags::bitflags;
 use num_traits::NumCast;
+use private::Sealed;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
+use std::ops::{Deref, DerefMut};
 use unplug::common::Text;
 use unplug::event::opcodes::{CmdOp, ExprOp, Opcode, TypeOp};
 use unplug::event::BlockId;
@@ -15,8 +19,63 @@ use unplug::stage::Event;
 mod private {
     pub trait Sealed {}
 }
-use crate::ast::IntValue;
-use private::Sealed;
+
+/// Wrapper which associates a value with a `Span` and implements `Spanned` for it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Located<T> {
+    value: T,
+    span: Span,
+}
+
+impl<T> Located<T> {
+    /// Creates a new located value with an empty span.
+    pub fn new(value: T) -> Self {
+        Self { value, span: Span::EMPTY }
+    }
+
+    /// Creates a new located value with the given span.
+    pub fn with_span(value: T, span: Span) -> Self {
+        Self { value, span }
+    }
+
+    /// Maps the inner value to a new one without changing the span.
+    pub fn map<U, F>(self, f: F) -> Located<U>
+    where
+        F: FnOnce(T) -> U,
+    {
+        Located::with_span(f(self.value), self.span)
+    }
+
+    /// Returns the inner value.
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+}
+
+impl<T> Deref for Located<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> DerefMut for Located<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+impl<T> Spanned for Located<T> {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl<T> From<T> for Located<T> {
+    fn from(value: T) -> Self {
+        Self::new(value)
+    }
+}
 
 /// Data which can be operated on.
 #[derive(Debug, Clone)]
@@ -188,18 +247,21 @@ impl TypeHint for AsmMsgOp {
 /// An operation consisting of an opcode and zero or more operands.
 #[derive(Debug, Clone)]
 pub struct Operation<T: NamedOpcode> {
-    pub opcode: T,
-    pub operands: SmallVec<[Operand; 2]>,
+    pub opcode: Located<T>,
+    pub operands: SmallVec<[Located<Operand>; 2]>,
 }
 
 impl<T: NamedOpcode> Operation<T> {
     /// Creates an empty operation with `opcode`.
-    pub fn new(opcode: T) -> Self {
+    pub fn new(opcode: Located<T>) -> Self {
         Self { opcode, operands: SmallVec::new() }
     }
 
     /// Creates an empty operation with `opcode` and `operands`.
-    pub fn with_operands(opcode: T, operands: impl IntoIterator<Item = Operand>) -> Self {
+    pub fn with_operands(
+        opcode: Located<T>,
+        operands: impl IntoIterator<Item = Located<Operand>>,
+    ) -> Self {
         Self { opcode, operands: operands.into_iter().collect() }
     }
 }
@@ -213,7 +275,7 @@ pub enum CodeOperation {
 
 impl CodeOperation {
     /// Appends `operand` onto the operation.
-    pub fn push_operand(&mut self, operand: Operand) {
+    pub fn push_operand(&mut self, operand: Located<Operand>) {
         match self {
             Self::Command(op) => op.operands.push(operand),
             Self::Expr(op) => op.operands.push(operand),
@@ -282,7 +344,7 @@ bitflags! {
 #[derive(Debug, Clone)]
 pub enum BlockContent {
     Code(Vec<Operation<CmdOp>>),
-    Data(Vec<Operand>),
+    Data(Vec<Located<Operand>>),
 }
 
 /// A block of instructions corresponding to a script block.
@@ -315,7 +377,7 @@ impl Block {
     }
 
     /// Creates a data block populated from `operands`.
-    pub fn with_data(operands: impl IntoIterator<Item = Operand>) -> Self {
+    pub fn with_data(operands: impl IntoIterator<Item = Located<Operand>>) -> Self {
         Self::with_content(BlockContent::Data(operands.into_iter().collect()))
     }
 
@@ -349,7 +411,7 @@ impl Block {
 
     /// Appends data to the end of a data block. If the block is empty, it will become a data block.
     /// ***Panics*** if the block already contains code.
-    pub fn push_data(&mut self, data: impl IntoIterator<Item = Operand>) {
+    pub fn push_data(&mut self, data: impl IntoIterator<Item = Located<Operand>>) {
         match self.content.get_or_insert(BlockContent::Data(vec![])) {
             BlockContent::Code(_) => panic!("cannot append a command to a data block"),
             BlockContent::Data(d) => d.extend(data),
@@ -449,8 +511,8 @@ impl Program {
                     // flow command refers to a subroutine
                     if !cmd.operands.is_empty() && !cmd.opcode.is_control_flow() {
                         for operand in &cmd.operands {
-                            if let Operand::Label(label) = operand {
-                                let target_id = self.labels.get(*label).block.unwrap();
+                            if let Operand::Label(label) = **operand {
+                                let target_id = self.labels.get(label).block.unwrap();
                                 let target_index = target_id.index();
                                 let flags = match target_index.cmp(&index) {
                                     Ordering::Less => &mut before[target_index].flags,

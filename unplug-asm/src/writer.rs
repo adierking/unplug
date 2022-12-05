@@ -1,8 +1,10 @@
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::program::{
-    Block, BlockContent, BlockFlags, CodeOperation, EntryPoint, Operand, Operation, Program, Target,
+    Block, BlockContent, BlockFlags, CodeOperation, EntryPoint, Located, Operand, Operation,
+    Program, Target,
 };
+use crate::span::Span;
 use crate::Result;
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -47,7 +49,7 @@ impl SerializedAsm {
     }
 
     /// Returns the inner data. ***Panics*** if this is not a data block.
-    fn into_data(self) -> Vec<Operand> {
+    fn into_data(self) -> Vec<Located<Operand>> {
         match self.content {
             None => vec![],
             Some(BlockContent::Code(_)) => panic!("Unexpected code"),
@@ -90,10 +92,10 @@ impl<'a> AsmSerializer<'a> {
     /// Pushes a new operand onto the current operation.
     fn push_operand(&mut self, operand: Operand) {
         if let Some(op) = &mut self.operation {
-            op.push_operand(operand)
+            op.push_operand(operand.into())
         } else {
             match self.asm.content.get_or_insert(BlockContent::Data(vec![])) {
-                BlockContent::Data(data) => data.push(operand),
+                BlockContent::Data(data) => data.push(operand.into()),
                 _ => panic!("Unexpected operand: {:?}", operand),
             }
         }
@@ -109,9 +111,10 @@ impl<'a> AsmSerializer<'a> {
 
             let label = match self.labels.find_block(block).first() {
                 Some(&label) => label,
-                None => {
-                    self.labels.insert_new(format!("loc_{}", block.index()), Some(block)).unwrap()
-                }
+                None => self
+                    .labels
+                    .insert_new(format!("loc_{}", block.index()), Some(block), Span::EMPTY)
+                    .unwrap(),
             };
 
             // If this command is if-like, use an ElseLabel so that "else" is displayed before it.
@@ -147,7 +150,7 @@ impl<'a> AsmSerializer<'a> {
 
     /// Postprocess a command.
     fn postprocess_command(cmd: &mut Operation<CmdOp>) {
-        if cmd.opcode == CmdOp::Set {
+        if *cmd.opcode == CmdOp::Set {
             // set() puts the destination second; reverse the operands
             cmd.operands.reverse()
         }
@@ -155,9 +158,11 @@ impl<'a> AsmSerializer<'a> {
 
     /// Postprocess an expression, turning it into an operand.
     fn postprocess_expr(mut expr: Operation<ExprOp>) -> Operand {
-        match expr.opcode {
+        match *expr.opcode {
             // We have enough information to determine these from the operand
-            ExprOp::Imm16 | ExprOp::Imm32 | ExprOp::AddressOf => expr.operands.remove(0),
+            ExprOp::Imm16 | ExprOp::Imm32 | ExprOp::AddressOf => {
+                Located::into_inner(expr.operands.remove(0))
+            }
             // Reverse binary operation order
             ExprOp::Equal
             | ExprOp::NotEqual
@@ -279,7 +284,7 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 
     fn begin_expr(&mut self, expr: ExprOp) -> SerResult<()> {
-        self.begin_operation(Operation::new(expr));
+        self.begin_operation(Operation::new(expr.into()));
         Ok(())
     }
 
@@ -290,7 +295,7 @@ impl EventSerializer for AsmSerializer<'_> {
     }
 
     fn begin_command(&mut self, command: CmdOp) -> SerResult<()> {
-        self.begin_operation(Operation::new(command));
+        self.begin_operation(Operation::new(command.into()));
         Ok(())
     }
 
@@ -326,11 +331,11 @@ impl EventSerializer for AsmSerializer<'_> {
         };
 
         if let Some(CodeOperation::MsgCommand(cmd)) = &mut self.operation {
-            let op = cmd.opcode;
+            let op = *cmd.opcode;
             if op == AsmMsgOp::Text || op == AsmMsgOp::Format {
                 // Coalesce characters into newline-terminated text strings.
                 if let MsgOp::Char(b) = ch {
-                    if let Operand::Text(text) = &mut cmd.operands[0] {
+                    if let Operand::Text(text) = &mut *cmd.operands[0] {
                         let last = text.as_bytes().last().copied().unwrap_or(0);
                         if last != b'\n' && last != VT as u8 {
                             text.push(b);
@@ -374,7 +379,7 @@ impl EventSerializer for AsmSerializer<'_> {
             MsgOp::Stay => AsmMsgOp::Stay,
             MsgOp::Char(_) | MsgOp::Newline | MsgOp::NewlineVt => AsmMsgOp::Text,
         };
-        self.begin_operation(Operation::new(cmd));
+        self.begin_operation(Operation::new(cmd.into()));
         match ch {
             MsgOp::Char(b) => self.push_operand(Operand::Text(Text::with_bytes(vec![b]))),
             MsgOp::Format => self.push_operand(Operand::Text(Text::new())),
@@ -442,7 +447,7 @@ impl<'a> ProgramBuilder<'a> {
             };
             match self.program.labels.find_block(block_id).first() {
                 Some(&label) => self.program.labels.rename(label, name)?,
-                None => self.program.labels.insert_new(name, Some(block_id))?,
+                None => self.program.labels.insert_new(name, Some(block_id), Span::EMPTY)?,
             };
         }
         Ok(())
@@ -477,7 +482,7 @@ impl<'a> ProgramBuilder<'a> {
         let name = format!("sub_{}", entry_point.index());
         match self.program.labels.find_block(entry_point).first() {
             Some(&label) => self.program.labels.rename(label, name)?,
-            None => self.program.labels.insert_new(name, Some(entry_point))?,
+            None => self.program.labels.insert_new(name, Some(entry_point), Span::EMPTY)?,
         };
 
         while let Some(block) = self.queue.pop() {
@@ -612,10 +617,11 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
 
     fn write_target(&mut self) -> io::Result<()> {
         let op = match &self.program.target {
-            Some(Target::Globals) => Operation::new(DirOp::Globals),
-            Some(Target::Stage(path)) => {
-                Operation::with_operands(DirOp::Stage, [Text::encode(path).unwrap().into()])
-            }
+            Some(Target::Globals) => Operation::new(DirOp::Globals.into()),
+            Some(Target::Stage(path)) => Operation::with_operands(
+                DirOp::Stage.into(),
+                [Located::new(Text::encode(path).unwrap().into())],
+            ),
             None => return Ok(()),
         };
         self.write_directive(&op)?;
@@ -649,14 +655,14 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         code.iter().try_for_each(|c| self.write_command(c))
     }
 
-    fn write_data(&mut self, data: &[Operand]) -> io::Result<()> {
+    fn write_data(&mut self, data: &[Located<Operand>]) -> io::Result<()> {
         let mut current_op: Option<Operation<DirOp>> = None;
         for operand in data {
             let ty = operand_type(operand);
-            let mut op = current_op.get_or_insert_with(|| Operation::new(ty));
-            if op.opcode != ty {
+            let mut op = current_op.get_or_insert_with(|| Operation::new(ty.into()));
+            if *op.opcode != ty {
                 self.write_directive(op)?;
-                op.opcode = ty;
+                op.opcode = ty.into();
                 op.operands.clear();
             }
             op.operands.push(operand.clone());
@@ -671,7 +677,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         write!(self.writer, "\t{}", command.opcode.name())?;
         if !command.operands.is_empty() {
             write!(self.writer, "\t")?;
-            if matches!(command.opcode, CmdOp::Msg | CmdOp::Select) {
+            if matches!(*command.opcode, CmdOp::Msg | CmdOp::Select) {
                 self.write_msg_operands(&command.operands)?;
             } else {
                 self.write_operands(&command.operands)?;
@@ -682,13 +688,13 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     fn write_entry_directive(&mut self, kind: EntryPoint, label: LabelId) -> io::Result<()> {
-        let mut dir = Operation::new(kind.directive());
+        let mut dir = Operation::new(kind.directive().into());
         match kind {
-            EntryPoint::Lib(lib) => dir.operands.push(Operand::I16(lib)),
-            EntryPoint::Event(Event::Interact(obj)) => dir.operands.push(Operand::I32(obj)),
+            EntryPoint::Lib(lib) => dir.operands.push(Operand::I16(lib).into()),
+            EntryPoint::Event(Event::Interact(obj)) => dir.operands.push(Operand::I32(obj).into()),
             _ => (),
         }
-        dir.operands.push(Operand::Label(label));
+        dir.operands.push(Operand::Label(label).into());
         self.write_directive(&dir)
     }
 
@@ -707,15 +713,19 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         Ok(())
     }
 
-    fn write_operands(&mut self, operands: &[Operand]) -> io::Result<()> {
+    fn write_operands(&mut self, operands: &[Located<Operand>]) -> io::Result<()> {
         self.write_operands_impl(operands, ", ")
     }
 
-    fn write_msg_operands(&mut self, operands: &[Operand]) -> io::Result<()> {
+    fn write_msg_operands(&mut self, operands: &[Located<Operand>]) -> io::Result<()> {
         self.write_operands_impl(operands, ",\n\t\t")
     }
 
-    fn write_operands_impl(&mut self, operands: &[Operand], separator: &str) -> io::Result<()> {
+    fn write_operands_impl(
+        &mut self,
+        operands: &[Located<Operand>],
+        separator: &str,
+    ) -> io::Result<()> {
         for (i, operand) in operands.iter().enumerate() {
             if i > 0 {
                 write!(self.writer, "{}", separator)?;
@@ -763,7 +773,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     fn write_msg_command(&mut self, cmd: &Operation<AsmMsgOp>) -> io::Result<()> {
-        match cmd.opcode {
+        match *cmd.opcode {
             AsmMsgOp::Text => self.write_operand(&cmd.operands[0])?,
             _ => {
                 write!(self.writer, "{}", cmd.opcode.name())?;
