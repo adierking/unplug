@@ -1,20 +1,15 @@
+use crate::ast::{self, Ast, Expr, IdentClass, IntValue, Item};
 use crate::label::{LabelId, LabelMap};
-use crate::lexer::Number;
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
-use crate::parser::{Ast, Item, Node, Value};
 use crate::program::{
     Block, BlockContent, EntryPoint, Operand, OperandType, Operation, Program, Target, TypeHint,
 };
 use crate::{Error, Result};
-use smol_str::SmolStr;
 use std::collections::HashMap;
 use unplug::common::Text;
 use unplug::event::opcodes::{CmdOp, ExprOp, TypeOp};
 use unplug::event::BlockId;
 use unplug::stage::Event;
-
-/// Vertical tab character (`\v`).
-const VT: &str = "\x0b";
 
 /// Assembles a `Program` from an AST.
 pub struct ProgramAssembler<'a> {
@@ -50,13 +45,13 @@ impl<'a> ProgramAssembler<'a> {
         self.program.first_block = Some(block_id);
         let mut new_block = false;
         for item in &self.ast.items {
-            if let Item::Label(label) = &item.data {
+            if let Item::LabelDecl(label) = item {
                 if new_block {
                     block_id = self.program.insert_after(Some(block_id), Block::new());
                     // Labels right after each other refer to the same block
                     new_block = false;
                 }
-                self.program.labels.insert_new(label.data.as_str(), Some(block_id))?;
+                self.program.labels.insert_new(label.name.as_str(), Some(block_id))?;
             } else {
                 // There's content in this block, so the next label starts a new one
                 new_block = true;
@@ -69,25 +64,28 @@ impl<'a> ProgramAssembler<'a> {
     fn parse_instructions(&mut self) -> Result<()> {
         let mut block_id = self.program.first_block.unwrap();
         for item in &self.ast.items {
-            match &item.data {
-                Item::Label(label) => {
+            match item {
+                Item::LabelDecl(label) => {
                     let labels = &self.program.labels;
                     let id = labels
-                        .find_name(label.data.as_str())
+                        .find_name(label.name.as_str())
                         .expect("label does not have an associated ID");
                     block_id =
                         labels.get(id).block.expect("label does not have an associated block");
                 }
-                Item::Command(name, values) => {
-                    let opcode = Self::parse_command_opcode(name)?;
-                    let command = self.parse_operation(opcode, values)?;
-                    block_id = self.process_command(block_id, command);
-                }
-                Item::Directive(name, values) => {
-                    let opcode = Self::parse_directive_opcode(name)?;
-                    let dir = self.parse_operation(opcode, values)?;
-                    block_id = self.process_directive(block_id, dir)?;
-                }
+                Item::Command(cmd) => match cmd.name.class() {
+                    IdentClass::Default => {
+                        let opcode = Self::parse_command_opcode(&cmd.name)?;
+                        let command = self.parse_operation(opcode, &cmd.operands)?;
+                        block_id = self.process_command(block_id, command);
+                    }
+                    IdentClass::Directive => {
+                        let opcode = Self::parse_directive_opcode(&cmd.name)?;
+                        let dir = self.parse_operation(opcode, &cmd.operands)?;
+                        block_id = self.process_directive(block_id, dir)?;
+                    }
+                    IdentClass::Type => return Err(Error::UnexpectedExpr),
+                },
             }
         }
         Ok(())
@@ -230,58 +228,62 @@ impl<'a> ProgramAssembler<'a> {
     fn parse_operation<T: NamedOpcode + TypeHint>(
         &self,
         opcode: T,
-        values: &[Node<Value>],
+        operands: &[ast::Operand],
     ) -> Result<Operation<T>> {
         let mut operation = Operation::new(opcode);
-        operation.operands.reserve(values.len());
+        operation.operands.reserve(operands.len());
         let ty = opcode.type_hint();
-        for value in values {
-            operation.operands.push(self.parse_operand(ty, value)?);
+        for operand in operands {
+            operation.operands.push(self.parse_operand(ty, operand)?);
         }
         Ok(operation)
     }
 
     /// Parses a single operand.
-    fn parse_operand(&self, ty: OperandType, value: &Node<Value>) -> Result<Operand> {
-        match &value.data {
-            Value::Number(num) => Self::parse_number(ty, *num),
-            Value::Text(text) => Self::parse_text(ty, text.as_str()),
-            Value::Type(name) => Self::parse_type(ty, &value.map(|_| name.clone())),
-            Value::Label(name) => self.parse_label(ty, &name.data).map(Operand::Label),
-            Value::ElseLabel(name) => self.parse_label(ty, &name.data).map(Operand::ElseLabel),
-            Value::Offset(num) => Self::parse_offset(ty, num.data),
-            Value::Function(name, values) => self.parse_function(ty, name, values),
+    fn parse_operand(&self, ty: OperandType, operand: &ast::Operand) -> Result<Operand> {
+        match &*operand.expr {
+            Expr::IntLiteral(i) => Self::parse_integer(ty, i.value()),
+            Expr::StrLiteral(s) => Self::parse_text(ty, s),
+            Expr::Variable(id) => Self::parse_var_expr(ty, id),
+            Expr::LabelRef(label) => self.parse_label(ty, &label.name).map(Operand::Label),
+            Expr::ElseLabel(label) => self.parse_label(ty, &label.name).map(Operand::ElseLabel),
+            Expr::OffsetRef(off) => Self::parse_offset(ty, off),
+            Expr::FunctionCall(call) => self.parse_function(ty, call),
         }
     }
 
     /// Parses a number of a potentially-unknown type into an operand with a known type.
-    fn parse_number(ty: OperandType, num: Number) -> Result<Operand> {
-        match num {
-            Number::I8(x) => i8::try_from(x).map(Operand::I8).map_err(|_| Error::Invalid8(num)),
-            Number::U8(x) => u8::try_from(x).map(Operand::U8).map_err(|_| Error::Invalid8(num)),
-            Number::I16(x) => i16::try_from(x).map(Operand::I16).map_err(|_| Error::Invalid16(num)),
-            Number::U16(x) => u16::try_from(x).map(Operand::U16).map_err(|_| Error::Invalid16(num)),
-            Number::I32(x) => Ok(Operand::I32(x)),
-            Number::U32(x) => Ok(Operand::U32(x)),
-            Number::IAuto(x) => {
+    fn parse_integer(ty: OperandType, int: IntValue) -> Result<Operand> {
+        match int {
+            IntValue::I8(x) => i8::try_from(x).map(Operand::I8).map_err(|_| Error::Invalid8(int)),
+            IntValue::U8(x) => u8::try_from(x).map(Operand::U8).map_err(|_| Error::Invalid8(int)),
+            IntValue::I16(x) => {
+                i16::try_from(x).map(Operand::I16).map_err(|_| Error::Invalid16(int))
+            }
+            IntValue::U16(x) => {
+                u16::try_from(x).map(Operand::U16).map_err(|_| Error::Invalid16(int))
+            }
+            IntValue::I32(x) => Ok(Operand::I32(x)),
+            IntValue::U32(x) => Ok(Operand::U32(x)),
+            IntValue::IAuto(x) => {
                 // If we know what type we're parsing as, then forcibly parse as that type,
                 // otherwise find the smallest type which fits
                 match ty {
-                    OperandType::Byte => Self::parse_number(ty, Number::I8(x)),
-                    OperandType::Word => Self::parse_number(ty, Number::I16(x)),
-                    OperandType::Dword => Self::parse_number(ty, Number::I32(x)),
+                    OperandType::Byte => Self::parse_integer(ty, IntValue::I8(x)),
+                    OperandType::Word => Self::parse_integer(ty, IntValue::I16(x)),
+                    OperandType::Dword => Self::parse_integer(ty, IntValue::I32(x)),
                     _ => i8::try_from(x)
                         .map(Operand::I8)
                         .or_else(|_| i16::try_from(x).map(Operand::I16))
                         .or(Ok(Operand::I32(x))),
                 }
             }
-            Number::UAuto(x) => {
+            IntValue::UAuto(x) => {
                 // Same as with IAuto
                 match ty {
-                    OperandType::Byte => Self::parse_number(ty, Number::U8(x)),
-                    OperandType::Word => Self::parse_number(ty, Number::U16(x)),
-                    OperandType::Dword => Self::parse_number(ty, Number::U32(x)),
+                    OperandType::Byte => Self::parse_integer(ty, IntValue::U8(x)),
+                    OperandType::Word => Self::parse_integer(ty, IntValue::U16(x)),
+                    OperandType::Dword => Self::parse_integer(ty, IntValue::U32(x)),
                     _ => u8::try_from(x)
                         .map(Operand::U8)
                         .or_else(|_| u16::try_from(x).map(Operand::U16))
@@ -292,88 +294,94 @@ impl<'a> ProgramAssembler<'a> {
     }
 
     /// Parses a text operand.
-    fn parse_text(ty: OperandType, text: &str) -> Result<Operand> {
+    fn parse_text(ty: OperandType, s: &ast::StrLiteral) -> Result<Operand> {
         if !matches!(ty, OperandType::Unknown | OperandType::Byte | OperandType::Message) {
             return Err(Error::OperandTypeExpected(ty));
         }
-        // TODO: This is lazy
-        let unescaped = text.replace(r"\n", "\n").replace(r"\v", VT);
+        let unescaped = s.to_unescaped();
         let encoded = Text::encode(&unescaped)?;
         Ok(Operand::Text(encoded))
     }
 
-    /// Parses a @type operand.
-    fn parse_type(ty: OperandType, name: &Node<SmolStr>) -> Result<Operand> {
-        if !matches!(ty, OperandType::Unknown | OperandType::Dword) {
+    /// Parses a variable reference expression.
+    fn parse_var_expr(ty: OperandType, id: &ast::Ident) -> Result<Operand> {
+        if !matches!(ty, OperandType::Unknown | OperandType::Dword | OperandType::Message) {
             return Err(Error::OperandTypeExpected(ty));
         }
-        Ok(Operand::Type(Self::parse_type_opcode(name)?))
+        Ok(match id.class() {
+            IdentClass::Default => {
+                if ty == OperandType::Message {
+                    let cmd = Operation::new(Self::parse_msg_opcode(id)?);
+                    Operand::MsgCommand(cmd.into())
+                } else {
+                    let expr = Operation::new(Self::parse_expr_opcode(id)?);
+                    Operand::Expr(expr.into())
+                }
+            }
+            IdentClass::Directive => return Err(Error::UnexpectedDirective),
+            IdentClass::Type => Operand::Type(Self::parse_type_opcode(id)?),
+        })
     }
 
     /// Parses a label reference operand.
-    fn parse_label(&self, ty: OperandType, name: &SmolStr) -> Result<LabelId> {
+    fn parse_label(&self, ty: OperandType, id: &ast::Ident) -> Result<LabelId> {
         if !matches!(ty, OperandType::Unknown | OperandType::Dword) {
             return Err(Error::OperandTypeExpected(ty));
         }
         self.program
             .labels
-            .find_name(name.as_str())
-            .ok_or_else(|| Error::UndefinedLabel(name.clone()))
+            .find_name(id.as_str())
+            .ok_or_else(|| Error::UndefinedLabel(id.as_str().into()))
     }
 
     /// Parses an offset reference operand.
-    fn parse_offset(ty: OperandType, num: Number) -> Result<Operand> {
+    fn parse_offset(ty: OperandType, offset: &ast::OffsetRef) -> Result<Operand> {
         if !matches!(ty, OperandType::Unknown | OperandType::Dword) {
             return Err(Error::OperandTypeExpected(ty));
         }
-        Ok(Operand::Offset(Self::parse_number(OperandType::Unknown, num)?.cast()?))
+        Ok(Operand::Offset(
+            Self::parse_integer(OperandType::Unknown, offset.offset.value())?.cast()?,
+        ))
     }
 
     /// Parses a "function" operand, which depending on context may be an expression or message
     /// command.
-    fn parse_function(
-        &self,
-        ty: OperandType,
-        name: &Node<SmolStr>,
-        values: &[Node<Value>],
-    ) -> Result<Operand> {
+    fn parse_function(&self, ty: OperandType, call: &ast::FunctionCall) -> Result<Operand> {
         match ty {
             OperandType::Unknown => {
-                let opcode = Self::parse_expr_opcode(name)?;
-                self.parse_operation(opcode, values).map(|op| Operand::Expr(op.into()))
+                let opcode = Self::parse_expr_opcode(&call.name)?;
+                self.parse_operation(opcode, &call.operands).map(|o| Operand::Expr(o.into()))
             }
             OperandType::Message => {
-                let opcode = Self::parse_msg_opcode(name)?;
-                self.parse_operation(opcode, values).map(|op| Operand::MsgCommand(op.into()))
+                let opcode = Self::parse_msg_opcode(&call.name)?;
+                self.parse_operation(opcode, &call.operands).map(|o| Operand::MsgCommand(o.into()))
             }
             _ => Err(Error::OperandTypeExpected(ty)),
         }
     }
 
     /// Parses a command name.
-    fn parse_command_opcode(name: &Node<SmolStr>) -> Result<CmdOp> {
-        CmdOp::get(name.data.as_str()).ok_or_else(|| Error::UnrecognizedCommand(name.data.clone()))
+    fn parse_command_opcode(id: &ast::Ident) -> Result<CmdOp> {
+        CmdOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedCommand(id.as_str().into()))
     }
 
     /// Parses a directive name.
-    fn parse_directive_opcode(name: &Node<SmolStr>) -> Result<DirOp> {
-        DirOp::get(name.data.as_str()).ok_or_else(|| Error::UnrecognizedCommand(name.data.clone()))
+    fn parse_directive_opcode(id: &ast::Ident) -> Result<DirOp> {
+        DirOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedCommand(id.as_str().into()))
     }
 
     /// Parses a @type name.
-    fn parse_type_opcode(name: &Node<SmolStr>) -> Result<TypeOp> {
-        TypeOp::get(name.data.as_str()).ok_or_else(|| Error::UnrecognizedType(name.data.clone()))
+    fn parse_type_opcode(id: &ast::Ident) -> Result<TypeOp> {
+        TypeOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedType(id.as_str().into()))
     }
 
     /// Parses an expression name.
-    fn parse_expr_opcode(name: &Node<SmolStr>) -> Result<ExprOp> {
-        ExprOp::get(name.data.as_str())
-            .ok_or_else(|| Error::UnrecognizedFunction(name.data.clone()))
+    fn parse_expr_opcode(id: &ast::Ident) -> Result<ExprOp> {
+        ExprOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedFunction(id.as_str().into()))
     }
 
     /// Parses a message command name.
-    fn parse_msg_opcode(name: &Node<SmolStr>) -> Result<AsmMsgOp> {
-        AsmMsgOp::get(name.data.as_str())
-            .ok_or_else(|| Error::UnrecognizedFunction(name.data.clone()))
+    fn parse_msg_opcode(id: &ast::Ident) -> Result<AsmMsgOp> {
+        AsmMsgOp::get(id.as_str()).ok_or_else(|| Error::UnrecognizedFunction(id.as_str().into()))
     }
 }

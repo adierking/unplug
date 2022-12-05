@@ -15,18 +15,20 @@
 )]
 
 pub mod assembler;
+pub mod ast;
 pub mod compiler;
 pub mod label;
 pub mod lexer;
 pub mod opcodes;
 pub mod parser;
 pub mod program;
+pub mod span;
 pub mod writer;
 
 pub use compiler::compile;
 pub use writer::{disassemble_globals, disassemble_stage, write_program};
 
-use lexer::Number;
+use ast::IntValue;
 use program::{EntryPoint, OperandType};
 use smol_str::SmolStr;
 use std::io;
@@ -48,22 +50,22 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(variant_size_differences)]
 pub enum Error {
     #[error("{0} cannot be converted to an 8-bit signed integer")]
-    CannotConvertToI8(Number),
+    CannotConvertToI8(IntValue),
 
     #[error("{0} cannot be converted to an 8-bit unsigned integer")]
-    CannotConvertToU8(Number),
+    CannotConvertToU8(IntValue),
 
     #[error("{0} cannot be converted to a 16-bit signed integer")]
-    CannotConvertToI16(Number),
+    CannotConvertToI16(IntValue),
 
     #[error("{0} cannot be converted to a 16-bit unsigned integer")]
-    CannotConvertToU16(Number),
+    CannotConvertToU16(IntValue),
 
     #[error("{0} cannot be converted to a 32-bit signed integer")]
-    CannotConvertToI32(Number),
+    CannotConvertToI32(IntValue),
 
     #[error("{0} cannot be converted to a 32-bit unsigned integer")]
-    CannotConvertToU32(Number),
+    CannotConvertToU32(IntValue),
 
     #[error("entry point is defined more than once: {0:?}")]
     DuplicateEntryPoint(EntryPoint),
@@ -99,10 +101,10 @@ pub enum Error {
     ExpectedText,
 
     #[error("invalid 8-bit integer: {0}")]
-    Invalid8(Number),
+    Invalid8(IntValue),
 
     #[error("invalid 16-bit integer: {0}")]
-    Invalid16(Number),
+    Invalid16(IntValue),
 
     #[error("invalid library function index: {0}")]
     InvalidLibIndex(i16),
@@ -127,6 +129,9 @@ pub enum Error {
 
     #[error("undefined label: \"{0}\"")]
     UndefinedLabel(SmolStr),
+
+    #[error("unexpected directive")]
+    UnexpectedDirective,
 
     #[error("else labels can only appear in conditionals")]
     UnexpectedElseLabel,

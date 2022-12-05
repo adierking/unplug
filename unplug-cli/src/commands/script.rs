@@ -6,6 +6,7 @@ use crate::opt::{
     ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt,
 };
 use anyhow::{anyhow, bail, Result};
+use asm::lexer::Lexer;
 use log::error;
 use log::info;
 use std::fs::{self, File};
@@ -18,8 +19,7 @@ use unplug::globals::{GlobalsBuilder, Libs};
 use unplug::stage::Stage;
 use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
-use unplug_asm::lexer::{Logos, Token};
-use unplug_asm::parser::{Ast, Parser, Stream};
+use unplug_asm::parser::Parser;
 use unplug_asm::program::Target;
 
 fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
@@ -188,10 +188,9 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
     let name = opt.path.file_name().unwrap_or_default().to_string_lossy();
     info!("Parsing {}", name);
     let source = fs::read_to_string(&opt.path)?;
-    let len = source.len();
-    let lexer = Token::lexer(&source);
-    let stream = Stream::from_iter(len..len + 1, lexer.spanned());
-    let ast = match Ast::parser().parse(stream) {
+    let lexer = Lexer::new(&source);
+    let parser = Parser::new();
+    let ast = match parser.parse(lexer) {
         Ok(ast) => ast,
         Err(errors) => {
             // TODO: Make this suck less

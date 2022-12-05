@@ -1,5 +1,4 @@
 use crate::label::{LabelId, LabelMap};
-use crate::lexer::Number;
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::{Error, Result};
 use bitflags::bitflags;
@@ -16,6 +15,7 @@ use unplug::stage::Event;
 mod private {
     pub trait Sealed {}
 }
+use crate::ast::IntValue;
 use private::Sealed;
 
 /// Data which can be operated on.
@@ -54,12 +54,12 @@ impl Operand {
     /// appropriate error on failure.
     pub fn cast<T: CastOperand>(&self) -> Result<T> {
         let result = match *self {
-            Operand::I8(x) => T::from(x).ok_or_else(|| Number::I8(x.into())),
-            Operand::U8(x) => T::from(x).ok_or_else(|| Number::U8(x.into())),
-            Operand::I16(x) => T::from(x).ok_or_else(|| Number::I16(x.into())),
-            Operand::U16(x) => T::from(x).ok_or_else(|| Number::U16(x.into())),
-            Operand::I32(x) => T::from(x).ok_or(Number::I32(x)),
-            Operand::U32(x) => T::from(x).ok_or(Number::U32(x)),
+            Operand::I8(x) => T::from(x).ok_or_else(|| IntValue::I8(x.into())),
+            Operand::U8(x) => T::from(x).ok_or_else(|| IntValue::U8(x.into())),
+            Operand::I16(x) => T::from(x).ok_or_else(|| IntValue::I16(x.into())),
+            Operand::U16(x) => T::from(x).ok_or_else(|| IntValue::U16(x.into())),
+            Operand::I32(x) => T::from(x).ok_or(IntValue::I32(x)),
+            Operand::U32(x) => T::from(x).ok_or(IntValue::U32(x)),
             _ => return Err(Error::ExpectedInteger),
         };
         result.map_err(T::error)
@@ -98,8 +98,8 @@ impl_operand_from!(Operation<AsmMsgOp>, MsgCommand);
 
 /// Trait for a primitive type which an operand can be cast to.
 pub trait CastOperand: NumCast + Sealed {
-    /// Maps `num` to an error corresponding to this type.
-    fn error(num: Number) -> Error;
+    /// Maps `int` to an error corresponding to this type.
+    fn error(int: IntValue) -> Error;
 }
 
 // `CastOperand` implementations
@@ -107,8 +107,8 @@ macro_rules! impl_cast_operand {
     ($type:ty, $err:path) => {
         impl Sealed for $type {}
         impl CastOperand for $type {
-            fn error(num: Number) -> Error {
-                $err(num)
+            fn error(int: IntValue) -> Error {
+                $err(int)
             }
         }
     };

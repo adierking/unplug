@@ -694,7 +694,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
 
     fn write_directive(&mut self, dir: &Operation<DirOp>) -> io::Result<()> {
         let name = dir.opcode.name();
-        write!(self.writer, "\t.{}", name)?;
+        write!(self.writer, "\t{}", name)?;
         if !dir.operands.is_empty() {
             if name.len() + 1 < TAB_SIZE {
                 write!(self.writer, "\t")?;
@@ -745,7 +745,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
                 write!(self.writer, "else *{}", self.program.labels.get(*label).name)?
             }
             Operand::Offset(off) => write!(self.writer, "*0x{:x}", off)?,
-            Operand::Type(ty) => write!(self.writer, "@{}", ty.name())?,
+            Operand::Type(ty) => write!(self.writer, "{}", ty.name())?,
             Operand::Expr(expr) => self.write_expr(expr)?,
             Operand::MsgCommand(cmd) => self.write_msg_command(cmd)?,
         }

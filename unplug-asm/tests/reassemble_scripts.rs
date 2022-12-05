@@ -1,6 +1,4 @@
 use anyhow::{bail, Result};
-use chumsky::{Parser, Stream};
-use logos::Logos;
 use std::io::{BufReader, Cursor, Seek, SeekFrom};
 use tracing::info;
 use unplug::common::WriteTo;
@@ -11,8 +9,8 @@ use unplug::stage::Stage;
 use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
 use unplug_asm::compiler::CompiledScript;
-use unplug_asm::lexer::Token;
-use unplug_asm::parser::Ast;
+use unplug_asm::lexer::Lexer;
+use unplug_asm::parser::Parser;
 use unplug_asm::program::Program;
 use unplug_test as common;
 
@@ -22,11 +20,9 @@ fn program_string(program: &Program) -> String {
     String::from_utf8(bytes).unwrap()
 }
 
-fn assemble(source: &str) -> Result<CompiledScript> {
-    let len = source.len();
-    let lexer = Token::lexer(source);
-    let stream = Stream::from_iter(len..len + 1, lexer.spanned());
-    let ast = match Ast::parser().parse(stream) {
+fn assemble(parser: &Parser, source: &str) -> Result<CompiledScript> {
+    let lexer = Lexer::new(source);
+    let ast = match parser.parse(lexer) {
         Ok(ast) => ast,
         Err(_) => bail!("assembly failed"), // TODO
     };
@@ -47,10 +43,11 @@ fn test_reassemble_scripts() -> Result<()> {
     let libs = globals.read_libs()?;
 
     info!("Reassembling globals");
+    let parser = Parser::new();
     let reassembled_libs = {
         let program = asm::disassemble_globals(&libs)?;
         let source = program_string(&program);
-        let compiled = assemble(&source)?;
+        let compiled = assemble(&parser, &source)?;
         let compiled_libs = compiled.into_libs()?;
         info!("Reading the reassembled globals");
         let mut cursor = Cursor::new(Vec::<u8>::new());
@@ -73,7 +70,7 @@ fn test_reassemble_scripts() -> Result<()> {
         info!("Reassembling the stage");
         let program = asm::disassemble_stage(&original, id.name())?;
         let source = program_string(&program);
-        let compiled = assemble(&source)?;
+        let compiled = assemble(&parser, &source)?;
         let compiled_stage = compiled.into_stage(original.clone_without_script())?;
         let mut cursor = Cursor::new(Vec::<u8>::new());
         compiled_stage.write_to(&mut cursor)?;
