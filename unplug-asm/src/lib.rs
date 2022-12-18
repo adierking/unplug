@@ -17,6 +17,7 @@
 pub mod assembler;
 pub mod ast;
 pub mod compiler;
+pub mod diagnostics;
 pub mod label;
 pub mod lexer;
 pub mod opcodes;
@@ -49,6 +50,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[non_exhaustive]
 #[allow(variant_size_differences)]
 pub enum Error {
+    #[error("compilation failed")]
+    CompileFailed,
+
     #[error("{0} cannot be converted to an 8-bit signed integer")]
     CannotConvertToI8(IntValue),
 

@@ -1,148 +1,359 @@
 use crate::ast::*;
-use crate::lexer::{Token, TokenStream};
-use crate::span::Span;
-use chumsky::prelude::*;
-use chumsky::Parser as _;
-use chumsky::Stream;
+use crate::diagnostics::{CompileOutput, Diagnostic};
+use crate::lexer::{Token, TokenIterator, TokenStream};
+use crate::span::{Span, Spanned};
+use std::iter::Peekable;
 
-/// The parser's error type.
-pub type Error = Simple<Token, Span>;
-
-pub struct Parser {
-    parser: BoxedParser<'static, Token, Ast, Error>,
+/// Parses a token stream into an AST with automatic error recovery.
+pub struct Parser<'s> {
+    /// The token iterator.
+    tokens: Peekable<Box<TokenIterator<'s>>>,
+    /// The current token, or None if at EOF.
+    token: Option<Token>,
+    /// The current span, or empty if at EOF.
+    span: Span,
+    /// The current diagnostic list.
+    diagnostics: Vec<Diagnostic>,
 }
 
-impl Parser {
-    /// Builds a `Parser` for parsing tokens into an AST.
-    pub fn new() -> Self {
-        // NL*
-        let newlines = just(Token::Newline).ignored().repeated();
-        // NL | $
-        let required_newline = just(Token::Newline).ignored().or(end());
-        // `,` NL*
-        let comma =
-            just(Token::Comma).map_with_span(|_, s| Comma::new(s)).then_ignore(newlines.clone());
+impl<'s> Parser<'s> {
+    /// Creates a new parser which reads from `tokens`.
+    pub fn new(tokens: impl TokenStream<'s>) -> Self {
+        let mut parser = Self {
+            tokens: tokens.into_tokens().peekable(),
+            token: Some(Token::Error),
+            span: Span::EMPTY,
+            diagnostics: vec![],
+        };
+        parser.eat();
+        parser
+    }
 
-        // `(`
-        let lparen = just(Token::LParen).map_with_span(|_, s| LParen::new(s));
-        // `)`
-        let rparen = just(Token::RParen).map_with_span(|_, s| RParen::new(s));
+    /// Parse the entire stream into an AST.
+    pub fn parse(mut self) -> CompileOutput<Ast> {
+        let mut items = vec![];
+        while let Some(token) = &self.token {
+            match token {
+                // Ignore top-level newlines
+                Token::Newline => self.eat(),
+                _ => items.push(self.parse_item()),
+            }
+        }
+        if self.diagnostics.is_empty() {
+            let ast = Ast::with_items(items);
+            CompileOutput::Ok(ast, self.diagnostics)
+        } else {
+            CompileOutput::Err(self.diagnostics)
+        }
+    }
 
-        // `:`
-        let colon = just(Token::Colon).map_with_span(|_, s| Colon::new(s));
-        // `*`
-        let deref_token = just(Token::Deref).map_with_span(|_, s| Deref::new(s));
-        // `else`
-        let else_token = just(Token::Else).map_with_span(|_, s| Else::new(s));
+    /// Parses either a label declaration or a command.
+    fn parse_item(&mut self) -> Item {
+        match self.token {
+            Some(Token::Identifier(_)) => {
+                if self.peek(|t| *t == Token::Colon) {
+                    Item::LabelDecl(self.parse_label_decl())
+                } else {
+                    Item::Command(self.parse_command())
+                }
+            }
+            Some(Token::Error) => {
+                self.report(Diagnostic::invalid_token(self.span));
+                // Ignore the bad token
+                self.eat();
+                Item::Error
+            }
+            _ => {
+                self.report(Diagnostic::expected_item(self.span));
+                // Recover by going to the next line
+                self.skip_thru(|t| matches!(t, Token::Newline));
+                Item::Error
+            }
+        }
+    }
 
-        // IDENTIFIER
-        let identifier = filter_map(|s, t: Token| match t {
-            Token::Identifier(x) => Ok(Ident::new(x, s)),
-            _ => Err(Error::custom(s, "expected an identifier")),
-        });
+    /// Parses a label declaration.
+    fn parse_label_decl(&mut self) -> LabelDecl {
+        let name = self.parse_ident();
+        let colon = self.parse_simple().unwrap();
+        LabelDecl { name, colon_token: colon }
+    }
 
-        // INTEGER
-        let integer = filter_map(|s, t: Token| match t {
-            Token::Integer(x) => Ok(IntLiteral::new(x, s)),
-            _ => Err(Error::custom(s, "expected an integer")),
-        });
+    /// Parses a command.
+    fn parse_command(&mut self) -> Command {
+        let name = self.parse_ident();
+        let operands = self.parse_operands();
+        let command = Command { name, operands };
 
-        // NUMBER | STRING | IDENTIFIER
-        let value = filter_map(|s, t: Token| match t {
-            Token::Integer(x) => Ok(Expr::IntLiteral(IntLiteral::new(x, s))),
-            Token::String(x) => Ok(Expr::StrLiteral(StrLiteral::with_escaped(x, s))),
-            Token::Identifier(x) => Ok(Expr::Variable(Ident::new(x, s))),
-            _ => Err(Error::custom(s, "expected a value")),
-        });
+        // If the current token is not a newline, something is wrong.
+        if self.have(|t| *t != Token::Newline) {
+            if let Some(last) = command.operands.last() {
+                // The command had at least one operand. Try to recover by parsing more operands in
+                // case a comma was missing.
+                let extra_operands = self.parse_operands();
+                if !extra_operands.is_empty() {
+                    // Yep, we got more operands, so a comma was probably missing.
+                    self.report(Diagnostic::missing_comma(last.span().at_end(0)));
+                } else {
+                    // Nope, the command just needs to be followed by a newline.
+                    self.report(Diagnostic::expected_newline(self.span));
+                    self.skip_thru(|t| matches!(t, Token::Newline));
+                }
+            } else {
+                // The command has no operands, so trying again wouldn't help.
+                self.report(Diagnostic::expected_newline(self.span));
+                self.skip_thru(|t| matches!(t, Token::Newline));
+            }
+        }
+        command
+    }
 
-        // else `*` IDENTIFIER
-        let else_deref = else_token
-            .then(deref_token.clone())
-            .then(identifier)
-            .map(|((e, d), i)| ElseLabel { else_token: e, deref_token: d, name: i })
-            .map(Expr::ElseLabel);
+    /// Parses a list of zero or more operands separated by commas.
+    fn parse_operands(&mut self) -> Vec<Operand> {
+        let mut operands: Vec<Operand> = vec![];
+        while let Some(token) = &self.token {
+            if let Token::Newline | Token::RParen = token {
+                // There's either a dangling comma or there are no operands
+                break;
+            }
+            let operand = self.parse_operand();
+            let done = operand.comma.is_none();
+            operands.push(operand);
+            if done {
+                // No comma, this is the last operand
+                break;
+            }
+        }
 
-        // `*` IDENTIFIER
-        let label_deref = deref_token
-            .clone()
-            .then(identifier)
-            .map(|(d, i)| LabelRef { deref_token: d, name: i })
-            .map(Expr::LabelRef);
+        // Detect a trailing comma
+        if let Some(last) = operands.last() {
+            if let Some(last_comma) = last.comma {
+                self.report(Diagnostic::unexpected_token(&Token::Comma, last_comma));
+            }
+        }
+        operands
+    }
 
-        // `*` NUMBER
-        let offset_deref = deref_token
-            .then(integer)
-            .map(|(d, n)| OffsetRef { deref_token: d, offset: n })
-            .map(Expr::OffsetRef);
+    /// Parses an operand optionally followed by a comma.
+    fn parse_operand(&mut self) -> Operand {
+        let expr = self.parse_expr();
+        let comma = self.parse_simple();
+        if comma.is_some() {
+            // Newlines are permitted after commas because we know there's more left
+            while let Some(Token::Newline) = self.token {
+                self.eat();
+            }
+        }
+        Operand { expr, comma }
+    }
 
-        // else_deref | label_deref | offset_deref
-        let deref = else_deref.or(label_deref).or(offset_deref);
+    /// Parses an expression.
+    fn parse_expr(&mut self) -> Expr {
+        loop {
+            match &self.token {
+                Some(Token::Newline) | None => {
+                    // Always stop at newlines or EOF.
+                    self.report(Diagnostic::expected_expr(self.span));
+                    break Expr::Error;
+                }
 
-        let operands = recursive(|operands| {
-            // IDENTIFIER `(` operands `)`
-            let call = identifier
-                .then(lparen)
-                .then(operands)
-                .then(rparen)
-                .map(|(((i, l), o), r)| FunctionCall {
-                    name: i,
-                    lparen_token: l,
-                    operands: o,
-                    rparen_token: r,
-                })
-                .map(Expr::FunctionCall);
+                Some(Token::Deref) => match self.parse_ref() {
+                    Some(expr) => break expr,
+                    // Continue on if nothing matched
+                    None => self.eat(),
+                },
 
-            // function | literal | deref
-            let operand = call.or(value).or(deref);
-            // ((operand comma)* operand))?
-            operand
-                .clone()
-                .then(comma)
-                .map(|(o, c)| Operand { expr: o.into(), comma: Some(c) })
-                .repeated()
-                .then(operand.map(|o| Operand { expr: o.into(), comma: None }))
-                .or_not()
-                .map(|o| match o {
-                    Some((mut front, back)) => {
-                        front.push(back);
-                        front
+                Some(Token::Else) => {
+                    break Expr::ElseLabel(self.parse_else_label());
+                }
+
+                Some(Token::Identifier(_)) => {
+                    // If there is a '(' ahead, this is a function call
+                    if self.peek(|t| matches!(t, Token::LParen)) {
+                        break Expr::FunctionCall(self.parse_call());
+                    } else {
+                        break Expr::Variable(self.parse_ident());
                     }
-                    None => vec![],
-                })
-        });
+                }
 
-        // IDENTIFIER operands (NL | $)
-        let command = identifier
-            .then(operands.clone())
-            .then_ignore(required_newline)
-            .map(|(i, o)| Item::Command(Command { name: i, operands: o }));
+                Some(Token::String(_)) => {
+                    break Expr::StrLiteral(self.parse_str_literal());
+                }
 
-        // IDENTIFIER `:`
-        let label = identifier
-            .then(colon)
-            .map(|(i, c)| LabelDecl { name: i, colon_token: c })
-            .map(Item::LabelDecl);
+                Some(Token::Integer(_)) => {
+                    break Expr::IntLiteral(self.parse_int_literal());
+                }
 
-        // command | label
-        let item = command.or(label);
-        // (item (NL* item)*)?
-        let items = item.separated_by(newlines.clone());
-        // NL* items NL* $
-        let program = items.padded_by(newlines).then_ignore(end());
-        Self { parser: program.map(Ast::with_items).boxed() }
+                Some(t @ Token::Comma)
+                | Some(t @ Token::LParen)
+                | Some(t @ Token::RParen)
+                | Some(t @ Token::Colon) => {
+                    self.report(Diagnostic::unexpected_token(t, self.span));
+                    // Ignore the bad token
+                    self.eat();
+                }
+
+                Some(Token::Error) => {
+                    self.report(Diagnostic::invalid_token(self.span));
+                    // Ignore the bad token
+                    self.eat();
+                }
+            }
+        }
     }
 
-    /// Parses an AST from `tokens`.
-    pub fn parse<'s, S: TokenStream<'s>>(&self, tokens: S) -> Result<Ast, Vec<Error>> {
-        let len = tokens.source_len();
-        let stream = Stream::from_iter(Span::new(len, len + 1), tokens.into_tokens());
-        self.parser.parse(stream)
+    /// Parses a reference.
+    fn parse_ref(&mut self) -> Option<Expr> {
+        if self.peek(|t| matches!(t, Token::Integer(_))) {
+            Some(Expr::OffsetRef(self.parse_offset_ref()))
+        } else if self.peek(|t| matches!(t, Token::Identifier(_))) {
+            Some(Expr::LabelRef(self.parse_label_ref()))
+        } else {
+            self.report(Diagnostic::missing_deref_target(self.span));
+            None
+        }
     }
-}
 
-impl Default for Parser {
-    fn default() -> Self {
-        Self::new()
+    /// Parses a label reference.
+    fn parse_label_ref(&mut self) -> LabelRef {
+        let deref_token = self.parse_simple::<Deref>().unwrap();
+        let name = self.parse_ident();
+        LabelRef { deref_token, name }
+    }
+
+    /// Parses an offset reference.
+    fn parse_offset_ref(&mut self) -> OffsetRef {
+        let deref_token = self.parse_simple::<Deref>().unwrap();
+        let offset = self.parse_int_literal();
+        OffsetRef { deref_token, offset }
+    }
+
+    /// Parses an "else label" reference.
+    fn parse_else_label(&mut self) -> ElseLabel {
+        let else_token = self.parse_simple::<Else>().unwrap();
+        let deref_token = match self.parse_simple::<Deref>() {
+            Some(t) => t,
+            None => {
+                self.report(Diagnostic::missing_deref(else_token));
+                Deref::new(Span::EMPTY)
+            }
+        };
+        let name = self.parse_ident();
+        ElseLabel { else_token, deref_token, name }
+    }
+
+    /// Parses a function call.
+    fn parse_call(&mut self) -> FunctionCall {
+        let name = self.parse_ident();
+        let lparen_token = self.parse_simple::<LParen>().unwrap();
+        let operands = self.parse_operands();
+        let rparen_token = match self.parse_simple::<RParen>() {
+            Some(p) => p,
+            None => {
+                // TODO: Pick a better spot for the parenthesis depending on the function name. This
+                // will suggest it at the end, which is not always right.
+                self.report(Diagnostic::unclosed_parenthesis(lparen_token, self.span.with_len(0)));
+                RParen::new(self.span)
+            }
+        };
+        FunctionCall { name, lparen_token, operands, rparen_token }
+    }
+
+    /// Parses an identifier.
+    fn parse_ident(&mut self) -> Ident {
+        let token = self.token.take();
+        if let Some(Token::Identifier(name)) = token {
+            self.take(|_, span| Ident::new(name, span))
+        } else {
+            self.token = token;
+            self.report(Diagnostic::expected_ident(self.span));
+            Ident::new("", self.span)
+        }
+    }
+
+    /// Parses an integer literal.
+    fn parse_int_literal(&mut self) -> IntLiteral {
+        if let Some(Token::Integer(i)) = self.token {
+            self.take(|_, span| IntLiteral::new(i, span))
+        } else {
+            self.report(Diagnostic::expected_integer(self.span));
+            IntLiteral::new(IntValue::U32(0), self.span)
+        }
+    }
+
+    /// Parses a string literal.
+    fn parse_str_literal(&mut self) -> StrLiteral {
+        let token = self.token.take();
+        if let Some(Token::String(s)) = token {
+            self.take(|_, span| StrLiteral::with_escaped(s, span))
+        } else {
+            self.token = token;
+            self.report(Diagnostic::expected_integer(self.span));
+            StrLiteral::with_escaped("", self.span)
+        }
+    }
+
+    /// Parses an optional `SimpleToken`.
+    fn parse_simple<T: SimpleToken>(&mut self) -> Option<T> {
+        if self.have(T::matches) {
+            Some(self.take(|_, span| T::new(span)))
+        } else {
+            None
+        }
+    }
+
+    /// Passes the current token and its span to `func`, eats the token, and returns the new value.
+    ///
+    /// If there is no current token, the function will be passed `Token::Error`.
+    fn take<F, T>(&mut self, func: F) -> T
+    where
+        F: FnOnce(Token, Span) -> T,
+    {
+        let result = func(self.token.take().unwrap_or(Token::Error), self.span);
+        self.eat();
+        result
+    }
+
+    /// Consumes tokens until EOF is reached or `predicate` returns true. The token that passed the
+    /// predicate will also be consumed.
+    fn skip_thru<F>(&mut self, predicate: F)
+    where
+        F: Fn(&Token) -> bool,
+    {
+        let mut done = false;
+        while self.token.is_some() && !done {
+            done = predicate(self.token.as_ref().unwrap());
+            self.eat();
+        }
+    }
+
+    /// Consumes and discards the current token, moving to the next one.
+    fn eat(&mut self) {
+        (self.token, self.span) =
+            self.tokens.next().map_or((None, Span::EMPTY), |(t, s)| (Some(t), s));
+    }
+
+    /// Matches the current token against a predicate. Returns true if the predicate matches, false
+    /// if it doesn't or EOF is reached.
+    fn have<F>(&mut self, predicate: F) -> bool
+    where
+        F: FnOnce(&Token) -> bool,
+    {
+        self.token.as_ref().map_or(false, predicate)
+    }
+
+    /// Matches the lookahead token against a predicate. Returns true if the predicate matches,
+    /// false if it doesn't or EOF is reached.
+    fn peek<F>(&mut self, predicate: F) -> bool
+    where
+        F: FnOnce(&Token) -> bool,
+    {
+        self.tokens.peek().map_or(false, |(token, _)| predicate(token))
+    }
+
+    /// Reports a diagnostic.
+    fn report(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic)
     }
 }
 
@@ -150,7 +361,6 @@ impl Default for Parser {
 mod tests {
     use super::*;
     use crate::lexer::TokenIterator;
-    use crate::span::SourceOffset;
     use smol_str::SmolStr;
 
     fn id_token(name: impl Into<SmolStr>) -> Token {
@@ -194,11 +404,11 @@ mod tests {
     }
 
     fn operand_comma(value: impl Into<Expr>) -> Operand {
-        Operand { expr: Box::new(value.into()), comma: Some(Comma::new(Span::EMPTY)) }
+        Operand { expr: value.into(), comma: Some(Comma::new(Span::EMPTY)) }
     }
 
     fn operand_end(value: impl Into<Expr>) -> Operand {
-        Operand { expr: Box::new(value.into()), comma: None }
+        Operand { expr: value.into(), comma: None }
     }
 
     fn call_node(name: impl Into<SmolStr>, operands: Vec<Operand>) -> FunctionCall {
@@ -221,17 +431,13 @@ mod tests {
     struct VecTokenStream(Vec<Token>);
 
     impl TokenStream<'static> for VecTokenStream {
-        fn source_len(&self) -> SourceOffset {
-            0
-        }
-
         fn into_tokens(self) -> Box<TokenIterator<'static>> {
             Box::new(self.0.into_iter().map(|t| (t, Span::EMPTY)))
         }
     }
 
     fn parse(tokens: Vec<Token>) -> Vec<Item> {
-        Parser::new().parse(VecTokenStream(tokens)).unwrap().items
+        Parser::new(VecTokenStream(tokens)).parse().unwrap().items
     }
 
     #[test]

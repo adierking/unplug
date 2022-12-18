@@ -1,4 +1,4 @@
-use num_traits::ToPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 use std::fmt::{self, Debug, Formatter};
 use std::ops::Range;
 
@@ -14,17 +14,17 @@ pub struct Span {
 
 impl Span {
     /// A span which is empty.
-    pub const EMPTY: Self = Self::new(0, 0);
+    pub const EMPTY: Self = Self { start: 0, end: 0 };
 
     /// Creates a new span beginning at `start` and ending at `end` (exclusive).
-    pub const fn new(start: SourceOffset, end: SourceOffset) -> Self {
-        debug_assert!(start <= end);
+    pub fn new(start: SourceOffset, end: SourceOffset) -> Self {
+        debug_assert!(start <= end, "start = {start}, end = {end}");
         Self { start, end }
     }
 
     /// Creates a new span from a range of source offsets.
-    pub const fn from_range(range: Range<SourceOffset>) -> Self {
-        Self { start: range.start, end: range.end }
+    pub fn from_range(range: Range<SourceOffset>) -> Self {
+        Self { start: range.start, end: range.end.max(range.start) }
     }
 
     /// Returns the start offset of the span.
@@ -47,6 +47,17 @@ impl Span {
         self.len() == 0
     }
 
+    /// Returns a new span with length `len` and the same starting point.
+    pub fn with_len(self, len: u32) -> Self {
+        let end = self.start.checked_add(len).expect("span length overflow");
+        Self { start: self.start, end }
+    }
+
+    /// Returns a new span of length `len` starting at the end of this span.
+    pub fn at_end(self, len: u32) -> Self {
+        Span::new(self.end, self.end).with_len(len)
+    }
+
     /// Joins this span with another span. Empty spans are ignored.
     pub fn join(self, other: Self) -> Self {
         if self.is_empty() {
@@ -65,29 +76,21 @@ impl Debug for Span {
     }
 }
 
-impl chumsky::Span for Span {
-    type Context = ();
-    type Offset = SourceOffset;
-
-    fn new(_context: Self::Context, range: Range<Self::Offset>) -> Self {
-        Self::from_range(range)
-    }
-
-    fn context(&self) -> Self::Context {}
-
-    fn start(&self) -> Self::Offset {
-        self.start
-    }
-
-    fn end(&self) -> Self::Offset {
-        self.end
+impl<I: ToPrimitive> TryFrom<Range<I>> for Span {
+    type Error = ();
+    fn try_from(r: Range<I>) -> Result<Self, Self::Error> {
+        let start = r.start.to_u32().ok_or(())?;
+        let end = r.end.to_u32().ok_or(())?;
+        Ok(Self { start, end })
     }
 }
 
-impl<I: ToPrimitive> TryFrom<Range<I>> for Span {
+impl<I: FromPrimitive> TryFrom<Span> for Range<I> {
     type Error = ();
-    fn try_from(value: Range<I>) -> Result<Self, Self::Error> {
-        Ok(Self { start: value.start.to_u32().ok_or(())?, end: value.end.to_u32().ok_or(())? })
+    fn try_from(s: Span) -> Result<Self, Self::Error> {
+        let start = I::from_u32(s.start).ok_or(())?;
+        let end = I::from_u32(s.end).ok_or(())?;
+        Ok(start..end)
     }
 }
 
@@ -95,6 +98,18 @@ impl<I: ToPrimitive> TryFrom<Range<I>> for Span {
 pub trait Spanned {
     /// Returns the node's span.
     fn span(&self) -> Span;
+}
+
+impl Spanned for Span {
+    fn span(&self) -> Span {
+        *self
+    }
+}
+
+impl<T: Spanned> Spanned for &T {
+    fn span(&self) -> Span {
+        (*self).span()
+    }
 }
 
 #[cfg(test)]
@@ -127,5 +142,18 @@ mod tests {
         assert_eq!(Span::new(5, 6).join(Span::EMPTY), Span::new(5, 6));
         assert_eq!(Span::EMPTY.join(Span::new(5, 6)), Span::new(5, 6));
         assert_eq!(Span::EMPTY.join(Span::EMPTY), Span::EMPTY);
+    }
+
+    #[test]
+    fn test_with_len() {
+        assert_eq!(Span::new(5, 10).with_len(6), Span::new(5, 11));
+        assert_eq!(Span::new(5, 10).with_len(1), Span::new(5, 6));
+        assert_eq!(Span::new(5, 10).with_len(0), Span::new(5, 5));
+    }
+
+    #[test]
+    fn test_at_end() {
+        assert_eq!(Span::new(5, 10).at_end(2), Span::new(10, 12));
+        assert_eq!(Span::new(5, 10).at_end(0), Span::new(10, 10));
     }
 }

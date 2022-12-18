@@ -87,6 +87,7 @@ impl<'a> ProgramAssembler<'a> {
                     }
                     IdentClass::Type => return Err(Error::UnexpectedExpr),
                 },
+                Item::Error => panic!("error item in AST"),
             }
         }
         Ok(())
@@ -244,7 +245,7 @@ impl<'a> ProgramAssembler<'a> {
 
     /// Parses a single operand.
     fn parse_operand(&self, ty: OperandType, operand: &ast::Operand) -> Result<Operand> {
-        match &*operand.expr {
+        match &operand.expr {
             Expr::IntLiteral(i) => Self::parse_integer(ty, i.value()),
             Expr::StrLiteral(s) => Self::parse_text(ty, s),
             Expr::Variable(id) => Self::parse_var_expr(ty, id),
@@ -252,6 +253,7 @@ impl<'a> ProgramAssembler<'a> {
             Expr::ElseLabel(label) => self.parse_label(ty, &label.name).map(Operand::ElseLabel),
             Expr::OffsetRef(off) => Self::parse_offset(ty, off),
             Expr::FunctionCall(call) => self.parse_function(ty, call),
+            Expr::Error => panic!("error expr in AST"),
         }
     }
 

@@ -16,6 +16,7 @@ arrayvec.workspace = true
 byteorder.workspace = true
 cfg-if.workspace = true
 clap.workspace = true
+codespan-reporting.workspace = true
 console.workspace = true
 cpal.workspace = true
 crossterm.workspace = true

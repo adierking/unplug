@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use std::io::{BufReader, Cursor, Seek, SeekFrom};
 use tracing::info;
 use unplug::common::WriteTo;
@@ -20,12 +20,10 @@ fn program_string(program: &Program) -> String {
     String::from_utf8(bytes).unwrap()
 }
 
-fn assemble(parser: &Parser, source: &str) -> Result<CompiledScript> {
+fn assemble(source: &str) -> Result<CompiledScript> {
     let lexer = Lexer::new(source);
-    let ast = match parser.parse(lexer) {
-        Ok(ast) => ast,
-        Err(_) => bail!("assembly failed"), // TODO
-    };
+    let parser = Parser::new(lexer);
+    let ast = parser.parse().into_result().unwrap();
     let program = ProgramAssembler::new(&ast).assemble()?;
     Ok(asm::compile(&program)?)
 }
@@ -43,11 +41,10 @@ fn test_reassemble_scripts() -> Result<()> {
     let libs = globals.read_libs()?;
 
     info!("Reassembling globals");
-    let parser = Parser::new();
     let reassembled_libs = {
         let program = asm::disassemble_globals(&libs)?;
         let source = program_string(&program);
-        let compiled = assemble(&parser, &source)?;
+        let compiled = assemble(&source)?;
         let compiled_libs = compiled.into_libs()?;
         info!("Reading the reassembled globals");
         let mut cursor = Cursor::new(Vec::<u8>::new());
@@ -70,7 +67,7 @@ fn test_reassemble_scripts() -> Result<()> {
         info!("Reassembling the stage");
         let program = asm::disassemble_stage(&original, id.name())?;
         let source = program_string(&program);
-        let compiled = assemble(&parser, &source)?;
+        let compiled = assemble(&source)?;
         let compiled_stage = compiled.into_stage(original.clone_without_script())?;
         let mut cursor = Cursor::new(Vec::<u8>::new());
         compiled_stage.write_to(&mut cursor)?;

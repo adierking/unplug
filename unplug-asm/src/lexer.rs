@@ -1,5 +1,5 @@
 use crate::ast::IntValue;
-use crate::span::{SourceOffset, Span};
+use crate::span::Span;
 use logos::{Filter, Lexer as LogosLexer, Logos, SpannedIter};
 use smol_str::SmolStr;
 use std::fmt::{self, Display, Formatter};
@@ -57,16 +57,16 @@ impl Display for Token {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Token::Newline => f.write_str("newline"),
-            Token::Comma => f.write_str(","),
-            Token::LParen => f.write_str("("),
-            Token::RParen => f.write_str(")"),
-            Token::Colon => f.write_str(":"),
-            Token::Deref => f.write_str("*"),
-            Token::Else => f.write_str("else"),
+            Token::Comma => f.write_str("','"),
+            Token::LParen => f.write_str("'('"),
+            Token::RParen => f.write_str("')'"),
+            Token::Colon => f.write_str("':'"),
+            Token::Deref => f.write_str("'*'"),
+            Token::Else => f.write_str("'else'"),
             Token::Identifier(s) => f.write_str(s.as_str()),
             Token::String(s) => f.write_str(s.as_str()),
             Token::Integer(n) => n.fmt(f),
-            Token::Error => f.write_str("<error>"),
+            Token::Error => f.write_str("error"),
         }
     }
 }
@@ -135,32 +135,23 @@ pub type TokenIterator<'s> = dyn Iterator<Item = (Token, Span)> + 's;
 
 /// Trait for a stream of tokens.
 pub trait TokenStream<'s> {
-    /// Gets the length of the source file. No spans returned by the stream should be larger than
-    /// this offset.
-    fn source_len(&self) -> SourceOffset;
-
     /// Converts the stream into a token iterator.
     fn into_tokens(self) -> Box<TokenIterator<'s>>;
 }
 
 /// Tokenizes source code.
 pub struct Lexer<'s> {
-    source: &'s str,
     inner: SpannedIter<'s, Token>,
 }
 
 impl<'s> Lexer<'s> {
     /// Creates a new `Lexer` which reads from `source`.
     pub fn new(source: &'s str) -> Self {
-        Self { source, inner: Token::lexer(source).spanned() }
+        Self { inner: Token::lexer(source).spanned() }
     }
 }
 
 impl<'s> TokenStream<'s> for Lexer<'s> {
-    fn source_len(&self) -> SourceOffset {
-        self.source.len().try_into().unwrap()
-    }
-
     fn into_tokens(self) -> Box<TokenIterator<'s>> {
         Box::new(self.inner.map(|(t, s)| (t, s.try_into().unwrap())))
     }

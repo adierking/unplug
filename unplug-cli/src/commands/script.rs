@@ -6,11 +6,15 @@ use crate::opt::{
     ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt,
 };
 use anyhow::{anyhow, bail, Result};
-use asm::lexer::Lexer;
-use log::error;
+use asm::diagnostics::{CompileOutput, Diagnostic};
+use codespan_reporting::diagnostic::{Diagnostic as ReportDiagnostic, Label as ReportLabel};
+use codespan_reporting::files::{Files, SimpleFile};
+use codespan_reporting::term;
+use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use log::info;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
+use std::ops::Range;
 use std::path::Path;
 use std::time::Instant;
 use unplug::data::{Resource, Stage as StageId};
@@ -19,8 +23,10 @@ use unplug::globals::{GlobalsBuilder, Libs};
 use unplug::stage::Stage;
 use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
+use unplug_asm::lexer::Lexer;
 use unplug_asm::parser::Parser;
 use unplug_asm::program::Target;
+use unplug_asm::span::Spanned;
 
 fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
     for (i, id) in libs.entry_points.iter().enumerate() {
@@ -181,6 +187,61 @@ pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Re
     Ok(())
 }
 
+/// Reports diagnostics from a compilation stage.
+fn report_diagnostics<'f, F>(file: &'f F, diagnostics: &[Diagnostic])
+where
+    F: Files<'f, FileId = ()>,
+{
+    let writer = StandardStream::stderr(ColorChoice::Auto);
+    let config = codespan_reporting::term::Config::default();
+    let mut lock = writer.lock();
+    for diagnostic in diagnostics {
+        let mut report = ReportDiagnostic::error()
+            .with_message(diagnostic.message())
+            .with_code(format!("{}", diagnostic.code()));
+        if let Some(note) = diagnostic.note() {
+            report = report.with_notes(vec![note.to_owned()]);
+        }
+        let labels = diagnostic
+            .labels()
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                let range = Range::<usize>::try_from(l.span()).unwrap();
+                let mut label = match i {
+                    0 => ReportLabel::primary((), range),
+                    _ => ReportLabel::secondary((), range),
+                };
+                if let Some(tag) = l.tag() {
+                    label = label.with_message(tag);
+                }
+                label
+            })
+            .collect::<Vec<_>>();
+        if !labels.is_empty() {
+            report = report.with_labels(labels);
+        }
+        term::emit(&mut lock, &config, file, &report).unwrap();
+    }
+}
+
+/// Checks the result of a compilation stage and reports any necessary diagnostics. If it succeeds,
+/// the compilation result will be returned.
+fn check_compile_result<'f, F, T>(file: &'f F, result: CompileOutput<T>) -> Result<T>
+where
+    F: Files<'f, FileId = ()>,
+{
+    let diagnostics = result.diagnostics();
+    let num_diagnostics = diagnostics.len();
+    if num_diagnostics > 0 {
+        report_diagnostics(file, diagnostics);
+    }
+    result.into_value().ok_or_else(|| match num_diagnostics {
+        1 => anyhow!("1 error found"),
+        n => anyhow!("{n} errors found"),
+    })
+}
+
 /// The `script assemble` CLI command.
 fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
@@ -188,21 +249,10 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
     let name = opt.path.file_name().unwrap_or_default().to_string_lossy();
     info!("Parsing {}", name);
     let source = fs::read_to_string(&opt.path)?;
+    let file = SimpleFile::new(name, &source);
     let lexer = Lexer::new(&source);
-    let parser = Parser::new();
-    let ast = match parser.parse(lexer) {
-        Ok(ast) => ast,
-        Err(errors) => {
-            // TODO: Make this suck less
-            for error in &errors {
-                error!("{}: {}", name, error);
-            }
-            return match errors.len() {
-                1 => Err(anyhow!("1 syntax error found")),
-                e => Err(anyhow!("{} syntax errors found", e)),
-            };
-        }
-    };
+    let parser = Parser::new(lexer);
+    let ast = check_compile_result(&file, parser.parse())?;
 
     info!("Assembling script");
     let program = ProgramAssembler::new(&ast).assemble()?;

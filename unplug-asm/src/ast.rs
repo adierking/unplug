@@ -1,3 +1,4 @@
+use crate::lexer::Token;
 use crate::span::{Span, Spanned};
 use smol_str::SmolStr;
 use std::fmt::{self, Debug, Display, Formatter};
@@ -10,6 +11,15 @@ const TYPE_PREFIX: char = '@';
 /// Vertical tab character (`\v`).
 const VT: &str = "\x0b";
 
+/// Trait for an AST node which represents a token with no data.
+pub trait SimpleToken {
+    /// Creates a new instance of this token with the given span.
+    fn new(span: Span) -> Self;
+
+    /// Returns true if a token matches this node.
+    fn matches(token: &Token) -> bool;
+}
+
 /// Macro for generating token types that have spans associated with them.
 macro_rules! declare_tokens {
     {
@@ -21,9 +31,13 @@ macro_rules! declare_tokens {
             pub struct $name {
                 span: Span,
             }
-            impl $name {
-                pub fn new(span: Span) -> Self {
+            impl SimpleToken for $name {
+                fn new(span: Span) -> Self {
                     Self { span }
+                }
+
+                fn matches(token: &Token) -> bool {
+                    matches!(token, Token::$name)
                 }
             }
             impl Spanned for $name {
@@ -86,6 +100,12 @@ impl Ident {
 impl Debug for Ident {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Debug::fmt(&self.name, f)
+    }
+}
+
+impl Display for Ident {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.name)
     }
 }
 
@@ -283,7 +303,7 @@ impl Spanned for OffsetRef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Operand {
     /// The expression.
-    pub expr: Box<Expr>,
+    pub expr: Expr,
     /// The `,` token (if present).
     pub comma: Option<Comma>,
 }
@@ -336,6 +356,7 @@ pub enum Expr {
     OffsetRef(OffsetRef),
     /// A function call expression.
     FunctionCall(FunctionCall),
+    Error,
 }
 
 impl Spanned for Expr {
@@ -348,6 +369,7 @@ impl Spanned for Expr {
             Expr::ElseLabel(e) => e.span(),
             Expr::OffsetRef(e) => e.span(),
             Expr::FunctionCall(e) => e.span(),
+            Expr::Error => Span::EMPTY,
         }
     }
 }
@@ -405,6 +427,7 @@ impl Spanned for LabelDecl {
 pub enum Item {
     Command(Command),
     LabelDecl(LabelDecl),
+    Error,
 }
 
 impl Spanned for Item {
@@ -412,6 +435,7 @@ impl Spanned for Item {
         match self {
             Self::Command(i) => i.span(),
             Self::LabelDecl(i) => i.span(),
+            Self::Error => Span::EMPTY,
         }
     }
 }
