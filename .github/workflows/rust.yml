@@ -144,8 +144,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Upload VSCode Extension
+      - name: Install vsce
+        run: npm install --global @vscode/vsce
+
+      - name: Create VSIX
+        run: |
+          cp ../COPYING LICENSE.txt
+          vsce package --allow-missing-repository -o ../unplug-vscode.vsix
+        working-directory: unplug-vscode
+
+      - name: Upload
         uses: actions/upload-artifact@v3
         with:
           name: unplug-vscode
-          path: unplug-vscode/
+          path: unplug-vscode.vsix
