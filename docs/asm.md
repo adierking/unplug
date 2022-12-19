@@ -51,16 +51,16 @@ to grab the latest build with a green checkmark next to it. Scroll down to the A
 build's page and download the zip for your platform of choice. This guide assumes that you already
 know how to configure and use Unplug - if not, read through the [Tour Guide](/docs/tour.md).
 
+### Visual Studio Code Extension
+
 It is recommended that you use [Visual Studio Code](https://code.visualstudio.com/) to edit script
 files - there's an Unplug extension for auto-formatting and syntax highlighting, and it's also a
-great editor to have in general. Once VSCode is installed, run it once and then close it.  Download
-the `unplug-vscode.zip` artifact, then go to your user directory -> `.vscode` -> `extensions` and
-unzip it into a new folder named `unplug-vscode` to install it. The installed extension should look
-something like this:
-
-![Screenshot of the unpacked extension](https://dierking.me/i/i4O2vc.png)
-
-Go to the extensions tab in VSCode to double-check that the Unplug extension is now registered:
+great editor to have in general. Once VSCode is installed, download the `unplug-vscode.zip` artifact
+and unzip it to get `unplug-vscode.vsix`. Open VSCode, go to the command palette using F1 (or
+Ctrl+Shift+P/Cmd+Shift+P), search for `Extensions: Install from VSIX...`, press Enter, and then
+browse to the file you downloaded. VSCode will install the extension and then ask you to reload it.
+If the extension is installed correctly, you should see something like this in the Extensions tab on
+the sidebar:
 
 ![Unplug assembly support extension](https://dierking.me/i/PS0EKj.png)
 
