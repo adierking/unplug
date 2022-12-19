@@ -3,6 +3,7 @@ use crate::span::Span;
 use logos::{Filter, Lexer as LogosLexer, Logos, SpannedIter};
 use smol_str::SmolStr;
 use std::fmt::{self, Display, Formatter};
+use std::iter::FusedIterator;
 
 /// Tokens which can appear in assembly source files.
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
@@ -130,13 +131,14 @@ fn block_comment(lex: &mut LogosLexer<'_, Token>) -> Filter<()> {
     }
 }
 
-/// A trait object which iterates over tokens and their spans.
-pub type TokenIterator<'s> = dyn Iterator<Item = (Token, Span)> + 's;
+/// A trait for iterators which iterate over tokens and their spans.
+pub trait TokenIterator: Iterator<Item = (Token, Span)> + FusedIterator {}
+impl<I> TokenIterator for I where I: Iterator<Item = (Token, Span)> + FusedIterator {}
 
 /// Trait for a stream of tokens.
 pub trait TokenStream<'s> {
     /// Converts the stream into a token iterator.
-    fn into_tokens(self) -> Box<TokenIterator<'s>>;
+    fn into_tokens(self) -> Box<dyn TokenIterator + 's>;
 }
 
 /// Tokenizes source code.
@@ -152,8 +154,8 @@ impl<'s> Lexer<'s> {
 }
 
 impl<'s> TokenStream<'s> for Lexer<'s> {
-    fn into_tokens(self) -> Box<TokenIterator<'s>> {
-        Box::new(self.inner.map(|(t, s)| (t, s.try_into().unwrap())))
+    fn into_tokens(self) -> Box<dyn TokenIterator + 's> {
+        Box::new(self.inner.fuse().map(|(t, s)| (t, s.try_into().unwrap())))
     }
 }
 

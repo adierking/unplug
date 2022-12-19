@@ -2,16 +2,17 @@ use crate::ast::*;
 use crate::diagnostics::{CompileOutput, Diagnostic};
 use crate::lexer::{Token, TokenIterator, TokenStream};
 use crate::span::{Span, Spanned};
-use std::iter::Peekable;
 
 /// Parses a token stream into an AST with automatic error recovery.
 pub struct Parser<'s> {
     /// The token iterator.
-    tokens: Peekable<Box<TokenIterator<'s>>>,
+    tokens: Box<dyn TokenIterator + 's>,
     /// The current token, or None if at EOF.
     token: Option<Token>,
     /// The current span, or empty if at EOF.
     span: Span,
+    /// The next token and span, if known.
+    next: Option<(Token, Span)>,
     /// The current diagnostic list.
     diagnostics: Vec<Diagnostic>,
 }
@@ -20,9 +21,10 @@ impl<'s> Parser<'s> {
     /// Creates a new parser which reads from `tokens`.
     pub fn new(tokens: impl TokenStream<'s>) -> Self {
         let mut parser = Self {
-            tokens: tokens.into_tokens().peekable(),
+            tokens: tokens.into_tokens(),
             token: Some(Token::Error),
             span: Span::EMPTY,
+            next: None,
             diagnostics: vec![],
         };
         parser.eat();
@@ -57,12 +59,7 @@ impl<'s> Parser<'s> {
                     Item::Command(self.parse_command())
                 }
             }
-            Some(Token::Error) => {
-                self.report(Diagnostic::invalid_token(self.span));
-                // Ignore the bad token
-                self.eat();
-                Item::Error
-            }
+            Some(Token::Error) => panic!("unfiltered error token"),
             _ => {
                 self.report(Diagnostic::expected_item(self.span));
                 // Recover by going to the next line
@@ -193,11 +190,7 @@ impl<'s> Parser<'s> {
                     self.eat();
                 }
 
-                Some(Token::Error) => {
-                    self.report(Diagnostic::invalid_token(self.span));
-                    // Ignore the bad token
-                    self.eat();
-                }
+                Some(Token::Error) => panic!("unfiltered error token"),
             }
         }
     }
@@ -327,10 +320,13 @@ impl<'s> Parser<'s> {
         }
     }
 
-    /// Consumes and discards the current token, moving to the next one.
+    /// Consumes the current token and moves to the next one.
     fn eat(&mut self) {
-        (self.token, self.span) =
-            self.tokens.next().map_or((None, Span::EMPTY), |(t, s)| (Some(t), s));
+        (self.token, self.span) = self
+            .next
+            .take()
+            .or_else(|| self.read())
+            .map_or((None, Span::EMPTY), |(t, s)| (Some(t), s));
     }
 
     /// Matches the current token against a predicate. Returns true if the predicate matches, false
@@ -348,7 +344,20 @@ impl<'s> Parser<'s> {
     where
         F: FnOnce(&Token) -> bool,
     {
-        self.tokens.peek().map_or(false, |(token, _)| predicate(token))
+        if self.next.is_none() {
+            self.next = self.read();
+        }
+        self.next.as_ref().map_or(false, |(token, _)| predicate(token))
+    }
+
+    /// Reads the next token from the stream until a non-error token or EOF is encountered.
+    fn read(&mut self) -> Option<(Token, Span)> {
+        let mut next = self.tokens.next();
+        while let Some((Token::Error, span)) = next {
+            self.diagnostics.push(Diagnostic::invalid_token(span));
+            next = self.tokens.next();
+        }
+        next
     }
 
     /// Reports a diagnostic.
@@ -431,7 +440,7 @@ mod tests {
     struct VecTokenStream(Vec<Token>);
 
     impl TokenStream<'static> for VecTokenStream {
-        fn into_tokens(self) -> Box<TokenIterator<'static>> {
+        fn into_tokens(self) -> Box<dyn TokenIterator + 'static> {
             Box::new(self.0.into_iter().map(|t| (t, Span::EMPTY)))
         }
     }
