@@ -138,6 +138,8 @@ pub enum IntValue {
     IAuto(i32),
     /// Select the best storage class based on context (unsigned)
     UAuto(u32),
+    /// An integer could not be represented
+    Error,
 }
 
 impl Display for IntValue {
@@ -151,6 +153,7 @@ impl Display for IntValue {
             Self::U32(x) => write!(f, "{}.d", x),
             Self::IAuto(x) => write!(f, "{}", x),
             Self::UAuto(x) => write!(f, "{}", x),
+            Self::Error => write!(f, "error"),
         }
     }
 }

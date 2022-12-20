@@ -1,12 +1,12 @@
 use crate::ast::*;
 use crate::diagnostics::{CompileOutput, Diagnostic};
-use crate::lexer::{Token, TokenIterator, TokenStream};
+use crate::lexer::{Token, TokenStream};
 use crate::span::{Span, Spanned};
 
 /// Parses a token stream into an AST with automatic error recovery.
 pub struct Parser<'s> {
-    /// The token iterator.
-    tokens: Box<dyn TokenIterator + 's>,
+    /// The token stream.
+    stream: Box<dyn TokenStream + 's>,
     /// The current token, or None if at EOF.
     token: Option<Token>,
     /// The current span, or empty if at EOF.
@@ -18,10 +18,10 @@ pub struct Parser<'s> {
 }
 
 impl<'s> Parser<'s> {
-    /// Creates a new parser which reads from `tokens`.
-    pub fn new(tokens: impl TokenStream<'s>) -> Self {
+    /// Creates a new parser which reads from `stream`.
+    pub fn new(stream: impl TokenStream + 's) -> Self {
         let mut parser = Self {
-            tokens: tokens.into_tokens(),
+            stream: Box::from(stream),
             token: Some(Token::Error),
             span: Span::EMPTY,
             next: None,
@@ -41,6 +41,7 @@ impl<'s> Parser<'s> {
                 _ => items.push(self.parse_item()),
             }
         }
+        self.diagnostics.append(&mut self.stream.take_diagnostics());
         if self.diagnostics.is_empty() {
             let ast = Ast::with_items(items);
             CompileOutput::Ok(ast, self.diagnostics)
@@ -352,10 +353,10 @@ impl<'s> Parser<'s> {
 
     /// Reads the next token from the stream until a non-error token or EOF is encountered.
     fn read(&mut self) -> Option<(Token, Span)> {
-        let mut next = self.tokens.next();
+        let mut next = self.stream.next();
         while let Some((Token::Error, span)) = next {
             self.diagnostics.push(Diagnostic::invalid_token(span));
-            next = self.tokens.next();
+            next = self.stream.next();
         }
         next
     }
@@ -369,8 +370,8 @@ impl<'s> Parser<'s> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::TokenIterator;
     use smol_str::SmolStr;
+    use std::iter::FusedIterator;
 
     fn id_token(name: impl Into<SmolStr>) -> Token {
         Token::Identifier(name.into())
@@ -437,16 +438,25 @@ mod tests {
         LabelDecl { name: id_node(name), colon_token: Colon::new(Span::EMPTY) }.into()
     }
 
-    struct VecTokenStream(Vec<Token>);
+    struct IterTokenStream<I: Iterator<Item = Token>>(I);
 
-    impl TokenStream<'static> for VecTokenStream {
-        fn into_tokens(self) -> Box<dyn TokenIterator + 'static> {
-            Box::new(self.0.into_iter().map(|t| (t, Span::EMPTY)))
+    impl<I: Iterator<Item = Token> + FusedIterator> Iterator for IterTokenStream<I> {
+        type Item = (Token, Span);
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0.next().map(|t| (t, Span::EMPTY))
+        }
+    }
+
+    impl<I: Iterator<Item = Token> + FusedIterator> FusedIterator for IterTokenStream<I> {}
+
+    impl<I: Iterator<Item = Token> + FusedIterator> TokenStream for IterTokenStream<I> {
+        fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
+            vec![]
         }
     }
 
     fn parse(tokens: Vec<Token>) -> Vec<Item> {
-        Parser::new(VecTokenStream(tokens)).parse().unwrap().items
+        Parser::new(IterTokenStream(tokens.into_iter())).parse().unwrap().items
     }
 
     #[test]

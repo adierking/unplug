@@ -1,12 +1,27 @@
 use crate::ast::IntValue;
+use crate::diagnostics::Diagnostic;
 use crate::span::Span;
-use logos::{Filter, Lexer as LogosLexer, Logos, SpannedIter};
+use logos::{Lexer as LogosLexer, Logos, Skip};
 use smol_str::SmolStr;
 use std::fmt::{self, Display, Formatter};
 use std::iter::FusedIterator;
+use std::mem;
+
+/// Shared state used to propagate diagnostics to the parser.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct State {
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl State {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 /// Tokens which can appear in assembly source files.
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
+#[logos(extras = State)]
 pub enum Token {
     #[regex(r"\n")]
     Newline,
@@ -84,78 +99,89 @@ fn string(lex: &mut LogosLexer<'_, Token>) -> SmolStr {
 }
 
 /// Callback for integer literals
-fn integer(
-    lex: &mut LogosLexer<'_, Token>,
-    radix: u32,
-    prefix: usize,
-    suffix: usize,
-) -> Option<IntValue> {
+fn integer(lex: &mut LogosLexer<'_, Token>, radix: u32, prefix: usize, suffix: usize) -> IntValue {
     // General format of a number literal is [-][prefix]<number>[suffix]
     // We need to extract the number, parse it, negate it if necessary, and then check the suffix
     let token = lex.slice();
+    let span = lex.span().try_into().unwrap();
     let negative = token.starts_with('-');
     let start = if negative { 1 + prefix } else { prefix };
     let end = token.len() - suffix;
-    let value = u32::from_str_radix(&token[start..end], radix).ok()?;
+    let Ok(value) = u32::from_str_radix(&token[start..end], radix) else {
+        lex.extras.diagnostics.push(Diagnostic::integer_out_of_range(span));
+        return IntValue::Error;
+    };
     if negative {
-        // Negative numbers are signed, nonnegative numbers are unsigned
+        // Negative numbers are always signed
         if value > i32::MIN as u32 {
-            return None;
+            lex.extras.diagnostics.push(Diagnostic::integer_out_of_range(span));
+            return IntValue::Error;
         }
         let signed = value.wrapping_neg() as i32;
         match &token[end..] {
-            "" => Some(IntValue::IAuto(signed)),
-            ".b" => Some(IntValue::I8(signed)),
-            ".w" => Some(IntValue::I16(signed)),
-            ".d" => Some(IntValue::I32(signed)),
-            _ => None,
+            "" => IntValue::IAuto(signed),
+            ".b" => IntValue::I8(signed),
+            ".w" => IntValue::I16(signed),
+            ".d" => IntValue::I32(signed),
+            _ => panic!("unrecognized integer suffix"),
         }
     } else {
+        // Nonnegative numbers are always unsigned
         match &token[end..] {
-            "" => Some(IntValue::UAuto(value)),
-            ".b" => Some(IntValue::U8(value)),
-            ".w" => Some(IntValue::U16(value)),
-            ".d" => Some(IntValue::U32(value)),
-            _ => None,
+            "" => IntValue::UAuto(value),
+            ".b" => IntValue::U8(value),
+            ".w" => IntValue::U16(value),
+            ".d" => IntValue::U32(value),
+            _ => panic!("unrecognized integer suffix"),
         }
     }
 }
 
 /// Callback to skip block comments
-fn block_comment(lex: &mut LogosLexer<'_, Token>) -> Filter<()> {
+fn block_comment(lex: &mut LogosLexer<'_, Token>) -> Skip {
     if let Some(end) = lex.remainder().find("*/") {
         lex.bump(end + 2);
-        Filter::Skip
     } else {
-        Filter::Emit(())
+        let span = lex.span().try_into().unwrap();
+        lex.extras.diagnostics.push(Diagnostic::unterminated_comment(span));
     }
+    Skip
 }
-
-/// A trait for iterators which iterate over tokens and their spans.
-pub trait TokenIterator: Iterator<Item = (Token, Span)> + FusedIterator {}
-impl<I> TokenIterator for I where I: Iterator<Item = (Token, Span)> + FusedIterator {}
 
 /// Trait for a stream of tokens.
-pub trait TokenStream<'s> {
-    /// Converts the stream into a token iterator.
-    fn into_tokens(self) -> Box<dyn TokenIterator + 's>;
+pub trait TokenStream: Iterator<Item = (Token, Span)> + FusedIterator {
+    /// Takes out the internal list of diagnostics and returns it.
+    fn take_diagnostics(&mut self) -> Vec<Diagnostic>;
 }
 
-/// Tokenizes source code.
+/// Translates source code into a stream of tokens.
 pub struct Lexer<'s> {
-    inner: SpannedIter<'s, Token>,
+    inner: LogosLexer<'s, Token>,
 }
 
 impl<'s> Lexer<'s> {
     /// Creates a new `Lexer` which reads from `source`.
     pub fn new(source: &'s str) -> Self {
-        Self { inner: Token::lexer(source).spanned() }
+        Self { inner: Token::lexer(source) }
     }
 }
 
-impl<'s> TokenStream<'s> for Lexer<'s> {
-    fn into_tokens(self) -> Box<dyn TokenIterator + 's> {
-        Box::new(self.inner.fuse().map(|(t, s)| (t, s.try_into().unwrap())))
+impl Iterator for Lexer<'_> {
+    type Item = (Token, Span);
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.inner.remainder().is_empty() {
+            self.inner.next().map(|token| (token, self.inner.span().try_into().unwrap()))
+        } else {
+            None
+        }
+    }
+}
+
+impl FusedIterator for Lexer<'_> {}
+
+impl TokenStream for Lexer<'_> {
+    fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
+        mem::take(&mut self.inner.extras.diagnostics)
     }
 }
 
@@ -213,10 +239,10 @@ mod tests {
         assert_eq!(lex("-123.d"), &[Token::Integer(IntValue::I32(-123))]);
 
         assert_eq!(lex("4294967295"), &[Token::Integer(IntValue::UAuto(u32::MAX))]);
-        assert_eq!(lex("4294967296"), &[Token::Error]);
+        assert_eq!(lex("4294967296"), &[Token::Integer(IntValue::Error)]);
 
         assert_eq!(lex("-2147483648"), &[Token::Integer(IntValue::IAuto(i32::MIN))]);
-        assert_eq!(lex("-2147483649"), &[Token::Error]);
+        assert_eq!(lex("-2147483649"), &[Token::Integer(IntValue::Error)]);
     }
 
     #[test]
@@ -238,10 +264,10 @@ mod tests {
         assert_eq!(lex("-0x1f.d"), &[Token::Integer(IntValue::I32(-0x1f))]);
 
         assert_eq!(lex("0xffffffff"), &[Token::Integer(IntValue::UAuto(u32::MAX))]);
-        assert_eq!(lex("0x100000000"), &[Token::Error]);
+        assert_eq!(lex("0x100000000"), &[Token::Integer(IntValue::Error)]);
 
         assert_eq!(lex("-0x80000000"), &[Token::Integer(IntValue::IAuto(i32::MIN))]);
-        assert_eq!(lex("-0x80000001"), &[Token::Error]);
+        assert_eq!(lex("-0x80000001"), &[Token::Integer(IntValue::Error)]);
     }
 
     #[test]
@@ -271,7 +297,6 @@ mod tests {
             lex("abc /* def\nghi jkl\n"),
             &[
                 Token::Identifier("abc".into()),
-                Token::Error,
                 Token::Identifier("def".into()),
                 Token::Newline,
                 Token::Identifier("ghi".into()),

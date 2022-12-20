@@ -258,9 +258,9 @@ diagnostics! {
         labels: [span -> "delete this"],
     }
 
-    integer_out_of_range(span: Span, token: &str) {
+    integer_out_of_range(span: Span) {
         code: IntegerOutOfRange,
-        message: "integer literal out of range: '{token}'",
+        message: "integer literal out of range",
         note: "integers cannot exceed 32 bits",
         labels: [span],
     }

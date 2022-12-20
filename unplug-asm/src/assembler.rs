@@ -295,6 +295,7 @@ impl<'a> ProgramAssembler<'a> {
                         .or(Ok(Operand::U32(x))),
                 }
             }
+            IntValue::Error => panic!("error int in AST"),
         }
     }
 
