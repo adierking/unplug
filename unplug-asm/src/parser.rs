@@ -44,9 +44,9 @@ impl<'s> Parser<'s> {
         self.diagnostics.append(&mut self.stream.take_diagnostics());
         if self.diagnostics.is_empty() {
             let ast = Ast::with_items(items);
-            CompileOutput::Ok(ast, self.diagnostics)
+            CompileOutput::with_result(ast, self.diagnostics)
         } else {
-            CompileOutput::Err(self.diagnostics)
+            CompileOutput::err(self.diagnostics)
         }
     }
 

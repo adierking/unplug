@@ -1,4 +1,5 @@
 use num_traits::{FromPrimitive, ToPrimitive};
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::Range;
 
@@ -6,7 +7,7 @@ use std::ops::Range;
 pub type SourceOffset = u32;
 
 /// Represents a range of bytes in source code.
-#[derive(Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Span {
     start: SourceOffset,
     end: SourceOffset,
@@ -73,6 +74,22 @@ impl Span {
 impl Debug for Span {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}..{}", self.start, self.end)
+    }
+}
+
+impl PartialOrd for Span {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Span {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Earlier spans are lesser than later ones, and smaller spans are lesser than larger ones
+        match self.start.cmp(&other.start) {
+            Ordering::Equal => self.end.cmp(&other.end),
+            ord => ord,
+        }
     }
 }
 
@@ -155,5 +172,13 @@ mod tests {
     fn test_at_end() {
         assert_eq!(Span::new(5, 10).at_end(2), Span::new(10, 12));
         assert_eq!(Span::new(5, 10).at_end(0), Span::new(10, 10));
+    }
+
+    #[test]
+    fn test_cmp() {
+        assert!(Span::new(1, 10) < Span::new(2, 2));
+        assert!(Span::new(2, 2) > Span::new(1, 10));
+        assert!(Span::new(1, 2) < Span::new(1, 3));
+        assert!(Span::new(1, 3) > Span::new(1, 2));
     }
 }

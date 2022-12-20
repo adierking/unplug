@@ -188,10 +188,11 @@ pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Re
 }
 
 /// Reports diagnostics from a compilation stage.
-fn report_diagnostics<'f, F>(file: &'f F, diagnostics: &[Diagnostic])
+fn report_diagnostics<'f, F>(file: &'f F, diagnostics: &mut [Diagnostic])
 where
     F: Files<'f, FileId = ()>,
 {
+    diagnostics.sort_by_key(Diagnostic::span);
     let writer = StandardStream::stderr(ColorChoice::Auto);
     let config = codespan_reporting::term::Config::default();
     let mut lock = writer.lock();
@@ -225,18 +226,16 @@ where
     }
 }
 
-/// Checks the result of a compilation stage and reports any necessary diagnostics. If it succeeds,
-/// the compilation result will be returned.
-fn check_compile_result<'f, F, T>(file: &'f F, result: CompileOutput<T>) -> Result<T>
+/// Checks the output of a compilation stage and reports any necessary diagnostics. If it succeeds,
+/// the result value will be returned.
+fn check_output<'f, F, T>(file: &'f F, mut output: CompileOutput<T>) -> Result<T>
 where
     F: Files<'f, FileId = ()>,
 {
-    let diagnostics = result.diagnostics();
-    let num_diagnostics = diagnostics.len();
-    if num_diagnostics > 0 {
-        report_diagnostics(file, diagnostics);
+    if !output.diagnostics.is_empty() {
+        report_diagnostics(file, &mut output.diagnostics);
     }
-    result.into_value().ok_or_else(|| match num_diagnostics {
+    output.result.ok_or_else(|| match output.diagnostics.len() {
         1 => anyhow!("1 error found"),
         n => anyhow!("{n} errors found"),
     })
@@ -252,7 +251,7 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
     let file = SimpleFile::new(name, &source);
     let lexer = Lexer::new(&source);
     let parser = Parser::new(lexer);
-    let ast = check_compile_result(&file, parser.parse())?;
+    let ast = check_output(&file, parser.parse())?;
 
     info!("Assembling script");
     let program = ProgramAssembler::new(&ast).assemble()?;

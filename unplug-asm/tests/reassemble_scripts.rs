@@ -23,7 +23,7 @@ fn program_string(program: &Program) -> String {
 fn assemble(source: &str) -> Result<CompiledScript> {
     let lexer = Lexer::new(source);
     let parser = Parser::new(lexer);
-    let ast = parser.parse().into_result().unwrap();
+    let ast = parser.parse().unwrap();
     let program = ProgramAssembler::new(&ast).assemble()?;
     Ok(asm::compile(&program)?)
 }

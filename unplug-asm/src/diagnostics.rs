@@ -97,57 +97,47 @@ impl Spanned for Diagnostic {
     }
 }
 
-/// Compilation output including a potential result and any diagnostics that were emitted.
+/// Output from a compilation stage including a potential result and any emitted diagnostics.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
-pub enum CompileOutput<T> {
-    Ok(T, Vec<Diagnostic>),
-    Err(Vec<Diagnostic>),
+pub struct CompileOutput<T> {
+    /// The compilation result. If this is present, the stage either succeeded or produced a partial
+    /// result. If this is not present, the stage failed.
+    pub result: Option<T>,
+    /// Diagnostics that were emitted during the stage.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl<T> CompileOutput<T> {
-    /// Returns true if the output indicates a success.
-    pub fn is_ok(&self) -> bool {
-        matches!(self, Self::Ok(_, _))
+    /// Creates an output with a result.
+    pub fn with_result(result: T, diagnostics: Vec<Diagnostic>) -> Self {
+        Self { result: Some(result), diagnostics }
     }
 
-    /// Returns true if the output indicates a failure.
+    /// Creates an error output without a result.
+    pub fn err(diagnostics: Vec<Diagnostic>) -> Self {
+        Self { result: None, diagnostics }
+    }
+
+    /// Returns true if the output has a result.
+    pub fn has_result(&self) -> bool {
+        self.result.is_some()
+    }
+
+    /// Returns true if the output did not produce a result.
     pub fn is_err(&self) -> bool {
-        matches!(self, Self::Err(_))
-    }
-
-    /// Returns the diagnostics that were emitted.
-    pub fn diagnostics(&self) -> &[Diagnostic] {
-        match self {
-            Self::Ok(_, diagnostics) => diagnostics,
-            Self::Err(diagnostics) => diagnostics,
-        }
-    }
-
-    /// Returns a reference to the value if successful.
-    pub fn value(&self) -> Option<&T> {
-        match self {
-            Self::Ok(value, _) => Some(value),
-            Self::Err(_) => None,
-        }
-    }
-
-    /// Consumes the output and returns the inner value (if any), discarding the diagnostics.
-    pub fn into_value(self) -> Option<T> {
-        match self {
-            Self::Ok(value, _) => Some(value),
-            Self::Err(_) => None,
-        }
+        self.result.is_none()
     }
 
     /// Consumes the output and returns the inner value, discarding the diagnostics.
     /// ***Panics*** if the result was not successful.
     pub fn unwrap(self) -> T {
-        self.into_value().unwrap()
+        self.result.unwrap()
     }
 
     /// Consumes the output and maps it to a `Result`, discarding the diagnostics.
-    pub fn into_result(self) -> Result<T> {
-        self.into_value().ok_or(Error::CompileFailed)
+    pub fn try_unwrap(self) -> Result<T> {
+        self.result.ok_or(Error::CompileFailed)
     }
 }
 
