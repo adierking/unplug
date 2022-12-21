@@ -18,6 +18,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("unsupported command: {0:?}")]
+    Unsupported(CmdOp),
+
     #[error(transparent)]
     Expr(Box<expr::Error>),
 
@@ -277,6 +280,7 @@ impl DeserializeEvent for Command {
             CmdOp::Warp => Self::Warp(WarpArgs::deserialize(de)?.into()),
             CmdOp::Win => Self::Win(WinType::deserialize(de)?.into()),
             CmdOp::Movie => Self::Movie(MovieArgs::deserialize(de)?.into()),
+            CmdOp::Invalid => return Err(Error::Unsupported(cmd)),
         };
         de.end_command()?;
         Ok(result)

@@ -554,6 +554,7 @@ impl EventDeserializer for AsmDeserializer<'_> {
             AsmMsgOp::Stay => MsgOp::Stay,
             // There is no command for plain text, so just recurse
             AsmMsgOp::Text => return self.deserialize_msg_char(),
+            AsmMsgOp::Invalid => MsgOp::Invalid,
         })
     }
 

@@ -5,7 +5,9 @@ pub use ggte::Ggte;
 use std::hash::Hash;
 
 /// Base trait for an opcode enum.
-pub trait Opcode: Copy + Eq + Hash + Sized {
+///
+/// Opcodes must provide a default "invalid" value which can be used as a placeholder.
+pub trait Opcode: Copy + Default + Eq + Hash + Sized {
     /// The type of a raw opcode value.
     type Value: Copy + Eq + Hash;
 
@@ -85,7 +87,7 @@ macro_rules! opcodes {
 }
 
 /// An expression opcode. Refer to `Expr` for documentation.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ExprOp {
     Equal,
     NotEqual,
@@ -143,6 +145,9 @@ pub enum ExprOp {
     Sin,
     Cos,
     ArrayElement,
+    /// Not an actual opcode and cannot be serialized
+    #[default]
+    Invalid,
 }
 
 impl Opcode for ExprOp {
@@ -156,7 +161,7 @@ impl Opcode for ExprOp {
 }
 
 /// A command opcode. Refer to `Command` for documentation.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum CmdOp {
     Abort,
     Return,
@@ -207,6 +212,9 @@ pub enum CmdOp {
     Warp,
     Win,
     Movie,
+    /// Not an actual opcode and cannot be serialized
+    #[default]
+    Invalid,
 }
 
 impl CmdOp {
@@ -254,7 +262,7 @@ impl Opcode for CmdOp {
 
 /// A command type opcode (note, these are actually represented as immediate expressions). Refer to
 /// individual commands for documentation.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TypeOp {
     Time,
     Fade,
@@ -309,6 +317,9 @@ pub enum TypeOp {
     Unk250,
     Unk251,
     Unk252,
+    /// Not an actual opcode and cannot be serialized
+    #[default]
+    Invalid,
 }
 
 impl Opcode for TypeOp {
@@ -322,7 +333,7 @@ impl Opcode for TypeOp {
 }
 
 /// A message command opcode. Refer to `MsgCommand` for documentation.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum MsgOp {
     End,
     Speed,
@@ -347,6 +358,9 @@ pub enum MsgOp {
     Question,
     Stay,
     Char(u8),
+    /// Not an actual opcode and cannot be serialized
+    #[default]
+    Invalid,
 }
 
 /// Maximum value of a message command opcode.

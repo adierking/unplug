@@ -188,6 +188,7 @@ impl<'a> ProgramAssembler<'a> {
                 dir.opcode,
                 &dir.operands,
             )?,
+            DirOp::Invalid => (),
         }
         Ok(block_id)
     }

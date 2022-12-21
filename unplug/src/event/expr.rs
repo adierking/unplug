@@ -22,6 +22,9 @@ pub enum Error {
     #[error("expression is not assignable: {0:?}")]
     NotAssignable(ExprOp),
 
+    #[error("unsupported expression: {0:?}")]
+    Unsupported(ExprOp),
+
     #[error("expression is not a valid ATC ID: {0:?}")]
     InvalidAtc(Box<Expr>),
 
@@ -425,6 +428,7 @@ impl DeserializeEvent for Expr {
             ExprOp::Sin => Self::Sin(Self::deserialize(de)?.into()),
             ExprOp::Cos => Self::Cos(Self::deserialize(de)?.into()),
             ExprOp::ArrayElement => Self::ArrayElement(ArrayElementExpr::deserialize(de)?.into()),
+            ExprOp::Invalid => return Err(Error::Unsupported(expr)),
         };
         de.end_expr()?;
         Ok(result)

@@ -13,7 +13,7 @@ pub trait NamedOpcode: Opcode {
 /// An opcode which appears as part of a message.
 ///
 /// We don't use `MsgOp` directly because we want full text strings rather than single characters.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum AsmMsgOp {
     Speed,
     Wait,
@@ -35,6 +35,8 @@ pub enum AsmMsgOp {
     Question,
     Stay,
     Text,
+    #[default]
+    Invalid,
 }
 
 impl Opcode for AsmMsgOp {
@@ -48,7 +50,7 @@ impl Opcode for AsmMsgOp {
 }
 
 /// An assembler directive type.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum DirOp {
     Globals,
     Stage,
@@ -63,6 +65,8 @@ pub enum DirOp {
     TimeCycle,
     TimeUp,
     Interact,
+    #[default]
+    Invalid,
 }
 
 impl Opcode for DirOp {
@@ -96,6 +100,7 @@ macro_rules! opcode_names {
                 fn name(self) -> &'static str {
                     match self {
                         $(Self::$value => $name,)*
+                        Self::Invalid => "invalid",
                     }
                 }
             }

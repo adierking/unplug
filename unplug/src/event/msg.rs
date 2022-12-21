@@ -46,7 +46,7 @@ pub enum Error {
     Decode,
 
     #[error("unsupported message command: {0:?}")]
-    NotSupported(MsgOp),
+    Unsupported(MsgOp),
 
     #[error("message is too large ({len} > {max})")]
     TooLarge { len: u64, max: u64 },
@@ -240,7 +240,7 @@ impl DeserializeEvent for MsgArgs {
                         match de.deserialize_msg_char()? {
                             MsgOp::Format => break,
                             MsgOp::Char(ch) => format_text.push(ch),
-                            ch => return Err(Error::NotSupported(ch)),
+                            ch => return Err(Error::Unsupported(ch)),
                         }
                     }
                     Some(MsgCommand::Format(Text::with_bytes(format_text)))
@@ -279,6 +279,7 @@ impl DeserializeEvent for MsgArgs {
                     });
                     continue;
                 }
+                MsgOp::Invalid => return Err(Error::Unsupported(ch)),
             };
             if !text.is_empty() {
                 commands.push(MsgCommand::Text(Text::with_bytes(text.clone())));

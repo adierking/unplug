@@ -378,6 +378,7 @@ impl EventSerializer for AsmSerializer<'_> {
             MsgOp::Question => AsmMsgOp::Question,
             MsgOp::Stay => AsmMsgOp::Stay,
             MsgOp::Char(_) | MsgOp::Newline | MsgOp::NewlineVt => AsmMsgOp::Text,
+            MsgOp::Invalid => AsmMsgOp::Invalid,
         };
         self.begin_operation(Operation::new(cmd.into()));
         match ch {
