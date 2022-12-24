@@ -36,30 +36,6 @@ impl Spanned for Label {
     }
 }
 
-/// Integer types which can appear in diagnostic messages.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum IntType {
-    I8,
-    U8,
-    I16,
-    U16,
-    I32,
-    U32,
-}
-
-impl Display for IntType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            IntType::I8 => f.write_str("signed byte"),
-            IntType::U8 => f.write_str("unsigned byte"),
-            IntType::I16 => f.write_str("signed word"),
-            IntType::U16 => f.write_str("unsigned word"),
-            IntType::I32 => f.write_str("signed dword"),
-            IntType::U32 => f.write_str("unsigned dword"),
-        }
-    }
-}
-
 /// A message emitted by a compilation stage. Currently all diagnostics are considered errors.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
@@ -159,6 +135,7 @@ pub enum DiagnosticCode {
     NotEnoughOperands,
     ExpectedNewline,
     ExpectedExpr,
+    ExpectedCommand,
     ExpectedMsgCommand,
     ExpectedItem,
     ExpectedInteger,
@@ -175,10 +152,13 @@ pub enum DiagnosticCode {
     UnexpectedElseLabel,
     UnexpectedOffset,
     UnexpectedFunction,
+    UndefinedLabel,
+    DuplicateLabel,
     DuplicateTarget,
     MissingStageName,
+    MissingLibIndex,
     DuplicateEntryPoint,
-    MissingEventSubroutine,
+    MissingEntryPointSubroutine,
     StageEventInGlobals,
     LibInStage,
     UndefinedLib,
@@ -255,36 +235,36 @@ diagnostics! {
         labels: [span],
     }
 
-    integer_conversion(span: Span, required: IntType) {
+    integer_conversion(span: Span, bits: usize) {
         code: IntegerConversion,
-        message: "integer must be convertible to {required}",
+        message: "integer cannot fit in {bits} bits",
         labels: [span],
     }
 
     unterminated_string(span: Span) {
         code: UnterminatedString,
         message: "unterminated string literal",
-        note: "add a '\"' at the end of the string",
+        note: "add a `\"` at the end of the string",
         labels: [span],
     }
 
     unterminated_comment(start: Span) {
         code: UnterminatedComment,
         message: "unterminated block comment",
-        note: "add a '*/' at the end of the comment",
+        note: "add a `*/` at the end of the comment",
         labels: [start],
     }
 
     missing_deref(else_token: Else) {
         code: MissingDeref,
-        message: "missing '*' after 'else'",
+        message: "missing `*` after `else`",
         labels: [else_token],
     }
 
     missing_deref_target(deref_token: Span) {
         code: MissingDerefTarget,
-        message: "missing label or offset after '*'",
-        note: "e.g. '*my_label', '*0x10'",
+        message: "missing label or offset after `*`",
+        note: "add a label or number, e.g. `*my_label`, `*0x10`",
         labels: [deref_token],
     }
 
@@ -293,14 +273,14 @@ diagnostics! {
         message: "unclosed parenthesis",
         labels: [
             lparen_token,
-            suggested -> "try adding a ')' here",
+            suggested -> "try adding a `)` here",
         ],
     }
 
     missing_comma(span: Span) {
         code: MissingComma,
-        message: "missing ',' after operand",
-        labels: [span -> "try adding a ',' here"],
+        message: "missing `,` after operand",
+        labels: [span -> "try adding a `,` here"],
     }
 
     not_enough_operands(command: Span) {
@@ -318,6 +298,12 @@ diagnostics! {
     expected_expr(span: Span) {
         code: ExpectedExpr,
         message: "expected an expression",
+        labels: [span],
+    }
+
+    expected_command(span: Span) {
+        code: ExpectedCommand,
+        message: "expected a command",
         labels: [span],
     }
 
@@ -401,7 +387,7 @@ diagnostics! {
 
     unexpected_else_label(label: Span) {
         code: UnexpectedElseLabel,
-        message: "unexpected 'else' label reference",
+        message: "unexpected `else` label reference",
         labels: [label],
     }
 
@@ -417,7 +403,22 @@ diagnostics! {
         labels: [func],
     }
 
-    duplicate_target(this: &ast::Command, prev: &ast::Command) {
+    undefined_label(name: &ast::Ident) {
+        code: UndefinedLabel,
+        message: "undefined label: `{name}`",
+        labels: [name],
+    }
+
+    duplicate_label(name: &ast::Ident, prev: Span) {
+        code: DuplicateLabel,
+        message: "label `{name}` is declared more than once",
+        labels: [
+            name -> "give this a unique name",
+            prev -> "previously declared here",
+        ],
+    }
+
+    duplicate_target(this: Span, prev: Span) {
         code: DuplicateTarget,
         message: "duplicate target specifier",
         labels: [
@@ -426,14 +427,21 @@ diagnostics! {
         ],
     }
 
-    missing_stage_name(specifier: &ast::Command) {
+    missing_stage_name(specifier: Span) {
         code: MissingStageName,
         message: "target specifier is missing a stage name",
-        note: "e.g. '.stage \"stage07\"'",
+        note: "add a stage file name, e.g. `.stage \"stage07\"`",
         labels: [specifier],
     }
 
-    duplicate_entry_point(this: &ast::Command, prev: &ast::Command) {
+    missing_lib_index(span: Span) {
+        code: MissingLibIndex,
+        message: "library function declaration is missing an index",
+        note: "add an index first, e.g. `.lib 123, *my_lib`",
+        labels: [span],
+    }
+
+    duplicate_entry_point(this: Span, prev: Span) {
         code: DuplicateEntryPoint,
         message: "duplicate entry point",
         labels: [
@@ -442,39 +450,39 @@ diagnostics! {
         ],
     }
 
-    missing_event_subroutine(decl: &ast::Command) {
-        code: MissingEventSubroutine,
-        message: "missing event subroutine",
-        note: "e.g. '.startup *evt_startup'",
-        labels: [decl],
+    missing_entry_point_subroutine(span: Span) {
+        code: MissingEntryPointSubroutine,
+        message: "missing entry point subroutine",
+        note: "add a label reference, e.g. `*evt_startup`",
+        labels: [span],
     }
 
     stage_event_in_globals(decl: &ast::Command) {
         code: StageEventInGlobals,
         message: "globals scripts cannot define stage events",
-        note: "only '.lib' entry points are permitted",
+        note: "only `.lib` entry points are permitted",
         labels: [decl],
     }
 
     lib_in_stage(decl: &ast::Command) {
         code: LibInStage,
         message: "stage scripts cannot define library functions",
-        note: "'.lib' entry points are not permitted",
+        note: "`.lib` entry points are not permitted",
         labels: [decl],
     }
 
     undefined_lib(index: i16) {
         code: UndefinedLib,
         message: "library function is not defined: {index}",
-        note: "declare it with '.lib {index}, *label'",
+        note: "declare it with `.lib {index}, *label`",
         labels: [],
     }
 
-    missing_event_object(decl: &ast::Command) {
+    missing_event_object(span: Span) {
         code: MissingEventObject,
         message: "interaction event is missing an object index",
-        note: "e.g. '.interact 123, *label'",
-        labels: [decl],
+        note: "add an object index first, e.g. `.interact 123, *label`",
+        labels: [span],
     }
 
     invalid_event_object(index: i32) {
@@ -485,55 +493,55 @@ diagnostics! {
 
     unrecognized_command(ident: &ast::Ident) {
         code: UnrecognizedCommand,
-        message: "unrecognized command: '{ident}'",
+        message: "unrecognized command: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_directive(ident: &ast::Ident) {
         code: UnrecognizedDirective,
-        message: "unrecognized directive: '{ident}'",
+        message: "unrecognized directive: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_type(ident: &ast::Ident) {
         code: UnrecognizedType,
-        message: "unrecognized type code: '{ident}'",
+        message: "unrecognized type code: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_function(ident: &ast::Ident) {
         code: UnrecognizedFunction,
-        message: "unrecognized function: '{ident}'",
+        message: "unrecognized function: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_msg_command(ident: &ast::Ident) {
         code: UnrecognizedMsgCommand,
-        message: "unrecognized message command: '{ident}'",
+        message: "unrecognized message command: `{ident}`",
         labels: [ident],
     }
 
     unsupported_command(ident: &ast::Ident) {
         code: UnsupportedCommand,
-        message: "command is not supported by the target game: '{ident}'",
+        message: "command is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 
     unsupported_type(ident: &ast::Ident) {
         code: UnsupportedType,
-        message: "type code is not supported by the target game: '{ident}'",
+        message: "type code is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 
     unsupported_function(ident: &ast::Ident) {
         code: UnsupportedFunction,
-        message: "function is not supported by the target game: '{ident}'",
+        message: "function is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 
     unsupported_msg_command(ident: &ast::Ident) {
         code: UnsupportedMsgCommand,
-        message: "message command is not supported by the target game: '{ident}'",
+        message: "message command is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 }

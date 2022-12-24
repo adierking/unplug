@@ -418,14 +418,14 @@ impl<'a> ProgramBuilder<'a> {
     fn new_impl(target: Option<Target>, script: &'a Script, stage: Option<&'a Stage>) -> Self {
         let blocks = (0..script.len()).map(|_| Block::new()).collect::<Vec<_>>();
         let mut program = Program::with_blocks(blocks, None);
-        program.target = target;
+        program.target = target.map(Located::new);
         Self { script, stage, program, queue: vec![] }
     }
 
     /// Adds a script entry point of type `kind` beginning at `block_id` to the program.
     pub fn add_entry_point(&mut self, kind: EntryPoint, block_id: BlockId) -> Result<()> {
         self.add_subroutine(block_id)?;
-        self.program.entry_points.insert(kind, block_id);
+        self.program.entry_points.insert(kind, Located::new(block_id));
         let block = block_id.get_mut(&mut self.program.blocks);
         if !block.flags.contains(BlockFlags::ENTRY_POINT) {
             block.flags.insert(BlockFlags::ENTRY_POINT);
@@ -574,7 +574,7 @@ fn operand_type(op: &Operand) -> DirOp {
         Operand::I16(_) | Operand::U16(_) => DirOp::Word,
         Operand::I32(_) | Operand::U32(_) | Operand::Type(_) => DirOp::Dword,
         Operand::Label(_) | Operand::Offset(_) => DirOp::Dword,
-        Operand::ElseLabel(_) | Operand::Expr(_) | Operand::MsgCommand(_) => {
+        Operand::ElseLabel(_) | Operand::Expr(_) | Operand::MsgCommand(_) | Operand::Error => {
             panic!("Invalid data operand: {:?}", op);
         }
     }
@@ -594,7 +594,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         // Reverse the program's event map
         let mut block_entries = HashMap::<BlockId, EntryPointVec>::new();
         for (&kind, &block) in &program.entry_points {
-            block_entries.entry(block).or_default().push(kind);
+            block_entries.entry(*block).or_default().push(kind);
         }
         Self { writer, program, block_entries }
     }
@@ -617,7 +617,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     }
 
     fn write_target(&mut self) -> io::Result<()> {
-        let op = match &self.program.target {
+        let op = match self.program.target.as_deref() {
             Some(Target::Globals) => Operation::new(DirOp::Globals.into()),
             Some(Target::Stage(path)) => Operation::with_operands(
                 DirOp::Stage.into(),
@@ -759,6 +759,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
             Operand::Type(ty) => write!(self.writer, "{}", ty.name())?,
             Operand::Expr(expr) => self.write_expr(expr)?,
             Operand::MsgCommand(cmd) => self.write_msg_command(cmd)?,
+            Operand::Error => write!(self.writer, "!")?,
         }
         Ok(())
     }

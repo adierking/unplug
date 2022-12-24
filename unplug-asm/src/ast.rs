@@ -188,14 +188,24 @@ impl IntLiteral {
     }
 
     /// Returns the literal's value.
-    pub fn value(&self) -> IntValue {
+    pub fn value(self) -> IntValue {
         self.value
+    }
+
+    pub fn with_value(self, value: IntValue) -> Self {
+        Self { value, ..self }
     }
 }
 
 impl Debug for IntLiteral {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Debug::fmt(&self.value, f)
+    }
+}
+
+impl Display for IntLiteral {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.value, f)
     }
 }
 

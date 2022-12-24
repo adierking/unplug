@@ -241,7 +241,9 @@ impl<'a> OperandCursor<'a> {
                 (op.opcode, Self::with_owned(op))
             }
             Operand::Expr(expr) => (expr.opcode, Self::with_borrowed(expr)),
-            Operand::Text(_) | Operand::MsgCommand(_) => return Err(Error::ExpectedExpr),
+            Operand::Text(_) | Operand::MsgCommand(_) | Operand::Error => {
+                return Err(Error::ExpectedExpr)
+            }
         };
         self.position += 1;
         Ok((*opcode, cursor))
@@ -611,6 +613,7 @@ fn into_data(program: &Program, value: &Located<Operand>) -> Result<DataBlock> {
         Operand::ElseLabel(_) => Err(Error::UnexpectedElseLabel),
         Operand::Expr(_) => Err(Error::UnexpectedExpr),
         Operand::MsgCommand(_) => Err(Error::UnexpectedMessage),
+        Operand::Error => Ok(DataBlock::U8Array(vec![])),
     }
 }
 
@@ -665,6 +668,9 @@ fn try_append_data(program: &Program, block: &mut DataBlock, value: &Operand) ->
 fn compile_data(program: &Program, data: &[Located<Operand>]) -> Result<ScriptBlock> {
     let mut blocks: Vec<DataBlock> = vec![];
     for value in data {
+        if let Operand::Error = **value {
+            continue;
+        }
         if let Some(last) = blocks.last_mut() {
             if try_append_data(program, last, value) {
                 continue;
@@ -706,8 +712,8 @@ pub fn compile(program: &Program) -> Result<CompiledScript> {
     let script = Script::with_blocks_and_layout(script_blocks, layout);
     Ok(CompiledScript {
         script,
-        target: program.target.clone(),
-        entry_points: program.entry_points.clone(),
+        target: program.target.as_deref().cloned(),
+        entry_points: program.entry_points.iter().map(|(&e, &b)| (e, *b)).collect(),
     })
 }
 

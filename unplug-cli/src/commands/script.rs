@@ -254,7 +254,7 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
     let ast = check_output(&file, parser.parse())?;
 
     info!("Assembling script");
-    let program = ProgramAssembler::new(&ast).assemble()?;
+    let program = check_output(&file, ProgramAssembler::new(&ast).assemble())?;
     let compiled = asm::compile(&program)?;
     let update = match &compiled.target {
         Some(Target::Globals) => {

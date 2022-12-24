@@ -106,6 +106,8 @@ pub enum Operand {
     Expr(Box<Operation<ExprOp>>),
     /// A message command.
     MsgCommand(Box<Operation<AsmMsgOp>>),
+    /// An intermediate error result used for partial compilation.
+    Error,
 }
 
 impl Operand {
@@ -157,6 +159,9 @@ impl_operand_from!(Operation<AsmMsgOp>, MsgCommand);
 
 /// Trait for a primitive type which an operand can be cast to.
 pub trait CastOperand: NumCast + Sealed {
+    /// The number of bits in the integer.
+    const BITS: usize;
+
     /// Maps `int` to an error corresponding to this type.
     fn error(int: IntValue) -> Error;
 }
@@ -166,6 +171,7 @@ macro_rules! impl_cast_operand {
     ($type:ty, $err:path) => {
         impl Sealed for $type {}
         impl CastOperand for $type {
+            const BITS: usize = std::mem::size_of::<$type>() * 8;
             fn error(int: IntValue) -> Error {
                 $err(int)
             }
@@ -263,6 +269,18 @@ impl<T: NamedOpcode> Operation<T> {
         operands: impl IntoIterator<Item = Located<Operand>>,
     ) -> Self {
         Self { opcode, operands: operands.into_iter().collect() }
+    }
+
+    /// Replaces the operation's opcode without changing the span or operands.
+    pub fn with_opcode<U: NamedOpcode>(self, opcode: U) -> Operation<U> {
+        Operation { opcode: self.opcode.map(|_| opcode), operands: self.operands }
+    }
+}
+
+impl<T: NamedOpcode> Spanned for Operation<T> {
+    fn span(&self) -> Span {
+        let operands = self.operands.iter().fold(Span::EMPTY, |s, o| s.join(o.span()));
+        self.opcode.span().join(operands)
     }
 }
 
@@ -458,13 +476,13 @@ pub enum Target {
 #[derive(Default)]
 pub struct Program {
     /// An optional target specifier.
-    pub target: Option<Target>,
+    pub target: Option<Located<Target>>,
     /// The blocks making up the program. Each block's ID is its index in this list.
     pub blocks: Vec<Block>,
     /// The ID of the first block in the program, or `None` if the program is empty.
     pub first_block: Option<BlockId>,
     /// Map of entry points to block IDs.
-    pub entry_points: HashMap<EntryPoint, BlockId>,
+    pub entry_points: HashMap<EntryPoint, Located<BlockId>>,
     /// Label information.
     pub labels: LabelMap,
 }
