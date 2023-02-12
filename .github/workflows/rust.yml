@@ -1,7 +1,6 @@
-name: Rust
+name: Unplug
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
     paths-ignore:
@@ -10,6 +9,9 @@ on:
       - '**.txt'
       - 'docs/**'
       - '.vscode/**'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 8 * * *'
 
 env:
   CARGO_TERM_COLOR: always
