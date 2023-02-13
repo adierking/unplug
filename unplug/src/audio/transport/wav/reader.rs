@@ -26,7 +26,7 @@ struct RiffReader<'a> {
 impl<'a> RiffReader<'a> {
     /// Opens a RIFF form, reading the header from `reader`.
     fn open_form(mut reader: impl ReadSeek + 'a) -> Result<Self> {
-        let header_offset = reader.seek(SeekFrom::Current(0))?;
+        let header_offset = reader.stream_position()?;
         let header = ChunkHeader::read_from(&mut reader)?;
         if header.id != ID_RIFF {
             return Err(Error::InvalidRiff);
@@ -58,7 +58,7 @@ impl<'a> RiffReader<'a> {
         // Set the next I/O operation to happen at the start of the next chunk. We can't just seek
         // here because `Region` would conflict with it. The caller can do whatever with the reader
         // we return and the next call to `next_chunk()` will always read from the right place.
-        let data_offset = self.seek(SeekFrom::Current(0))?;
+        let data_offset = self.stream_position()?;
         let header_offset = data_offset - CHUNK_HEADER_SIZE;
         let end_offset = data_offset + header.size as u64;
         self.next_offset = Some(align(end_offset, RIFF_ALIGN));

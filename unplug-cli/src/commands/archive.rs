@@ -9,7 +9,7 @@ use anyhow::{bail, Result};
 use humansize::{FormatSize, BINARY};
 use log::{debug, info};
 use std::fs::{self, File};
-use std::io::{Seek, SeekFrom};
+use std::io::Seek;
 use tempfile::NamedTempFile;
 use unplug::common::io::BUFFER_SIZE;
 use unplug::dvd::{ArchiveBuilder, ArchiveReader, Glob, GlobMode};
@@ -83,7 +83,7 @@ fn command_replace(ctx: Context, path: &str, opt: ArchiveReplaceOpt) -> Result<(
     debug!("Writing new archive to {}", temp.path().to_string_lossy());
     let mut builder = ArchiveBuilder::with_archive(&mut archive);
     builder.replace(entry, || reader).write_to(&mut temp)?;
-    temp.seek(SeekFrom::Start(0))?;
+    temp.rewind()?;
     drop(builder);
     drop(archive);
 

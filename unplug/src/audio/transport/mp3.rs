@@ -28,7 +28,7 @@ impl<'r> Mp3Reader<'r> {
 
     #[instrument(level = "trace", skip_all)]
     fn new_impl(mut reader: Box<dyn ReadSeek + 'r>, tag: SourceTag) -> Result<Self> {
-        let start_offset = reader.seek(SeekFrom::Current(0))?;
+        let start_offset = reader.stream_position()?;
         let mut info = Info::default();
         if let Err(e) = analyze_mp3(&mut reader, &mut info) {
             warn!("Could not fully analyze MP3 file: {:#}", e);
@@ -260,7 +260,7 @@ fn find_first_frame(reader: &mut impl Read, base_offset: u64) -> Result<Option<u
 #[instrument(level = "trace", skip_all)]
 fn analyze_mp3(reader: &mut (impl Read + Seek), info: &mut Info) -> Result<()> {
     // The ID3 header can be arbitrarily large, so we have to skip past it first
-    info.audio_offset = reader.seek(SeekFrom::Current(0))?;
+    info.audio_offset = reader.stream_position()?;
     match detect_id3_header(reader) {
         Ok(Some(offset)) => info.audio_offset = offset,
         Ok(None) => (),

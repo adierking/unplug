@@ -45,7 +45,7 @@ pub fn fill(mut writer: impl Write, byte: u8, len: u64) -> io::Result<()> {
 
 /// Writes padding bytes so that a writer's offset is aligned to a power of two.
 pub fn pad(mut writer: (impl Write + Seek), align: u64, fill: u8) -> io::Result<()> {
-    let offset = writer.seek(SeekFrom::Current(0))?;
+    let offset = writer.stream_position()?;
     let aligned = super::align(offset, align);
     let padding = aligned - offset;
     self::fill(writer, fill, padding)?;
@@ -113,12 +113,12 @@ mod tests {
         let mut cursor = Cursor::new(&[b't', b'e', b's', b't', 0, 0, 0, 0]);
 
         assert_eq!(read_fixed_string(&mut cursor, 8)?, CString::new("test")?);
-        assert_eq!(cursor.seek(SeekFrom::Current(0))?, 8);
-        cursor.seek(SeekFrom::Start(0))?;
+        assert_eq!(cursor.stream_position()?, 8);
+        cursor.rewind()?;
 
         assert_eq!(read_fixed_string(&mut cursor, 5)?, CString::new("test")?);
-        assert_eq!(cursor.seek(SeekFrom::Current(0))?, 5);
-        cursor.seek(SeekFrom::Start(0))?;
+        assert_eq!(cursor.stream_position()?, 5);
+        cursor.rewind()?;
 
         assert!(read_fixed_string(&mut cursor, 4).is_err());
         Ok(())

@@ -60,7 +60,7 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Libs {
         assert_eq!(self.entry_points.len(), NUM_LIBS);
 
         // Write an empty entry point table because it has to come first
-        let table_offset = writer.seek(SeekFrom::Current(0))?;
+        let table_offset = writer.stream_position()?;
         let mut table = LibTable { entry_points: vec![0u32; NUM_LIBS].into_boxed_slice() };
         table.write_to(writer)?;
 
@@ -75,7 +75,7 @@ impl<W: WriteSeek + ?Sized> WriteTo<W> for Libs {
         for (&id, offset) in self.entry_points.iter().zip(&mut *table.entry_points) {
             *offset = offsets.get(id);
         }
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
+        let end_offset = writer.stream_position()?;
         writer.seek(SeekFrom::Start(table_offset))?;
         table.write_to(writer)?;
         writer.seek(SeekFrom::Start(end_offset))?;

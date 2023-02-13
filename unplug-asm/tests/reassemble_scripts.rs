@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::io::{BufReader, Cursor, Seek, SeekFrom};
+use std::io::{BufReader, Cursor, Seek};
 use tracing::info;
 use unplug::common::WriteTo;
 use unplug::data::{Resource, Stage as StageId};
@@ -50,7 +50,7 @@ fn test_reassemble_scripts() -> Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
         GlobalsBuilder::new().base(&mut globals).libs(&compiled_libs).write_to(&mut cursor)?;
         drop(globals);
-        cursor.seek(SeekFrom::Start(0))?;
+        cursor.rewind()?;
         let mut rebuilt = GlobalsReader::open(cursor)?;
         rebuilt.read_libs()?
     };
@@ -73,7 +73,7 @@ fn test_reassemble_scripts() -> Result<()> {
         compiled_stage.write_to(&mut cursor)?;
 
         info!("Reading the reassembled stage");
-        cursor.seek(SeekFrom::Start(0))?;
+        cursor.rewind()?;
         let rebuilt = Stage::read_from(&mut cursor, &libs)?;
         assert_eq!(original.settings, rebuilt.settings);
         assert_eq!(original.objects.len(), rebuilt.objects.len());

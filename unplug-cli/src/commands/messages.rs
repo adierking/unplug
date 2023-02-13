@@ -97,7 +97,7 @@ pub fn command_import(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
     }
 
     if !messages.is_empty() {
-        let mut unused_ids: Vec<_> = messages.into_iter().map(|(k, _)| k).collect();
+        let mut unused_ids: Vec<_> = messages.into_keys().collect();
         unused_ids.sort_unstable();
         for id in unused_ids {
             warn!("Message was not found: {}", id.to_string());

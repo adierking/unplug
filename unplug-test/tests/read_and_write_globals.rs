@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::info;
 use serial_test::serial;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek};
 use tempfile::tempfile;
 use unplug::common::Text;
 use unplug::data::Object;
@@ -29,11 +29,11 @@ fn test_rebuild_globals_copy_all() -> Result<()> {
     info!("Comparing files");
 
     let mut original = original.into_inner();
-    original.seek(SeekFrom::Start(0))?;
+    original.rewind()?;
     let mut original_bytes = vec![];
     original.read_to_end(&mut original_bytes)?;
 
-    temp.seek(SeekFrom::Start(0))?;
+    temp.rewind()?;
     let mut rebuilt_bytes = vec![];
     temp.read_to_end(&mut rebuilt_bytes)?;
     assert!(original_bytes == rebuilt_bytes);

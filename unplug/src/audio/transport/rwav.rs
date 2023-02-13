@@ -245,7 +245,7 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for InfoSection {
         // Wrap the reader in a region which locks it to the section data. All seeks will now be
         // relative to the start of the section.
         let section_header = SectionHeader::read_from(reader)?;
-        let start_offset = reader.seek(SeekFrom::Current(0))?;
+        let start_offset = reader.stream_position()?;
         let mut section =
             Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
         let header = InfoHeader::read_from(&mut section)?;
@@ -309,7 +309,7 @@ impl DataSection {
         // Wrap the reader in a region which locks it to the DATA section. All seeks will now be
         // relative to the start of the DATA section.
         let section_header = SectionHeader::read_from(reader)?;
-        let start_offset = reader.seek(SeekFrom::Current(0))?;
+        let start_offset = reader.stream_position()?;
         let mut section =
             Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
 

@@ -21,7 +21,7 @@ impl<R: ReadSeek> ArchiveReader<R> {
     /// `ArchiveReader` does its own buffering, so `stream` should not be buffered.
     pub fn open(reader: R) -> Result<Self> {
         let mut buf = BufReader::new(reader);
-        buf.seek(SeekFrom::Start(0))?;
+        buf.rewind()?;
         let header = Header::read_from(&mut buf)?;
         buf.seek(SeekFrom::Start(header.fst_offset as u64))?;
         let fst = FileStringTable::read_from(&mut buf.by_ref().take(header.fst_size as u64))?;

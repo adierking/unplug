@@ -2,7 +2,7 @@ use super::collision::ObjectColliders;
 use super::header::{FileHeader, HEADER_SIZE};
 use super::{Libs, Metadata, Result};
 use crate::common::{ReadFrom, ReadSeek, Region};
-use std::io::{self, BufReader, Seek, SeekFrom, Write};
+use std::io::{self, BufReader, Seek, Write};
 
 /// A stream for reading globals.bin data.
 pub struct GlobalsReader<R: ReadSeek> {
@@ -15,7 +15,7 @@ impl<R: ReadSeek> GlobalsReader<R> {
     /// its own buffering, so `stream` should not be buffered.
     pub fn open(reader: R) -> Result<Self> {
         let mut reader = BufReader::new(reader);
-        reader.seek(SeekFrom::Start(0))?;
+        reader.rewind()?;
         let header = FileHeader::read_from(&mut reader)?;
         Ok(Self { reader: reader.into_inner(), header })
     }

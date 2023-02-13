@@ -6,7 +6,7 @@ use crate::dvd::OpenFile;
 use slotmap::SecondaryMap;
 use std::cell::RefCell;
 use std::convert::TryFrom;
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, Write};
 use std::rc::Rc;
 use tracing::trace;
 
@@ -111,22 +111,21 @@ impl<'a> ArchiveBuilder<'a> {
     /// Writes out an archive file.
     pub fn write_to(&self, mut writer: (impl Write + Seek)) -> Result<()> {
         // Write an empty header we can fill in later
-        writer.seek(SeekFrom::Start(0))?;
+        writer.rewind()?;
         let mut buf = BufWriter::new(&mut writer);
         let mut header = Header::new();
         header.write_to(&mut buf)?;
 
         // Write an incomplete FST. We'll fill in the correct offsets and sizes at the end.
-        header.fst_offset = buf.seek(SeekFrom::Current(0))? as u32;
+        header.fst_offset = buf.stream_position()? as u32;
         let (mut fst, ids) = self.files.to_fst()?;
         fst.write_to(&mut buf)?;
-        header.fst_size = buf.seek(SeekFrom::Current(0))? as u32 - header.fst_offset;
+        header.fst_size = buf.stream_position()? as u32 - header.fst_offset;
 
         buf.flush()?;
         drop(buf);
         pad(&mut writer, ARCHIVE_ALIGN, 0)?;
-        header.data_offset =
-            u32::try_from(writer.seek(SeekFrom::Current(0))?).expect("File size overflow");
+        header.data_offset = u32::try_from(writer.stream_position()?).expect("File size overflow");
 
         for (entry, id) in fst.entries.iter_mut().zip(ids) {
             if entry.kind != FstEntryKind::File {
@@ -135,21 +134,20 @@ impl<'a> ArchiveBuilder<'a> {
 
             pad(&mut writer, ARCHIVE_ALIGN, 0)?;
             let start_offset =
-                u32::try_from(writer.seek(SeekFrom::Current(0))?).expect("File size overflow");
+                u32::try_from(writer.stream_position()?).expect("File size overflow");
 
             trace!("Writing archive entry \"{}\" at {:#x}", self.files[id].name(), start_offset);
             let mut source = self.sources[id].borrow_mut();
             let mut reader = source.open_file(id)?;
             std::io::copy(reader.as_mut(), &mut writer)?;
 
-            let end_offset =
-                u32::try_from(writer.seek(SeekFrom::Current(0))?).expect("File size overflow");
+            let end_offset = u32::try_from(writer.stream_position()?).expect("File size overflow");
             entry.offset_or_parent = start_offset;
             entry.size_or_next = end_offset - start_offset;
         }
 
         // Go back and fill in the header
-        writer.seek(SeekFrom::Start(0))?;
+        writer.rewind()?;
         let mut buf = BufWriter::new(&mut writer);
         header.write_to(&mut buf)?;
         fst.write_to(&mut buf)?;

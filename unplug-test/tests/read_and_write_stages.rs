@@ -1,6 +1,6 @@
 use anyhow::Result;
 use log::info;
-use std::io::{BufReader, Cursor, Seek, SeekFrom};
+use std::io::{BufReader, Cursor, Seek};
 use unplug::common::WriteTo;
 use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, OpenFile};
@@ -32,7 +32,7 @@ fn test_read_and_write_stages() -> Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
         GlobalsBuilder::new().base(&mut globals).libs(&libs).write_to(&mut cursor)?;
         info!("Reading the rebuilt globals");
-        cursor.seek(SeekFrom::Start(0))?;
+        cursor.rewind()?;
         let mut rebuilt = GlobalsReader::open(cursor)?;
         rebuilt.read_libs()?
     };
@@ -52,7 +52,7 @@ fn test_read_and_write_stages() -> Result<()> {
         original.write_to(&mut cursor)?;
 
         info!("Reading the rebuilt stage");
-        cursor.seek(SeekFrom::Start(0))?;
+        cursor.rewind()?;
         let rebuilt = Stage::read_from(&mut cursor, &libs)?;
         assert_eq!(original.settings, rebuilt.settings);
         assert_eq!(original.objects.len(), rebuilt.objects.len());

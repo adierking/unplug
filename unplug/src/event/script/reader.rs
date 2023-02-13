@@ -308,7 +308,7 @@ impl<'r> ScriptReader<'r> {
         let mut command_offsets: Vec<u32> = vec![];
 
         let start_offset: u32 =
-            self.reader.seek(SeekFrom::Current(0))?.try_into().expect("File offset overflow");
+            self.reader.stream_position()?.try_into().expect("File offset overflow");
         let mut offset = start_offset;
         loop {
             if offset >= end_offset {
@@ -328,8 +328,7 @@ impl<'r> ScriptReader<'r> {
             code.commands.push(command);
             command_offsets.push(offset);
 
-            offset =
-                self.reader.seek(SeekFrom::Current(0))?.try_into().expect("File offset overflow");
+            offset = self.reader.stream_position()?.try_into().expect("File offset overflow");
 
             let command = code.commands.last().unwrap();
             if let Some(goto_target) = command.goto_target() {

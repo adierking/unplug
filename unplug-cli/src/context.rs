@@ -5,7 +5,7 @@ use log::{debug, error, info, warn};
 use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, Cursor, Seek, SeekFrom, Write};
+use std::io::{BufReader, Cursor, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::NamedTempFile;
@@ -469,7 +469,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
     pub fn write_globals(self, builder: &mut GlobalsBuilder<'_>) -> Result<Self> {
         let mut writer = Cursor::new(vec![]);
         builder.write_to(&mut writer)?;
-        writer.seek(SeekFrom::Start(0))?;
+        writer.rewind()?;
         self.write_qp_file_at(StageId::QP_GLOBALS_PATH, writer)
     }
 
@@ -483,7 +483,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
     pub fn write_stage_file(self, file: &FileId, stage: &Stage) -> Result<Self> {
         let mut writer = Cursor::new(vec![]);
         stage.write_to(&mut writer)?;
-        writer.seek(SeekFrom::Start(0))?;
+        writer.rewind()?;
         Ok(self.write_file(file, writer))
     }
 
@@ -531,7 +531,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
         drop(builder);
         drop(archive);
 
-        temp.seek(SeekFrom::Start(0))?;
+        temp.rewind()?;
         self.ctx.disc.write(&qp.file, &mut temp)?;
         Ok(())
     }

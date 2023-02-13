@@ -245,14 +245,14 @@ impl<'r, 's> HpsWriter<'r, 's> {
 
         // Write a placeholder header because we can't know how to fill it out until the blocks are
         // all processed
-        let start_offset = writer.seek(SeekFrom::Current(0))?;
+        let start_offset = writer.stream_position()?;
         FileHeader::new().write_to(writer)?;
 
         pad(&mut *writer, super::FIRST_BLOCK_OFFSET as u64, 0)?;
         self.write_blocks(writer)?;
 
         // Now go back and fill in the header
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
+        let end_offset = writer.stream_position()?;
         writer.seek(SeekFrom::Start(start_offset))?;
         let channels = [self.left_channel, self.right_channel];
         let header = FileHeader {
@@ -454,10 +454,10 @@ mod tests {
     use crate::test;
     use std::io::{Cursor, Seek};
 
-    fn write_and_read_hps<'r, 's>(writer: HpsWriter<'r, 's>) -> Result<HpsReader<'static>> {
+    fn write_and_read_hps(writer: HpsWriter<'_, '_>) -> Result<HpsReader<'static>> {
         let mut cursor = Cursor::new(vec![]);
         writer.write_to(&mut cursor)?;
-        cursor.seek(SeekFrom::Start(0))?;
+        cursor.rewind()?;
         HpsReader::new(cursor, "test")
     }
 

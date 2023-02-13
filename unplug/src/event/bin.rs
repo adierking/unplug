@@ -124,14 +124,14 @@ impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
     fn begin_call(&mut self) -> Result<()> {
         assert!(self.call_start_offset == u64::MAX, "Call start offset already set");
         // Write a command size of 0 for now
-        self.call_start_offset = self.writer.seek(SeekFrom::Current(0))?;
+        self.call_start_offset = self.writer.stream_position()?;
         self.serialize_i16(0)
     }
 
     fn end_call(&mut self) -> Result<()> {
         assert!(self.call_start_offset < u64::MAX, "Call start offset not set");
         // Go back and fill in the command size
-        let end_offset = self.writer.seek(SeekFrom::Current(0))?;
+        let end_offset = self.writer.stream_position()?;
         let command_size =
             i16::try_from(end_offset - self.call_start_offset).expect("Call command size overflow");
         self.writer.seek(SeekFrom::Start(self.call_start_offset))?;
@@ -144,7 +144,7 @@ impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
     fn begin_msg(&mut self) -> Result<()> {
         assert!(self.msg_start_offset == u64::MAX, "Message start offset already set");
         // Write an end offset of 0 for now
-        self.msg_start_offset = self.writer.seek(SeekFrom::Current(0))?;
+        self.msg_start_offset = self.writer.stream_position()?;
         self.serialize_i32(0)
     }
 
@@ -162,7 +162,7 @@ impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
         assert!(self.msg_start_offset < u64::MAX, "Message start offset not set");
 
         // Ensure we don't overflow the game's message buffer
-        let end_offset = self.writer.seek(SeekFrom::Current(0))?;
+        let end_offset = self.writer.stream_position()?;
         let msg_size = end_offset - self.msg_start_offset;
         if msg_size > MAX_MSG_SIZE {
             return Err(Error::MsgTooLarge { len: msg_size, max: MAX_MSG_SIZE });
@@ -314,7 +314,7 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
 
     fn begin_call(&mut self) -> Result<()> {
         assert!(self.call_end_offset == u64::MAX, "Call end offset already set");
-        let start_offset = self.reader.seek(SeekFrom::Current(0))?;
+        let start_offset = self.reader.stream_position()?;
         let command_size = self.reader.read_i16::<LE>()?;
         self.call_end_offset = start_offset + command_size as u64;
         Ok(())
@@ -322,7 +322,7 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
 
     fn have_call_arg(&mut self) -> Result<bool> {
         assert!(self.call_end_offset < u64::MAX, "Call end offset not set");
-        Ok(self.reader.seek(SeekFrom::Current(0))? < self.call_end_offset)
+        Ok(self.reader.stream_position()? < self.call_end_offset)
     }
 
     fn end_call(&mut self) -> Result<()> {
@@ -336,7 +336,7 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
 
         // The message string is prefixed with the offset of the next command to jump to.
         let end_offset = self.reader.read_i32::<LE>()? as u64;
-        let start_offset = self.reader.seek(SeekFrom::Current(0))?;
+        let start_offset = self.reader.stream_position()?;
         if end_offset <= start_offset {
             return Err(Error::InvalidMsgOffset { start: start_offset, end: end_offset });
         }
@@ -353,7 +353,7 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
     fn end_msg(&mut self) -> Result<()> {
         assert!(self.msg_end_offset < u64::MAX, "Message end offset not set");
 
-        let offset = self.reader.seek(SeekFrom::Current(0))?;
+        let offset = self.reader.stream_position()?;
         self.reader.seek(SeekFrom::Start(self.msg_end_offset))?;
         self.msg_end_offset = u64::MAX;
 

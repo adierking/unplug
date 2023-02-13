@@ -86,7 +86,7 @@ impl<W: Write + Seek> StringWriter<W> {
 
     /// Writes a placeholder string offset.
     fn write_string_offset(&mut self, string: &Text) -> io::Result<()> {
-        let offset = self.inner.seek(SeekFrom::Current(0))?;
+        let offset = self.inner.stream_position()?;
         self.strings.push((offset, string.clone()));
         self.inner.write_u32::<LE>(0)?;
         Ok(())
@@ -94,7 +94,7 @@ impl<W: Write + Seek> StringWriter<W> {
 
     /// Writes out the actual strings and fills in the placeholder offsets.
     fn write_strings(&mut self) -> io::Result<()> {
-        let mut cur_offset = self.inner.seek(SeekFrom::Current(0))?;
+        let mut cur_offset = self.inner.stream_position()?;
         for (ptr_offset, string) in &self.strings {
             let str_offset = cur_offset;
             self.inner.write_all(string.as_bytes())?;
@@ -1098,7 +1098,7 @@ impl Default for Metadata {
 impl<R: Read + Seek + ?Sized> ReadFrom<R> for Metadata {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
-        assert_eq!(reader.seek(SeekFrom::Current(0))?, 0);
+        assert_eq!(reader.stream_position()?, 0);
         let header = MetadataHeader::read_from(reader)?;
         let mut metadata = Self::new();
 
@@ -1182,47 +1182,47 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for Metadata {
         assert_eq!(self.stickers.len(), NUM_STICKERS);
         assert_eq!(self.stats.len(), NUM_STATS);
 
-        assert_eq!(writer.seek(SeekFrom::Current(0))?, 0);
+        assert_eq!(writer.stream_position()?, 0);
         let mut header = MetadataHeader::default();
         header.write_to(writer)?;
 
-        header.battery_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.battery_globals_offset = writer.stream_position()? as u32;
         self.battery_globals.write_to(writer)?;
-        header.popper_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.popper_globals_offset = writer.stream_position()? as u32;
         self.popper_globals.write_to(writer)?;
-        header.copter_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.copter_globals_offset = writer.stream_position()? as u32;
         self.copter_globals.write_to(writer)?;
-        header.radar_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.radar_globals_offset = writer.stream_position()? as u32;
         self.radar_globals.write_to(writer)?;
-        header.time_limit_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.time_limit_offset = writer.stream_position()? as u32;
         self.time_limit.write_to(writer)?;
-        header.player_globals_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.player_globals_offset = writer.stream_position()? as u32;
         self.player_globals.write_to(writer)?;
-        header.default_atcs_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.default_atcs_offset = writer.stream_position()? as u32;
         self.default_atcs.write_to(writer)?;
-        header.coin_values_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.coin_values_offset = writer.stream_position()? as u32;
         self.coin_values.write_to(writer)?;
-        header.pickup_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.pickup_sounds_offset = writer.stream_position()? as u32;
         write_sounds(&mut *writer, &self.pickup_sounds)?;
-        header.collect_sounds_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.collect_sounds_offset = writer.stream_position()? as u32;
         write_sounds(&mut *writer, &self.collect_sounds)?;
 
         let mut writer = StringWriter::new(writer);
-        header.items_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.items_offset = writer.stream_position()? as u32;
         Item::write_all_to(&mut writer, &self.items)?;
-        header.actors_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.actors_offset = writer.stream_position()? as u32;
         Actor::write_all_to(&mut writer, &self.actors)?;
-        header.atcs_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.atcs_offset = writer.stream_position()? as u32;
         Atc::write_all_to(&mut writer, &self.atcs)?;
-        header.suits_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.suits_offset = writer.stream_position()? as u32;
         Suit::write_all_to(&mut writer, &self.suits)?;
-        header.stages_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.stages_offset = writer.stream_position()? as u32;
         Stage::write_all_to(&mut writer, &self.stages)?;
-        header.letickers_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.letickers_offset = writer.stream_position()? as u32;
         Leticker::write_all_to(&mut writer, &self.letickers)?;
-        header.stickers_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.stickers_offset = writer.stream_position()? as u32;
         Sticker::write_all_to(&mut writer, &self.stickers)?;
-        header.stats_offset = writer.seek(SeekFrom::Current(0))? as u32;
+        header.stats_offset = writer.stream_position()? as u32;
         Stat::write_all_to(&mut writer, &self.stats)?;
 
         // Write all the strings out at the end. This is different from how the official file is
@@ -1230,8 +1230,8 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for Metadata {
         // descriptions. But this is simpler and still produces valid data.
         writer.write_strings()?;
 
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
-        writer.seek(SeekFrom::Start(0))?;
+        let end_offset = writer.stream_position()?;
+        writer.rewind()?;
         header.write_to(&mut writer)?;
         writer.seek(SeekFrom::Start(end_offset))?;
         Ok(())

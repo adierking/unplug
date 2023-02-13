@@ -45,7 +45,7 @@ fn command_info(ctx: Context) -> Result<()> {
 /// The `iso list` CLI command.
 fn command_list(ctx: Context, opt: IsoListOpt) -> Result<()> {
     let path = ctx.into_iso_path()?;
-    let disc = DiscStream::open(File::open(&path)?)?;
+    let disc = DiscStream::open(File::open(path)?)?;
     list_files(&disc.files, &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))
 }
 
@@ -69,7 +69,7 @@ fn command_extract(ctx: Context, opt: IsoExtractOpt) -> Result<()> {
 /// The `iso extract-all` CLI command.
 fn command_extract_all(ctx: Context, opt: IsoExtractAllOpt) -> Result<()> {
     let path = ctx.into_iso_path()?;
-    let mut disc = DiscStream::open(File::open(&path)?)?;
+    let mut disc = DiscStream::open(File::open(path)?)?;
     let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
     fs::create_dir_all(out_dir)?;
     let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();

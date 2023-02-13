@@ -243,7 +243,7 @@ mod tests {
     use super::*;
     use crate::assert_write_and_read;
     use std::convert::TryInto;
-    use std::io::{Cursor, Seek, SeekFrom};
+    use std::io::{Cursor, Seek};
 
     #[test]
     fn test_read_header_mono() -> Result<()> {
@@ -277,7 +277,7 @@ mod tests {
 
         let mut reader = Cursor::new(bytes);
         let header = FileHeader::read_from(&mut reader)?;
-        assert_eq!(reader.seek(SeekFrom::Current(0))?, FIRST_BLOCK_OFFSET as u64);
+        assert_eq!(reader.stream_position()?, FIRST_BLOCK_OFFSET as u64);
 
         assert_eq!(header.magic, HPS_MAGIC);
         assert_eq!(header.sample_rate, 44100);
@@ -337,7 +337,7 @@ mod tests {
 
         let mut reader = Cursor::new(bytes);
         let header = FileHeader::read_from(&mut reader)?;
-        assert_eq!(reader.seek(SeekFrom::Current(0))?, FIRST_BLOCK_OFFSET as u64);
+        assert_eq!(reader.stream_position()?, FIRST_BLOCK_OFFSET as u64);
 
         assert_eq!(header.magic, HPS_MAGIC);
         assert_eq!(header.sample_rate, 44100);
@@ -424,7 +424,7 @@ mod tests {
 
         let mut reader = Cursor::new(bytes);
         let header = BlockHeader::read_from(&mut reader)?;
-        assert_eq!(reader.seek(SeekFrom::Current(0))?, 0x20);
+        assert_eq!(reader.stream_position()?, 0x20);
 
         assert_eq!(header.size, 1);
         assert_eq!(header.end_address, 2);
@@ -468,7 +468,7 @@ mod tests {
 
         let mut reader = Cursor::new(bytes);
         let header = BlockHeader::read_from(&mut reader)?;
-        assert_eq!(reader.seek(SeekFrom::Current(0))?, 0x40);
+        assert_eq!(reader.stream_position()?, 0x40);
 
         assert_eq!(header.size, 1);
         assert_eq!(header.end_address, 2);

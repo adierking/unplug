@@ -47,7 +47,7 @@ impl<W: Write + Seek> RiffWriter<W> {
     /// Opens a new chunk.
     fn open_chunk(&mut self, id: u32) -> Result<()> {
         // Save the offset of this header so we can go back and write the size in
-        let offset = self.writer.seek(SeekFrom::Current(0))?;
+        let offset = self.writer.stream_position()?;
         self.open_chunks.push((offset, id));
 
         // Write a header with the size set to 0 for now
@@ -61,7 +61,7 @@ impl<W: Write + Seek> RiffWriter<W> {
         let (offset, actual_id) = self.open_chunks.pop().unwrap();
         assert_eq!(id, actual_id);
 
-        let end_offset = self.writer.seek(SeekFrom::Current(0))?;
+        let end_offset = self.writer.stream_position()?;
         let size = (end_offset - offset - 8) as u32;
 
         // Replace the filler chunk header we originally wrote
@@ -368,7 +368,7 @@ mod tests {
         let mut cursor = Cursor::new(vec![]);
         WavWriter::new(samples).write_to(&mut cursor)?;
 
-        cursor.seek(SeekFrom::Start(0))?;
+        cursor.rewind()?;
         let wav = WavReader::new(cursor, "test")?;
         let actual = wav.cues().collect::<Vec<_>>();
         assert_eq!(actual.len(), 3);

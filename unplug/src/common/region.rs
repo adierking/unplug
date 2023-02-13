@@ -134,11 +134,12 @@ mod tests {
         let cursor = Cursor::new(vec![0u8; 5]);
         let mut region = Region::new(cursor, 1, 3);
 
-        assert_eq!(region.seek(SeekFrom::Start(0))?, 0);
+        region.rewind()?;
+        assert_eq!(region.stream_position()?, 0);
         assert_eq!(region.seek(SeekFrom::Start(3))?, 3);
         assert_eq!(region.seek(SeekFrom::Start(4))?, 4);
         assert!(region.seek(SeekFrom::Start(std::u64::MAX)).is_err());
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 4);
+        assert_eq!(region.stream_position()?, 4);
         Ok(())
     }
 
@@ -147,7 +148,7 @@ mod tests {
         let cursor = Cursor::new(vec![0u8; 5]);
         let mut region = Region::new(cursor, 1, 3);
 
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 0);
+        assert_eq!(region.stream_position()?, 0);
         assert_eq!(region.seek(SeekFrom::Current(1))?, 1);
         assert_eq!(region.seek(SeekFrom::Current(2))?, 3);
         assert_eq!(region.seek(SeekFrom::Current(1))?, 4);
@@ -167,7 +168,7 @@ mod tests {
         assert_eq!(region.seek(SeekFrom::End(-1))?, 2);
         assert_eq!(region.seek(SeekFrom::End(-3))?, 0);
         assert!(region.seek(SeekFrom::End(-4)).is_err());
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 0);
+        assert_eq!(region.stream_position()?, 0);
         Ok(())
     }
 
@@ -179,19 +180,19 @@ mod tests {
 
         assert_eq!(region.read(&mut buf)?, 1);
         assert_eq!(buf[0], 1u8);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 1);
+        assert_eq!(region.stream_position()?, 1);
 
         assert_eq!(region.read(&mut buf)?, 1);
         assert_eq!(buf[0], 2u8);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 2);
+        assert_eq!(region.stream_position()?, 2);
 
         assert_eq!(region.read(&mut buf)?, 1);
         assert_eq!(buf[0], 3u8);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         assert_eq!(region.read(&mut buf)?, 0);
         assert_eq!(buf[0], 3u8);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         Ok(())
     }
@@ -204,11 +205,11 @@ mod tests {
 
         assert_eq!(region.read(&mut buf)?, 3);
         assert_eq!(&buf[..3], [1u8, 2u8, 3u8]);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         assert_eq!(region.read(&mut buf)?, 0);
         assert_eq!(&buf[..3], [1u8, 2u8, 3u8]);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
         Ok(())
     }
 
@@ -221,7 +222,7 @@ mod tests {
         assert_eq!(region.seek(SeekFrom::Start(1))?, 1);
         assert_eq!(region.read(&mut buf)?, 2);
         assert_eq!(&buf[..2], [2u8, 3u8]);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
         Ok(())
     }
 
@@ -231,16 +232,16 @@ mod tests {
         let mut region = Region::new(cursor, 1, 3);
 
         assert_eq!(region.write(&[1u8])?, 1);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 1);
+        assert_eq!(region.stream_position()?, 1);
 
         assert_eq!(region.write(&[2u8])?, 1);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 2);
+        assert_eq!(region.stream_position()?, 2);
 
         assert_eq!(region.write(&[3u8])?, 1);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         assert_eq!(region.write(&[3u8])?, 0);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         let bytes = region.into_inner().into_inner();
         assert_eq!(bytes, [0u8, 1u8, 2u8, 3u8, 0u8]);
@@ -253,10 +254,10 @@ mod tests {
         let mut region = Region::new(cursor, 1, 3);
 
         assert_eq!(region.write(&[1u8, 2u8, 3u8, 4u8, 5u8])?, 3);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         assert_eq!(region.write(&[1u8, 2u8, 3u8, 4u8, 5u8])?, 0);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         let bytes = region.into_inner().into_inner();
         assert_eq!(bytes, [0u8, 1u8, 2u8, 3u8, 0u8]);
@@ -270,7 +271,7 @@ mod tests {
 
         assert_eq!(region.seek(SeekFrom::Start(1))?, 1);
         assert_eq!(region.write(&[1u8, 2u8, 3u8, 4u8, 5u8])?, 2);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
 
         let bytes = region.into_inner().into_inner();
         assert_eq!(bytes, [0u8, 0u8, 1u8, 2u8, 0u8]);
@@ -287,7 +288,7 @@ mod tests {
         assert_eq!(region.seek(SeekFrom::End(0))?, 0);
 
         assert_eq!(region.write(&[1u8, 2u8, 3u8])?, 3);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 3);
+        assert_eq!(region.stream_position()?, 3);
         assert_eq!(region.len(), 3);
         assert_eq!(region.seek(SeekFrom::End(0))?, 3);
 
@@ -297,11 +298,11 @@ mod tests {
         assert_eq!(region.seek(SeekFrom::End(0))?, 3);
 
         assert_eq!(region.write(&[4u8, 5u8, 6u8])?, 1);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 4);
+        assert_eq!(region.stream_position()?, 4);
         assert_eq!(region.len(), 4);
 
         assert_eq!(region.write(&[4u8, 5u8, 6u8])?, 0);
-        assert_eq!(region.seek(SeekFrom::Current(0))?, 4);
+        assert_eq!(region.stream_position()?, 4);
         assert_eq!(region.len(), 4);
 
         let bytes = region.into_inner().into_inner();

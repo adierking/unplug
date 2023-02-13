@@ -111,14 +111,14 @@ impl<W: Write + Seek> WritePointer for BlockWriter<W> {
             // We can just directly write header offsets because they don't have blocks
             self.writer.write_u32::<LE>(ptr.offset().unwrap())
         } else {
-            let base_offset = self.writer.seek(SeekFrom::Current(0))?.try_into().unwrap();
+            let base_offset = self.writer.stream_position()?.try_into().unwrap();
             self.fixups.push((base_offset, Fixup::BlockOffset(ptr)));
             self.write_placeholder()
         }
     }
 
     fn write_rel_offset(&mut self, offset: i32) -> io::Result<()> {
-        let base_offset = self.writer.seek(SeekFrom::Current(0))?.try_into().unwrap();
+        let base_offset = self.writer.stream_position()?.try_into().unwrap();
         self.fixups.push((base_offset, Fixup::RelOffset(offset)));
         self.write_placeholder()
     }
@@ -148,7 +148,7 @@ impl Blob {
 
     /// Begins a new block within the blob.
     fn begin(&mut self, block: BlockId) {
-        let offset = self.writer.seek(SeekFrom::Current(0)).unwrap().try_into().unwrap();
+        let offset = self.writer.stream_position().unwrap().try_into().unwrap();
         self.block_offsets.push((block, offset));
     }
 }
@@ -256,7 +256,7 @@ impl<'a> ScriptWriter<'a> {
         let mut writer = BlockWriter { writer, fixups };
         let offsets = self.write_blobs(&mut writer)?;
 
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
+        let end_offset = writer.stream_position()?;
         writer.fix_offsets(|ptr| {
             let block = match self.script.resolve_pointer(ptr) {
                 Ok(id) => id,
@@ -292,7 +292,7 @@ impl<'a> ScriptWriter<'a> {
         writer: &mut BlockWriter<W>,
     ) -> Result<BlockOffsetMap> {
         let mut offsets = BlockOffsetMap::new(self.script.len());
-        let mut base_offset = u32::try_from(writer.seek(SeekFrom::Current(0))?).unwrap();
+        let mut base_offset = u32::try_from(writer.stream_position()?).unwrap();
         for blob in &self.blobs {
             // Merge in block offsets
             for &(block, offset) in &blob.block_offsets {

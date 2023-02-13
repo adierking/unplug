@@ -12,7 +12,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Cursor, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Cursor, Seek};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
@@ -524,7 +524,7 @@ fn import_music<T: ReadWriteSeek>(
     progress.finish_using_style();
 
     info!("Updating game files");
-    writer.seek(SeekFrom::Start(0))?;
+    writer.rewind()?;
     ctx.begin_update().write_file(&file, writer).commit()?;
     Ok(())
 }
@@ -555,7 +555,7 @@ fn import_sfx<T: ReadWriteSeek>(
     bank.write_to(&mut writer)?;
 
     info!("Updating game files");
-    writer.seek(SeekFrom::Start(0))?;
+    writer.rewind()?;
     ctx.begin_update().write_file(&file, writer).commit()?;
     Ok(())
 }

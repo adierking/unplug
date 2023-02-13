@@ -104,14 +104,14 @@ where
     let mut cursor = Cursor::new(bytes);
     val.write_to(&mut cursor).unwrap();
 
-    let offset = cursor.seek(SeekFrom::Current(0)).unwrap();
+    let offset = cursor.stream_position().unwrap();
     let end_offset = cursor.seek(SeekFrom::End(0)).unwrap();
     assert_eq!(offset, end_offset);
 
-    cursor.seek(SeekFrom::Start(0)).unwrap();
+    cursor.rewind().unwrap();
     let val = read(&mut cursor);
 
-    let offset = cursor.seek(SeekFrom::Current(0)).unwrap();
+    let offset = cursor.stream_position().unwrap();
     assert_eq!(offset, end_offset);
     val
 }
@@ -128,15 +128,15 @@ where
     let mut ser = BinSerializer::new(&mut cursor);
     val.serialize(&mut ser).unwrap();
 
-    let offset = cursor.seek(SeekFrom::Current(0)).unwrap();
+    let offset = cursor.stream_position().unwrap();
     let end_offset = cursor.seek(SeekFrom::End(0)).unwrap();
     assert_eq!(offset, end_offset);
 
-    cursor.seek(SeekFrom::Start(0)).unwrap();
+    cursor.rewind().unwrap();
     let mut de = BinDeserializer::new(&mut cursor);
     let val = T::deserialize(&mut de).unwrap();
 
-    let offset = cursor.seek(SeekFrom::Current(0)).unwrap();
+    let offset = cursor.stream_position().unwrap();
     assert_eq!(offset, end_offset);
     val
 }
@@ -152,7 +152,7 @@ impl WritePointer for Cursor<Vec<u8>> {
     }
 
     fn write_rel_offset(&mut self, offset: i32) -> io::Result<()> {
-        let base_offset = u32::try_from(self.seek(SeekFrom::Current(0))?).unwrap();
+        let base_offset = u32::try_from(self.stream_position()?).unwrap();
         self.write_u32::<LE>(base_offset.wrapping_add(offset as u32))
     }
 }

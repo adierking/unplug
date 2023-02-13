@@ -438,7 +438,7 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for SfxBank {
 
     #[instrument(level = "trace", skip_all)]
     fn write_to(&self, writer: &mut W) -> Result<()> {
-        assert_eq!(writer.seek(SeekFrom::Current(0))?, 0);
+        assert_eq!(writer.stream_position()?, 0);
 
         // Write a placeholder header which we can fill in with the sizes later
         let mut header = FileHeader {
@@ -462,7 +462,7 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for SfxBank {
             let header = SampleHeader { rate: sample.rate, channels };
             header.write_to(writer)?;
         }
-        header.index_size = (writer.seek(SeekFrom::Current(0))? - HEADER_SIZE) as u32;
+        header.index_size = (writer.stream_position()? - HEADER_SIZE) as u32;
         header.data_size = align(data_offset, DATA_ALIGN) as u32;
         pad(&mut *writer, DATA_ALIGN, 0)?;
 
@@ -475,8 +475,8 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for SfxBank {
         // The data section size is aligned in official SSM files
         pad(&mut *writer, DATA_ALIGN, 0)?;
 
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
-        writer.seek(SeekFrom::Start(0))?;
+        let end_offset = writer.stream_position()?;
+        writer.rewind()?;
         header.write_to(writer)?;
         writer.seek(SeekFrom::Start(end_offset))?;
         Ok(())

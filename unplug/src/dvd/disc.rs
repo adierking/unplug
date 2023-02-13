@@ -171,7 +171,7 @@ impl<S: ReadSeek> DiscStream<S> {
     /// `DiscStream` does its own buffering, so `stream` should not be buffered.
     pub fn open(stream: S) -> Result<Self> {
         let mut stream = BufReader::new(stream);
-        stream.seek(SeekFrom::Start(0))?;
+        stream.rewind()?;
         let header = DiscHeader::read_from(&mut stream)?;
         debug!("Found FST at {:#x} (size = {:#x})", header.fst_offset, header.fst_size);
         stream.seek(SeekFrom::Start(header.fst_offset as u64))?;
@@ -412,7 +412,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
 
     /// Replaces file `id` with the contents of `reader`.
     pub fn replace_file(&mut self, id: EntryId, mut reader: (impl Read + Seek)) -> Result<()> {
-        let start_pos = reader.seek(SeekFrom::Current(0))?;
+        let start_pos = reader.stream_position()?;
         let end_pos = reader.seek(SeekFrom::End(0))?;
         reader.seek(SeekFrom::Start(start_pos))?;
 
@@ -459,7 +459,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
         if disk_size != self.header.fst_size {
             let mut new_header = self.header.clone();
             new_header.fst_size = disk_size;
-            self.stream.seek(SeekFrom::Start(0))?;
+            self.stream.rewind()?;
             let mut buf = BufWriter::new(&mut self.stream);
             new_header.write_to(&mut buf)?;
             buf.flush()?;

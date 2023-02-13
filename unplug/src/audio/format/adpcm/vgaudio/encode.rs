@@ -113,7 +113,7 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
                 ((distance as f32 / scale as f32) as f64 - 0.4999999) as i32
             };
 
-            let clamped = unclamped.max(-8).min(7);
+            let clamped = unclamped.clamp(-8, 7);
             if clamped != unclamped {
                 let overflow = (unclamped - clamped).abs();
                 max_overflow = max_overflow.max(overflow);

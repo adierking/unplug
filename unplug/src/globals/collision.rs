@@ -148,7 +148,7 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for ObjectColliders {
         assert_eq!(self.objects.len(), Object::MAIN_COUNT);
 
         // Write an empty offset table because it has to come first
-        let table_offset = writer.seek(SeekFrom::Current(0))?;
+        let table_offset = writer.stream_position()?;
         let mut offsets = vec![0u32; Object::MAIN_COUNT];
         for &offset in &offsets {
             writer.write_u32::<LE>(offset)?;
@@ -159,12 +159,12 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for ObjectColliders {
             if colliders.is_empty() {
                 continue;
             }
-            offsets[i] = writer.seek(SeekFrom::Current(0))? as u32;
+            offsets[i] = writer.stream_position()? as u32;
             NonNoneList(colliders.into()).write_to(writer)?;
         }
 
         // Go back and fill in the offset table
-        let end_offset = writer.seek(SeekFrom::Current(0))?;
+        let end_offset = writer.stream_position()?;
         writer.seek(SeekFrom::Start(table_offset))?;
         for &offset in &offsets {
             writer.write_u32::<LE>(offset)?;

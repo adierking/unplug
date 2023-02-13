@@ -1,6 +1,6 @@
 use anyhow::Result;
 use log::info;
-use std::io::{BufReader, Cursor, Seek, SeekFrom};
+use std::io::{BufReader, Cursor, Seek};
 use unplug::common::WriteTo;
 use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, OpenFile};
@@ -37,7 +37,7 @@ fn test_read_and_write_shop() -> Result<()> {
     original_stage.write_to(&mut cursor)?;
 
     info!("Reading the rebuilt stage");
-    cursor.seek(SeekFrom::Start(0))?;
+    cursor.rewind()?;
     let rebuilt_stage = Stage::read_from(&mut cursor, &libs)?;
     let rebuilt_shop = Shop::parse(&rebuilt_stage.script)?;
 
