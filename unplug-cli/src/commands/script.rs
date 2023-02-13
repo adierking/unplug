@@ -226,18 +226,25 @@ where
     }
 }
 
-/// Checks the output of a compilation stage and reports any necessary diagnostics. If it succeeds,
-/// the result value will be returned.
-fn check_output<'f, F, T>(file: &'f F, mut output: CompileOutput<T>) -> Result<T>
+/// Checks the output of a compilation stage and pools diagnostics into a single list. If a result is available,
+/// the result value will be returned, otherwise this will report all diagnostics and fail.
+fn check_output<'f, F, T>(
+    file: &'f F,
+    diagnostics: &mut Vec<Diagnostic>,
+    mut output: CompileOutput<T>,
+) -> Result<T>
 where
     F: Files<'f, FileId = ()>,
 {
     if !output.diagnostics.is_empty() {
-        report_diagnostics(file, &mut output.diagnostics);
+        diagnostics.append(&mut output.diagnostics);
     }
-    output.result.ok_or_else(|| match output.diagnostics.len() {
-        1 => anyhow!("1 error found"),
-        n => anyhow!("{n} errors found"),
+    output.result.ok_or_else(|| {
+        report_diagnostics(file, diagnostics);
+        match diagnostics.len() {
+            1 => anyhow!("1 error found"),
+            n => anyhow!("{n} errors found"),
+        }
     })
 }
 
@@ -251,11 +258,12 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
     let file = SimpleFile::new(name, &source);
     let lexer = Lexer::new(&source);
     let parser = Parser::new(lexer);
-    let ast = check_output(&file, parser.parse())?;
+    let mut diagnostics = vec![];
+    let ast = check_output(&file, &mut diagnostics, parser.parse())?;
 
     info!("Assembling script");
-    let program = check_output(&file, ProgramAssembler::new(&ast).assemble())?;
-    let compiled = asm::compile(&program)?;
+    let program = check_output(&file, &mut diagnostics, ProgramAssembler::new(&ast).assemble())?;
+    let compiled = check_output(&file, &mut diagnostics, asm::compile(&program))?;
     let update = match &compiled.target {
         Some(Target::Globals) => {
             let libs = compiled.into_libs()?;

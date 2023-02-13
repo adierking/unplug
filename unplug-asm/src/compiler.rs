@@ -1,12 +1,17 @@
+use crate::diagnostics::{CompileOutput, Diagnostic};
 use crate::opcodes::{AsmMsgOp, NamedOpcode};
 use crate::program::{
     Block, BlockContent, CastOperand, EntryPoint, Located, Operand, Operation, Program, Target,
 };
+use crate::span::{Span, Spanned};
 use crate::{Error, Result};
 use smallvec::SmallVec;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::rc::Rc;
+use std::result::Result as StdResult;
 use unplug::common::Text;
 use unplug::event::analysis::SubroutineEffectsMap;
 use unplug::event::block::Block as ScriptBlock;
@@ -19,6 +24,8 @@ use unplug::event::{BlockId, CodeBlock, Command, DataBlock, Pointer};
 use unplug::globals::{Libs, NUM_LIBS};
 use unplug::stage::Stage;
 
+type SharedDiagnostics = Rc<RefCell<Vec<Diagnostic>>>;
+
 /// Differentiates cursor types and stores the underlying opcode.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum CursorKind {
@@ -28,15 +35,6 @@ enum CursorKind {
 }
 
 impl CursorKind {
-    /// Returns the opcode name.
-    fn name(self) -> &'static str {
-        match self {
-            Self::Command(cmd) => cmd.name(),
-            Self::Expr(expr) => expr.name(),
-            Self::MsgCommand(msg) => msg.name(),
-        }
-    }
-
     /// Returns true if the operands should be read in reversed order.
     fn has_reversed_operands(self) -> bool {
         // TODO: Put this somewhere common instead of duplicating this logic in writer.rs
@@ -90,27 +88,40 @@ impl From<AsmMsgOp> for CursorKind {
 
 /// A trait for matching opcode types against a `CursorKind`.
 trait MatchCursorKind: NamedOpcode {
-    fn match_cursor(kind: CursorKind) -> Result<Self>;
+    fn match_cursor(kind: CursorKind) -> Option<Self>;
+    fn error_diagnostic(span: Span) -> Diagnostic;
 }
 
 impl MatchCursorKind for CmdOp {
-    fn match_cursor(kind: CursorKind) -> Result<Self> {
-        let CursorKind::Command(cmd) = kind else { return Err(Error::ExpectedCommand) };
-        Ok(cmd)
+    fn match_cursor(kind: CursorKind) -> Option<Self> {
+        let CursorKind::Command(cmd) = kind else { return None };
+        Some(cmd)
+    }
+
+    fn error_diagnostic(span: Span) -> Diagnostic {
+        Diagnostic::expected_command(span)
     }
 }
 
 impl MatchCursorKind for ExprOp {
-    fn match_cursor(kind: CursorKind) -> Result<Self> {
-        let CursorKind::Expr(expr) = kind else { return Err(Error::ExpectedExpr) };
-        Ok(expr)
+    fn match_cursor(kind: CursorKind) -> Option<Self> {
+        let CursorKind::Expr(expr) = kind else { return None };
+        Some(expr)
+    }
+
+    fn error_diagnostic(span: Span) -> Diagnostic {
+        Diagnostic::expected_expr(span)
     }
 }
 
 impl MatchCursorKind for AsmMsgOp {
-    fn match_cursor(kind: CursorKind) -> Result<Self> {
-        let CursorKind::MsgCommand(msg) = kind else { return Err(Error::ExpectedMessage) };
-        Ok(msg)
+    fn match_cursor(kind: CursorKind) -> Option<Self> {
+        let CursorKind::MsgCommand(msg) = kind else { return None };
+        Some(msg)
+    }
+
+    fn error_diagnostic(span: Span) -> Diagnostic {
+        Diagnostic::expected_msg_command(span)
     }
 }
 
@@ -154,11 +165,12 @@ struct OperandCursor<'a> {
     position: usize,
     /// True if the operands should be read in reversed order.
     reversed: bool,
+    diagnostics: SharedDiagnostics,
 }
 
 impl<'a> OperandCursor<'a> {
     /// Creates a cursor over a borrowed operation.
-    fn with_borrowed<T>(op: &'a Operation<T>) -> Self
+    fn with_borrowed<T>(op: &'a Operation<T>, diagnostics: SharedDiagnostics) -> Self
     where
         T: NamedOpcode + Into<CursorKind>,
     {
@@ -168,11 +180,12 @@ impl<'a> OperandCursor<'a> {
             operands: CursorData::Borrowed(&op.operands),
             position: 0,
             reversed: kind.has_reversed_operands(),
+            diagnostics,
         }
     }
 
     /// Creates a cursor which owns its operation.
-    fn with_owned<T>(op: Operation<T>) -> Self
+    fn with_owned<T>(op: Operation<T>, diagnostics: SharedDiagnostics) -> Self
     where
         T: NamedOpcode + Into<CursorKind>,
     {
@@ -182,12 +195,18 @@ impl<'a> OperandCursor<'a> {
             operands: CursorData::Owned(op.operands),
             position: 0,
             reversed: kind.has_reversed_operands(),
+            diagnostics,
         }
     }
 
-    /// If the cursor is for an opcode of type `T`, returns it, otherwise returns an error.
-    fn opcode<T: MatchCursorKind>(&self) -> Result<T> {
+    /// Returns the cursor's opcode if it is of type `T`.
+    fn opcode<T: MatchCursorKind>(&self) -> Option<T> {
         T::match_cursor(*self.kind)
+    }
+
+    /// Returns true if the cursor's opcode is of type `T`.
+    fn has_opcode<T: MatchCursorKind>(&self) -> bool {
+        self.opcode::<T>().is_some()
     }
 
     /// Returns true if the cursor has another operand.
@@ -196,7 +215,7 @@ impl<'a> OperandCursor<'a> {
     }
 
     /// Returns the next operand (if any) and advances the cursor.
-    fn next(&mut self) -> Option<&Operand> {
+    fn next(&mut self) -> Option<&Located<Operand>> {
         if let Some(index) = self.index() {
             let operand = &self.operands[index];
             self.position += 1;
@@ -219,30 +238,52 @@ impl<'a> OperandCursor<'a> {
     }
 
     /// Descends into an expression, returning the opcode and subcursor.
-    fn enter_expr(&mut self) -> Result<(ExprOp, Self)> {
-        let Some(index) = self.index() else { return Err(Error::ExpectedExpr) };
-        if !matches!(*self.kind, CursorKind::Command(_) | CursorKind::Expr(_)) {
-            return Err(Error::ExpectedExpr);
+    fn enter_expr(&mut self) -> (ExprOp, Self) {
+        match self.enter_expr_impl() {
+            Ok((op, cursor)) => (op, cursor),
+            Err(()) => {
+                // Synthesize an expression which evaluates to 0
+                let opcode = ExprOp::Imm32;
+                let op =
+                    Operation::with_operands(Located::new(opcode), [Located::new(Operand::I32(0))]);
+                (opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
+            }
         }
-        let operands = self.operands.ensure_borrowed().ok_or(Error::ExpectedExpr)?;
+    }
+
+    fn enter_expr_impl(&mut self) -> StdResult<(ExprOp, Self), ()> {
+        let Some(index) = self.index() else {
+            self.report(Diagnostic::not_enough_operands(self.kind.span()));
+            return Err(());
+        };
+        if !matches!(*self.kind, CursorKind::Command(_) | CursorKind::Expr(_)) {
+            panic!("this operation does not support expressions");
+        }
+        let operands = self.operands.ensure_borrowed().expect("operands are not borrowed");
         let operand = &operands[index];
         let (opcode, cursor) = match &**operand {
             Operand::I8(_) | Operand::U8(_) | Operand::I16(_) | Operand::U16(_) => {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm16), [operand.clone()]);
-                (op.opcode, Self::with_owned(op))
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
             Operand::I32(_) | Operand::U32(_) | Operand::Type(_) => {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm32), [operand.clone()]);
-                (op.opcode, Self::with_owned(op))
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
             Operand::Label(_) | Operand::ElseLabel(_) | Operand::Offset(_) => {
                 let op =
                     Operation::with_operands(Located::new(ExprOp::AddressOf), [operand.clone()]);
-                (op.opcode, Self::with_owned(op))
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
-            Operand::Expr(expr) => (expr.opcode, Self::with_borrowed(expr)),
-            Operand::Text(_) | Operand::MsgCommand(_) | Operand::Error => {
-                return Err(Error::ExpectedExpr)
+            Operand::Expr(expr) => {
+                (expr.opcode, Self::with_borrowed(expr, Rc::clone(&self.diagnostics)))
+            }
+            Operand::Text(_) | Operand::MsgCommand(_) => {
+                self.report(Diagnostic::expected_expr(operand.span()));
+                return Err(());
+            }
+            Operand::Error => {
+                return Err(());
             }
         };
         self.position += 1;
@@ -250,38 +291,82 @@ impl<'a> OperandCursor<'a> {
     }
 
     /// Descends into a message command, returning the opcode and subcursor.
-    fn enter_msg_command(&mut self) -> Result<(AsmMsgOp, Self)> {
-        let Some(index) = self.index() else { return Err(Error::ExpectedExpr) };
-        if !matches!(*self.kind, CursorKind::Command(_)) {
-            return Err(Error::ExpectedMessage);
+    fn enter_msg_command(&mut self) -> (AsmMsgOp, Self) {
+        match self.enter_msg_command_impl() {
+            Ok((op, cursor)) => (op, cursor),
+            Err(()) => {
+                // Synthesize an empty string
+                let opcode = AsmMsgOp::Text;
+                let op = Operation::with_operands(
+                    Located::new(opcode),
+                    [Located::new(Operand::Text(Text::new()))],
+                );
+                (opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
+            }
         }
-        let operands = self.operands.ensure_borrowed().ok_or(Error::ExpectedMessage)?;
+    }
+
+    fn enter_msg_command_impl(&mut self) -> StdResult<(AsmMsgOp, Self), ()> {
+        let Some(index) = self.index() else {
+            self.report(Diagnostic::not_enough_operands(self.kind.span()));
+            return Err(());
+        };
+        if !matches!(*self.kind, CursorKind::Command(_)) {
+            panic!("this operation does not support message commands");
+        }
+        let operands = self.operands.ensure_borrowed().expect("operands are not borrowed");
         let operand = &operands[index];
         let (opcode, cursor) = match &**operand {
             Operand::Text(_) => {
                 let op = Operation::with_operands(Located::new(AsmMsgOp::Text), [operand.clone()]);
-                (op.opcode, Self::with_owned(op))
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
-            Operand::MsgCommand(op) => (op.opcode, Self::with_borrowed(op)),
-            _ => return Err(Error::ExpectedMessage),
+            Operand::MsgCommand(op) => {
+                (op.opcode, Self::with_borrowed(op, Rc::clone(&self.diagnostics)))
+            }
+            Operand::Error => {
+                return Err(());
+            }
+            Operand::I8(_)
+            | Operand::U8(_)
+            | Operand::I16(_)
+            | Operand::U16(_)
+            | Operand::I32(_)
+            | Operand::U32(_)
+            | Operand::Label(_)
+            | Operand::ElseLabel(_)
+            | Operand::Offset(_)
+            | Operand::Type(_)
+            | Operand::Expr(_) => {
+                self.report(Diagnostic::expected_msg_command(operand.span()));
+                return Err(());
+            }
         };
         self.position += 1;
         Ok((*opcode, cursor))
     }
 
-    /// Consumes the cursor, also validating that the opcode matches `T` and all operands were
-    /// consumed.
-    fn leave<T: MatchCursorKind>(self) -> Result<()> {
-        T::match_cursor(*self.kind)?;
-        if self.has_next() {
-            Err(Error::TooManyOperands {
-                name: self.kind.name(),
-                expected: self.position,
-                actual: self.operands.len(),
-            })
-        } else {
-            Ok(())
+    /// Consumes the cursor, emitting diagnostics if the opcode does not match `T` or not all
+    /// operands were consumed.
+    fn leave<T: MatchCursorKind>(self) {
+        if !self.has_opcode::<T>() {
+            self.report(T::error_diagnostic(self.kind.span()));
         }
+        if self.has_next() {
+            self.report(Diagnostic::too_many_operands(self.kind.span()));
+        }
+    }
+
+    /// Reports a diagnostic to the shared diagnostic list.
+    fn report(&self, diagnostic: Diagnostic) {
+        self.diagnostics.borrow_mut().push(diagnostic)
+    }
+}
+
+impl Spanned for OperandCursor<'_> {
+    fn span(&self) -> Span {
+        let operands = self.operands.iter().fold(Span::EMPTY, |s, o| s.join(o.span()));
+        self.kind.span().join(operands)
     }
 }
 
@@ -323,11 +408,20 @@ struct AsmDeserializer<'a> {
     text: Option<TextCursor>,
     /// Cursors for elements higher-up in the tree.
     stack: Vec<OperandCursor<'a>>,
+    diagnostics: SharedDiagnostics,
 }
 
 impl<'a> AsmDeserializer<'a> {
-    fn new(program: &'a Program, block: &'a Block) -> Self {
-        Self { program, block, command_index: 0, cursor: None, text: None, stack: vec![] }
+    fn new(program: &'a Program, block: &'a Block, diagnostics: SharedDiagnostics) -> Self {
+        Self {
+            program,
+            block,
+            command_index: 0,
+            cursor: None,
+            text: None,
+            stack: vec![],
+            diagnostics,
+        }
     }
 
     fn has_command(&self) -> bool {
@@ -338,106 +432,134 @@ impl<'a> AsmDeserializer<'a> {
         }
     }
 
-    fn next_operand(&mut self) -> Option<&Operand> {
+    fn next_operand(&mut self) -> Option<&Located<Operand>> {
         self.cursor.as_mut().and_then(|c| c.next())
     }
 
-    fn deserialize_array<T: CastOperand>(&mut self, len: usize) -> SerResult<Vec<T>> {
-        let mut values = vec![];
-        for _ in 0..len {
-            let operand = self.next_operand().ok_or(Error::ExpectedInteger)?;
-            values.push(operand.cast()?);
+    fn next_integer<I: CastOperand + Default>(&mut self) -> I {
+        let Some(operand) = self.next_operand() else {
+            self.report(Diagnostic::expected_integer(self.cursor_span().at_end(0)));
+            return I::default();
+        };
+        if let Operand::Error = **operand {
+            return I::default();
         }
-        Ok(values)
+        let span = operand.span();
+        match operand.cast() {
+            Ok(i) => i,
+            Err(Error::ExpectedInteger) => {
+                self.report(Diagnostic::expected_integer(span));
+                I::default()
+            }
+            Err(_) => {
+                self.report(Diagnostic::integer_conversion(span, I::BITS));
+                I::default()
+            }
+        }
+    }
+
+    fn cursor_span(&self) -> Span {
+        self.cursor.as_ref().expect("missing cursor").span()
+    }
+
+    /// Reports a diagnostic to the shared diagnostic list.
+    fn report(&self, diagnostic: Diagnostic) {
+        self.diagnostics.borrow_mut().push(diagnostic)
     }
 }
 
 impl EventDeserializer for AsmDeserializer<'_> {
     fn deserialize_i8(&mut self) -> SerResult<i8> {
-        Ok(self.next_operand().ok_or(Error::ExpectedInteger)?.cast()?)
+        Ok(self.next_integer())
     }
 
     fn deserialize_u8(&mut self) -> SerResult<u8> {
-        Ok(self.next_operand().ok_or(Error::ExpectedInteger)?.cast()?)
+        Ok(self.next_integer())
     }
 
     fn deserialize_i16(&mut self) -> SerResult<i16> {
-        Ok(self.next_operand().ok_or(Error::ExpectedInteger)?.cast()?)
+        Ok(self.next_integer())
     }
 
     fn deserialize_u16(&mut self) -> SerResult<u16> {
-        Ok(self.next_operand().ok_or(Error::ExpectedInteger)?.cast()?)
+        Ok(self.next_integer())
     }
 
     fn deserialize_i32(&mut self) -> SerResult<i32> {
-        Ok(self.next_operand().ok_or(Error::ExpectedInteger)?.cast()?)
+        Ok(self.next_integer())
     }
 
     fn deserialize_u32(&mut self) -> SerResult<u32> {
-        Ok(self.next_operand().ok_or(Error::ExpectedInteger)?.cast()?)
+        Ok(self.next_integer())
     }
 
     fn deserialize_pointer(&mut self) -> SerResult<Pointer> {
-        match *self.next_operand().ok_or(SerError::EndOfData)? {
+        let Some(operand) = self.next_operand() else {
+            self.report(Diagnostic::expected_label_ref(self.cursor_span().at_end(0)));
+            return Ok(Pointer::Offset(0));
+        };
+        let span = operand.span();
+        match **operand {
             Operand::Label(label) | Operand::ElseLabel(label) => {
                 // TODO: Only allow else labels in conditionals
                 Ok(Pointer::Block(self.program.labels.get(label).block))
             }
             Operand::Offset(o) => Ok(Pointer::Offset(o)),
-            _ => Err(Error::ExpectedLabel.into()),
+            _ => {
+                self.report(Diagnostic::expected_label_ref(span));
+                Ok(Pointer::Offset(0))
+            }
         }
     }
 
-    fn deserialize_i8_array(&mut self, len: usize) -> SerResult<Vec<i8>> {
-        self.deserialize_array(len)
+    fn deserialize_i8_array(&mut self, _len: usize) -> SerResult<Vec<i8>> {
+        unimplemented!()
     }
 
-    fn deserialize_u8_array(&mut self, len: usize) -> SerResult<Vec<u8>> {
-        self.deserialize_array(len)
+    fn deserialize_u8_array(&mut self, _len: usize) -> SerResult<Vec<u8>> {
+        unimplemented!()
     }
 
-    fn deserialize_i16_array(&mut self, len: usize) -> SerResult<Vec<i16>> {
-        self.deserialize_array(len)
+    fn deserialize_i16_array(&mut self, _len: usize) -> SerResult<Vec<i16>> {
+        unimplemented!()
     }
 
-    fn deserialize_u16_array(&mut self, len: usize) -> SerResult<Vec<u16>> {
-        self.deserialize_array(len)
+    fn deserialize_u16_array(&mut self, _len: usize) -> SerResult<Vec<u16>> {
+        unimplemented!()
     }
 
-    fn deserialize_i32_array(&mut self, len: usize) -> SerResult<Vec<i32>> {
-        self.deserialize_array(len)
+    fn deserialize_i32_array(&mut self, _len: usize) -> SerResult<Vec<i32>> {
+        unimplemented!()
     }
 
-    fn deserialize_u32_array(&mut self, len: usize) -> SerResult<Vec<u32>> {
-        self.deserialize_array(len)
+    fn deserialize_u32_array(&mut self, _len: usize) -> SerResult<Vec<u32>> {
+        unimplemented!()
     }
 
-    fn deserialize_pointer_array(&mut self, max_len: usize) -> SerResult<Vec<Pointer>> {
-        let mut pointers = vec![];
-        for _ in 0..max_len {
-            let pointer = match self.deserialize_pointer() {
-                Ok(p) => p,
-                Err(SerError::EndOfData) => break,
-                Err(e) => return Err(e),
-            };
-            pointers.push(pointer)
-        }
-        Ok(pointers)
+    fn deserialize_pointer_array(&mut self, _max_len: usize) -> SerResult<Vec<Pointer>> {
+        unimplemented!()
     }
 
     fn deserialize_type(&mut self) -> SerResult<TypeOp> {
         let operand = self.next_operand().ok_or(Error::ExpectedInteger)?;
-        match operand {
-            Operand::Type(op) => Ok(*op),
+        match **operand {
+            Operand::Type(op) => Ok(op),
             _ => Ggte::get(operand.cast()?).map_err(SerError::UnrecognizedType),
         }
     }
 
     fn deserialize_text(&mut self) -> SerResult<Text> {
-        match self.next_operand() {
-            Some(Operand::Text(text)) => Ok(text.clone()), // TODO: Avoid this clone?
-            Some(_) => Err(Error::ExpectedText.into()),
-            None => Err(SerError::EndOfData),
+        let Some(operand) = self.next_operand() else {
+            self.report(Diagnostic::expected_string(self.cursor_span().at_end(0)));
+            return Ok(Text::new());
+        };
+        let span = operand.span();
+        match &**operand {
+            Operand::Text(text) => Ok(text.clone()), // TODO: Avoid this clone?
+            _ => {
+                self.report(Diagnostic::expected_string(span));
+                Ok(Text::new())
+            }
         }
     }
 
@@ -446,36 +568,34 @@ impl EventDeserializer for AsmDeserializer<'_> {
     }
 
     fn begin_expr(&mut self) -> SerResult<ExprOp> {
-        let cursor = self.cursor.as_mut().ok_or(Error::ExpectedExpr)?;
-        let (opcode, subcursor) = cursor.enter_expr()?;
+        let cursor = self.cursor.as_mut().expect("missing cursor");
+        let (opcode, subcursor) = cursor.enter_expr();
         self.stack.push(self.cursor.replace(subcursor).unwrap());
         Ok(opcode)
     }
 
     fn end_expr(&mut self) -> SerResult<()> {
-        let cursor = self.cursor.take().ok_or(Error::ExpectedExpr)?;
-        cursor.leave::<ExprOp>()?;
+        self.cursor.take().expect("missing cursor").leave::<ExprOp>();
         self.cursor = self.stack.pop();
         Ok(())
     }
 
     fn begin_command(&mut self) -> SerResult<CmdOp> {
         if self.cursor.is_some() {
-            return Err(Error::ExpectedCommand.into());
+            panic!("already in a command");
         }
         let code = match &self.block.content {
             Some(BlockContent::Code(code)) => code,
-            Some(BlockContent::Data(_)) => return Err(Error::ExpectedCommand.into()),
+            Some(BlockContent::Data(_)) => panic!("not in a code block"),
             _ => return Err(SerError::EndOfData),
         };
         let command = code.get(self.command_index).ok_or(SerError::EndOfData)?;
-        self.cursor = Some(OperandCursor::with_borrowed(command));
+        self.cursor = Some(OperandCursor::with_borrowed(command, Rc::clone(&self.diagnostics)));
         Ok(*command.opcode)
     }
 
     fn end_command(&mut self) -> SerResult<()> {
-        let cursor = self.cursor.take().ok_or_else(|| SerError::from(Error::ExpectedCommand))?;
-        cursor.leave::<CmdOp>()?;
+        self.cursor.take().expect("missing cursor").leave::<CmdOp>();
         self.command_index += 1;
         Ok(())
     }
@@ -485,7 +605,7 @@ impl EventDeserializer for AsmDeserializer<'_> {
     }
 
     fn have_call_arg(&mut self) -> SerResult<bool> {
-        let cursor = self.cursor.as_ref().ok_or(Error::ExpectedCommand)?;
+        let cursor = self.cursor.as_ref().expect("missing cursor");
         Ok(cursor.has_next())
     }
 
@@ -499,22 +619,22 @@ impl EventDeserializer for AsmDeserializer<'_> {
 
     fn deserialize_msg_char(&mut self) -> SerResult<MsgOp> {
         // If we're currently iterating over text, see if there are characters left
-        let mut cursor = self.cursor.as_mut().ok_or(Error::ExpectedMessage)?;
+        let mut cursor = self.cursor.as_mut().expect("missing cursor");
         if let Some(text) = &mut self.text {
             if let Some(b) = text.next() {
                 return Ok(b);
             }
             // For format strings, we have to emit a Format byte at the end
             self.text = None;
-            if cursor.opcode::<AsmMsgOp>()? == AsmMsgOp::Format {
+            if let Some(AsmMsgOp::Format) = cursor.opcode() {
                 return Ok(MsgOp::Format);
             }
         }
 
         // If we're currently in a message command, we should be done with it now
-        if cursor.opcode::<AsmMsgOp>().is_ok() {
-            self.cursor.replace(self.stack.pop().unwrap()).unwrap().leave::<AsmMsgOp>()?;
-            cursor = self.cursor.as_mut().ok_or(Error::ExpectedMessage)?;
+        if cursor.has_opcode::<AsmMsgOp>() {
+            self.cursor.replace(self.stack.pop().unwrap()).unwrap().leave::<AsmMsgOp>();
+            cursor = self.cursor.as_mut().expect("missing cursor");
         }
 
         // Emit an end byte if we're at the end of the message
@@ -523,12 +643,12 @@ impl EventDeserializer for AsmDeserializer<'_> {
         }
 
         // Now enter the next message command
-        let (opcode, mut subcursor) = cursor.enter_msg_command()?;
+        let (opcode, mut subcursor) = cursor.enter_msg_command();
 
         // For strings, make a text cursor
         if let AsmMsgOp::Format | AsmMsgOp::Text = opcode {
             let operand = subcursor.next().ok_or(Error::ExpectedMessage)?;
-            let Operand::Text(text) = operand else { return Err(Error::ExpectedText.into()) };
+            let Operand::Text(text) = &**operand else { return Err(Error::ExpectedText.into()) };
             self.text = Some(TextCursor::new(text.clone()));
         }
         self.stack.push(self.cursor.replace(subcursor).unwrap());
@@ -562,18 +682,22 @@ impl EventDeserializer for AsmDeserializer<'_> {
 
     fn end_msg(&mut self) -> SerResult<()> {
         // End the current message command if there is one
-        let cursor = self.cursor.as_mut().ok_or(Error::ExpectedMessage)?;
-        if cursor.opcode::<AsmMsgOp>().is_ok() {
-            self.cursor.replace(self.stack.pop().unwrap()).unwrap().leave::<AsmMsgOp>()?;
+        let cursor = self.cursor.as_mut().expect("missing cursor");
+        if cursor.has_opcode::<AsmMsgOp>() {
+            self.cursor.replace(self.stack.pop().unwrap()).unwrap().leave::<AsmMsgOp>();
         }
         Ok(())
     }
 }
 
 /// Compiles a code block.
-fn compile_code(program: &Program, block: &Block) -> Result<ScriptBlock> {
+fn compile_code(
+    program: &Program,
+    block: &Block,
+    diagnostics: SharedDiagnostics,
+) -> Result<ScriptBlock> {
     let mut code = CodeBlock::new();
-    let mut deserializer = AsmDeserializer::new(program, block);
+    let mut deserializer = AsmDeserializer::new(program, block, diagnostics);
     while deserializer.has_command() {
         let cmd = Command::deserialize(&mut deserializer)
             .map_err(|e| ScriptError::WriteCommand(e.into()))?;
@@ -686,13 +810,16 @@ fn compile_data(program: &Program, data: &[Located<Operand>]) -> Result<ScriptBl
 }
 
 /// Compiles a program into an event script.
-pub fn compile(program: &Program) -> Result<CompiledScript> {
+pub fn compile(program: &Program) -> CompileOutput<CompiledScript> {
     // Compile each block individually
     let mut script_blocks = vec![];
+    let diagnostics = Rc::new(RefCell::new(vec![]));
     for block in &program.blocks {
         let script_block = match &block.content {
-            Some(BlockContent::Code(_)) | None => compile_code(program, block)?,
-            Some(BlockContent::Data(data)) => compile_data(program, data)?,
+            Some(BlockContent::Code(_)) | None => {
+                compile_code(program, block, Rc::clone(&diagnostics)).unwrap()
+            }
+            Some(BlockContent::Data(data)) => compile_data(program, data).unwrap(),
         };
         script_blocks.push(script_block);
     }
@@ -710,11 +837,19 @@ pub fn compile(program: &Program) -> Result<CompiledScript> {
 
     let layout = ScriptLayout::new(block_offsets, SubroutineEffectsMap::new());
     let script = Script::with_blocks_and_layout(script_blocks, layout);
-    Ok(CompiledScript {
-        script,
-        target: program.target.as_deref().cloned(),
-        entry_points: program.entry_points.iter().map(|(&e, &b)| (e, *b)).collect(),
-    })
+    let diagnostics = Rc::try_unwrap(diagnostics).unwrap().into_inner();
+    if diagnostics.is_empty() {
+        CompileOutput::with_result(
+            CompiledScript {
+                script,
+                target: program.target.as_deref().cloned(),
+                entry_points: program.entry_points.iter().map(|(&e, &b)| (e, *b)).collect(),
+            },
+            vec![],
+        )
+    } else {
+        CompileOutput::err(diagnostics)
+    }
 }
 
 /// Compiled script information.

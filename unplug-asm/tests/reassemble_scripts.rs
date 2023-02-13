@@ -25,7 +25,7 @@ fn assemble(source: &str) -> Result<CompiledScript> {
     let parser = Parser::new(lexer);
     let ast = parser.parse().unwrap();
     let program = ProgramAssembler::new(&ast).assemble().unwrap();
-    Ok(asm::compile(&program)?)
+    Ok(asm::compile(&program).unwrap())
 }
 
 #[test]
