@@ -23,6 +23,13 @@ You can also get bleeding-edge continuous builds
 [here](https://github.com/adierking/unplug/actions), though these are undocumented and not
 guaranteed to work correctly.
 
+### Unplugger
+
+If command-line tools aren't your thing and you want to use Unplug through a GUI, check out
+emistro's [Unplugger](https://github.com/eavpsp/Unplugger)!
+
+![Unplugger stage tools screenshot](docs/images/unplugger.png)
+
 ## Goals
 
 - **Modding**: Build a foundation for editing game assets
