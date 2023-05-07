@@ -11,7 +11,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use unplug::audio::format::pcm::Scalable;
-use unplug::audio::format::{AnyFormat, Cast, Convert, PcmF32Le, PcmFormat, PcmS16Le, PcmU16Le};
+use unplug::audio::format::{
+    AnyFormat, Cast, Convert, PcmF32Le, PcmFormat, PcmS16Le, PcmS32Le, PcmS8, PcmU16Le,
+};
 use unplug::audio::volume::{ScaleAmplitude, Volume};
 use unplug::audio::{Error, ReadSamples, SampleFilter, Samples};
 
@@ -641,16 +643,19 @@ impl PlaybackDevice {
     /// Starts playing `source` and returns the stream that can be used to control it.
     pub fn play(&mut self, source: PlaybackSource) -> PlaybackStream {
         match self.config.sample_format() {
+            cpal::SampleFormat::I8 => self.play_impl::<PcmS8>(source),
             cpal::SampleFormat::I16 => self.play_impl::<PcmS16Le>(source),
             cpal::SampleFormat::U16 => self.play_impl::<PcmU16Le>(source),
+            cpal::SampleFormat::I32 => self.play_impl::<PcmS32Le>(source),
             cpal::SampleFormat::F32 => self.play_impl::<PcmF32Le>(source),
+            other => panic!("Unsupported output format: {other:?}"),
         }
     }
 
     fn play_impl<F>(&mut self, source: PlaybackSource) -> PlaybackStream
     where
         F: PcmFormat + ScaleAmplitude + Cast<AnyFormat>,
-        F::Data: cpal::Sample + Default + Scalable,
+        F::Data: cpal::SizedSample + Default + Scalable,
     {
         let channels = self.config.channels() as usize;
         let sample_rate = self.config.sample_rate().0;
@@ -664,6 +669,7 @@ impl PlaybackDevice {
                 &self.config.clone().into(),
                 stream.sample_callback::<F>(),
                 |error| error!("Playback error: {:#}", error),
+                None,
             )
             .expect("failed to create output stream");
         output.play().unwrap();
