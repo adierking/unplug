@@ -309,15 +309,15 @@ impl EventSerializer for AsmSerializer<'_> {
         Ok(())
     }
 
-    fn begin_call(&mut self) -> SerResult<()> {
+    fn begin_variadic_args(&mut self, _count: usize) -> SerResult<()> {
         Ok(())
     }
 
-    fn end_call(&mut self) -> SerResult<()> {
-        Ok(())
-    }
-
-    fn begin_msg(&mut self) -> SerResult<()> {
+    fn end_variadic_args(&mut self) -> SerResult<()> {
+        if let Some(CodeOperation::MsgCommand(_)) = &self.operation {
+            let op = self.end_operation().into_msg_command();
+            self.push_operand(Operand::MsgCommand(op.into()));
+        }
         Ok(())
     }
 
@@ -385,14 +385,6 @@ impl EventSerializer for AsmSerializer<'_> {
             MsgOp::Char(b) => self.push_operand(Operand::Text(Text::with_bytes(vec![b]))),
             MsgOp::Format => self.push_operand(Operand::Text(Text::new())),
             _ => (),
-        }
-        Ok(())
-    }
-
-    fn end_msg(&mut self) -> SerResult<()> {
-        if let Some(CodeOperation::MsgCommand(_)) = &self.operation {
-            let op = self.end_operation().into_msg_command();
-            self.push_operand(Operand::MsgCommand(op.into()));
         }
         Ok(())
     }

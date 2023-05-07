@@ -600,20 +600,21 @@ impl EventDeserializer for AsmDeserializer<'_> {
         Ok(())
     }
 
-    fn begin_call(&mut self) -> SerResult<()> {
+    fn begin_variadic_args(&mut self) -> SerResult<()> {
         Ok(())
     }
 
-    fn have_call_arg(&mut self) -> SerResult<bool> {
+    fn have_variadic_arg(&mut self) -> SerResult<bool> {
         let cursor = self.cursor.as_ref().expect("missing cursor");
         Ok(cursor.has_next())
     }
 
-    fn end_call(&mut self) -> SerResult<()> {
-        Ok(())
-    }
-
-    fn begin_msg(&mut self) -> SerResult<()> {
+    fn end_variadic_args(&mut self) -> SerResult<()> {
+        // End the current message command if there is one
+        let cursor = self.cursor.as_mut().expect("missing cursor");
+        if cursor.has_opcode::<AsmMsgOp>() {
+            self.cursor.replace(self.stack.pop().unwrap()).unwrap().leave::<AsmMsgOp>();
+        }
         Ok(())
     }
 
@@ -678,15 +679,6 @@ impl EventDeserializer for AsmDeserializer<'_> {
             AsmMsgOp::Text => return self.deserialize_msg_char(),
             AsmMsgOp::Invalid => MsgOp::Invalid,
         })
-    }
-
-    fn end_msg(&mut self) -> SerResult<()> {
-        // End the current message command if there is one
-        let cursor = self.cursor.as_mut().expect("missing cursor");
-        if cursor.has_opcode::<AsmMsgOp>() {
-            self.cursor.replace(self.stack.pop().unwrap()).unwrap().leave::<AsmMsgOp>();
-        }
-        Ok(())
     }
 }
 

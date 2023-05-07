@@ -6,7 +6,7 @@ use super::serialize::{
     self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
 };
 use crate::common::Text;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::fmt;
 use thiserror::Error;
 use unplug_proc::{DeserializeEvent, SerializeEvent};
@@ -417,14 +417,12 @@ impl DeserializeEvent for AnimArgs {
     type Error = Error;
     fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
         let obj = Expr::deserialize(de)?;
+        de.begin_variadic_args()?;
         let mut values = vec![];
-        loop {
-            let val = Expr::deserialize(de)?;
-            if let Some(-1) = val.value() {
-                break;
-            }
-            values.push(val);
+        while de.have_variadic_arg()? {
+            values.push(Expr::deserialize(de)?);
         }
+        de.end_variadic_args()?;
         Ok(Self { obj, values })
     }
 }
@@ -433,10 +431,11 @@ impl SerializeEvent for AnimArgs {
     type Error = Error;
     fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
         self.obj.serialize(ser)?;
+        ser.begin_variadic_args(self.values.len())?;
         for val in &self.values {
             val.serialize(ser)?;
         }
-        Expr::Imm32(-1).serialize(ser)?;
+        ser.end_variadic_args()?;
         Ok(())
     }
 }
@@ -472,13 +471,13 @@ pub struct CallArgs {
 impl DeserializeEvent for CallArgs {
     type Error = Error;
     fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
-        de.begin_call()?;
+        de.begin_variadic_args()?;
         let obj = Expr::deserialize(de)?;
         let mut args = vec![];
-        while de.have_call_arg()? {
+        while de.have_variadic_arg()? {
             args.push(Expr::deserialize(de)?);
         }
-        de.end_call()?;
+        de.end_variadic_args()?;
         Ok(Self { obj, args })
     }
 }
@@ -486,12 +485,12 @@ impl DeserializeEvent for CallArgs {
 impl SerializeEvent for CallArgs {
     type Error = Error;
     fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
-        ser.begin_call()?;
+        ser.begin_variadic_args(self.args.len())?;
         self.obj.serialize(ser)?;
         for arg in &self.args {
             arg.serialize(ser)?;
         }
-        Ok(ser.end_call()?)
+        Ok(ser.end_variadic_args()?)
     }
 }
 
@@ -728,12 +727,12 @@ impl DeserializeEvent for PtclLeadArgs {
     type Error = Error;
     fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
         let obj = Expr::deserialize(de)?;
-        let argc_expr = Expr::deserialize(de)?;
-        let argc = argc_expr.value().ok_or_else(|| expr::Error::NonConstant(argc_expr.opcode()))?;
+        de.begin_variadic_args()?;
         let mut args = vec![];
-        for _ in 0..argc {
+        while de.have_variadic_arg()? {
             args.push(Expr::deserialize(de)?);
         }
+        de.end_variadic_args()?;
         Ok(Self { obj, args })
     }
 }
@@ -742,11 +741,11 @@ impl SerializeEvent for PtclLeadArgs {
     type Error = Error;
     fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
         self.obj.serialize(ser)?;
-        let argc = i32::try_from(self.args.len()).expect("PtclLeadArgs size overflow");
-        Expr::Imm32(argc).serialize(ser)?;
+        ser.begin_variadic_args(self.args.len())?;
         for arg in &self.args {
             arg.serialize(ser)?;
         }
+        ser.end_variadic_args()?;
         Ok(())
     }
 }

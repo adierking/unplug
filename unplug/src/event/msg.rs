@@ -209,7 +209,7 @@ impl DeserializeEvent for MsgArgs {
         let mut commands = vec![];
         let mut text = vec![];
         let mut done = false;
-        de.begin_msg()?;
+        de.begin_variadic_args()?;
         while !done {
             let ch = de.deserialize_msg_char()?;
             let command = match ch {
@@ -289,7 +289,7 @@ impl DeserializeEvent for MsgArgs {
                 commands.push(command);
             }
         }
-        de.end_msg()?;
+        de.end_variadic_args()?;
         commands.shrink_to_fit();
         Ok(Self { commands })
     }
@@ -298,7 +298,7 @@ impl DeserializeEvent for MsgArgs {
 impl SerializeEvent for MsgArgs {
     type Error = Error;
     fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
-        ser.begin_msg()?;
+        ser.begin_variadic_args(self.commands.len())?;
         let mut num_chars = 0;
         for command in &self.commands {
             if let Some(opcode) = command.opcode() {
@@ -361,7 +361,7 @@ impl SerializeEvent for MsgArgs {
             return Err(Error::TooManyChars { len: num_chars, max: MAX_CHARS });
         }
         ser.serialize_msg_char(MsgOp::End)?;
-        Ok(ser.end_msg()?)
+        Ok(ser.end_variadic_args()?)
     }
 }
 
@@ -692,10 +692,34 @@ mod tests {
     use crate::assert_reserialize;
     use crate::data::Music;
     use crate::event::bin::BinSerializer;
+    use crate::event::opcodes::CmdOp;
     use std::io::Cursor;
 
-    fn msg(command: MsgCommand) -> MsgArgs {
-        vec![command].into()
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct MsgWrapper(MsgArgs);
+
+    impl SerializeEvent for MsgWrapper {
+        type Error = Error;
+        fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
+            ser.begin_command(CmdOp::Msg)?;
+            self.0.serialize(ser)?;
+            ser.end_command()?;
+            Ok(())
+        }
+    }
+
+    impl DeserializeEvent for MsgWrapper {
+        type Error = Error;
+        fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
+            assert_eq!(de.begin_command()?, CmdOp::Msg);
+            let args = MsgArgs::deserialize(de)?;
+            de.end_command()?;
+            Ok(Self(args))
+        }
+    }
+
+    fn msg(command: MsgCommand) -> MsgWrapper {
+        MsgWrapper(vec![command].into())
     }
 
     fn text(string: &str) -> Text {
@@ -776,7 +800,7 @@ mod tests {
             MsgCommand::Text(text(" bunger")),
             MsgCommand::Wait(MsgWaitType::LeftPlug),
         ]);
-        assert_reserialize!(msg);
+        assert_reserialize!(MsgWrapper(msg));
     }
 
     #[test]
@@ -786,9 +810,9 @@ mod tests {
 
     #[test]
     fn test_write_invalid_char() {
-        let msg = MsgArgs::from(vec![MsgCommand::Text(text("\x01"))]);
+        let ch = msg(MsgCommand::Text(text("\x01")));
         let mut ser = BinSerializer::new(Cursor::new(vec![]));
-        match msg.serialize(&mut ser) {
+        match ch.serialize(&mut ser) {
             Err(Error::Serialize(e)) => assert!(matches!(*e, SerError::InvalidMsgChar(1))),
             _ => panic!("not a serialization error"),
         };

@@ -12,6 +12,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("expected an immediate value, got {0:?}")]
+    ExpectedImmediate(ExprOp),
+
     #[error("unrecognized expression opcode: {0}")]
     UnrecognizedExpr(u8),
 
@@ -42,14 +45,23 @@ pub enum Error {
     #[error("unsupported message character: {0:?}")]
     UnsupportedMsgChar(MsgOp),
 
+    #[error("command does not support variadic arguments: {0:?}")]
+    VariadicArgsNotSupported(CmdOp),
+
+    #[error("no variadic argument list active")]
+    NoVariadicArgList,
+
     #[error("unexpected end of data")]
     EndOfData,
 
-    #[error("message end offset ({end:#x}) is before the start offset ({start:#x})")]
-    InvalidMsgOffset { start: u64, end: u64 },
+    #[error("end offset of argument list ({end:#x}) is before the start offset ({start:#x})")]
+    InvalidEndOffset { start: u64, end: u64 },
 
-    #[error("read past the end of the message ({offset:#x} > {end:#x})")]
-    PassedEndOfMsg { offset: u64, end: u64 },
+    #[error("invalid argument list size: {0:#x}")]
+    InvalidArgListSize(u64),
+
+    #[error("read past the end of an argument list ({offset:#x} > {end:#x})")]
+    PassedEndOfArgList { offset: u64, end: u64 },
 
     #[error("message is too large ({len} > {max})")]
     MsgTooLarge { len: u64, max: u64 },
@@ -143,20 +155,14 @@ pub trait EventSerializer {
     /// Finishes serializing a command.
     fn end_command(&mut self) -> Result<()>;
 
-    /// Begins serializing a `call()` command's argument list.
-    fn begin_call(&mut self) -> Result<()>;
+    /// Begins serializing a variable-length argument list.
+    fn begin_variadic_args(&mut self, count: usize) -> Result<()>;
 
-    /// Finishes serializing a `call()` command's argument list.
-    fn end_call(&mut self) -> Result<()>;
-
-    /// Begins serializing a message.
-    fn begin_msg(&mut self) -> Result<()>;
+    /// Finishes serializing a variable-length argument list.
+    fn end_variadic_args(&mut self) -> Result<()>;
 
     /// Serializes a single message character.
     fn serialize_msg_char(&mut self, ch: MsgOp) -> Result<()>;
-
-    /// Finishes serializing a message.
-    fn end_msg(&mut self) -> Result<()>;
 }
 
 /// An object which can deserialize event data.
@@ -224,23 +230,17 @@ pub trait EventDeserializer {
     /// Finishes deserializing a command.
     fn end_command(&mut self) -> Result<()>;
 
-    /// Begins deserializing a `call()` command's argument list.
-    fn begin_call(&mut self) -> Result<()>;
+    /// Begins deserializing a variable-length argument list.
+    fn begin_variadic_args(&mut self) -> Result<()>;
 
-    /// Checks whether more `call()` arguments are available to be read.
-    fn have_call_arg(&mut self) -> Result<bool>;
+    /// Checks whether more variadic arguments are available to be read.
+    fn have_variadic_arg(&mut self) -> Result<bool>;
 
-    /// Finishes deserializing a `call()` command's argument list.
-    fn end_call(&mut self) -> Result<()>;
-
-    /// Begins deserializing a message.
-    fn begin_msg(&mut self) -> Result<()>;
+    /// Finishes deserializing a variable-length argument list.
+    fn end_variadic_args(&mut self) -> Result<()>;
 
     /// Deserializes a single message character and returns it.
     fn deserialize_msg_char(&mut self) -> Result<MsgOp>;
-
-    /// Finishes deserializing a message.
-    fn end_msg(&mut self) -> Result<()>;
 }
 
 /// An object which can be serialized to an `EventSerializer`.
