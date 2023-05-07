@@ -7,12 +7,12 @@
 [![Test Coverage](https://img.shields.io/coverallsCoverage/github/adierking/unplug)](https://coveralls.io/github/adierking/unplug)
 [![License](https://img.shields.io/github/license/adierking/unplug)](COPYING)
 
-:satellite: [Download](https://github.com/adierking/unplug/releases)<br>
-:star: [Goals](#goals)<br>
-:robot: [Features](#features)<br>
-:thinking: [How to Use](#how-to-use)<br>
-:gear: [Compiling](#compiling)<br>
-:wrench: [Contributing](#contributing)<br>
+:satellite: [Download](https://github.com/adierking/unplug/releases)  
+:star: [Goals](#goals)  
+:robot: [Features](#features)  
+:thinking: [How to Use](#how-to-use)  
+:gear: [Compiling](#compiling)  
+:wrench: [Contributing](#contributing)  
 
 ## Download
 
