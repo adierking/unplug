@@ -33,8 +33,26 @@ pub enum Error {
     #[error("unsupported type: {0:?}")]
     UnsupportedType(TypeOp),
 
-    #[error("expected a constant type value, got {0:?} instead")]
-    ExpectedType(ExprOp),
+    #[error("expected an integer value")]
+    ExpectedInteger,
+
+    #[error("expected a pointer")]
+    ExpectedPointer,
+
+    #[error("expected a constant type value")]
+    ExpectedType,
+
+    #[error("expected text")]
+    ExpectedText,
+
+    #[error("expected a command")]
+    ExpectedCommand,
+
+    #[error("expected an expression")]
+    ExpectedExpr,
+
+    #[error("expected a message")]
+    ExpectedMessage,
 
     #[error("unrecognized message character: {0}")]
     UnrecognizedMsgChar(u16),

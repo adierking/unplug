@@ -329,7 +329,7 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
     fn deserialize_type(&mut self) -> Result<TypeOp> {
         let value = match self.deserialize_imm_expr() {
             Ok(x) => x,
-            Err(Error::ExpectedImmediate(op)) => return Err(Error::ExpectedType(op)),
+            Err(Error::ExpectedImmediate(_)) => return Err(Error::ExpectedType),
             Err(e) => return Err(e),
         };
         Ggte::get(value).map_err(Error::UnrecognizedType)

@@ -2,12 +2,13 @@ mod ggte;
 
 pub use ggte::Ggte;
 
+use std::fmt::Debug;
 use std::hash::Hash;
 
 /// Base trait for an opcode enum.
 ///
 /// Opcodes must provide a default "invalid" value which can be used as a placeholder.
-pub trait Opcode: Copy + Default + Eq + Hash + Sized {
+pub trait Opcode: Copy + Default + Eq + Ord + Hash + Debug + Sized {
     /// The type of a raw opcode value.
     type Value: Copy + Eq + Hash;
 
@@ -87,7 +88,7 @@ macro_rules! opcodes {
 }
 
 /// An expression opcode. Refer to `Expr` for documentation.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ExprOp {
     Equal,
     NotEqual,
@@ -161,7 +162,7 @@ impl Opcode for ExprOp {
 }
 
 /// A command opcode. Refer to `Command` for documentation.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CmdOp {
     Abort,
     Return,
@@ -262,7 +263,7 @@ impl Opcode for CmdOp {
 
 /// A command type opcode (note, these are actually represented as immediate expressions). Refer to
 /// individual commands for documentation.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypeOp {
     Time,
     Fade,
@@ -333,7 +334,7 @@ impl Opcode for TypeOp {
 }
 
 /// A message command opcode. Refer to `MsgCommand` for documentation.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MsgOp {
     End,
     Speed,

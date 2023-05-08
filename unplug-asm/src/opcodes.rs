@@ -1,5 +1,5 @@
 use phf::phf_map;
-use unplug::event::opcodes::{CmdOp, ExprOp, Opcode, TypeOp};
+use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, Opcode, TypeOp};
 
 /// An opcode which has an associated name.
 pub trait NamedOpcode: Opcode {
@@ -13,7 +13,7 @@ pub trait NamedOpcode: Opcode {
 /// An opcode which appears as part of a message.
 ///
 /// We don't use `MsgOp` directly because we want full text strings rather than single characters.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AsmMsgOp {
     Speed,
     Wait,
@@ -39,6 +39,64 @@ pub enum AsmMsgOp {
     Invalid,
 }
 
+impl TryFrom<AsmMsgOp> for MsgOp {
+    type Error = AsmMsgOp;
+    fn try_from(op: AsmMsgOp) -> Result<Self, Self::Error> {
+        Ok(match op {
+            AsmMsgOp::Speed => Self::Speed,
+            AsmMsgOp::Wait => Self::Wait,
+            AsmMsgOp::Anim => Self::Anim,
+            AsmMsgOp::Sfx => Self::Sfx,
+            AsmMsgOp::Voice => Self::Voice,
+            AsmMsgOp::Default => Self::Default,
+            AsmMsgOp::Format => Self::Format,
+            AsmMsgOp::Size => Self::Size,
+            AsmMsgOp::Color => Self::Color,
+            AsmMsgOp::Rgba => Self::Rgba,
+            AsmMsgOp::Proportional => Self::Proportional,
+            AsmMsgOp::Icon => Self::Icon,
+            AsmMsgOp::Shake => Self::Shake,
+            AsmMsgOp::Center => Self::Center,
+            AsmMsgOp::Rotate => Self::Rotate,
+            AsmMsgOp::Scale => Self::Scale,
+            AsmMsgOp::NumInput => Self::NumInput,
+            AsmMsgOp::Question => Self::Question,
+            AsmMsgOp::Stay => Self::Stay,
+            AsmMsgOp::Invalid => Self::Invalid,
+            AsmMsgOp::Text => return Err(op),
+        })
+    }
+}
+
+impl TryFrom<MsgOp> for AsmMsgOp {
+    type Error = MsgOp;
+    fn try_from(op: MsgOp) -> Result<Self, Self::Error> {
+        Ok(match op {
+            MsgOp::Speed => Self::Speed,
+            MsgOp::Wait => Self::Wait,
+            MsgOp::Anim => Self::Anim,
+            MsgOp::Sfx => Self::Sfx,
+            MsgOp::Voice => Self::Voice,
+            MsgOp::Default => Self::Default,
+            MsgOp::Format => Self::Format,
+            MsgOp::Size => Self::Size,
+            MsgOp::Color => Self::Color,
+            MsgOp::Rgba => Self::Rgba,
+            MsgOp::Proportional => Self::Proportional,
+            MsgOp::Icon => Self::Icon,
+            MsgOp::Shake => Self::Shake,
+            MsgOp::Center => Self::Center,
+            MsgOp::Rotate => Self::Rotate,
+            MsgOp::Scale => Self::Scale,
+            MsgOp::NumInput => Self::NumInput,
+            MsgOp::Question => Self::Question,
+            MsgOp::Stay => Self::Stay,
+            MsgOp::Invalid => Self::Invalid,
+            MsgOp::Char(_) | MsgOp::Newline | MsgOp::NewlineVt | MsgOp::End => return Err(op),
+        })
+    }
+}
+
 impl Opcode for AsmMsgOp {
     type Value = u8;
     fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
@@ -50,7 +108,7 @@ impl Opcode for AsmMsgOp {
 }
 
 /// An assembler directive type.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DirOp {
     Globals,
     Stage,

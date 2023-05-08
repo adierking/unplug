@@ -23,6 +23,7 @@ pub mod lexer;
 pub mod opcodes;
 pub mod parser;
 pub mod program;
+pub mod signatures;
 pub mod span;
 pub mod writer;
 
