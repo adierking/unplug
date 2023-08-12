@@ -34,7 +34,7 @@ claxon = "0.4.3"
 codespan-reporting = "0.11.1"
 console = { version = "0.15.0", default-features = false }
 cpal = "0.15.2"
-criterion = { version = "0.4.0", features = ["html_reports"] }
+criterion = { version = "0.5.1", features = ["html_reports"] }
 crossterm = "0.25.0"
 ctor = "0.1.26"
 dirs = "4.0"
