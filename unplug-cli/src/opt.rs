@@ -1126,19 +1126,31 @@ mod tests {
             assert!(matches!(opt, GetSetting::DolphinPath));
         });
         parse(["config", "set", "default-iso"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command else { panic!() };
+            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command
+            else {
+                panic!()
+            };
             assert_eq!(path, None);
         });
         parse(["config", "set", "default-iso", "foo"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command else { panic!() };
+            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command
+            else {
+                panic!()
+            };
             assert_eq!(path.as_deref(), Some("foo"));
         });
         parse(["config", "set", "dolphin-path"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command else { panic!() };
+            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command
+            else {
+                panic!()
+            };
             assert_eq!(path, None);
         });
         parse(["config", "set", "dolphin-path", "foo"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command else { panic!() };
+            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command
+            else {
+                panic!()
+            };
             assert_eq!(path.as_deref(), Some("foo"));
         });
         assert_eq!(error(["config", "get"]), ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand);
