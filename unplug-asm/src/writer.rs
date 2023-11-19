@@ -652,7 +652,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
         let mut current_op: Option<Operation<DirOp>> = None;
         for operand in data {
             let ty = operand_type(operand);
-            let mut op = current_op.get_or_insert_with(|| Operation::new(ty.into()));
+            let op = current_op.get_or_insert_with(|| Operation::new(ty.into()));
             if *op.opcode != ty {
                 self.write_directive(op)?;
                 op.opcode = ty.into();

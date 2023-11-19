@@ -52,7 +52,7 @@ fn command_list(ctx: Context, opt: IsoListOpt) -> Result<()> {
 /// The `iso extract` CLI command.
 fn command_extract(ctx: Context, opt: IsoExtractOpt) -> Result<()> {
     let path = ctx.into_iso_path()?;
-    let mut disc = DiscStream::open(File::open(&path)?)?;
+    let mut disc = DiscStream::open(File::open(path)?)?;
     let files = Glob::new(GlobMode::Exact, opt.paths).find(&disc.files).collect::<Vec<_>>();
     if files.is_empty() {
         bail!("Nothing to extract");

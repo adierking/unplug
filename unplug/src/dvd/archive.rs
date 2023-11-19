@@ -34,16 +34,16 @@ from_error_boxed!(Error::Fst, fst::Error);
 from_error_boxed!(Error::Io, io::Error);
 
 #[derive(Debug, Copy, Clone)]
-pub(self) struct Header {
-    pub(self) magic: u32,
-    pub(self) fst_offset: u32,
-    pub(self) fst_size: u32,
-    pub(self) data_offset: u32,
-    pub(self) reserved: [u8; 16],
+struct Header {
+    magic: u32,
+    fst_offset: u32,
+    fst_size: u32,
+    data_offset: u32,
+    reserved: [u8; 16],
 }
 
 impl Header {
-    pub(self) fn new() -> Self {
+    fn new() -> Self {
         Self {
             magic: ARC_MAGIC,
             fst_offset: 0,
