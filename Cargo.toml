@@ -19,7 +19,7 @@ default-members = [
 [workspace.package]
 authors = ["Derpky <a@dierking.me>"]
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.74"
 version = "0.4.0"
 
 [workspace.dependencies]

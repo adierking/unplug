@@ -66,7 +66,7 @@ Follow the [tour guide](docs/tour.md) for examples of how to use each command.
 
 Prerequisites:
 
-- Rust 1.65+
+- Rust 1.74+
 - C compiler (for dependencies)
 - CMake (for dependencies)
 
