@@ -225,7 +225,7 @@ impl<T: ReadWriteSeek> DiscSource<T> {
 pub enum FileId {
     Iso(EntryId),
     Qp(EntryId),
-    File(Arc<PathBuf>),
+    File(Arc<Path>),
 }
 
 /// File metadata.
@@ -259,7 +259,7 @@ impl<T: ReadSeek> OpenContext<T> {
 
     /// Gets the ID of a file located using a context path.
     pub fn file_at(&mut self, path: impl AsRef<str>) -> Result<FileId> {
-        self.get_file_impl(ContextPath::parse(path.as_ref()))
+        self.get_file_impl(&ContextPath::parse(path.as_ref()))
     }
 
     /// Gets the ID of a file located using a context path, but returns `None` for paths which do
@@ -267,21 +267,21 @@ impl<T: ReadSeek> OpenContext<T> {
     pub fn explicit_file_at(&mut self, path: impl AsRef<str>) -> Result<Option<FileId>> {
         match ContextPath::parse(path.as_ref()) {
             ContextPath::Other(_) => Ok(None),
-            path => Ok(Some(self.get_file_impl(path)?)),
+            path => Ok(Some(self.get_file_impl(&path)?)),
         }
     }
 
     /// Gets the ID of a file on the disc.
     pub fn disc_file_at(&mut self, path: impl AsRef<str>) -> Result<FileId> {
-        self.get_file_impl(ContextPath::Dvd(path.as_ref()))
+        self.get_file_impl(&ContextPath::Dvd(path.as_ref()))
     }
 
     /// Gets the ID of a file in qp.bin.
     pub fn qp_file_at(&mut self, path: impl AsRef<str>) -> Result<FileId> {
-        self.get_file_impl(ContextPath::Qp(path.as_ref()))
+        self.get_file_impl(&ContextPath::Qp(path.as_ref()))
     }
 
-    fn get_file_impl(&mut self, path: ContextPath<'_>) -> Result<FileId> {
+    fn get_file_impl(&mut self, path: &ContextPath<'_>) -> Result<FileId> {
         match path {
             ContextPath::Dvd(path) => self.disc.get(path),
             ContextPath::Qp(path) => {
@@ -316,7 +316,7 @@ impl<T: ReadSeek> OpenContext<T> {
                     .unwrap_or_else(|| OsStr::new(""))
                     .to_string_lossy()
                     .into_owned();
-                let info = fs::metadata(path.as_path())?;
+                let info = fs::metadata(path)?;
                 Ok(FileInfo { name, size: info.len() })
             }
         }
@@ -434,7 +434,7 @@ pub struct UpdateQueue<'c, 'r, T: ReadWriteSeek> {
     ctx: &'c mut OpenContext<T>,
     qp_files: Vec<(EntryId, Box<dyn ReadSeek + 'r>)>,
     iso_files: Vec<(EntryId, Box<dyn ReadSeek + 'r>)>,
-    fs_files: Vec<(Arc<PathBuf>, Box<dyn ReadSeek + 'r>)>,
+    fs_files: Vec<(Arc<Path>, Box<dyn ReadSeek + 'r>)>,
 }
 
 impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
@@ -492,7 +492,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
         match file {
             &FileId::Iso(entry) => self.iso_files.push((entry, reader)),
             &FileId::Qp(entry) => self.qp_files.push((entry, reader)),
-            FileId::File(path) => self.fs_files.push((path.clone(), reader)),
+            FileId::File(path) => self.fs_files.push((Arc::clone(path), reader)),
         }
         self
     }
