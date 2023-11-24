@@ -100,7 +100,7 @@ pub trait ReadValuesExt: Read {
             Err(e) => panic!("slice cast failed: {:?}", e),
         };
         values.convert_endian::<E, NativeEndian>();
-        // Safety: We know the pointer was allocated by a Vec, and as_mut_slice_of() already
+        // SAFETY: We know the pointer was allocated by a Vec, and as_mut_slice_of() already
         // checked that the pointer is safe
         let v = unsafe { Vec::from_raw_parts(values.as_mut_ptr(), values.len(), values.len()) };
         mem::forget(bytes); // Allocation is managed by the Vec now

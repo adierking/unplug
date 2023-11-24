@@ -177,27 +177,30 @@ try_from_unsigned!(I24, u64);
 try_from_unsigned!(I24, u128);
 try_from_unsigned!(I24, usize);
 
+// SAFETY: I24 can be converted to and from a byte slice
 unsafe impl ToByteSlice for I24 {
     fn to_byte_slice<T: AsRef<[Self]> + ?Sized>(slice: &T) -> &[u8] {
         let slice = slice.as_ref();
-        // Safety: I24 is represented as an array of 3 bytes
+        // SAFETY: I24 is represented as an array of 3 bytes
         unsafe { slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * 3) }
     }
 }
 
+// SAFETY: I24 can be converted to and from a byte slice
 unsafe impl ToMutByteSlice for I24 {
     fn to_mut_byte_slice<T: AsMut<[Self]> + ?Sized>(slice: &mut T) -> &mut [u8] {
         let slice = slice.as_mut();
-        // Safety: I24 is represented as an array of 3 bytes
+        // SAFETY: I24 is represented as an array of 3 bytes
         unsafe { slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len() * 3) }
     }
 }
 
+// SAFETY: I24 can be converted to and from a byte slice
 unsafe impl FromByteSlice for I24 {
     fn from_byte_slice<T: AsRef<[u8]> + ?Sized>(slice: &T) -> Result<&[Self], BscError> {
         let bytes = slice.as_ref();
         if bytes.len() % 3 == 0 {
-            // Safety: I24 is represented as an array of 3 bytes and does not need alignment
+            // SAFETY: I24 is represented as an array of 3 bytes and does not need alignment
             Ok(unsafe { slice::from_raw_parts(bytes.as_ptr() as *const I24, bytes.len() / 3) })
         } else {
             Err(BscError::LengthMismatch {
@@ -213,7 +216,7 @@ unsafe impl FromByteSlice for I24 {
     ) -> Result<&mut [Self], BscError> {
         let bytes = slice.as_mut();
         if bytes.len() % 3 == 0 {
-            // Safety: I24 is represented as an array of 3 bytes and does not need alignment
+            // SAFETY: I24 is represented as an array of 3 bytes and does not need alignment
             Ok(unsafe {
                 slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut I24, bytes.len() / 3)
             })

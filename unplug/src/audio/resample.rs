@@ -17,8 +17,10 @@ const MIN_OUTPUT_FRAMES: usize = 0x1000;
 /// Converts a libsamplerate error code into an `Error` value.
 #[allow(clippy::useless_conversion)]
 fn make_error(code: c_int) -> Error {
+    // SAFETY: libsamplerate API
     let description_ptr = unsafe { src_strerror(code) };
     let description = if !description_ptr.is_null() {
+        // SAFETY: description_ptr is non-null
         unsafe { CStr::from_ptr(description_ptr).to_string_lossy().into_owned() }
     } else {
         String::new()
@@ -69,6 +71,7 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
         assert!(self.state.is_null());
         let mut error = 0;
         self.state =
+            // SAFETY: libsamplerate API
             unsafe { src_new(SRC_SINC_BEST_QUALITY as c_int, channels as c_int, &mut error) };
         if self.state.is_null() {
             return Err(make_error(error));
@@ -80,6 +83,7 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
     /// Destroys the libsamplerate state if it has been initialized.
     fn destroy_state(&mut self) {
         if !self.state.is_null() {
+            // SAFETY: state is non-null
             unsafe { src_delete(self.state) };
             self.state = ptr::null_mut();
         }
@@ -109,6 +113,7 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
         }
 
         let ratio = (self.rate_out as c_double) / (samples.rate as c_double);
+        // SAFETY: libsamplerate API
         if unsafe { src_is_valid_ratio(ratio) } == 0 {
             return Err(Error::UnsupportedRateConversion(samples.rate, self.rate_out));
         }
@@ -137,6 +142,7 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
             ..Default::default()
         };
         let error =
+            // SAFETY: libsamplerate API
             trace_span!("src_process").in_scope(|| unsafe { src_process(self.state, &mut data) });
         if error != 0 {
             return Err(make_error(error));
@@ -160,6 +166,7 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
             self.destroy_state();
         }
 
+        // SAFETY: libsamplerate API
         unsafe { data_out.set_len(samples_produced) };
         Ok(Samples::from_pcm(data_out, self.channels, self.rate_out))
     }
@@ -226,6 +233,7 @@ where
     }
 }
 
+// SAFETY: state pointer can be sent across threads
 unsafe impl<F: AnyPcm> Send for Resample<'_, '_, F> {}
 
 #[cfg(test)]

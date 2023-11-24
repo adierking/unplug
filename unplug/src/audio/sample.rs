@@ -879,7 +879,7 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
 
         let mut merged = F::allocate(len * 2);
         debug_assert!(merged.len() == len * 2);
-        // Safety:
+        // SAFETY:
         // - We know `merged` is zero-initialized to a length of `len * 2`
         // - We know that `left.data` and `right.data` are at least `len` in size
         unsafe {

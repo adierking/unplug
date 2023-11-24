@@ -296,7 +296,7 @@ where
                 let b = s.as_byte_slice();
 
                 // &[u8] -> &[AnyData]
-                // Safety: AnyData and u8 have the same representation
+                // SAFETY: AnyData and u8 have the same representation
                 Cow::Borrowed(unsafe {
                     slice::from_raw_parts(b.as_ptr() as *const AnyData, b.len())
                 })
@@ -311,7 +311,7 @@ where
                 let b = s.as_mut_byte_slice();
 
                 // &mut [u8] -> Vec<AnyData>
-                // Safety: AnyData and u8 have the same representation, and we know the pointer was
+                // SAFETY: AnyData and u8 have the same representation, and we know the pointer was
                 // allocated by a Vec
                 let v = unsafe {
                     Vec::from_raw_parts(b.as_mut_ptr() as *mut AnyData, b.len(), b.len())
@@ -345,7 +345,7 @@ where
             // &[AnyData] -> &[u8] -> &[Data]
             Cow::Borrowed(s) => {
                 // &[AnyData] -> &[u8]
-                // Safety: AnyData and u8 have the same representation
+                // SAFETY: AnyData and u8 have the same representation
                 let b = unsafe { slice::from_raw_parts(s.as_ptr() as *const u8, s.len()) };
 
                 // &[u8] -> &[Data]
@@ -358,14 +358,14 @@ where
                 let mut s = v.into_boxed_slice();
 
                 // Box<[AnyData]> -> &mut [u8]
-                // Safety: AnyData and u8 have the same representation
+                // SAFETY: AnyData and u8 have the same representation
                 let b = unsafe { slice::from_raw_parts_mut(s.as_mut_ptr() as *mut u8, s.len()) };
 
                 // &mut [u8] -> &mut [Data]
                 let v = b.as_mut_slice_of().expect("cast failed");
 
                 // &mut [Data] -> Vec<Data>
-                // Safety: We know the pointer was allocated by a Vec, and as_mut_slice_of() already
+                // SAFETY: We know the pointer was allocated by a Vec, and as_mut_slice_of() already
                 // checked that the pointer is safe
                 let v = unsafe { Vec::from_raw_parts(v.as_mut_ptr(), v.len(), v.len()) };
                 mem::forget(s); // Allocation is managed by the Vec now
