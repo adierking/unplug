@@ -15,6 +15,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  stable_toolchain: 1.74
+  nightly_toolchain: nightly-2023-11-13
 
 jobs:
   build:
@@ -48,12 +50,22 @@ jobs:
         uses: ./.github/actions/toolchain
         with:
           target: ${{ matrix.target }}
+          stable: ${{ env.stable_toolchain }}
+          nightly: ${{ env.nightly_toolchain }}
 
-      - name: Check
+      - name: Fetch Crates
+        run: cargo fetch --target ${{ matrix.target }}
+
+      - name: Check MSRV
         run: cargo check --workspace --all-targets --target ${{ matrix.target }}
 
       - name: Build CLI
-        run: cargo build -v -p unplug-cli --target ${{ matrix.target }} --release --no-default-features --features distribution
+        run:
+          cargo build +${{ env.nightly_toolchain }}
+            -v -p unplug-cli --target ${{ matrix.target }}
+            --release --no-default-features --features distribution
+            -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort
+
         env:
           RUSTFLAGS: -C strip=symbols
 
@@ -112,6 +124,7 @@ jobs:
         uses: ./.github/actions/toolchain
         with:
           target: ${{ matrix.target }}
+          stable: ${{ env.stable_toolchain }}
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov

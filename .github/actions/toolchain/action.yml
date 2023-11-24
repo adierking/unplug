@@ -1,10 +1,15 @@
-name: 'Install Toolchain'
-description: 'Install the toolchain needed to compile Unplug'
+name: "Install Toolchain"
+description: "Install the toolchain needed to compile Unplug"
 
 inputs:
   target:
     description: "Target triple"
     required: true
+  stable:
+    description: "Stable toolchain to install"
+    required: true
+  nightly:
+    description: "Optional nightly toolchain to install"
 
 runs:
   using: "composite"
@@ -16,10 +21,13 @@ runs:
         sudo apt-get install libasound2-dev
       shell: bash
 
-    - name: Install Toolchain
+    - name: Install Toolchain (Stable)
       run: |
         rustup set auto-self-update disable
-        rustup toolchain install 1.74 --component llvm-tools-preview
-        rustup target add --toolchain 1.74 ${{ inputs.target }}
-        rustup default 1.74
+        rustup toolchain install ${{ inputs.stable }} -t ${{ inputs.target }} -c llvm-tools-preview
+        rustup default ${{ inputs.stable }}
       shell: bash
+
+    - if: ${{ inputs.nightly }}
+      name: Install Toolchain (Nightly)
+      run: rustup toolchain install ${{ inputs.nightly }} -t ${{ inputs.target }} -c llvm-tools-preview
