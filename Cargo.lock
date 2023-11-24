@@ -1957,6 +1957,7 @@ dependencies = [
  "cpal",
  "crossterm",
  "dirs",
+ "float-cmp",
  "humansize",
  "indicatif",
  "lazy_static",

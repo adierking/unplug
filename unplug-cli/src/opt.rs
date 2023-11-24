@@ -781,6 +781,7 @@ pub struct StageImportAllOpt {
 mod tests {
     use super::*;
     use clap::error::ErrorKind;
+    use float_cmp::approx_eq;
     use std::ffi::OsString;
     use std::iter;
     use std::path::Path;
@@ -1091,16 +1092,16 @@ mod tests {
         let map = mapper!(Command::Audio(AudioCommand::Play(opt)) => opt);
         parse(["audio", "play", "foo"], map, |opt| {
             assert_eq!(opt.name, "foo");
-            assert_eq!(opt.volume, 0.8);
+            assert!(approx_eq!(f64, opt.volume, 0.8));
         });
         parse(["audio", "play", "foo", "--volume", "0"], map, |opt| {
-            assert_eq!(opt.volume, 0.0);
+            assert!(approx_eq!(f64, opt.volume, 0.0));
         });
         parse(["audio", "play", "foo", "--volume", "50"], map, |opt| {
-            assert_eq!(opt.volume, 0.5);
+            assert!(approx_eq!(f64, opt.volume, 0.5));
         });
         parse(["audio", "play", "foo", "--volume", "100"], map, |opt| {
-            assert_eq!(opt.volume, 1.0);
+            assert!(approx_eq!(f64, opt.volume, 1.0));
         });
         assert_eq!(error(["audio", "play"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["audio", "play", "foo", "bar"]), ErrorKind::UnknownArgument);

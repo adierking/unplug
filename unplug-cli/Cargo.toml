@@ -45,6 +45,7 @@ unplug = { path = "../unplug" }
 unplug-asm = { path = "../unplug-asm" }
 
 [dev-dependencies]
+float-cmp.workspace = true
 unplug-test = { path = "../unplug-test" }
 
 [features]
