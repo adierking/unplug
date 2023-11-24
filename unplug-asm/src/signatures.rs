@@ -501,7 +501,7 @@ mod tests {
             let mut values = vec![opcode];
             for i in 0..args.len() {
                 let mut index = i;
-                if let Value::Command(CmdOp::Set) = opcode {
+                if matches!(opcode, Value::Command(CmdOp::Set)) {
                     index = args.len() - index - 1;
                 }
                 match args[index] {
@@ -558,7 +558,7 @@ mod tests {
                     }
                 }
             }
-            if let Value::Message(MsgOp::Format) = values[0] {
+            if matches!(values[0], Value::Message(MsgOp::Format)) {
                 // HACK: format strings have to end with the format character
                 values.push(Value::Message(MsgOp::Format));
             }

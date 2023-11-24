@@ -216,6 +216,7 @@ impl Channel {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl Debug for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Channel")
@@ -483,6 +484,7 @@ impl<W: Write + Seek + ?Sized> WriteTo<W> for SfxBank {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl Debug for SfxBank {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SoundBank")
@@ -561,7 +563,7 @@ impl ReadSamples<'static> for BankSampleReader {
     }
 
     fn progress(&self) -> Option<ProgressHint> {
-        let current = if self.sample.is_some() { 0 } else { 1 };
+        let current = u64::from(self.sample.is_none());
         ProgressHint::new(current, 1)
     }
 

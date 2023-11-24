@@ -9,7 +9,7 @@ use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt};
 use unplug_cli::{commands, terminal};
 
 #[cfg(feature = "trace")]
-fn init_tracing(path: &std::path::Path) -> Result<impl Drop> {
+fn init_tracing(path: &Path) -> Result<impl Drop> {
     use log::debug;
     use std::fs::File;
     use std::io::BufWriter;
@@ -80,7 +80,7 @@ fn run_app() -> Result<()> {
 
 fn main() {
     process::exit(match run_app() {
-        Ok(_) => 0,
+        Ok(()) => 0,
         Err(err) => {
             error!("Fatal: {:#}", err);
             1

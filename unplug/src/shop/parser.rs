@@ -230,7 +230,7 @@ impl<'s> ShopParser<'s> {
 
         // Propagate the current state to any slots that were updated
         if !vars.is_empty() {
-            let requirements = condition.as_ref().map_or(HashSet::new(), parse_requirements);
+            let requirements = condition.as_ref().map_or_else(HashSet::new, parse_requirements);
             self.update_slots(&requirements, &vars);
         }
 
@@ -272,7 +272,7 @@ impl<'s> ShopParser<'s> {
                         return;
                     }
                 }
-            } else if let Some(0) = set.value.value() {
+            } else if set.value.value() == Some(0) {
                 return; // Ignore the assignment to clamp to 0
             }
             warn!("unsupported temp var assignment: {:?}", set);

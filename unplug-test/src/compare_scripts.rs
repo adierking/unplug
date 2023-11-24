@@ -317,8 +317,8 @@ pub fn assert_scripts_match(script1: &Script, script2: &Script) {
         layout1.block_offsets().iter().map(|loc| (loc.id, loc.offset)).collect::<HashMap<_, _>>();
     let offsets2 =
         layout2.block_offsets().iter().map(|loc| (loc.id, loc.offset)).collect::<HashMap<_, _>>();
-    subs1.sort_unstable_by_key(|a| offsets1.get(a).unwrap());
-    subs2.sort_unstable_by_key(|a| offsets2.get(a).unwrap());
+    subs1.sort_unstable_by_key(|a| offsets1[a]);
+    subs2.sort_unstable_by_key(|a| offsets2[a]);
 
     let mut visited = HashSet::new();
     for (&sub1, &sub2) in subs1.iter().zip(&subs2) {

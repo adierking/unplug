@@ -518,7 +518,7 @@ impl<'a> ProgramAssembler<'a> {
     /// If an operand is an integer, extracts it and casts it to `I`. If the operand is not an
     /// integer or it cannot be narrowed, reports a diagnostic and returns an error.
     fn expect_integer<I: CastOperand>(&mut self, operand: &Located<Operand>) -> Result<I, ()> {
-        if let Operand::Error = **operand {
+        if matches!(**operand, Operand::Error) {
             return Err(());
         }
         match operand.cast() {

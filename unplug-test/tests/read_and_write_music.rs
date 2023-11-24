@@ -11,7 +11,7 @@ use unplug::data::Music;
 use unplug::dvd::OpenFile;
 use unplug_test as common;
 
-fn decode_and_hash(hps: &HpsReader) -> Result<u64> {
+fn decode_and_hash(hps: &HpsReader<'_>) -> Result<u64> {
     let mut hasher = SeaHasher::new();
     let mut decoder = hps.decoder();
     while let Some(samples) = decoder.read_samples()? {

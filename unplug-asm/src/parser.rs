@@ -138,7 +138,7 @@ impl<'s> Parser<'s> {
         let comma = self.parse_simple();
         if comma.is_some() {
             // Newlines are permitted after commas because we know there's more left
-            while let Some(Token::Newline) = self.token {
+            while self.token == Some(Token::Newline) {
                 self.eat();
             }
         }

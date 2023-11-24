@@ -284,6 +284,7 @@ pub struct Channel {
     pub data: Vec<u8>,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl Debug for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Channel")

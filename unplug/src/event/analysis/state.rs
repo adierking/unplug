@@ -449,6 +449,7 @@ impl LiveState {
         }
     }
 
+    #[allow(clippy::unused_self)]
     fn analyze_address_of(&mut self, ptr: Pointer) -> LiveValue {
         if let Pointer::Offset(off) = ptr {
             LiveValue::Value(Value::Offset(off))

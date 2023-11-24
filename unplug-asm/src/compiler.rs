@@ -443,7 +443,7 @@ impl<'a> AsmDeserializer<'a> {
             self.report(Diagnostic::expected_integer(self.cursor_span().at_end(0)));
             return I::default();
         };
-        if let Operand::Error = **operand {
+        if matches!(**operand, Operand::Error) {
             return I::default();
         }
         let span = operand.span();
@@ -627,7 +627,7 @@ impl EventDeserializer for AsmDeserializer<'_> {
             }
             // For format strings, we have to emit a Format byte at the end
             self.text = None;
-            if let Some(AsmMsgOp::Format) = cursor.opcode() {
+            if cursor.opcode() == Some(AsmMsgOp::Format) {
                 return Ok(MsgOp::Format);
             }
         }
@@ -784,7 +784,7 @@ fn try_append_data(program: &Program, block: &mut DataBlock, value: &Operand) ->
 fn compile_data(program: &Program, data: &[Located<Operand>]) -> Result<ScriptBlock> {
     let mut blocks: Vec<DataBlock> = vec![];
     for value in data {
-        if let Operand::Error = **value {
+        if matches!(**value, Operand::Error) {
             continue;
         }
         if let Some(last) = blocks.last_mut() {

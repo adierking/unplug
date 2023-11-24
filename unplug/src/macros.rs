@@ -290,7 +290,7 @@ macro_rules! expr_enum {
                     Ok(())
                 }
             }
-        )*)?)?
+        )?)?)*
     };
 
     // Internal rules which let us match an arg object if $args_type is present

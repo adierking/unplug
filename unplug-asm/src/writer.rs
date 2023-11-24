@@ -730,30 +730,29 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
 
     fn write_operand(&mut self, operand: &Operand) -> io::Result<()> {
         match operand {
-            Operand::I8(i) => write!(self.writer, "{}.b", i)?,
-            Operand::U8(i) => write!(self.writer, "{}.b", i)?,
-            Operand::I16(i) => write!(self.writer, "{}.w", i)?,
-            Operand::U16(i) => write!(self.writer, "{}.w", i)?,
-            Operand::I32(i) => write!(self.writer, "{}.d", i)?,
-            Operand::U32(i) => write!(self.writer, "{}.d", i)?,
+            Operand::I8(i) => write!(self.writer, "{}.b", i),
+            Operand::U8(i) => write!(self.writer, "{}.b", i),
+            Operand::I16(i) => write!(self.writer, "{}.w", i),
+            Operand::U16(i) => write!(self.writer, "{}.w", i),
+            Operand::I32(i) => write!(self.writer, "{}.d", i),
+            Operand::U32(i) => write!(self.writer, "{}.d", i),
             Operand::Text(text) => {
                 let decoded = text.decode().unwrap();
                 let escaped = decoded.replace('\n', "\\n").replace(VT, "\\v");
-                write!(self.writer, "\"{}\"", escaped)?
+                write!(self.writer, "\"{}\"", escaped)
             }
             Operand::Label(label) => {
-                write!(self.writer, "*{}", self.program.labels.get(*label).name)?
+                write!(self.writer, "*{}", self.program.labels.get(*label).name)
             }
             Operand::ElseLabel(label) => {
-                write!(self.writer, "else *{}", self.program.labels.get(*label).name)?
+                write!(self.writer, "else *{}", self.program.labels.get(*label).name)
             }
-            Operand::Offset(off) => write!(self.writer, "*0x{:x}", off)?,
-            Operand::Type(ty) => write!(self.writer, "{}", ty.name())?,
-            Operand::Expr(expr) => self.write_expr(expr)?,
-            Operand::MsgCommand(cmd) => self.write_msg_command(cmd)?,
-            Operand::Error => write!(self.writer, "!")?,
+            Operand::Offset(off) => write!(self.writer, "*0x{:x}", off),
+            Operand::Type(ty) => write!(self.writer, "{}", ty.name()),
+            Operand::Expr(expr) => self.write_expr(expr),
+            Operand::MsgCommand(cmd) => self.write_msg_command(cmd),
+            Operand::Error => write!(self.writer, "!"),
         }
-        Ok(())
     }
 
     fn write_expr(&mut self, expr: &Operation<ExprOp>) -> io::Result<()> {

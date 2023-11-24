@@ -65,7 +65,7 @@ impl<'r> FlacReader<'r> {
     fn build_samples<F>(
         &self,
         num_samples: usize,
-        channels: Vec<&[i32]>,
+        channels: &[&[i32]],
     ) -> Samples<'static, AnyFormat>
     where
         F: PcmFormat + Cast<AnyFormat>,
@@ -73,7 +73,7 @@ impl<'r> FlacReader<'r> {
     {
         let mut samples = Vec::with_capacity(num_samples);
         for i in 0..(num_samples / channels.len()) {
-            for channel in &channels {
+            for channel in channels {
                 samples.push(F::Data::try_from(channel[i]).ok().expect("bad sample size"));
             }
         }
@@ -87,22 +87,22 @@ impl ReadSamples<'static> for FlacReader<'_> {
     #[instrument(level = "trace", name = "FlacReader", skip_all)]
     fn read_samples(&mut self) -> Result<Option<Samples<'static, Self::Format>>> {
         // Calling blocks() here will pick up where the last call left off
-        let _block_span = trace_span!("read_next_or_eof").entered();
+        let span = trace_span!("read_next_or_eof").entered();
         let mut reader = self.flac.blocks();
         let block = match reader.read_next_or_eof(mem::take(&mut self.buffer))? {
             Some(b) => b,
             None => return Ok(None),
         };
-        _block_span.exit();
+        span.exit();
 
         // The channels are all separate chunks of data which need to be interleaved
         let num_samples = block.len() as usize;
         let channels = (0..self.channels).map(|c| block.channel(c as u32)).collect::<Vec<_>>();
         let samples = match self.format {
-            Format::PcmS8 => self.build_samples::<PcmS8>(num_samples, channels),
-            Format::PcmS16Le => self.build_samples::<PcmS16Le>(num_samples, channels),
-            Format::PcmS24Le => self.build_samples::<PcmS24Le>(num_samples, channels),
-            Format::PcmS32Le => self.build_samples::<PcmS32Le>(num_samples, channels),
+            Format::PcmS8 => self.build_samples::<PcmS8>(num_samples, &channels),
+            Format::PcmS16Le => self.build_samples::<PcmS16Le>(num_samples, &channels),
+            Format::PcmS24Le => self.build_samples::<PcmS24Le>(num_samples, &channels),
+            Format::PcmS32Le => self.build_samples::<PcmS32Le>(num_samples, &channels),
             other => panic!("unhandled format: {:?}", other),
         };
         self.buffer = block.into_buffer();

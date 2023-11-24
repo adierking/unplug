@@ -311,8 +311,8 @@ impl<W: Write> MessageWriter<W> {
             MsgCommand::Question(arg) => {
                 let mut tag = BytesStart::new(ELEM_QUESTION);
                 let yn = |f| if arg.flags.contains(f) { QUESTION_NO } else { QUESTION_YES };
-                tag.push_attribute((ATTR_LEFT, yn(QuestionFlags::LEFT_NO).to_string().as_ref()));
-                tag.push_attribute((ATTR_RIGHT, yn(QuestionFlags::RIGHT_NO).to_string().as_ref()));
+                tag.push_attribute((ATTR_LEFT, yn(QuestionFlags::LEFT_NO).to_owned().as_ref()));
+                tag.push_attribute((ATTR_RIGHT, yn(QuestionFlags::RIGHT_NO).to_owned().as_ref()));
                 tag.push_attribute((ATTR_DEFAULT, arg.default.to_string().as_ref()));
                 self.writer.write_event(Event::Empty(tag))?;
             }

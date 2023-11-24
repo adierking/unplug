@@ -19,7 +19,7 @@ fn load_music() -> HpsReader<'static> {
         .expect("failed to load HPS file")
 }
 
-fn decode_adpcm(music: &HpsReader) -> Vec<Samples<'static, PcmS16Le>> {
+fn decode_adpcm(music: &HpsReader<'_>) -> Vec<Samples<'static, PcmS16Le>> {
     let mut decoder = music.decoder().owned();
     let mut samples = vec![];
     loop {

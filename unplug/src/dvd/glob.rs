@@ -27,7 +27,7 @@ fn glob_to_regex(glob: &str, mode: GlobMode) -> String {
     let mut is_dir = true; // true if the regex currently ends with a separator
     while let Some(ch) = chars.next() {
         if ch == '*' {
-            if let Some('*') = chars.peek().copied() {
+            if chars.peek().copied() == Some('*') {
                 // `**` - match any characters including slashes
                 regex.push('.');
                 chars.next();

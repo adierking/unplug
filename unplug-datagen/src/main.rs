@@ -591,7 +591,7 @@ fn read_spawnables(
     for i in 0..NUM_SPAWNABLES {
         let placement = ObjectPlacement::read_from(reader)?;
         let object = object_index(placement.id);
-        let mut label = objects[object].label.0.to_owned();
+        let mut label = objects[object].label.0.clone();
         if let Some(stripped) = label.strip_prefix(INTERNAL_PREFIX) {
             label = stripped.into();
         } else if label.strip_prefix(UNKNOWN_PREFIX).is_some() {
@@ -602,7 +602,7 @@ fn read_spawnables(
         spawnables.push(Spawnable { label: Label(label), name, placement });
     }
     for (i, spawnable) in spawnables.iter_mut().enumerate() {
-        if *label_counts.get(&spawnable.label.0).unwrap() > 1 {
+        if label_counts[&spawnable.label.0] > 1 {
             spawnable.label.append_discriminator(i);
             spawnable.name = Label::snake_case(&spawnable.label.0);
         }
@@ -1111,7 +1111,10 @@ fn write_items(mut writer: impl Write, items: &[ItemDefinition]) -> Result<()> {
             Some(label) => &label.0,
             _ => "None",
         };
-        let flags: String = item.flags.iter().map(|f| format!(", {}", f)).collect();
+        let flags: String = item.flags.iter().fold(String::new(), |mut s, f| {
+            let _ = write!(s, ", {}", f);
+            s
+        });
         writeln!(
             writer,
             "    {} => {} {{ \"{}\", {}{} }},",
@@ -1248,7 +1251,7 @@ fn run_app() -> Result<()> {
     let mut sfx_samples = vec![];
     if let Some(brsar_path) = options.brsar {
         info!("Reading BRSAR");
-        let mut brsar_reader = BufReader::new(File::open(&brsar_path)?);
+        let mut brsar_reader = BufReader::new(File::open(brsar_path)?);
         let brsar = Brsar::read_from(&mut brsar_reader)?;
         info!("Matching sound effect names");
         sfx = build_sfx(&playlist, &brsar, &sfx_groups);
@@ -1361,7 +1364,7 @@ fn run_app() -> Result<()> {
 
 fn main() {
     process::exit(match run_app() {
-        Ok(_) => 0,
+        Ok(()) => 0,
         Err(err) => {
             error!("Fatal: {:#}", err);
             1

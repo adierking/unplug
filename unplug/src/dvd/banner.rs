@@ -56,6 +56,7 @@ impl Banner {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl Debug for Banner {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Banner").field("languages", &self.languages).finish()

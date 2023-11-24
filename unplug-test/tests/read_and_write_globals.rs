@@ -13,6 +13,7 @@ use unplug_test as common;
 
 #[test]
 #[serial]
+#[allow(clippy::verbose_file_reads)]
 fn test_rebuild_globals_copy_all() -> Result<()> {
     common::init_logging();
 

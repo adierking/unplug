@@ -214,7 +214,7 @@ pub fn progress_spinner(message: String) -> ProgressBar {
 }
 
 /// Creates a progress bar which shows audio playback progress.
-pub fn progress_playback(duration: Duration, message: String) -> ProgressBar {
+pub fn progress_playback(duration: Duration, message: &str) -> ProgressBar {
     let prefix = format_duration(Duration::default());
     let message = format!("[{}] {}", format_duration(duration), message);
     let length = duration.as_millis().try_into().unwrap();
@@ -360,7 +360,7 @@ impl<T: PlaybackController> PlaybackUi<T> {
 
         let duration = self.controller.duration();
         let name = self.controller.name().to_owned();
-        self.progress = progress_playback(duration, name);
+        self.progress = progress_playback(duration, &name);
     }
 
     /// Clears the UI, returning the terminal to the state it was in before `show_ui()`.
