@@ -109,9 +109,9 @@ pub struct WavReader<'a> {
     /// Audio cue points.
     cues: Vec<Cue>,
     /// The number of channels in the audio data.
-    pub channels: usize,
+    channels: usize,
     /// The audio's sample rate.
-    pub sample_rate: u32,
+    sample_rate: u32,
 }
 
 impl<'a> WavReader<'a> {

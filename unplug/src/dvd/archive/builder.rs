@@ -75,8 +75,8 @@ impl<'a> ArchiveBuilder<'a> {
         // OpenFile is implemented for &mut T
         let boxed: Box<dyn OpenFile> = Box::new(archive);
         let source = Rc::new(RefCell::new(boxed));
-        for entry in files.entries.keys() {
-            sources.insert(entry, source.clone());
+        for entry in files.entries() {
+            sources.insert(entry, Rc::clone(&source));
         }
         Self { files, sources }
     }

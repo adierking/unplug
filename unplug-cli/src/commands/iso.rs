@@ -37,7 +37,7 @@ fn command_info(ctx: Context) -> Result<()> {
         used * 100 / total
     );
 
-    println!("File Entries: {}", disc.files.len());
+    println!("File Entries: {}", disc.files().len());
     // TODO: Other useful info?
     Ok(())
 }
@@ -46,14 +46,14 @@ fn command_info(ctx: Context) -> Result<()> {
 fn command_list(ctx: Context, opt: IsoListOpt) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let disc = DiscStream::open(File::open(path)?)?;
-    list_files(&disc.files, &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))
+    list_files(disc.files(), &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))
 }
 
 /// The `iso extract` CLI command.
 fn command_extract(ctx: Context, opt: IsoExtractOpt) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let mut disc = DiscStream::open(File::open(path)?)?;
-    let files = Glob::new(GlobMode::Exact, opt.paths).find(&disc.files).collect::<Vec<_>>();
+    let files = Glob::new(GlobMode::Exact, opt.paths).find(disc.files()).collect::<Vec<_>>();
     if files.is_empty() {
         bail!("Nothing to extract");
     }
@@ -73,7 +73,7 @@ fn command_extract_all(ctx: Context, opt: IsoExtractAllOpt) -> Result<()> {
     let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
     fs::create_dir_all(out_dir)?;
     let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
-    let root = disc.files.root();
+    let root = disc.files().root();
     extract_file(&mut disc, root, "/", out_dir, out_name.as_deref(), &mut io_buf)?;
     Ok(())
 }

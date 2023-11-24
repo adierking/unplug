@@ -162,8 +162,8 @@ impl<W: Write + ?Sized> WriteTo<W> for DiscHeader {
 pub struct DiscStream<S: ReadSeek> {
     header: Box<DiscHeader>,
     free_regions: Vec<DiscRegion>,
-    pub stream: S,
-    pub files: FileTree,
+    stream: S,
+    files: FileTree,
 }
 
 impl<S: ReadSeek> DiscStream<S> {
@@ -179,6 +179,11 @@ impl<S: ReadSeek> DiscStream<S> {
         let free_regions = Self::find_free_regions(&header, &fst);
         let files = FileTree::from_fst(&fst)?;
         Ok(Self { header: header.into(), free_regions, stream: stream.into_inner(), files })
+    }
+
+    /// Returns a reference to the inner file tree.
+    pub fn files(&self) -> &FileTree {
+        &self.files
     }
 
     /// Returns the disc's game ID (e.g. "GGTE01").

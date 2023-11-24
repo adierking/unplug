@@ -170,7 +170,7 @@ impl<T: ReadSeek> DiscSource<T> {
     fn get(&self, path: &str) -> Result<FileId> {
         let files = match self {
             Self::None => return Err(no_disc_error()),
-            Self::Iso(disc) => &disc.files,
+            Self::Iso(disc) => disc.files(),
         };
         let entry = files.at(path)?;
         if files[entry].is_dir() {
@@ -184,7 +184,7 @@ impl<T: ReadSeek> DiscSource<T> {
         if let FileId::Iso(entry) = *file {
             let info = match self {
                 Self::None => return Err(no_disc_error()),
-                Self::Iso(disc) => disc.files[entry].file().unwrap(),
+                Self::Iso(disc) => disc.files()[entry].file().unwrap(),
             };
             Ok(FileInfo { name: info.name.clone(), size: info.size.into() })
         } else {

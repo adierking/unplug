@@ -460,7 +460,7 @@ impl FusedIterator for TreeRecurse<'_> {}
 #[derive(Clone)]
 pub struct FileTree {
     /// The entries in the table.
-    pub entries: SlotMap<EntryId, Entry>,
+    entries: SlotMap<EntryId, Entry>,
     /// The ID of the root directory.
     root: EntryId,
 }
@@ -495,6 +495,11 @@ impl FileTree {
     /// Returns an iterator that recurses through the entire tree.
     pub fn recurse(&self) -> TreeRecurse<'_> {
         self.recurse_from(self.root)
+    }
+
+    /// Returns an iterator over all entries in the tree in an unspecified order.
+    pub fn entries(&self) -> impl Iterator<Item = EntryId> + '_ {
+        self.entries.keys()
     }
 
     /// Returns an iterator that recurses through the tree starting at the directory referenced by

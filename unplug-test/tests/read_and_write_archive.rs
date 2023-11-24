@@ -22,7 +22,7 @@ fn test_read_and_write_archive_copy() -> Result<()> {
 
     info!("Comparing files");
     let mut rebuilt = ArchiveReader::open(temp)?;
-    assert_eq!(rebuilt.files.entries.len(), original.files.entries.len());
+    assert_eq!(rebuilt.files.len(), original.files.len());
     for (path, rebuilt_id) in rebuilt.files.recurse() {
         let file = match &rebuilt.files[rebuilt_id] {
             Entry::File(f) => f,
@@ -57,7 +57,7 @@ fn test_read_and_write_archive_replace() -> Result<()> {
 
     info!("Comparing files");
     let mut rebuilt = ArchiveReader::open(temp)?;
-    assert_eq!(rebuilt.files.entries.len(), original.files.entries.len());
+    assert_eq!(rebuilt.files.len(), original.files.len());
     for (path, rebuilt_id) in rebuilt.files.recurse() {
         let file = match &rebuilt.files[rebuilt_id] {
             Entry::File(f) => f,

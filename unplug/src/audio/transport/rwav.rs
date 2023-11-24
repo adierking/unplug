@@ -362,7 +362,7 @@ pub struct Rwav {
     /// The data for each channel in the sound.
     pub channels: ArrayVec<Channel, 2>,
     /// The audio source tag for debugging purposes.
-    tag: SourceTag,
+    pub tag: SourceTag,
 }
 
 impl Rwav {

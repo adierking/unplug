@@ -27,16 +27,16 @@ fn test_disc_max_file_size() -> Result<()> {
 
     let iso = common::open_iso()?;
 
-    let qp = iso.files.at("qp.bin")?;
-    assert_eq!(iso.files.file(qp)?.size, 0x46b288b);
+    let qp = iso.files().at("qp.bin")?;
+    assert_eq!(iso.files().file(qp)?.size, 0x46b288b);
     assert_eq!(iso.max_file_size(qp)?, 0x46b288c);
 
-    let cbr_ddf = iso.files.at("tmp/cbr.ddf")?;
-    assert_eq!(iso.files.file(cbr_ddf)?.size, 0x23d6);
+    let cbr_ddf = iso.files().at("tmp/cbr.ddf")?;
+    assert_eq!(iso.files().file(cbr_ddf)?.size, 0x23d6);
     assert_eq!(iso.max_file_size(cbr_ddf)?, 0x23e0);
 
-    let opening = iso.files.at("opening.bnr")?;
-    assert_eq!(iso.files.file(opening)?.size, 0x1960);
+    let opening = iso.files().at("opening.bnr")?;
+    assert_eq!(iso.files().file(opening)?.size, 0x1960);
     assert_eq!(iso.max_file_size(opening)?, 0x1960);
     Ok(())
 }
