@@ -48,7 +48,7 @@ pub fn finish(records: &[Vec3]) -> Coefficients {
         let vec2 = [0.0, -1.0, 0.0];
         for i in 0..exp {
             for y in 0..=2 {
-                vec_best[exp + i][y] = (0.01 * vec2[y]) + vec_best[i][y];
+                vec_best[exp + i][y] = 0.01f64.mul_add(vec2[y], vec_best[i][y]);
             }
         }
         exp = 1 << (w + 1);
@@ -186,13 +186,13 @@ fn bidirectional_filter(mtx: &Matrix3, vec_idxs: &[usize; 3], vec_out: &mut Vec3
 
 fn quadratic_merge(vec: &mut Vec3) -> bool {
     let v2 = vec[2];
-    let tmp = 1.0 - (v2 * v2);
+    let tmp = v2.mul_add(-v2, 1.0);
     if tmp == 0.0 {
         return true;
     }
 
-    let v0 = (vec[0] - (v2 * v2)) / tmp;
-    let v1 = (vec[1] - (vec[1] * v2)) / tmp;
+    let v0 = v2.mul_add(-v2, vec[0]) / tmp;
+    let v1 = vec[1].mul_add(-v2, vec[1]) / tmp;
     *vec = [v0, v1, v2];
     v1.abs() > 1.0
 }
@@ -206,7 +206,7 @@ fn finish_record(in_record: &Vec3, out_record: &mut Vec3) {
             in_record[z] = -0.9999999999;
         }
     }
-    *out_record = [1.0, (in_record[2] * in_record[1]) + in_record[1], in_record[2]];
+    *out_record = [1.0, in_record[2].mul_add(in_record[1], in_record[1]), in_record[2]];
 }
 
 fn matrix_filter(src: &Vec3, dst: &mut Vec3, mtx: &mut Matrix3) {
@@ -216,9 +216,9 @@ fn matrix_filter(src: &Vec3, dst: &mut Vec3, mtx: &mut Matrix3) {
     }
 
     for i in (1..=2).rev() {
-        let val = 1.0 - (mtx[i][i] * mtx[i][i]);
+        let val = mtx[i][i].mul_add(-mtx[i][i], 1.0);
         for y in 1..=i {
-            mtx[i - 1][y] = ((mtx[i][i] * mtx[i][y]) + mtx[i][y]) / val;
+            mtx[i - 1][y] = mtx[i][i].mul_add(mtx[i][y], mtx[i][y]) / val;
         }
     }
 
@@ -249,18 +249,18 @@ fn merge_finish_record(src: &Vec3, dst: &mut Vec3) {
             dst[y] += dst[i] * dst[i - y];
         }
 
-        val *= 1.0 - (dst[i] * dst[i]);
+        val *= dst[i].mul_add(-dst[i], 1.0);
     }
 
     finish_record(&tmp, dst);
 }
 
 fn contrast_vectors(a: &Vec3, b: &Vec3) -> f64 {
-    let val = (b[2] * b[1] + -b[1]) / (1.0 - b[2] * b[2]);
-    let val1 = (a[0] * a[0]) + (a[1] * a[1]) + (a[2] * a[2]);
-    let val2 = (a[0] * a[1]) + (a[1] * a[2]);
+    let val = b[2].mul_add(b[1], -b[1]) / b[2].mul_add(-b[2], 1.0);
+    let val1 = a[2].mul_add(a[2], a[0].mul_add(a[0], a[1] * a[1]));
+    let val2 = a[0].mul_add(a[1], a[1] * a[2]);
     let val3 = a[0] * a[2];
-    val1 + (2.0 * val * val2) + (2.0 * (-b[1] * val + -b[2]) * val3)
+    (2.0 * (-b[1]).mul_add(val, -b[2])).mul_add(val3, (2.0 * val).mul_add(val2, val1))
 }
 
 fn filter_records(vec_best: &mut [Vec3], exp: usize, records: &[Vec3]) {
