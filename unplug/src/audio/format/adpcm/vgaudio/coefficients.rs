@@ -2,12 +2,12 @@
 
 use crate::audio::format::adpcm::{Coefficients, SAMPLES_PER_FRAME};
 
-pub(crate) type Matrix3 = [[f64; 3]; 3];
-pub(crate) type Vec3 = [f64; 3];
+pub type Matrix3 = [[f64; 3]; 3];
+pub type Vec3 = [f64; 3];
 
-pub(crate) type PcmHistory = [i16; SAMPLES_PER_FRAME * 2];
+pub type PcmHistory = [i16; SAMPLES_PER_FRAME * 2];
 
-pub(crate) fn process_frame(pcm_hist: &mut PcmHistory, records: &mut Vec<Vec3>) {
+pub fn process_frame(pcm_hist: &mut PcmHistory, records: &mut Vec<Vec3>) {
     let mut vec1 = Vec3::default();
     let mut buffer = Vec3::default();
     let mut mtx = Matrix3::default();
@@ -27,7 +27,7 @@ pub(crate) fn process_frame(pcm_hist: &mut PcmHistory, records: &mut Vec<Vec3>) 
     pcm_hist.copy_within(SAMPLES_PER_FRAME.., 0);
 }
 
-pub(crate) fn finish(records: &[Vec3]) -> Coefficients {
+pub fn finish(records: &[Vec3]) -> Coefficients {
     let mut mtx = Matrix3::default();
     let mut vec1 = [1.0, 0.0, 0.0];
     let mut vec_best = [Vec3::default(); 8];

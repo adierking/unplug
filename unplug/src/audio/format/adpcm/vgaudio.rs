@@ -1,2 +1,2 @@
-pub(crate) mod coefficients;
-pub(crate) mod encode;
+pub mod coefficients;
+pub mod encode;
