@@ -65,7 +65,7 @@ jobs:
           if-no-files-found: error
 
   universal:
-    name: "Make universal binary"
+    name: "macOS Universal Binary"
     needs: build
     runs-on: macos-latest
     steps:
@@ -153,7 +153,7 @@ jobs:
           parallel: true
 
   test-done:
-    name: "Test (Finalize)"
+    name: "Finalize Code Coverage"
     needs: test
     runs-on: ubuntu-latest
     steps:
