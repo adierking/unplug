@@ -192,6 +192,7 @@ impl IntLiteral {
         self.value
     }
 
+    #[must_use]
     pub fn with_value(self, value: IntValue) -> Self {
         Self { value, ..self }
     }

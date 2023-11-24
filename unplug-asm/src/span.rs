@@ -49,17 +49,20 @@ impl Span {
     }
 
     /// Returns a new span with length `len` and the same starting point.
+    #[must_use]
     pub fn with_len(self, len: u32) -> Self {
         let end = self.start.checked_add(len).expect("span length overflow");
         Self { start: self.start, end }
     }
 
     /// Returns a new span of length `len` starting at the end of this span.
+    #[must_use]
     pub fn at_end(self, len: u32) -> Self {
         Span::new(self.end, self.end).with_len(len)
     }
 
     /// Joins this span with another span. Empty spans are ignored.
+    #[must_use]
     pub fn join(self, other: Self) -> Self {
         if self.is_empty() {
             other

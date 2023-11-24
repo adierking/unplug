@@ -443,6 +443,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
     }
 
     /// Enqueues `file` to be written from data in `reader`.
+    #[must_use]
     pub fn write_file(self, file: &FileId, reader: impl ReadSeek + 'r) -> Self {
         self.write_impl(file, Box::from(reader))
     }

@@ -410,6 +410,7 @@ impl Stage {
 
     /// Clones the stage without cloning any of the script data. The new stage will have an empty
     /// script with no entry points set.
+    #[must_use]
     pub fn clone_without_script(&self) -> Self {
         let mut cloned = Self {
             objects: self.objects.clone(),
