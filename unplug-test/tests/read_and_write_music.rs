@@ -74,7 +74,7 @@ fn test_read_and_write_music() -> Result<()> {
     }
 
     if rehash {
-        println!("];")
+        println!("];");
     }
     Ok(())
 }

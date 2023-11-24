@@ -33,7 +33,7 @@ fn decode_adpcm(music: &HpsReader) -> Vec<Samples<'static, PcmS16Le>> {
 
 pub fn bench(c: &mut Criterion) {
     c.bench_with_input(BenchmarkId::new("decode_adpcm", 0), &load_music(), |b, music| {
-        b.iter_with_large_drop(|| decode_adpcm(music))
+        b.iter_with_large_drop(|| decode_adpcm(music));
     });
 }
 

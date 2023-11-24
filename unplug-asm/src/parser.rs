@@ -363,7 +363,7 @@ impl<'s> Parser<'s> {
 
     /// Reports a diagnostic.
     fn report(&mut self, diagnostic: Diagnostic) {
-        self.diagnostics.push(diagnostic)
+        self.diagnostics.push(diagnostic);
     }
 }
 

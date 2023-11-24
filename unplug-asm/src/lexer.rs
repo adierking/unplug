@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(
             lex("abc ; def\nghi;"),
             &[Token::Identifier("abc".into()), Token::Newline, Token::Identifier("ghi".into())]
-        )
+        );
     }
 
     #[test]
@@ -288,7 +288,7 @@ mod tests {
                 Token::Identifier("pqr".into()),
                 Token::Newline,
             ]
-        )
+        );
     }
 
     #[test]
@@ -303,7 +303,7 @@ mod tests {
                 Token::Identifier("jkl".into()),
                 Token::Newline,
             ]
-        )
+        );
     }
 
     #[test]

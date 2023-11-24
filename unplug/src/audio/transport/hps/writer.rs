@@ -440,7 +440,7 @@ impl<'r, 's> HpsWriter<'r, 's> {
 
     fn update_progress(&mut self) {
         if let Some(on_progress) = &mut self.on_progress {
-            on_progress(self.left.progress())
+            on_progress(self.left.progress());
         }
     }
 }

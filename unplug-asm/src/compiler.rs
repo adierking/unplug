@@ -361,7 +361,7 @@ impl<'a> OperandCursor<'a> {
 
     /// Reports a diagnostic to the shared diagnostic list.
     fn report(&self, diagnostic: Diagnostic) {
-        self.diagnostics.borrow_mut().push(diagnostic)
+        self.diagnostics.borrow_mut().push(diagnostic);
     }
 }
 
@@ -466,7 +466,7 @@ impl<'a> AsmDeserializer<'a> {
 
     /// Reports a diagnostic to the shared diagnostic list.
     fn report(&self, diagnostic: Diagnostic) {
-        self.diagnostics.borrow_mut().push(diagnostic)
+        self.diagnostics.borrow_mut().push(diagnostic);
     }
 }
 

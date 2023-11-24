@@ -128,7 +128,7 @@ impl BlockBuilder {
 
     /// Adds `command` to the end of the block.
     fn emit(&mut self, command: Command) {
-        self.code.commands.push(command)
+        self.code.commands.push(command);
     }
 
     /// Emits a `Set()` command which sets `var` to `value`.
@@ -157,7 +157,7 @@ impl BlockBuilder {
 
     /// Emits an `EndIf()` command which jumps to `target`.
     fn emit_endif(&mut self, target: BlockId) {
-        self.emit(Command::EndIf(target.into()))
+        self.emit(Command::EndIf(target.into()));
     }
 
     /// Finishes building the block and returns the inner `CodeBlock`.

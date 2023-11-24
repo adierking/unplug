@@ -599,7 +599,7 @@ fn read_spawnables(
         }
         *label_counts.entry(label.clone()).or_default() += 1;
         let name = Label::snake_case(&label);
-        spawnables.push(Spawnable { label: Label(label), name, placement })
+        spawnables.push(Spawnable { label: Label(label), name, placement });
     }
     for (i, spawnable) in spawnables.iter_mut().enumerate() {
         if *label_counts.get(&spawnable.label.0).unwrap() > 1 {
@@ -940,7 +940,7 @@ fn read_sfx_groups(
             first_sample: sample_index,
             first_material: material_index,
             name: name.to_owned(),
-        })
+        });
     }
     Ok(groups)
 }

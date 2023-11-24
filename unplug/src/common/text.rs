@@ -67,7 +67,7 @@ impl Text {
 
     /// Resets the text to an empty string.
     pub fn clear(&mut self) {
-        self.bytes.clear()
+        self.bytes.clear();
     }
 
     /// Returns an iterator over the bytes in the text.

@@ -495,12 +495,12 @@ impl PlaybackStream {
 
     /// Runs the stream until it is ready for playback to begin.
     fn run_until_buffered(&mut self) {
-        self.run_until(|s| s.done || s.ready)
+        self.run_until(|s| s.done || s.ready);
     }
 
     /// Receives and processes stream notifications until music finishes playing.
     pub fn run_until_finished(&mut self) {
-        self.run_until(|s| s.done)
+        self.run_until(|s| s.done);
     }
 
     /// Internal method which receives and processes notifications until a predicate becomes true.
@@ -571,7 +571,7 @@ impl PlaybackStream {
 
     /// Sets the volume scale to `volume`.
     fn set_volume(&self, volume: f64) {
-        self.state.lock().unwrap().volume.set_volume(volume)
+        self.state.lock().unwrap().volume.set_volume(volume);
     }
 
     /// Stops the stream and waits for all threads to clean up.
@@ -710,7 +710,7 @@ impl PlaybackController for UiController {
         self.stream.volume()
     }
     fn set_volume(&self, volume: f64) {
-        self.stream.set_volume(volume)
+        self.stream.set_volume(volume);
     }
 }
 

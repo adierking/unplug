@@ -560,7 +560,7 @@ mod tests {
             }
             if let Value::Message(MsgOp::Format) = values[0] {
                 // HACK: format strings have to end with the format character
-                values.push(Value::Message(MsgOp::Format))
+                values.push(Value::Message(MsgOp::Format));
             }
             values
         }
@@ -753,16 +753,16 @@ mod tests {
 
     #[test]
     fn test_find_opcode_command() {
-        do_find_opcode_test(&CMD_SIGNATURES)
+        do_find_opcode_test(&CMD_SIGNATURES);
     }
 
     #[test]
     fn test_find_opcode_expr() {
-        do_find_opcode_test(&EXPR_SIGNATURES)
+        do_find_opcode_test(&EXPR_SIGNATURES);
     }
 
     #[test]
     fn test_find_opcode_msg() {
-        do_find_opcode_test(&MSG_SIGNATURES)
+        do_find_opcode_test(&MSG_SIGNATURES);
     }
 }

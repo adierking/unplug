@@ -37,7 +37,7 @@ fn read_stage(context: &StageContext) -> Stage {
 
 pub fn bench(c: &mut Criterion) {
     c.bench_with_input(BenchmarkId::new("read_stage", 0), &preread(), |b, data| {
-        b.iter_with_large_drop(|| read_stage(data))
+        b.iter_with_large_drop(|| read_stage(data));
     });
 }
 

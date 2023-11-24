@@ -740,7 +740,7 @@ impl<'s, R: ReadSamples<'s>> PeekSamples<'s, R> {
             // Save the progress hint before reading so that peeking doesn't change the progress
             let progress = self.inner.progress();
             if let Some(samples) = self.inner.read_samples()? {
-                self.next = Some(Box::from(SavedSamples { samples, progress }))
+                self.next = Some(Box::from(SavedSamples { samples, progress }));
             }
         }
         Ok(self.next.as_ref().map(|s| &s.samples))

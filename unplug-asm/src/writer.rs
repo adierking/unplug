@@ -92,7 +92,7 @@ impl<'a> AsmSerializer<'a> {
     /// Pushes a new operand onto the current operation.
     fn push_operand(&mut self, operand: Operand) {
         if let Some(op) = &mut self.operation {
-            op.push_operand(operand.into())
+            op.push_operand(operand.into());
         } else {
             match self.asm.content.get_or_insert(BlockContent::Data(vec![])) {
                 BlockContent::Data(data) => data.push(operand.into()),
@@ -152,7 +152,7 @@ impl<'a> AsmSerializer<'a> {
     fn postprocess_command(cmd: &mut Operation<CmdOp>) {
         if *cmd.opcode == CmdOp::Set {
             // set() puts the destination second; reverse the operands
-            cmd.operands.reverse()
+            cmd.operands.reverse();
         }
     }
 

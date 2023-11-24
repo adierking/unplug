@@ -22,7 +22,7 @@ fn encode_adpcm(music: &Samples<'static, PcmS16Le>) -> Samples<'static, GcAdpcm>
 
 pub fn bench(c: &mut Criterion) {
     c.bench_with_input(BenchmarkId::new("encode_adpcm", 0), &load_music(), |b, music| {
-        b.iter_with_large_drop(|| encode_adpcm(music))
+        b.iter_with_large_drop(|| encode_adpcm(music));
     });
 }
 
