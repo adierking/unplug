@@ -61,8 +61,31 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: unplug-${{ github.ref_name }}-${{ matrix.name }}
-          path:
-            target/${{ matrix.target }}/release/${{ matrix.exe-name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.exe-name }}
+          if-no-files-found: error
+
+  universal:
+    name: "Make universal binary"
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - name: Download ARM Build
+        uses: actions/download-artifact@v3
+        with:
+          name: unplug-${{ github.ref_name }}-macos-arm
+          path: arm
+      - name: Download x64 Build
+        uses: actions/download-artifact@v3
+        with:
+          name: unplug-${{ github.ref_name }}-macos-x64
+          path: x64
+      - name: Run Lipo
+        run: lipo arm/unplug x64/unplug -create -output unplug
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: unplug-${{ github.ref_name }}-macos-universal
+          path: unplug
           if-no-files-found: error
 
   test:
