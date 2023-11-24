@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 arrayvec.workspace = true
 bitflags.workspace = true

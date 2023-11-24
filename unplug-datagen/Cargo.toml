@@ -5,6 +5,9 @@ authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 bitflags.workspace = true

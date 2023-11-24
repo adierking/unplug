@@ -10,6 +10,9 @@ version.workspace = true
 name = "unplug"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 arrayvec.workspace = true
