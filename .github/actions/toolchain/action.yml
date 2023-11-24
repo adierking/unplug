@@ -30,5 +30,5 @@ runs:
 
     - if: ${{ inputs.nightly }}
       name: Install Toolchain (Nightly)
-      run: rustup toolchain install ${{ inputs.nightly }} -t ${{ inputs.target }} -c llvm-tools-preview
+      run: rustup toolchain install ${{ inputs.nightly }} -t ${{ inputs.target }} -c llvm-tools-preview rust-src
       shell: bash
