@@ -237,13 +237,9 @@ impl LiveState {
     }
 
     fn analyze_lib(&mut self, index: i16, libs: &[SubroutineEffects]) {
-        if libs.is_empty() {
-            panic!("No library subroutines are configured");
-        }
-        if index < 0 || (index as usize) >= libs.len() {
-            // TODO: this should be an error, not a panic
-            panic!("Invalid library index: {}", index);
-        }
+        assert!(!libs.is_empty(), "No library subroutines are configured");
+        // TODO: this should be an error, not an assert
+        assert!(index >= 0 && (index as usize) < libs.len(), "Invalid library index: {}", index);
         self.analyze_sub_call(&libs[index as usize]);
     }
 

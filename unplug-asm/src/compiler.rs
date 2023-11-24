@@ -256,9 +256,10 @@ impl<'a> OperandCursor<'a> {
             self.report(Diagnostic::not_enough_operands(self.kind.span()));
             return Err(());
         };
-        if !matches!(*self.kind, CursorKind::Command(_) | CursorKind::Expr(_)) {
-            panic!("this operation does not support expressions");
-        }
+        assert!(
+            matches!(*self.kind, CursorKind::Command(_) | CursorKind::Expr(_)),
+            "this operation does not support expressions"
+        );
         let operands = self.operands.ensure_borrowed().expect("operands are not borrowed");
         let operand = &operands[index];
         let (opcode, cursor) = match &**operand {
@@ -311,9 +312,10 @@ impl<'a> OperandCursor<'a> {
             self.report(Diagnostic::not_enough_operands(self.kind.span()));
             return Err(());
         };
-        if !matches!(*self.kind, CursorKind::Command(_)) {
-            panic!("this operation does not support message commands");
-        }
+        assert!(
+            matches!(*self.kind, CursorKind::Command(_)),
+            "this operation does not support message commands"
+        );
         let operands = self.operands.ensure_borrowed().expect("operands are not borrowed");
         let operand = &operands[index];
         let (opcode, cursor) = match &**operand {
@@ -581,9 +583,7 @@ impl EventDeserializer for AsmDeserializer<'_> {
     }
 
     fn begin_command(&mut self) -> SerResult<CmdOp> {
-        if self.cursor.is_some() {
-            panic!("already in a command");
-        }
+        assert!(self.cursor.is_none(), "already in a command");
         let code = match &self.block.content {
             Some(BlockContent::Code(code)) => code,
             Some(BlockContent::Data(_)) => panic!("not in a code block"),

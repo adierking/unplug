@@ -195,9 +195,10 @@ impl Script {
             Some(layout) => layout,
             None => panic!("Script does not have layout information"),
         };
-        if layout.block_offsets.len() != self.blocks.len() {
-            panic!("Script layout does not match the current block list");
-        }
+        assert!(
+            layout.block_offsets.len() == self.blocks.len(),
+            "Script layout does not match the current block list"
+        );
         BlocksOrdered { blocks: &self.blocks, locations: layout.block_offsets.iter() }
     }
 
@@ -208,9 +209,10 @@ impl Script {
             Some(layout) => layout,
             None => panic!("Script does not have layout information"),
         };
-        if layout.block_offsets.len() != self.len() {
-            panic!("Script layout does not match the current block list");
-        }
+        assert!(
+            layout.block_offsets.len() == self.len(),
+            "Script layout does not match the current block list"
+        );
         BlocksOrderedMut {
             blocks: self.blocks.as_mut_ptr(),
             len: self.len(),
@@ -318,10 +320,8 @@ pub struct BlocksOrderedMut<'a> {
 impl<'a> BlocksOrderedMut<'a> {
     fn get(&self, id: BlockId) -> &'a mut Block {
         let index = id.index();
-        if index >= self.len {
-            panic!("Invalid block index: {}", index);
-        }
-        // Safety:
+        assert!(index < self.len, "Invalid block index: {}", index);
+        // SAFETY:
         //
         // We validated above that the index is within the bounds of the block list.
         //
