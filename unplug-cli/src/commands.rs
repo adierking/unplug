@@ -1,3 +1,5 @@
+#![allow(clippy::needless_pass_by_value)]
+
 pub mod archive;
 pub mod audio;
 pub mod config;

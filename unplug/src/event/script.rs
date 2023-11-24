@@ -530,11 +530,11 @@ mod tests {
         })
     }
 
-    fn is_id_error<T>(result: Result<T>) -> bool {
+    fn is_id_error<T>(result: &Result<T>) -> bool {
         matches!(result, Err(Error::InvalidId(_)))
     }
 
-    fn is_offset_error<T>(result: Result<T>) -> bool {
+    fn is_offset_error<T>(result: &Result<T>) -> bool {
         matches!(result, Err(Error::InvalidOffset(_)))
     }
 
@@ -725,14 +725,14 @@ mod tests {
         assert_eq!(TEST_SCRIPT.resolve_pointer(BlockId::new(0).into())?, BlockId::new(0));
         assert_eq!(TEST_SCRIPT.resolve_pointer(BlockId::new(1).into())?, BlockId::new(1));
         assert_eq!(TEST_SCRIPT.resolve_pointer(BlockId::new(2).into())?, BlockId::new(2));
-        assert!(is_id_error(TEST_SCRIPT.resolve_pointer(BlockId::new(3).into())));
+        assert!(is_id_error(&TEST_SCRIPT.resolve_pointer(BlockId::new(3).into())));
 
         assert_eq!(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x123))?, BlockId::new(1));
         assert_eq!(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x456))?, BlockId::new(0));
         assert_eq!(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x789))?, BlockId::new(2));
-        assert!(is_offset_error(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x654))));
-        assert!(is_offset_error(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x122))));
-        assert!(is_offset_error(TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x78a))));
+        assert!(is_offset_error(&TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x654))));
+        assert!(is_offset_error(&TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x122))));
+        assert!(is_offset_error(&TEST_SCRIPT.resolve_pointer(Pointer::Offset(0x78a))));
         Ok(())
     }
 

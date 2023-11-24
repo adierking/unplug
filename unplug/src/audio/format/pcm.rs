@@ -79,7 +79,7 @@ pcm_cast!(PcmS16Le, PcmS16Be);
 pcm_cast!(PcmS16Be, PcmS16Le);
 
 /// Scales `val` between two data types.
-const fn scale(val: u64, from: TypeInfo, to: TypeInfo) -> u64 {
+const fn scale(val: u64, from: &TypeInfo, to: &TypeInfo) -> u64 {
     if from.bits == to.bits && from.min == to.min {
         val
     } else {
@@ -142,7 +142,7 @@ pub trait Scalable: Sized + Sealed {
         if Self::INFO.is_float || T::INFO.is_float {
             T::from_f64(self.to_f64())
         } else {
-            T::from_u64(scale(self.to_u64(), Self::INFO, T::INFO))
+            T::from_u64(scale(self.to_u64(), &Self::INFO, &T::INFO))
         }
     }
 }
@@ -291,7 +291,7 @@ where
     }
 
     /// Converts samples from the `From` format to the `To` format.
-    fn convert<From: PcmFormat>(samples: Samples<'s, From>) -> Samples<'s, To>
+    fn convert<From: PcmFormat>(samples: &Samples<'s, From>) -> Samples<'s, To>
     where
         From::Data: Scalable,
     {
@@ -320,13 +320,13 @@ where
         match samples.try_cast::<To>() {
             Ok(casted) => Ok(Some(casted)),
             Err(samples) => Ok(Some(match samples.format() {
-                Format::PcmS8 => Self::convert(samples.cast::<PcmS8>()),
-                Format::PcmS16Le => Self::convert(samples.cast::<PcmS16Le>()),
-                Format::PcmS16Be => Self::convert(samples.cast::<PcmS16Be>()),
-                Format::PcmU16Le => Self::convert(samples.cast::<PcmU16Le>()),
-                Format::PcmS24Le => Self::convert(samples.cast::<PcmS24Le>()),
-                Format::PcmS32Le => Self::convert(samples.cast::<PcmS32Le>()),
-                Format::PcmF32Le => Self::convert(samples.cast::<PcmF32Le>()),
+                Format::PcmS8 => Self::convert(&samples.cast::<PcmS8>()),
+                Format::PcmS16Le => Self::convert(&samples.cast::<PcmS16Le>()),
+                Format::PcmS16Be => Self::convert(&samples.cast::<PcmS16Be>()),
+                Format::PcmU16Le => Self::convert(&samples.cast::<PcmU16Le>()),
+                Format::PcmS24Le => Self::convert(&samples.cast::<PcmS24Le>()),
+                Format::PcmS32Le => Self::convert(&samples.cast::<PcmS32Le>()),
+                Format::PcmF32Le => Self::convert(&samples.cast::<PcmF32Le>()),
                 f @ Format::GcAdpcm => return Err(Error::UnsupportedFormat(f)),
             })),
         }

@@ -102,7 +102,7 @@ impl<R: BufRead> MessageReader<R> {
                     let name = str::from_utf8(e.name().into_inner())?;
                     ensure!(name == ELEM_MESSAGE, "Unexpected element: {}", name);
                     for attr in e.attributes() {
-                        let (key, value) = self.decode_attribute(attr?)?;
+                        let (key, value) = self.decode_attribute(&attr?)?;
                         match key {
                             ATTR_ID => id = Some(MessageId::parse(value)?),
                             _ => bail!("Unexpected attribute: {}", key),
@@ -145,10 +145,10 @@ impl<R: BufRead> MessageReader<R> {
 
                     if self.in_text {
                         let command = match name {
-                            ELEM_FORMAT => self.read_format(e)?,
-                            ELEM_ICON => self.read_icon(e)?,
-                            ELEM_NEWLINE => self.read_simple(e, MsgCommand::Newline)?,
-                            ELEM_NEWLINE_VT => self.read_simple(e, MsgCommand::NewlineVt)?,
+                            ELEM_FORMAT => self.read_format(&e)?,
+                            ELEM_ICON => self.read_icon(&e)?,
+                            ELEM_NEWLINE => Self::read_simple(&e, MsgCommand::Newline)?,
+                            ELEM_NEWLINE_VT => Self::read_simple(&e, MsgCommand::NewlineVt)?,
                             _ => bail!("Unexpected element: {}", name),
                         };
                         if !matches!(command, MsgCommand::Format(_)) {
@@ -163,16 +163,16 @@ impl<R: BufRead> MessageReader<R> {
                     }
 
                     let command = match name {
-                        ELEM_ANIM => self.read_anim(e)?,
-                        ELEM_DEFAULT => self.read_default(e)?,
-                        ELEM_FONT => self.read_font(e)?,
-                        ELEM_NUM_INPUT => self.read_num_input(e)?,
-                        ELEM_QUESTION => self.read_question(e)?,
-                        ELEM_SFX => self.read_sfx(e)?,
-                        ELEM_SHAKE => self.read_shake(e)?,
-                        ELEM_STAY => self.read_simple(e, MsgCommand::Stay)?,
-                        ELEM_VOICE => self.read_voice(e)?,
-                        ELEM_WAIT => self.read_wait(e)?,
+                        ELEM_ANIM => self.read_anim(&e)?,
+                        ELEM_DEFAULT => self.read_default(&e)?,
+                        ELEM_FONT => self.read_font(&e)?,
+                        ELEM_NUM_INPUT => self.read_num_input(&e)?,
+                        ELEM_QUESTION => self.read_question(&e)?,
+                        ELEM_SFX => self.read_sfx(&e)?,
+                        ELEM_SHAKE => self.read_shake(&e)?,
+                        ELEM_STAY => Self::read_simple(&e, MsgCommand::Stay)?,
+                        ELEM_VOICE => self.read_voice(&e)?,
+                        ELEM_WAIT => self.read_wait(&e)?,
                         _ => bail!("Unexpected element: {}", name),
                     };
                     self.read_to_end()?;
@@ -205,10 +205,10 @@ impl<R: BufRead> MessageReader<R> {
         }
     }
 
-    fn read_anim(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_anim(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let (mut flags, mut obj, mut anim) = (None, None, None);
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_FLAGS => flags = Some(parse_int(value)? as u8),
                 ATTR_OBJ => obj = Some(parse_int(value)? as i16),
@@ -223,11 +223,11 @@ impl<R: BufRead> MessageReader<R> {
         }))
     }
 
-    fn read_default(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_default(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let mut flags = DefaultFlags::empty();
         let mut index = None;
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_VAR => {
                     flags = DefaultFlags::VARIABLE;
@@ -243,11 +243,11 @@ impl<R: BufRead> MessageReader<R> {
         }))
     }
 
-    fn read_font(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_font(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         // TODO: Support multiple commands
         let mut cmd = None;
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_SPEED => cmd = Some(MsgCommand::Speed(parse_int(value)? as u8)),
                 ATTR_SIZE => cmd = Some(MsgCommand::Size(parse_int(value)? as u8)),
@@ -273,7 +273,7 @@ impl<R: BufRead> MessageReader<R> {
         cmd.ok_or_else(|| anyhow!("<{}> requires an attribute", ELEM_FONT))
     }
 
-    fn read_format(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_format(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         if let Some(attr) = elem.attributes().next() {
             bail!("Unexpected attribute: {}", str::from_utf8(attr?.key.into_inner())?);
         }
@@ -290,10 +290,10 @@ impl<R: BufRead> MessageReader<R> {
         Ok(MsgCommand::Format(Text::encode(&value)?))
     }
 
-    fn read_icon(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_icon(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let mut icon = None;
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_ID => icon = Some(Icon::try_from_id(value)?),
                 _ => bail!("Unexpected attribute: {}", key),
@@ -302,10 +302,10 @@ impl<R: BufRead> MessageReader<R> {
         Ok(MsgCommand::Icon(icon.ok_or_else(|| anyhow!("Missing {} attribute", ATTR_ID))?))
     }
 
-    fn read_num_input(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_num_input(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let (mut digits, mut editable, mut selected) = (None, None, None);
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_DIGITS => digits = Some(parse_int(value)? as u8),
                 ATTR_EDITABLE => editable = Some(parse_int(value)? as u8),
@@ -320,10 +320,10 @@ impl<R: BufRead> MessageReader<R> {
         }))
     }
 
-    fn read_question(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_question(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let (mut left, mut right, mut default) = (None, None, None);
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_LEFT => left = Some(parse_yes_no(value)?),
                 ATTR_RIGHT => right = Some(parse_yes_no(value)?),
@@ -342,10 +342,10 @@ impl<R: BufRead> MessageReader<R> {
         }))
     }
 
-    fn read_sfx(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_sfx(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let (mut id, mut name, mut cmd, mut duration, mut volume) = (None, None, None, None, None);
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_ID => id = Some(parse_int(value)? as u32), // Deprecated
                 ATTR_NAME => name = Some(value.to_owned()),
@@ -386,11 +386,11 @@ impl<R: BufRead> MessageReader<R> {
         ))
     }
 
-    fn read_shake(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_shake(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let (mut ty, mut strength, mut speed) = (None, None, None);
         let mut flags = ShakeFlags::empty();
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_TYPE => ty = Some(value.to_owned()),
                 ATTR_STRENGTH => strength = Some(parse_int(value)? as u8),
@@ -420,10 +420,10 @@ impl<R: BufRead> MessageReader<R> {
         }))
     }
 
-    fn read_voice(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_voice(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let mut voice = None;
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_ID => voice = Some(Voice::try_from_id(value)?),
                 _ => bail!("Unexpected attribute: {}", key),
@@ -432,10 +432,10 @@ impl<R: BufRead> MessageReader<R> {
         Ok(MsgCommand::Voice(voice.ok_or_else(|| anyhow!("Missing {} attribute", ATTR_ID))?))
     }
 
-    fn read_wait(&mut self, elem: BytesStart<'_>) -> Result<MsgCommand> {
+    fn read_wait(&mut self, elem: &BytesStart<'_>) -> Result<MsgCommand> {
         let (mut ty, mut duration) = (None, None);
         for attr in elem.attributes() {
-            let (key, value) = self.decode_attribute(attr?)?;
+            let (key, value) = self.decode_attribute(&attr?)?;
             match key {
                 ATTR_TYPE => ty = Some(value.to_owned()),
                 ATTR_DURATION => duration = Some(parse_int(value)? as u8),
@@ -456,7 +456,7 @@ impl<R: BufRead> MessageReader<R> {
     }
 
     /// Reads a message command which takes no attributes or inner text and returns `command`.
-    fn read_simple(&mut self, elem: BytesStart<'_>, command: MsgCommand) -> Result<MsgCommand> {
+    fn read_simple(elem: &BytesStart<'_>, command: MsgCommand) -> Result<MsgCommand> {
         if let Some(attr) = elem.attributes().next() {
             bail!("Unexpected attribute: {}", str::from_utf8(attr?.key.into_inner())?);
         }
@@ -470,7 +470,7 @@ impl<R: BufRead> MessageReader<R> {
     }
 
     /// Decodes an XML attribute into key and value strings.
-    fn decode_attribute(&mut self, attr: Attribute<'_>) -> Result<(&str, &str)> {
+    fn decode_attribute(&mut self, attr: &Attribute<'_>) -> Result<(&str, &str)> {
         let key = str::from_utf8(attr.key.into_inner())?;
         let key_len = key.len();
         let value = attr.unescape_value()?;
@@ -515,15 +515,15 @@ impl<R: BufRead> MessageReader<R> {
             Event::Eof => {
                 bail!("Unexpected end of file");
             }
-            Event::Text(t) => Self::ensure_text_empty(t),
-            Event::CData(d) => Self::ensure_text_empty(d.escape()?),
+            Event::Text(t) => Self::ensure_text_empty(&t),
+            Event::CData(d) => Self::ensure_text_empty(&d.escape()?),
             Event::Comment(_) => Ok(()), // Ignore comments
         }
     }
 
     /// Validates that a text element is empty.
-    fn ensure_text_empty(t: BytesText<'_>) -> Result<()> {
-        let text = String::from_utf8_lossy(&t);
+    fn ensure_text_empty(t: &BytesText<'_>) -> Result<()> {
+        let text = String::from_utf8_lossy(t);
         let trimmed = text.trim();
         ensure!(trimmed.is_empty(), "Unexpected text: \"{}\"", trimmed);
         Ok(())

@@ -382,10 +382,6 @@ mod tests {
         Text::encode(s).unwrap()
     }
 
-    fn is_borrowed<T: ToOwned + ?Sized>(c: Cow<'_, T>) -> bool {
-        matches!(c, Cow::Borrowed(_))
-    }
-
     fn xml(command: MsgCommand) -> Result<String> {
         let mut writer = MessageWriter::new(Cursor::<Vec<u8>>::default());
         writer.write_commands(&[command])?;
@@ -395,10 +391,10 @@ mod tests {
 
     #[test]
     fn test_text_to_xml() -> Result<()> {
-        assert!(is_borrowed(text_to_xml(&text(""))?));
-        assert!(is_borrowed(text_to_xml(&text("ABC"))?));
-        assert!(is_borrowed(text_to_xml(&text("ABC DEF"))?));
-        assert!(is_borrowed(text_to_xml(&text("\"ABC'DEF\""))?));
+        assert!(matches!(&text_to_xml(&text(""))?, Cow::Borrowed(_)));
+        assert!(matches!(&text_to_xml(&text("ABC"))?, Cow::Borrowed(_)));
+        assert!(matches!(&text_to_xml(&text("ABC DEF"))?, Cow::Borrowed(_)));
+        assert!(matches!(&text_to_xml(&text("\"ABC'DEF\""))?, Cow::Borrowed(_)));
 
         assert_eq!(text_to_xml(&text("<&>"))?, "&lt;&amp;&gt;");
         assert_eq!(text_to_xml(&text("< ABC & DEF >"))?, "&lt; ABC &amp; DEF &gt;");

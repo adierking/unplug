@@ -85,6 +85,7 @@ impl LabelMap {
 
     /// Changes the name of label `id` to `name`. Label names must be unique or else this will fail.
     /// Returns `id`.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn rename<S>(&mut self, id: LabelId, name: S) -> Result<LabelId>
     where
         S: AsRef<str> + Into<Arc<str>>,

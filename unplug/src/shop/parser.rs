@@ -191,12 +191,12 @@ impl<'s> ShopParser<'s> {
 
     /// Parses script code starting from `block` and returns the estimated slot configuration.
     pub(super) fn parse(mut self, block: BlockId) -> Vec<Slot> {
-        self.parse_block(block, None);
+        self.parse_block(block, &None);
         self.slots
     }
 
     /// Parses `block`, building requirements from `condition`.
-    fn parse_block(&mut self, block: BlockId, condition: Option<Expr>) {
+    fn parse_block(&mut self, block: BlockId, condition: &Option<Expr>) {
         if !self.visited.insert(block) {
             return;
         }
@@ -235,9 +235,9 @@ impl<'s> ShopParser<'s> {
         }
 
         if let Some(next_block) = next_block {
-            self.parse_block(next_block, next_condition);
+            self.parse_block(next_block, &next_condition);
             if let Some(else_block) = else_block {
-                self.parse_block(else_block, else_condition);
+                self.parse_block(else_block, &else_condition);
             }
         }
     }
