@@ -26,7 +26,7 @@ guaranteed to work correctly.
 ### Unplugger
 
 If command-line tools aren't your thing and you want to use Unplug through a GUI, check out
-emistro's [Unplugger](https://github.com/eavpsp/Unplugger)!
+emistro's [Unplugger](https://emistro.itch.io/unplugger)!
 
 ![Unplugger stage tools screenshot](docs/images/unplugger.png)
 
