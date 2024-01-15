@@ -193,7 +193,7 @@ impl<'a> ProgramAssembler<'a> {
             }
 
             DirOp::Stage => {
-                let Some(name_op) = dir.operands.get(0) else {
+                let Some(name_op) = dir.operands.first() else {
                     self.report(Diagnostic::missing_stage_name(dir.span()));
                     return Err(dir);
                 };
@@ -239,14 +239,14 @@ impl<'a> ProgramAssembler<'a> {
         // `.interact` and `.lib` take an argument which comes before the label opcode, so we have
         // to match the opcode to know where the label is
         let (entry_point, label_op) = match *dir.opcode {
-            DirOp::Prologue => (EntryPoint::Event(Event::Prologue), dir.operands.get(0)),
-            DirOp::Startup => (EntryPoint::Event(Event::Startup), dir.operands.get(0)),
-            DirOp::Dead => (EntryPoint::Event(Event::Dead), dir.operands.get(0)),
-            DirOp::Pose => (EntryPoint::Event(Event::Pose), dir.operands.get(0)),
-            DirOp::TimeCycle => (EntryPoint::Event(Event::TimeCycle), dir.operands.get(0)),
-            DirOp::TimeUp => (EntryPoint::Event(Event::TimeUp), dir.operands.get(0)),
+            DirOp::Prologue => (EntryPoint::Event(Event::Prologue), dir.operands.first()),
+            DirOp::Startup => (EntryPoint::Event(Event::Startup), dir.operands.first()),
+            DirOp::Dead => (EntryPoint::Event(Event::Dead), dir.operands.first()),
+            DirOp::Pose => (EntryPoint::Event(Event::Pose), dir.operands.first()),
+            DirOp::TimeCycle => (EntryPoint::Event(Event::TimeCycle), dir.operands.first()),
+            DirOp::TimeUp => (EntryPoint::Event(Event::TimeUp), dir.operands.first()),
             DirOp::Interact => {
-                let Some(object) = dir.operands.get(0) else {
+                let Some(object) = dir.operands.first() else {
                     self.report(Diagnostic::missing_event_object(dir.span()));
                     return Err(());
                 };
@@ -254,7 +254,7 @@ impl<'a> ProgramAssembler<'a> {
                 (EntryPoint::Event(Event::Interact(index)), dir.operands.get(1))
             }
             DirOp::Lib => {
-                let Some(num) = dir.operands.get(0) else {
+                let Some(num) = dir.operands.first() else {
                     self.report(Diagnostic::missing_lib_index(dir.span()));
                     return Err(());
                 };

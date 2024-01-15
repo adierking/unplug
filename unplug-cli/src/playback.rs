@@ -256,7 +256,7 @@ impl PlaybackState {
             self.instants.remove(0);
         }
         self.instants
-            .get(0)
+            .first()
             .filter(|i| now >= i.instant)
             .map(|i| now - i.instant + i.to_duration(self.sample_rate))
     }
