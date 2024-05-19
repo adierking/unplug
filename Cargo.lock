@@ -1572,8 +1572,7 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 [[package]]
 name = "slice-ring-buffer"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7081c7e452cb62f5f0c32edd4e265391bdbb23e90905df8bb88a23d3b5166b77"
+source = "git+https://github.com/adierking/slice_ring_buffer.git?branch=fix-asserts#c1e67529ae0f33a94c4ca291cef83e2a822531bb"
 dependencies = [
  "libc",
  "mach2",

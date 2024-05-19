@@ -76,6 +76,10 @@ tracing-flame = "0.2"
 tracing-subscriber = "0.3.16"
 unicase = "2.6"
 
+[patch.crates-io]
+# TODO: Remove this if the fix gets merged into mainline
+slice-ring-buffer = { git = "https://github.com/adierking/slice_ring_buffer.git", branch = "fix-asserts" }
+
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
 elided_lifetimes_in_paths = "warn"
@@ -139,6 +143,7 @@ wildcard_dependencies = "warn"
 
 [profile.bench]
 debug = true
+debug-assertions = false
 
 [profile.release]
 codegen-units = 1
