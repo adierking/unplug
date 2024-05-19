@@ -1,3 +1,5 @@
+use minimp3_fixed as minimp3;
+
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{ReadSeek, Region};

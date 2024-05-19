@@ -11,6 +11,7 @@ pub use format::{Format, FormatTag};
 pub use sample::{ReadSamples, SampleFilter, Samples, SourceChannel, SourceTag};
 
 use lewton::VorbisError;
+use minimp3_fixed as minimp3;
 use std::io;
 use std::num::NonZeroU64;
 use thiserror::Error;

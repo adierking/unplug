@@ -49,7 +49,7 @@ lewton = "0.10.2"
 libsamplerate-sys = "0.1.10"
 log = { version = "0.4" }
 logos = "0.12.1"
-minimp3 = "0.5"
+minimp3_fixed = "0.5.4"
 num_enum = "0.5.7"
 num-traits = "0.2"
 phf = { version = "0.11.1", features = ["macros", "unicase"] }
