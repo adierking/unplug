@@ -3,7 +3,7 @@ use crate::audio::cue::{Cue, LOOP_PREFIX};
 use crate::audio::format::adpcm::{self, GcAdpcm};
 use crate::audio::format::dsp::DspFormat;
 use crate::audio::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
-use crate::audio::{self, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
+use crate::audio::{ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
 use crate::common::{align, ReadFrom, ReadSeek};
 use arrayvec::ArrayVec;
 use std::collections::HashMap;
@@ -298,7 +298,7 @@ impl Iterator for CueIterator {
                 self.cue_index += 1;
                 let name = format!("{}", cue.id);
                 let start = self.sample_base + (cue.sample_index as u64);
-                return Some(audio::Cue::new(name, start));
+                return Some(Cue::new(name, start));
             } else {
                 self.block_index += 1;
                 self.cue_index = 0;

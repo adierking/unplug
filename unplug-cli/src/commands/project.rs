@@ -89,7 +89,7 @@ fn command_wipe(opt: ProjectWipeOpt) -> Result<()> {
     }
 
     info!("Deleting file: {}", project.path);
-    std::fs::remove_file(&project.path)?;
+    fs::remove_file(&project.path)?;
 
     let project_key = IString::new(name);
     config.projects.remove_entry(&project_key);

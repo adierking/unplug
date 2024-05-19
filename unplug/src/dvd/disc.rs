@@ -426,7 +426,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
 
         debug!("Writing {:#x} bytes to {}", size, self.files.file(id).unwrap().name);
         let mut writer = self.edit_file(id)?;
-        std::io::copy(&mut reader, &mut writer)?;
+        io::copy(&mut reader, &mut writer)?;
         Ok(())
     }
 

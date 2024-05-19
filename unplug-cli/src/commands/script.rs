@@ -194,7 +194,7 @@ where
 {
     diagnostics.sort_by_key(Diagnostic::span);
     let writer = StandardStream::stderr(ColorChoice::Auto);
-    let config = codespan_reporting::term::Config::default();
+    let config = term::Config::default();
     let mut lock = writer.lock();
     for diagnostic in diagnostics {
         let mut report = ReportDiagnostic::error()

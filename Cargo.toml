@@ -93,6 +93,7 @@ unused_qualifications = "warn"
 variant_size_differences = "warn"
 
 [workspace.lints.clippy]
+assigning_clones = "allow"
 bool_to_int_with_if = "warn"
 clear_with_drain = "warn"
 clone_on_ref_ptr = "warn"

@@ -129,7 +129,7 @@ impl From<Text> for CString {
 
 impl Extend<u8> for Text {
     fn extend<T: IntoIterator<Item = u8>>(&mut self, iter: T) {
-        self.bytes.extend(iter.into_iter());
+        self.bytes.extend(iter);
     }
 }
 
