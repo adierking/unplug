@@ -540,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_type() {
+    fn test_parse_atom() {
         assert_eq!(
             parse(vec![id_token("wait"), id_token("@read")]),
             &[cmd("wait", vec![operand_end(id_node("@read"))])]

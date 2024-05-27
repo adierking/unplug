@@ -106,7 +106,7 @@ impl<'a> ProgramAssembler<'a> {
                         }
                     }
 
-                    IdentClass::Type => {
+                    IdentClass::Atom => {
                         self.report(Diagnostic::expected_command(cmd.name.span()));
                         // Treat this as a command with an invalid opcode
                         let opcode = Located::with_span(CmdOp::Invalid, cmd.name.span());
@@ -405,8 +405,8 @@ impl<'a> ProgramAssembler<'a> {
                 self.report(Diagnostic::expected_expr(id.span()));
                 Err(())
             }
-            IdentClass::Type => {
-                Ok(Operand::Type(*self.parse_opcode(id, Diagnostic::unrecognized_type)))
+            IdentClass::Atom => {
+                Ok(Operand::Atom(*self.parse_opcode(id, Diagnostic::unrecognized_atom)))
             }
         }
     }

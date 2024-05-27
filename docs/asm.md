@@ -272,7 +272,7 @@ Operands are arguments that can be passed to commands or directives. There are m
 | Byte | `1.b`<br>`0xcc.b` | 8-bit integer |
 | Word | `12345.w`<br>`0xabcd.w` | 16-bit integer |
 | Dword | `12345678.d`<br>`0xabcdef.d` | 32-bit integer |
-| Type Code | `@anim` | Alters the semantics of a command |
+| Atom | `@anim` | Alters the semantics of a command |
 | Text | `"Hello, world!"` | Text string (Latin-1/SHIFT-JIS) |
 | Label | `*my_label` | Memory address of a label |
 | Else Label | `else *my_label` | Label reference used to make `if` commands more readable |
@@ -292,8 +292,8 @@ determine how large a number should be based on context.
 
 _Expressions_ are special operands which can be passed to commands and other expressions to perform
 complex calculations. Some expressions take no arguments, e.g. `money`, whereas others can take
-several and some even accept type codes that alter their semantics. There is no practical limit to
-how many expressions can be nested inside each other - some `if` statements in the game code are
+several and some even accept atoms that alter their semantics. There is no practical limit to how
+many expressions can be nested inside each other - some `if` statements in the game code are
 extremely long!
 
 Note that all expressions evaluate to 32-bit integers, as every value in a script is an integer.

@@ -40,7 +40,7 @@
 			"patterns": [
 				{ "include": "#literal-number" },
 				{ "include": "#literal-string" },
-				{ "include": "#literal-type" }
+				{ "include": "#literal-atom" }
 			]
 		},
 		"punctuation": {
@@ -123,7 +123,7 @@
 				}
 			]
 		},
-		"literal-type": {
+		"literal-atom": {
 			"name": "constant.language.unplug",
 			"match": "@[A-Za-z0-9_]+\\b"
 		},

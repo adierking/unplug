@@ -166,11 +166,11 @@ pub enum DiagnosticCode {
     InvalidEventObject,
     UnrecognizedCommand,
     UnrecognizedDirective,
-    UnrecognizedType,
+    UnrecognizedAtom,
     UnrecognizedFunction,
     UnrecognizedMsgCommand,
     UnsupportedCommand,
-    UnsupportedType,
+    UnsupportedAtom,
     UnsupportedFunction,
     UnsupportedMsgCommand,
 }
@@ -503,9 +503,9 @@ diagnostics! {
         labels: [ident],
     }
 
-    unrecognized_type(ident: &ast::Ident) {
-        code: UnrecognizedType,
-        message: "unrecognized type code: `{ident}`",
+    unrecognized_atom(ident: &ast::Ident) {
+        code: UnrecognizedAtom,
+        message: "unrecognized atom: `{ident}`",
         labels: [ident],
     }
 
@@ -527,9 +527,9 @@ diagnostics! {
         labels: [ident],
     }
 
-    unsupported_type(ident: &ast::Ident) {
-        code: UnsupportedType,
-        message: "type code is not supported by the target game: `{ident}`",
+    unsupported_atom(ident: &ast::Ident) {
+        code: UnsupportedAtom,
+        message: "atom is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 

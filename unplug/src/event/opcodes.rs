@@ -261,10 +261,16 @@ impl Opcode for CmdOp {
     }
 }
 
-/// A command type opcode (note, these are actually represented as immediate expressions). Refer to
-/// individual commands for documentation.
+/// Fixed integers representing abstract strings known to the engine.
+///
+/// The actual string characters do not exist anywhere, and they don't need to, because atoms are
+/// only ever compared for equality.
+///
+/// Atoms are often used to create subcommands which share similar meanings with each
+/// other. For example, `@fade` passed to the `scrn` command will fade the screen, and `@fade`
+/// passed to the `wait` command will wait for the fade to complete.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TypeOp {
+pub enum Atom {
     Time,
     Fade,
     Wipe,
@@ -323,7 +329,7 @@ pub enum TypeOp {
     Invalid,
 }
 
-impl Opcode for TypeOp {
+impl Opcode for Atom {
     type Value = i32;
     fn map_unrecognized(value: Self::Value) -> Result<Self, Self::Value> {
         Err(value)

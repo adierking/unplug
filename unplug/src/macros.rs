@@ -155,8 +155,8 @@ macro_rules! expr {
     }};
 }
 
-/// Generates an enum which binds to constant `Expr` values. The values can either be `TypeOp`
-/// values or `i32` literals.
+/// Generates an enum which binds to constant `Expr` values. The values can either be `Atom`s or
+/// 32-bit integers.
 ///
 /// Each enum value can have an optional argument list attached to it, and the argument list can be
 /// specified inline (if entirely composed of `Expr`s) or use an existing type.
@@ -168,13 +168,13 @@ macro_rules! expr {
 /// Basic usage:
 /// ```
 /// # use unplug::event::expr;
-/// # use unplug::event::opcodes::TypeOp;
+/// # use unplug::event::opcodes::Atom;
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
 ///     pub enum ColorType {
-///         Modulate => TypeOp::Modulate,
-///         Blend => TypeOp::Blend,
+///         Modulate => Atom::Modulate,
+///         Blend => Atom::Blend,
 ///     }
 /// }
 /// ```
@@ -182,14 +182,14 @@ macro_rules! expr {
 /// External argument list type:
 /// ```
 /// # use unplug::event::expr::{self, ObjExprObj, ObjExprBone, ObjExprPair};
-/// # use unplug::event::opcodes::TypeOp;
+/// # use unplug::event::opcodes::Atom;
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
 ///     pub enum ObjExpr {
-///         Anim(ObjExprObj) => TypeOp::Anim,
-///         BoneX(ObjExprBone) => TypeOp::BoneX,
-///         Distance(ObjExprPair) => TypeOp::Distance,
+///         Anim(ObjExprObj) => Atom::Anim,
+///         BoneX(ObjExprBone) => Atom::BoneX,
+///         Distance(ObjExprPair) => Atom::Distance,
 ///     }
 /// }
 /// ```
@@ -197,13 +197,13 @@ macro_rules! expr {
 /// Inline argument lists:
 /// ```
 /// # use unplug::event::expr;
-/// # use unplug::event::opcodes::TypeOp;
+/// # use unplug::event::opcodes::Atom;
 /// # use unplug::expr_enum;
 /// expr_enum! {
 ///     type Error = expr::Error;
 ///     pub enum LightType {
-///         Pos(LightPosArgs { x, y, z }) => TypeOp::Pos,
-///         Color(LightColorArgs { r, g, b }) => TypeOp::Color,
+///         Pos(LightPosArgs { x, y, z }) => Atom::Pos,
+///         Color(LightColorArgs { r, g, b }) => Atom::Color,
 ///     }
 /// }
 /// ```
@@ -233,11 +233,11 @@ macro_rules! expr_enum {
             fn deserialize(
                 de: &mut dyn $crate::event::serialize::EventDeserializer
             ) -> ::std::result::Result<Self, Self::Error> {
-                let ty = de.deserialize_type();
-                match ty {
-                    $($(Err($crate::event::serialize::Error::UnrecognizedType($val)))?
+                let atom = de.deserialize_atom();
+                match atom {
+                    $($(Err($crate::event::serialize::Error::UnrecognizedAtom($val)))?
                     $(Ok($op))? => Ok(Self::$type $( ( $args_type::deserialize(de)? ) )?),)*
-                    Ok(ty) => Err($crate::event::serialize::Error::UnsupportedType(ty).into()),
+                    Ok(atom) => Err($crate::event::serialize::Error::UnsupportedAtom(atom).into()),
                     Err(e) => Err(e.into()),
                 }
             }
@@ -254,7 +254,7 @@ macro_rules! expr_enum {
                         expr_enum!(@match $type $(, arg, $args_type)?) => {
                             $($crate::event::serialize::SerializeEvent::serialize(
                                 &$crate::event::Expr::Imm32($val), ser)?;)?
-                            $(ser.serialize_type($op)?;)?
+                            $(ser.serialize_atom($op)?;)?
                             expr_enum!(@serialize $(ser, arg, $args_type)?);
                         }
                     )*

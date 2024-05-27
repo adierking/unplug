@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use unplug::common::Text;
-use unplug::event::opcodes::{CmdOp, ExprOp, Opcode, TypeOp};
+use unplug::event::opcodes::{Atom, CmdOp, ExprOp, Opcode};
 use unplug::event::BlockId;
 use unplug::stage::Event;
 
@@ -100,8 +100,8 @@ pub enum Operand {
     ElseLabel(LabelId),
     /// A raw file offset reference.
     Offset(u32),
-    /// A type expression.
-    Type(TypeOp),
+    /// An atom expression.
+    Atom(Atom),
     /// An expression.
     Expr(Box<Operation<ExprOp>>),
     /// A message command.
@@ -153,7 +153,7 @@ impl_operand_from!(u16, U16);
 impl_operand_from!(i32, I32);
 impl_operand_from!(u32, U32);
 impl_operand_from!(Text, Text);
-impl_operand_from!(TypeOp, Type);
+impl_operand_from!(Atom, Atom);
 impl_operand_from!(Operation<ExprOp>, Expr);
 impl_operand_from!(Operation<AsmMsgOp>, MsgCommand);
 

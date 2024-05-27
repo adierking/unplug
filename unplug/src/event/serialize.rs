@@ -1,4 +1,4 @@
-use super::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
+use super::opcodes::{Atom, CmdOp, ExprOp, MsgOp};
 use super::Pointer;
 use crate::common::Text;
 use std::io;
@@ -27,11 +27,11 @@ pub enum Error {
     #[error("unsupported command: {0:?}")]
     UnsupportedCommand(CmdOp),
 
-    #[error("unrecognized type code: {0}")]
-    UnrecognizedType(i32),
+    #[error("unrecognized atom: {0}")]
+    UnrecognizedAtom(i32),
 
-    #[error("unsupported type: {0:?}")]
-    UnsupportedType(TypeOp),
+    #[error("unsupported atom: {0:?}")]
+    UnsupportedAtom(Atom),
 
     #[error("expected an integer value")]
     ExpectedInteger,
@@ -39,8 +39,8 @@ pub enum Error {
     #[error("expected a pointer")]
     ExpectedPointer,
 
-    #[error("expected a constant type value")]
-    ExpectedType,
+    #[error("expected an atom")]
+    ExpectedAtom,
 
     #[error("expected text")]
     ExpectedText,
@@ -152,8 +152,8 @@ pub trait EventSerializer {
     /// Serializes an array of pointers.
     fn serialize_pointer_array(&mut self, arr: &[Pointer]) -> Result<()>;
 
-    /// Serializes a type expression.
-    fn serialize_type(&mut self, ty: TypeOp) -> Result<()>;
+    /// Serializes an atom expression.
+    fn serialize_atom(&mut self, atom: Atom) -> Result<()>;
 
     /// Serializes a null-terminated text string.
     fn serialize_text(&mut self, text: &Text) -> Result<()>;
@@ -227,8 +227,8 @@ pub trait EventDeserializer {
     /// Deserializes an array of up to `max_len` pointers.
     fn deserialize_pointer_array(&mut self, max_len: usize) -> Result<Vec<Pointer>>;
 
-    /// Deserializes a type expression and returns it.
-    fn deserialize_type(&mut self) -> Result<TypeOp>;
+    /// Deserializes an atom expression and returns it.
+    fn deserialize_atom(&mut self) -> Result<Atom>;
 
     /// Deserializes a null-terminated text string and returns it.
     fn deserialize_text(&mut self) -> Result<Text>;
@@ -303,7 +303,7 @@ impl_serialize!(u16, serialize_u16, deserialize_u16);
 impl_serialize!(i32, serialize_i32, deserialize_i32);
 impl_serialize!(u32, serialize_u32, deserialize_u32);
 impl_serialize!(Pointer, serialize_pointer, deserialize_pointer);
-impl_serialize!(TypeOp, serialize_type, deserialize_type);
+impl_serialize!(Atom, serialize_atom, deserialize_atom);
 
 impl SerializeEvent for Text {
     type Error = Error;

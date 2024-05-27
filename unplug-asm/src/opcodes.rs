@@ -1,5 +1,5 @@
 use phf::phf_map;
-use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, Opcode, TypeOp};
+use unplug::event::opcodes::{Atom, CmdOp, ExprOp, MsgOp, Opcode};
 
 /// An opcode which has an associated name.
 pub trait NamedOpcode: Opcode {
@@ -279,7 +279,7 @@ opcode_names! {
         ArrayElement => "array",
     }
 
-    TypeOp {
+    Atom {
         Time => "@time",
         Fade => "@fade",
         Wipe => "@wipe",

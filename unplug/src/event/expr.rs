@@ -1,4 +1,4 @@
-use super::opcodes::{ExprOp, TypeOp};
+use super::opcodes::{Atom, ExprOp};
 use super::pointer::Pointer;
 use super::serialize::{
     self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
@@ -785,21 +785,21 @@ impl Debug for BinaryOp {
 expr_enum! {
     type Error = Error;
     pub enum ObjExpr {
-        Anim(ObjExprObj) => TypeOp::Anim,
-        Dir(ObjExprObj) => TypeOp::Dir,
-        PosX(ObjExprObj) => TypeOp::PosX,
-        PosY(ObjExprObj) => TypeOp::PosY,
-        PosZ(ObjExprObj) => TypeOp::PosZ,
-        BoneX(ObjExprBone) => TypeOp::BoneX,
-        BoneY(ObjExprBone) => TypeOp::BoneY,
-        BoneZ(ObjExprBone) => TypeOp::BoneZ,
-        DirTo(ObjExprPair) => TypeOp::DirTo,
-        Distance(ObjExprPair) => TypeOp::Distance,
-        Unk235(ObjExprObj) => TypeOp::Unk235,
-        Unk247(ObjExprObj) => TypeOp::Unk247,
-        Unk248(ObjExprObj) => TypeOp::Unk248,
-        Unk249(ObjExprBone) => TypeOp::Unk249,
-        Unk250(ObjExprBone) => TypeOp::Unk250,
+        Anim(ObjExprObj) => Atom::Anim,
+        Dir(ObjExprObj) => Atom::Dir,
+        PosX(ObjExprObj) => Atom::PosX,
+        PosY(ObjExprObj) => Atom::PosY,
+        PosZ(ObjExprObj) => Atom::PosZ,
+        BoneX(ObjExprBone) => Atom::BoneX,
+        BoneY(ObjExprBone) => Atom::BoneY,
+        BoneZ(ObjExprBone) => Atom::BoneZ,
+        DirTo(ObjExprPair) => Atom::DirTo,
+        Distance(ObjExprPair) => Atom::Distance,
+        Unk235(ObjExprObj) => Atom::Unk235,
+        Unk247(ObjExprObj) => Atom::Unk247,
+        Unk248(ObjExprObj) => Atom::Unk248,
+        Unk249(ObjExprBone) => Atom::Unk249,
+        Unk250(ObjExprBone) => Atom::Unk250,
     }
 }
 

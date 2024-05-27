@@ -1,5 +1,5 @@
 use crate::opcodes::{AsmMsgOp, NamedOpcode};
-use unplug::event::opcodes::{CmdOp, ExprOp, TypeOp};
+use unplug::event::opcodes::{Atom, CmdOp, ExprOp};
 
 /// Describes the type and purpose of an argument or group of arguments.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -40,8 +40,8 @@ pub enum ArgSignature {
     Variadic,
     /// A specific literal integer value.
     LitInteger(i16),
-    /// A specific literal type code.
-    LitType(TypeOp),
+    /// A specific literal atom value.
+    LitType(Atom),
 }
 
 /// Specifies a valid permutation of arguments for an opcode.
@@ -126,7 +126,7 @@ macro_rules! signatures {
         ArgSignature::LitInteger($value)
     };
     (@arg Lit($name:ident)) => {
-        ArgSignature::LitType(TypeOp::$name)
+        ArgSignature::LitType(Atom::$name)
     };
     (@arg $name:ident) => {
         ArgSignature::$name
@@ -626,13 +626,13 @@ mod tests {
             unimplemented!()
         }
 
-        fn deserialize_type(&mut self) -> SerResult<TypeOp> {
+        fn deserialize_atom(&mut self) -> SerResult<Atom> {
             match self.begin_expr()? {
                 ExprOp::Imm32 => {
                     let value = self.deserialize_i32()?;
-                    Ggte::get(value).map_err(SerError::UnrecognizedType)
+                    Ggte::get(value).map_err(SerError::UnrecognizedAtom)
                 }
-                _ => Err(SerError::ExpectedType),
+                _ => Err(SerError::ExpectedAtom),
             }
         }
 

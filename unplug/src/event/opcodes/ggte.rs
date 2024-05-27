@@ -8,7 +8,7 @@
 // Opcodes with unknown meanings are labeled with "Unk<num>" and their names may change to reflect
 // new information.
 
-use super::{CmdOp, ExprOp, MsgOp, TypeOp};
+use super::{Atom, CmdOp, ExprOp, MsgOp};
 use crate::opcodes;
 
 opcodes! {
@@ -126,7 +126,7 @@ opcodes! {
         ArrayElement = 204, // cc
     }
 
-    TypeOp {
+    Atom {
         Time = 200, // c8
         Fade = 201, // c9
         Wipe = 202, // ca

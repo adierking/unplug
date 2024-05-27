@@ -1,4 +1,4 @@
-use super::opcodes::{CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap, TypeOp};
+use super::opcodes::{Atom, CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap};
 use super::pointer::{Pointer, WritePointer};
 use super::serialize::{Error, EventDeserializer, EventSerializer, Result};
 use crate::common::text::Text;
@@ -110,8 +110,8 @@ impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
         arr.iter().try_for_each(|&x| self.serialize_pointer(x))
     }
 
-    fn serialize_type(&mut self, ty: TypeOp) -> Result<()> {
-        let opcode = Ggte::value(ty).map_err(Error::UnsupportedType)?;
+    fn serialize_atom(&mut self, atom: Atom) -> Result<()> {
+        let opcode = Ggte::value(atom).map_err(Error::UnsupportedAtom)?;
         self.serialize_imm_expr(opcode)
     }
 
@@ -326,13 +326,13 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
         Ok(offsets)
     }
 
-    fn deserialize_type(&mut self) -> Result<TypeOp> {
+    fn deserialize_atom(&mut self) -> Result<Atom> {
         let value = match self.deserialize_imm_expr() {
             Ok(x) => x,
-            Err(Error::ExpectedImmediate(_)) => return Err(Error::ExpectedType),
+            Err(Error::ExpectedImmediate(_)) => return Err(Error::ExpectedAtom),
             Err(e) => return Err(e),
         };
-        Ggte::get(value).map_err(Error::UnrecognizedType)
+        Ggte::get(value).map_err(Error::UnrecognizedAtom)
     }
 
     fn deserialize_text(&mut self) -> Result<Text> {

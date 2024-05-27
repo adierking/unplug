@@ -15,7 +15,7 @@ use std::result::Result as StdResult;
 use unplug::common::Text;
 use unplug::event::analysis::SubroutineEffectsMap;
 use unplug::event::block::Block as ScriptBlock;
-use unplug::event::opcodes::{CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap, TypeOp};
+use unplug::event::opcodes::{Atom, CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap};
 use unplug::event::script::{Error as ScriptError, Script, ScriptLayout};
 use unplug::event::serialize::{
     DeserializeEvent, Error as SerError, EventDeserializer, Result as SerResult,
@@ -267,7 +267,7 @@ impl<'a> OperandCursor<'a> {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm16), [operand.clone()]);
                 (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
-            Operand::I32(_) | Operand::U32(_) | Operand::Type(_) => {
+            Operand::I32(_) | Operand::U32(_) | Operand::Atom(_) => {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm32), [operand.clone()]);
                 (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
@@ -338,7 +338,7 @@ impl<'a> OperandCursor<'a> {
             | Operand::Label(_)
             | Operand::ElseLabel(_)
             | Operand::Offset(_)
-            | Operand::Type(_)
+            | Operand::Atom(_)
             | Operand::Expr(_) => {
                 self.report(Diagnostic::expected_msg_command(operand.span()));
                 return Err(());
@@ -542,11 +542,11 @@ impl EventDeserializer for AsmDeserializer<'_> {
         unimplemented!()
     }
 
-    fn deserialize_type(&mut self) -> SerResult<TypeOp> {
+    fn deserialize_atom(&mut self) -> SerResult<Atom> {
         let operand = self.next_operand().ok_or(Error::ExpectedInteger)?;
         match **operand {
-            Operand::Type(op) => Ok(op),
-            _ => Ggte::get(operand.cast()?).map_err(SerError::UnrecognizedType),
+            Operand::Atom(op) => Ok(op),
+            _ => Ggte::get(operand.cast()?).map_err(SerError::UnrecognizedAtom),
         }
     }
 
@@ -725,7 +725,7 @@ fn into_data(program: &Program, value: &Located<Operand>) -> Result<DataBlock> {
             Ok(DataBlock::PtrArray(vec![Pointer::Block(block)]))
         }
         Operand::Offset(x) => Ok(DataBlock::PtrArray(vec![Pointer::Offset(*x)])),
-        Operand::Type(x) => Ok(DataBlock::I32Array(vec![Ggte::value(*x).unwrap()])),
+        Operand::Atom(x) => Ok(DataBlock::I32Array(vec![Ggte::value(*x).unwrap()])),
         Operand::ElseLabel(_) => Err(Error::UnexpectedElseLabel),
         Operand::Expr(_) => Err(Error::UnexpectedExpr),
         Operand::MsgCommand(_) => Err(Error::UnexpectedMessage),
@@ -754,7 +754,7 @@ fn try_append_data(program: &Program, block: &mut DataBlock, value: &Operand) ->
         }
         DataBlock::I32Array(array) => match *value {
             Operand::I32(x) => array.push(x),
-            Operand::Type(x) => array.push(Ggte::value(x).unwrap()),
+            Operand::Atom(x) => array.push(Ggte::value(x).unwrap()),
             _ => return false,
         },
         DataBlock::U32Array(array) => {

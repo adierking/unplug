@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use unplug::common::Text;
 use unplug::data::Resource;
-use unplug::event::opcodes::{CmdOp, ExprOp, MsgOp, TypeOp};
+use unplug::event::opcodes::{Atom, CmdOp, ExprOp, MsgOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
 use unplug::event::serialize::{EventSerializer, Result as SerResult, SerializeEvent};
 use unplug::event::{self, BlockId, DataBlock, Pointer, Script};
@@ -269,8 +269,8 @@ impl EventSerializer for AsmSerializer<'_> {
         Ok(())
     }
 
-    fn serialize_type(&mut self, ty: TypeOp) -> SerResult<()> {
-        self.push_operand(Operand::Type(ty));
+    fn serialize_atom(&mut self, ty: Atom) -> SerResult<()> {
+        self.push_operand(Operand::Atom(ty));
         Ok(())
     }
 
@@ -564,7 +564,7 @@ fn operand_type(op: &Operand) -> DirOp {
     match op {
         Operand::I8(_) | Operand::U8(_) | Operand::Text(_) => DirOp::Byte,
         Operand::I16(_) | Operand::U16(_) => DirOp::Word,
-        Operand::I32(_) | Operand::U32(_) | Operand::Type(_) => DirOp::Dword,
+        Operand::I32(_) | Operand::U32(_) | Operand::Atom(_) => DirOp::Dword,
         Operand::Label(_) | Operand::Offset(_) => DirOp::Dword,
         Operand::ElseLabel(_) | Operand::Expr(_) | Operand::MsgCommand(_) | Operand::Error => {
             panic!("Invalid data operand: {:?}", op);
@@ -748,7 +748,7 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
                 write!(self.writer, "else *{}", self.program.labels.get(*label).name)
             }
             Operand::Offset(off) => write!(self.writer, "*0x{:x}", off),
-            Operand::Type(ty) => write!(self.writer, "{}", ty.name()),
+            Operand::Atom(ty) => write!(self.writer, "{}", ty.name()),
             Operand::Expr(expr) => self.write_expr(expr),
             Operand::MsgCommand(cmd) => self.write_msg_command(cmd),
             Operand::Error => write!(self.writer, "!"),

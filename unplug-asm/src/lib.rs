@@ -143,8 +143,8 @@ pub enum Error {
     #[error("unrecognized function: \"{0}\"")]
     UnrecognizedFunction(SmolStr),
 
-    #[error("unrecognized type: \"@{0}\"")]
-    UnrecognizedType(SmolStr),
+    #[error("unrecognized atom: \"@{0}\"")]
+    UnrecognizedAtom(SmolStr),
 
     #[error(transparent)]
     Command(Box<command::Error>),

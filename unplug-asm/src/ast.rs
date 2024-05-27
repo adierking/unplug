@@ -5,8 +5,8 @@ use std::fmt::{self, Debug, Display, Formatter};
 
 /// Prefix for directive identifiers.
 const DIRECTIVE_PREFIX: char = '.';
-/// Prefix for type code identifiers.
-const TYPE_PREFIX: char = '@';
+/// Prefix for atom identifiers.
+const ATOM_PREFIX: char = '@';
 
 /// Vertical tab character (`\v`).
 const VT: &str = "\x0b";
@@ -64,8 +64,8 @@ pub enum IdentClass {
     Default,
     /// The identifier is a directive (`.`).
     Directive,
-    /// The identifier is a type code (`@`).
-    Type,
+    /// The identifier is an atom (`@`).
+    Atom,
 }
 
 /// An identifier.
@@ -91,7 +91,7 @@ impl Ident {
     pub fn class(&self) -> IdentClass {
         match self.name.chars().next() {
             Some(DIRECTIVE_PREFIX) => IdentClass::Directive,
-            Some(TYPE_PREFIX) => IdentClass::Type,
+            Some(ATOM_PREFIX) => IdentClass::Atom,
             _ => IdentClass::Default,
         }
     }
