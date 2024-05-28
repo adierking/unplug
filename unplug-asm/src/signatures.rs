@@ -41,7 +41,7 @@ pub enum ArgSignature {
     /// A specific literal integer value.
     LitInteger(i16),
     /// A specific literal atom value.
-    LitType(Atom),
+    LitAtom(Atom),
 }
 
 /// Specifies a valid permutation of arguments for an opcode.
@@ -126,7 +126,7 @@ macro_rules! signatures {
         ArgSignature::LitInteger($value)
     };
     (@arg Lit($name:ident)) => {
-        ArgSignature::LitType(Atom::$name)
+        ArgSignature::LitAtom(Atom::$name)
     };
     (@arg $name:ident) => {
         ArgSignature::$name
@@ -548,7 +548,7 @@ mod tests {
                             values.push(Value::Integer(j));
                         }
                     }
-                    ArgSignature::LitType(t) => {
+                    ArgSignature::LitAtom(t) => {
                         values.push(Value::Expr(ExprOp::Imm32));
                         values.push(Value::Integer(Ggte::value(t).unwrap() as i16));
                     }
