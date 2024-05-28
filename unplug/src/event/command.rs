@@ -500,7 +500,7 @@ expr_enum! {
         Anim(CameraAnimArgs { val1, val2, val3 }) => Atom::Anim,
         Pos(CameraPosArgs { val1, val2, val3, val4, val5 }) => Atom::Pos,
         Obj(CameraObjArgs { val1, val2, val3 }) => Atom::Obj,
-        Unk209(CameraUnk209Args { val1, val2 }) => Atom::Unk209,
+        Reset(CameraResetArgs { val1, val2 }) => Atom::Reset,
         Unk211(CameraUnk211Args { val1, val2, val3, val4 }) => Atom::Unk211,
         Lead(CameraLeadArgs { val }) => Atom::Lead,
         Unk227(CameraUnk227Args { val1, val2, val3, val4, val5 }) => Atom::Unk227,
@@ -866,7 +866,7 @@ expr_enum! {
     pub enum WinType {
         Pos(WinPosArgs { val1, val2 }) => Atom::Pos,
         Obj(WinObjArgs { obj, val1, val2, val3 }) => Atom::Obj,
-        Unk209 => Atom::Unk209,
+        Reset => Atom::Reset,
         Color(WinColorArgs { val1, val2, val3, val4 }) => Atom::Color,
         Letterbox => Atom::Letterbox,
     }
@@ -1069,7 +1069,7 @@ mod tests {
             obj: expr(),
         }))));
         assert_reserialize!(Command::Warp(Box::new(WarpArgs { stage: expr(), val: expr() })));
-        assert_reserialize!(Command::Win(Box::new(WinType::Unk209)));
+        assert_reserialize!(Command::Win(Box::new(WinType::Reset)));
         assert_reserialize!(Command::Movie(Box::new(MovieArgs {
             path: expr(),
             val1: expr(),

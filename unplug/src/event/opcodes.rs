@@ -280,7 +280,7 @@ pub enum Atom {
     Move,
     Pos,
     Obj,
-    Unk209,
+    Reset,
     Unk210,
     Unk211,
     PosX,

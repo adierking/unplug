@@ -289,7 +289,7 @@ opcode_names! {
         Move => "@move",
         Pos => "@pos",
         Obj => "@obj",
-        Unk209 => "@unk209",
+        Reset => "@reset",
         Unk210 => "@unk210",
         Unk211 => "@unk211",
         PosX => "@pos_x",

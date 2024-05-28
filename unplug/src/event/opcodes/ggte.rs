@@ -136,7 +136,7 @@ opcodes! {
         Move = 206, // ce
         Pos = 207, // cf
         Obj = 208, // d0
-        Unk209 = 209, // d1
+        Reset = 209, // d1
         Unk210 = 210, // d2
         Unk211 = 211, // d3
         PosX = 212, // d4
