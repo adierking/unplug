@@ -2,7 +2,7 @@ use crate::common::IString;
 use crate::config::{Config, Project, ProjectKind};
 use crate::context::Context;
 use crate::opt::{
-    ProjectAddOpt, ProjectCommand, ProjectForgetOpt, ProjectInfoOpt, ProjectNewOpt, ProjectOpenOpt,
+    ProjectAddOpt, ProjectCommand, ProjectInfoOpt, ProjectNewOpt, ProjectOpenOpt, ProjectRemoveOpt,
     ProjectWipeOpt,
 };
 use crate::terminal::ask_yes_no;
@@ -140,8 +140,8 @@ fn command_add(opt: ProjectAddOpt) -> Result<()> {
     Ok(())
 }
 
-/// The `project forget` CLI command.
-fn command_forget(opt: ProjectForgetOpt) -> Result<()> {
+/// The `project remove` CLI command.
+fn command_remove(opt: ProjectRemoveOpt) -> Result<()> {
     let mut config = Config::get();
     let project_key = IString::new(opt.name.clone());
     let result = config.projects.remove_entry(&project_key);
@@ -153,7 +153,7 @@ fn command_forget(opt: ProjectForgetOpt) -> Result<()> {
         config.settings.project = String::new();
     }
     config.save()?;
-    info!("Forgot project: {}", name);
+    info!("Removed project: {}", name);
     Ok(())
 }
 
@@ -192,7 +192,7 @@ pub fn command(_ctx: Context, opt: ProjectCommand) -> Result<()> {
         ProjectCommand::New(opt) => command_new(opt),
         ProjectCommand::Wipe(opt) => command_wipe(opt),
         ProjectCommand::Add(opt) => command_add(opt),
-        ProjectCommand::Forget(opt) => command_forget(opt),
+        ProjectCommand::Remove(opt) => command_remove(opt),
         ProjectCommand::Open(opt) => command_open(opt),
         ProjectCommand::Close => command_close(),
     }

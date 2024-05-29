@@ -174,7 +174,8 @@ pub enum ProjectCommand {
     /// Register an existing project
     Add(ProjectAddOpt),
     /// Unregister a project without deleting any of its files
-    Forget(ProjectForgetOpt),
+    #[clap(alias = "forget")]
+    Remove(ProjectRemoveOpt),
     /// Open a project to be automatically used for future Unplug commands
     Open(ProjectOpenOpt),
     /// Close the currently-open project
@@ -198,8 +199,8 @@ pub struct ProjectAddOpt {
 }
 
 #[derive(Args)]
-pub struct ProjectForgetOpt {
-    /// Name of the project to forget
+pub struct ProjectRemoveOpt {
+    /// Name of the project to remove
     pub name: String,
 }
 
@@ -1404,13 +1405,13 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_project_forget() {
-        let map = mapper!(Command::Project(ProjectCommand::Forget(opt)) => opt);
-        parse(["project", "forget", "foo"], map, |opt| {
+    fn test_cli_project_remove() {
+        let map = mapper!(Command::Project(ProjectCommand::Remove(opt)) => opt);
+        multiparse([["project", "remove", "foo"], ["project", "forget", "foo"]], map, |opt| {
             assert_eq!(opt.name, "foo");
         });
-        assert_eq!(error(["project", "forget"]), ErrorKind::MissingRequiredArgument);
-        assert_eq!(error(["project", "forget", "foo", "bar"]), ErrorKind::UnknownArgument);
+        assert_eq!(error(["project", "remove"]), ErrorKind::MissingRequiredArgument);
+        assert_eq!(error(["project", "remove", "foo", "bar"]), ErrorKind::UnknownArgument);
     }
 
     #[test]
