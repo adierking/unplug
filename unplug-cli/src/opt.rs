@@ -225,6 +225,10 @@ pub struct ProjectNewOpt {
     /// Allow overwriting existing projects/files
     #[clap(short, long)]
     pub force: bool,
+
+    /// Do not open the new project
+    #[clap(long)]
+    pub no_open: bool,
 }
 
 #[derive(Args)]
@@ -1338,6 +1342,7 @@ mod tests {
             assert_eq!(opt.source, None);
             assert_eq!(opt.output, None);
             assert!(!opt.force);
+            assert!(!opt.no_open);
         });
         parse(["project", "new", "foo", "-s", "src"], map, |opt| {
             assert_eq!(opt.name, "foo");
@@ -1346,6 +1351,10 @@ mod tests {
         parse(["project", "new", "foo", "-o", "out"], map, |opt| {
             assert_eq!(opt.name, "foo");
             assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        });
+        parse(["project", "new", "foo", "--no-open"], map, |opt| {
+            assert_eq!(opt.name, "foo");
+            assert!(opt.no_open);
         });
         multiparse(
             [["project", "new", "foo", "-f"], ["project", "new", "foo", "--force"]],

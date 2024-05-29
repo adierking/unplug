@@ -70,8 +70,15 @@ fn command_new(opt: ProjectNewOpt) -> Result<()> {
 
     let project = Project { kind: ProjectKind::Iso, path: dest.to_string_lossy().into_owned() };
     config.projects.insert(project_key, project);
-    config.save()?;
-    info!("Created project: {}", opt.name);
+    let open = !opt.no_open;
+    if open {
+        config.settings.project = opt.name;
+        config.save()?;
+        info!("Opened new project: {}", config.settings.project);
+    } else {
+        config.save()?;
+        info!("Created project: {}", opt.name);
+    }
     Ok(())
 }
 
