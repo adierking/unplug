@@ -258,7 +258,13 @@ impl<R: BufRead> MessageReader<R> {
                         Some(MsgCommand::Color(Color::try_from_id(value)?))
                     };
                 }
-                ATTR_MONO => cmd = Some(MsgCommand::Proportional(!parse_bool(value)?)),
+                ATTR_LAYOUT => {
+                    cmd = Some(MsgCommand::Layout(match value {
+                        LAYOUT_MONO => Layout::Monospace,
+                        LAYOUT_DEFAULT => Layout::Default,
+                        _ => bail!("Invalid layout: {}", value),
+                    }));
+                }
                 ATTR_ALIGN => {
                     cmd = Some(MsgCommand::Center(match value {
                         ALIGN_LEFT => false,
@@ -697,9 +703,9 @@ mod tests {
     }
 
     #[test]
-    fn test_import_mono() -> Result<()> {
-        assert_eq!(cmd(b"<font mono=\"true\"/>")?, MsgCommand::Proportional(false));
-        assert_eq!(cmd(b"<font mono=\"false\"/>")?, MsgCommand::Proportional(true));
+    fn test_import_layout() -> Result<()> {
+        assert_eq!(cmd(b"<font layout=\"mono\"/>")?, MsgCommand::Layout(Layout::Monospace));
+        assert_eq!(cmd(b"<font layout=\"default\"/>")?, MsgCommand::Layout(Layout::Default));
         Ok(())
     }
 

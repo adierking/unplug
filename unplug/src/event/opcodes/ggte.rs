@@ -196,7 +196,7 @@ opcodes! {
         Size = 13, // 0d
         Color = 14, // 0e
         Rgba = 15, // 0f
-        Proportional = 16, // 10
+        Layout = 16, // 10
         Icon = 17, // 11
         Shake = 18, // 12
         Center = 19, // 13

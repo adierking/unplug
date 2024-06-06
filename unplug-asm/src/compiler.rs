@@ -666,7 +666,7 @@ impl EventDeserializer for AsmDeserializer<'_> {
             AsmMsgOp::Size => MsgOp::Size,
             AsmMsgOp::Color => MsgOp::Color,
             AsmMsgOp::Rgba => MsgOp::Rgba,
-            AsmMsgOp::Proportional => MsgOp::Proportional,
+            AsmMsgOp::Layout => MsgOp::Layout,
             AsmMsgOp::Icon => MsgOp::Icon,
             AsmMsgOp::Shake => MsgOp::Shake,
             AsmMsgOp::Center => MsgOp::Center,

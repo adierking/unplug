@@ -33,7 +33,7 @@ pub const ATTR_EDITABLE: &str = "editable";
 pub const ATTR_FLAGS: &str = "flags";
 pub const ATTR_ID: &str = "id";
 pub const ATTR_LEFT: &str = "left";
-pub const ATTR_MONO: &str = "mono";
+pub const ATTR_LAYOUT: &str = "layout";
 pub const ATTR_NAME: &str = "name";
 pub const ATTR_OBJ: &str = "obj";
 pub const ATTR_RIGHT: &str = "right";
@@ -51,6 +51,9 @@ pub const ATTR_Y: &str = "y";
 
 pub const ALIGN_LEFT: &str = "left";
 pub const ALIGN_CENTER: &str = "center";
+
+pub const LAYOUT_MONO: &str = "mono";
+pub const LAYOUT_DEFAULT: &str = "default";
 
 pub const QUESTION_YES: &str = "yes";
 pub const QUESTION_NO: &str = "no";

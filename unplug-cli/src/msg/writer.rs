@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::io::Write;
 use unplug::common::Text;
 use unplug::event::msg::{
-    DefaultFlags, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags,
+    DefaultFlags, Layout, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags,
 };
 use unplug::event::Script;
 
@@ -245,9 +245,15 @@ impl<W: Write> MessageWriter<W> {
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
-            MsgCommand::Proportional(b) => {
+            MsgCommand::Layout(layout) => {
                 let mut tag = BytesStart::new(ELEM_FONT);
-                tag.push_attribute((ATTR_MONO, (!b).to_string().as_ref()));
+                tag.push_attribute((
+                    ATTR_LAYOUT,
+                    match *layout {
+                        Layout::Monospace => LAYOUT_MONO,
+                        Layout::Default => LAYOUT_DEFAULT,
+                    },
+                ));
                 self.writer.write_event(Event::Empty(tag))?;
             }
 
@@ -506,9 +512,9 @@ mod tests {
     }
 
     #[test]
-    fn test_export_mono() -> Result<()> {
-        assert_eq!(xml(MsgCommand::Proportional(false))?, "<font mono=\"true\"/>");
-        assert_eq!(xml(MsgCommand::Proportional(true))?, "<font mono=\"false\"/>");
+    fn test_export_layout() -> Result<()> {
+        assert_eq!(xml(MsgCommand::Layout(Layout::Monospace))?, "<font layout=\"mono\"/>");
+        assert_eq!(xml(MsgCommand::Layout(Layout::Default))?, "<font layout=\"default\"/>");
         Ok(())
     }
 

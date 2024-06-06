@@ -66,6 +66,9 @@ pub enum Error {
     #[error("unrecognized message icon: {0}")]
     UnrecognizedIcon(u8),
 
+    #[error("unrecognized message layout: {0}")]
+    UnrecognizedLayout(u8),
+
     #[error("unrecognized message voice: {0}")]
     UnrecognizedVoice(u8),
 
@@ -110,8 +113,8 @@ pub enum MsgCommand {
     Color(Color),
     /// Sets the font color to an arbitrary RGBA color.
     Rgba(u32),
-    /// Sets whether the font should be proportional (i.e. false = monospace).
-    Proportional(bool),
+    /// Sets the font layout.
+    Layout(Layout),
     /// Displays an icon.
     Icon(Icon),
     /// Shakes characters.
@@ -149,7 +152,7 @@ impl MsgCommand {
             MsgCommand::Size(_) => MsgOp::Size,
             MsgCommand::Color(_) => MsgOp::Color,
             MsgCommand::Rgba(_) => MsgOp::Rgba,
-            MsgCommand::Proportional(_) => MsgOp::Proportional,
+            MsgCommand::Layout(_) => MsgOp::Layout,
             MsgCommand::Icon(_) => MsgOp::Icon,
             MsgCommand::Shake(_) => MsgOp::Shake,
             MsgCommand::Center(_) => MsgOp::Center,
@@ -254,7 +257,13 @@ impl DeserializeEvent for MsgArgs {
                     }
                 }
                 MsgOp::Rgba => Some(MsgCommand::Rgba(de.deserialize_rgba()?)),
-                MsgOp::Proportional => Some(MsgCommand::Proportional(de.deserialize_u8()? != 0)),
+                MsgOp::Layout => {
+                    let layout = de.deserialize_u8()?;
+                    match Layout::try_from(layout) {
+                        Ok(layout) => Some(MsgCommand::Layout(layout)),
+                        Err(_) => return Err(Error::UnrecognizedLayout(layout)),
+                    }
+                }
                 MsgOp::Icon => {
                     let icon = de.deserialize_u8()?;
                     match Icon::try_from(icon) {
@@ -328,7 +337,7 @@ impl SerializeEvent for MsgArgs {
                 MsgCommand::Size(size) => ser.serialize_u8(*size)?,
                 MsgCommand::Color(color) => ser.serialize_u8((*color).into())?,
                 MsgCommand::Rgba(rgba) => ser.serialize_rgba(*rgba)?,
-                MsgCommand::Proportional(x) => ser.serialize_u8(*x as u8)?,
+                MsgCommand::Layout(layout) => ser.serialize_u8((*layout).into())?,
                 MsgCommand::Icon(icon) => ser.serialize_u8((*icon).into())?,
                 MsgCommand::Shake(arg) => arg.serialize(ser)?,
                 MsgCommand::Center(x) => ser.serialize_u8(*x as u8)?,
@@ -580,6 +589,17 @@ pub enum Color {
     Reset = 255,
 }
 
+/// Text layouts.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum Layout {
+    /// Characters are spaced apart evenly.
+    Monospace = 0,
+    /// Characters are spaced apart proportionally.
+    #[default]
+    Default = 1,
+}
+
 /// Icons.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
@@ -758,8 +778,8 @@ mod tests {
         assert_reserialize!(msg(MsgCommand::Size(1)));
         assert_reserialize!(msg(MsgCommand::Color(Color::White)));
         assert_reserialize!(msg(MsgCommand::Rgba(1)));
-        assert_reserialize!(msg(MsgCommand::Proportional(false)));
-        assert_reserialize!(msg(MsgCommand::Proportional(true)));
+        assert_reserialize!(msg(MsgCommand::Layout(Layout::Monospace)));
+        assert_reserialize!(msg(MsgCommand::Layout(Layout::Default)));
         assert_reserialize!(msg(MsgCommand::Icon(Icon::Moolah)));
         assert_reserialize!(msg(MsgCommand::Shake(ShakeArgs {
             flags: ShakeFlags::X | ShakeFlags::JITTER,

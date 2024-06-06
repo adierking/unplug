@@ -355,7 +355,7 @@ pub enum MsgOp {
     Size,
     Color,
     Rgba,
-    Proportional,
+    Layout,
     Icon,
     Shake,
     Center,

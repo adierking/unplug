@@ -372,7 +372,7 @@ special modifiers which change the appearance or behavior of the text:
 | `format(str)` | A printf format specifier which reads values off the stack |
 | `icon(i)` | Display predefined icon `i` |
 | `input(digits, editable, selected)` | Ask the player for a number |
-| `prop(x)` | If `x` is 1, use proportional text spacing, otherwise monospace |
+| `layout(x)` | If `x` is 0, use monospace text layout, otherwise 1 for default |
 | `rgba(color)` | RGBA color |
 | `rotate(deg)` | Character rotation |
 | `scale(x, y)` | Text scale |

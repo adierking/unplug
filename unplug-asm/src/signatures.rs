@@ -387,7 +387,7 @@ signatures! {
         Size(Integer),
         Color(Integer),
         Rgba(Color),
-        Proportional(Integer),
+        Layout(Integer),
         Icon(Integer),
         Shake(Integer, Integer, Integer),
         Center(Integer),

@@ -368,7 +368,7 @@ impl EventSerializer for AsmSerializer<'_> {
             MsgOp::Size => AsmMsgOp::Size,
             MsgOp::Color => AsmMsgOp::Color,
             MsgOp::Rgba => AsmMsgOp::Rgba,
-            MsgOp::Proportional => AsmMsgOp::Proportional,
+            MsgOp::Layout => AsmMsgOp::Layout,
             MsgOp::Icon => AsmMsgOp::Icon,
             MsgOp::Shake => AsmMsgOp::Shake,
             MsgOp::Center => AsmMsgOp::Center,
