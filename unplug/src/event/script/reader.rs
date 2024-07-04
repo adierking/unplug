@@ -277,7 +277,7 @@ impl<'r> ScriptReader<'r> {
         }
 
         // Read a new block up until the start of the next block (if any)
-        let end_offset = after.map_or(std::u32::MAX, |i| i.get(&self.layouts).offset());
+        let end_offset = after.map_or(u32::MAX, |i| i.get(&self.layouts).offset());
         self.reader.seek(SeekFrom::Start(offset as u64))?;
         let new_id = self.read_code(end_offset)?;
         let new_code = new_id.get(&self.blocks).code().unwrap();

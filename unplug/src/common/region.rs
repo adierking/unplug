@@ -26,7 +26,7 @@ impl<S: Seek> Region<S> {
     /// Constructs a new `Region<S>` which wraps `stream`. The region starts at `start`, is `len`
     /// bytes large, and the maximum length is set as large as possible.
     pub fn with_inf_max_len(stream: S, start: u64, len: u64) -> Self {
-        Self::with_max_len(stream, start, len, std::u64::MAX - start)
+        Self::with_max_len(stream, start, len, u64::MAX - start)
     }
 
     /// Returns true if this region has a length of 0.
@@ -138,7 +138,7 @@ mod tests {
         assert_eq!(region.stream_position()?, 0);
         assert_eq!(region.seek(SeekFrom::Start(3))?, 3);
         assert_eq!(region.seek(SeekFrom::Start(4))?, 4);
-        assert!(region.seek(SeekFrom::Start(std::u64::MAX)).is_err());
+        assert!(region.seek(SeekFrom::Start(u64::MAX)).is_err());
         assert_eq!(region.stream_position()?, 4);
         Ok(())
     }
@@ -314,7 +314,7 @@ mod tests {
     fn test_inf_max_len() -> io::Result<()> {
         let cursor = Cursor::new(vec![0u8; 6]);
         let mut region = Region::with_inf_max_len(cursor, 1, 0);
-        assert_eq!(region.max_len(), std::u64::MAX - 1);
+        assert_eq!(region.max_len(), u64::MAX - 1);
 
         assert_eq!(region.write(&[1u8, 2u8, 3u8, 4u8, 5u8])?, 5);
         assert_eq!(region.len(), 5);
