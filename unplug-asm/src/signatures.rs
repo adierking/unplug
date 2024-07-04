@@ -38,10 +38,10 @@ pub enum ArgSignature {
     ArrayExpr,
     /// Zero or more expressions.
     Variadic,
-    /// A specific literal integer value.
-    LitInteger(i16),
-    /// A specific literal atom value.
-    LitAtom(Atom),
+    /// A specific atom.
+    Atom(Atom),
+    /// A specific integer value.
+    Literal(i16),
 }
 
 /// Specifies a valid permutation of arguments for an opcode.
@@ -103,8 +103,8 @@ impl<T: NamedOpcode + 'static> IntoIterator for SignatureSet<T> {
 macro_rules! signatures {
     {
         $(
-            $name:ident < $type:ident > {
-                $( $cmd:ident ( $( $arg:ident $( ( $($subarg:tt)+ ) )? ),* ) ),*
+            $name:ident : $type:ident {
+                $( $opcode:ident $args:tt ),*
                 $(,)*
             }
         )*
@@ -114,22 +114,56 @@ macro_rules! signatures {
                 sigs: &[
                     $(
                         Signature {
-                            opcode: $type::$cmd,
-                            args: &[$(signatures!(@arg $arg $( ( $($subarg)+ ) )? ) ),*],
+                            opcode: $type::$opcode,
+                            args: signatures!(@args $args),
                         }
                     ),*
                 ],
             };
         )*
     };
-    (@arg Lit($value:literal)) => {
-        ArgSignature::LitInteger($value)
+
+    // Start munching command arguments
+    (@args ( $($token:tt)* ) ) => {
+        // For simplicity, putting a comma here lets us always munch commas in the arg matchers.
+        signatures!(@arg [] $($token)* ,)
     };
-    (@arg Lit($name:ident)) => {
-        ArgSignature::LitAtom(Atom::$name)
+
+    // Atom argument
+    (@arg [ $($results:expr),* ] @ $atom:ident , $($tail:tt)*) => {
+        signatures!(@arg [
+            $($results,)*
+            ArgSignature::Atom(Atom::$atom)
+        ] $($tail)*)
     };
-    (@arg $name:ident) => {
-        ArgSignature::$name
+
+    // Literal argument
+    (@arg [ $($results:expr),* ] $value:literal , $($tail:tt)*) => {
+        signatures!(@arg [
+            $($results,)*
+            ArgSignature::Literal($value)
+        ] $($tail)*)
+    };
+
+    // Named argument (currently the name is unused)
+    (@arg [ $($results:expr),* ] $name:ident : $ty:ident , $($tail:tt)*) => {
+        signatures!(@arg [
+            $($results,)*
+            ArgSignature::$ty
+        ] $($tail)*)
+    };
+
+    // Unnamed argument
+    (@arg [ $($results:expr),* ] $ty:ident , $($tail:tt)*) => {
+        signatures!(@arg [
+            $($results,)*
+            ArgSignature::$ty
+        ] $($tail)*)
+    };
+
+    // If there are no more tokens left, output the final array
+    (@arg [ $($results:expr),* ] $(,)?) => {
+        &[ $($results),* ]
     };
 }
 
@@ -137,189 +171,189 @@ macro_rules! signatures {
 // declared in their original enums. The tests should catch the mistake if not.
 #[rustfmt::skip]
 signatures! {
-    CMD_SIGNATURES<CmdOp> {
+    CMD_SIGNATURES: CmdOp {
         Abort(),
         Return(),
-        Goto(Pointer),
-        Set(UpdateExpr),
-        Set(SetExpr, Expr),
-        If(Expr, Pointer),
-        Elif(Expr, Pointer),
-        EndIf(Pointer),
-        Case(Expr, Pointer),
-        Expr(Expr, Pointer),
-        While(Expr, Pointer),
-        Break(Pointer),
-        Run(Pointer),
-        Lib(Integer),
+        Goto(address: Pointer),
+        Set(update: UpdateExpr),
+        Set(target: SetExpr, value: Expr),
+        If(condition: Expr, else_address: Pointer),
+        Elif(condition: Expr, else_address: Pointer),
+        EndIf(address: Pointer),
+        Case(condition: Expr, else_address: Pointer),
+        Expr(condition: Expr, else_address: Pointer),
+        While(condition: Expr, else_address: Pointer),
+        Break(address: Pointer),
+        Run(subroutine: Pointer),
+        Lib(index: Integer),
         PushBp(),
         PopBp(),
-        SetSp(Expr),
-        Anim(ObjectExpr, Variadic),
-        Anim1(ObjectExpr, Variadic),
-        Anim2(ObjectExpr, Variadic),
-        Attach(ObjectExpr, EventExpr),
-        Born(Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, EventExpr),
-        Call(ObjectExpr, Variadic),
-        Camera(Lit(Anim), Expr, Expr, Expr),
-        Camera(Lit(Pos), Expr, Expr, Expr, Expr, Expr),
-        Camera(Lit(Obj), Expr, Expr, Expr),
-        Camera(Lit(Reset), Expr, Expr),
-        Camera(Lit(Unk211), Expr, Expr, Expr, Expr),
-        Camera(Lit(Lead), Expr),
-        Camera(Lit(Unk227), Expr, Expr, Expr, Expr, Expr),
-        Camera(Lit(Distance), Expr, Expr, Expr),
-        Camera(Lit(Unk229), Expr, Expr, Expr),
-        Camera(Lit(Unk230)),
-        Camera(Lit(Unk232), Lit(-2)),
-        Camera(Lit(Unk232), Lit(-1)),
-        Camera(Lit(Unk232), Lit(0)),
-        Camera(Lit(Unk232), Lit(1)),
-        Camera(Lit(Unk232), Lit(2), Expr),
-        Camera(Lit(Unk232), Lit(3), Expr),
-        Camera(Lit(Unk232), Lit(4), Expr),
-        Camera(Lit(Unk236), Expr),
-        Camera(Lit(Unk237), Expr),
-        Camera(Lit(Unk238), Expr),
-        Camera(Lit(Unk240), Expr, Expr, Expr, Expr),
-        Camera(Lit(Unk243), Expr, Expr, Expr, Expr),
-        Camera(Lit(Unk251), Expr, Expr, Expr, Expr),
-        Camera(Lit(Unk252), Expr, Expr, Expr, Expr),
-        Check(Lit(Time), Expr),
-        Check(Lit(Fade)),
-        Check(Lit(Wipe)),
-        Check(Lit(Unk203)),
-        Check(Lit(Anim), ObjectExpr, Expr),
-        Check(Lit(Dir), ObjectExpr),
-        Check(Lit(Move), ObjectExpr),
-        Check(Lit(Color), ObjectExpr),
-        Check(Lit(Sfx), SoundExpr),
-        Check(Lit(Real), Expr),
-        Check(Lit(Cam)),
-        Check(Lit(Read), ObjectExpr),
-        Check(Lit(ZBlur)),
-        Check(Lit(Letterbox)),
-        Check(Lit(Shake)),
-        Check(Lit(Mono)),
-        Check(Lit(Scale), ObjectExpr),
-        Check(Lit(Cue)),
-        Check(Lit(Unk246), Expr),
-        Color(ObjectExpr, Lit(Modulate), Expr, Expr, Expr, Expr),
-        Color(ObjectExpr, Lit(Blend), Expr, Expr, Expr, Expr),
+        SetSp(value: Expr),
+        Anim(object: ObjectExpr, Variadic),
+        Anim1(object: ObjectExpr, Variadic),
+        Anim2(object: ObjectExpr, Variadic),
+        Attach(object: ObjectExpr, script: EventExpr),
+        Born(Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, script: EventExpr),
+        Call(target: ObjectExpr, Variadic),
+        Camera(@Anim, Expr, Expr, Expr),
+        Camera(@Pos, Expr, Expr, Expr, Expr, Expr),
+        Camera(@Obj, Expr, Expr, Expr),
+        Camera(@Reset, Expr, Expr),
+        Camera(@Unk211, Expr, Expr, Expr, Expr),
+        Camera(@Lead, Expr),
+        Camera(@Unk227, Expr, Expr, Expr, Expr, Expr),
+        Camera(@Distance, Expr, Expr, Expr),
+        Camera(@Unk229, Expr, Expr, Expr),
+        Camera(@Unk230),
+        Camera(@Unk232, -2),
+        Camera(@Unk232, -1),
+        Camera(@Unk232, 0),
+        Camera(@Unk232, 1),
+        Camera(@Unk232, 2, Expr),
+        Camera(@Unk232, 3, Expr),
+        Camera(@Unk232, 4, Expr),
+        Camera(@Unk236, Expr),
+        Camera(@Unk237, Expr),
+        Camera(@Unk238, Expr),
+        Camera(@Unk240, Expr, Expr, Expr, Expr),
+        Camera(@Unk243, Expr, Expr, Expr, Expr),
+        Camera(@Unk251, Expr, Expr, Expr, Expr),
+        Camera(@Unk252, Expr, Expr, Expr, Expr),
+        Check(@Time, duration: Expr),
+        Check(@Fade),
+        Check(@Wipe),
+        Check(@Unk203),
+        Check(@Anim, object: ObjectExpr, Expr),
+        Check(@Dir, object: ObjectExpr),
+        Check(@Move, object: ObjectExpr),
+        Check(@Color, object: ObjectExpr),
+        Check(@Sfx, sound: SoundExpr),
+        Check(@Real, Expr),
+        Check(@Cam),
+        Check(@Read, object: ObjectExpr),
+        Check(@ZBlur),
+        Check(@Letterbox),
+        Check(@Shake),
+        Check(@Mono),
+        Check(@Scale, object: ObjectExpr),
+        Check(@Cue),
+        Check(@Unk246, Expr),
+        Color(ObjectExpr, @Modulate, Expr, Expr, Expr, Expr),
+        Color(ObjectExpr, @Blend, Expr, Expr, Expr, Expr),
         Detach(ObjectExpr),
         Dir(ObjectExpr, Expr),
-        MDir(ObjectExpr, Lit(Dir), Expr, Expr, Expr),
-        MDir(ObjectExpr, Lit(Pos), Expr, Expr, Expr, Expr),
-        MDir(ObjectExpr, Lit(Obj), Expr, Expr, Expr),
-        MDir(ObjectExpr, Lit(Cam), Expr, Expr),
+        MDir(ObjectExpr, @Dir, Expr, Expr, Expr),
+        MDir(ObjectExpr, @Pos, Expr, Expr, Expr, Expr),
+        MDir(ObjectExpr, @Obj, Expr, Expr, Expr),
+        MDir(ObjectExpr, @Cam, Expr, Expr),
         Disp(ObjectExpr, Expr),
         Kill(Expr),
-        Light(Expr, Lit(Pos), Expr, Expr, Expr),
-        Light(Expr, Lit(Color), Expr, Expr, Expr),
-        Light(Expr, Lit(Unk227), Expr, Expr, Expr),
-        Menu(Lit(0)),
-        Menu(Lit(1)),
-        Menu(Lit(2)),
-        Menu(Lit(3)),
-        Menu(Lit(4)),
-        Menu(Lit(5)),
-        Menu(Lit(6)),
-        Menu(Lit(7)),
-        Menu(Lit(1000), Expr),
-        Menu(Lit(1001), Expr, Expr),
+        Light(Expr, @Pos, Expr, Expr, Expr),
+        Light(Expr, @Color, Expr, Expr, Expr),
+        Light(Expr, @Unk227, Expr, Expr, Expr),
+        Menu(0),
+        Menu(1),
+        Menu(2),
+        Menu(3),
+        Menu(4),
+        Menu(5),
+        Menu(6),
+        Menu(7),
+        Menu(1000, Expr),
+        Menu(1001, Expr, Expr),
         Move(ObjectExpr, Expr, Expr, Expr, Expr),
         MoveTo(ObjectExpr, Expr, Expr, Expr, Expr, Expr, Expr),
         Msg(Message),
         Pos(ObjectExpr, Expr, Expr, Expr),
         PrintF(String),
-        Ptcl(Expr, Lit(Pos), Expr, Expr, Expr, Expr, Expr, Expr, Expr),
-        Ptcl(Expr, Lit(Obj), ObjectExpr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
-        Ptcl(Expr, Lit(Unk210)),
-        Ptcl(Expr, Lit(Lead), ObjectExpr, Variadic),
-        Read(Lit(Anim), ObjectExpr, StringExpr),
-        Read(Lit(Sfx), ObjectExpr, StringExpr),
+        Ptcl(Expr, @Pos, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
+        Ptcl(Expr, @Obj, ObjectExpr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
+        Ptcl(Expr, @Unk210),
+        Ptcl(Expr, @Lead, ObjectExpr, Variadic),
+        Read(@Anim, ObjectExpr, StringExpr),
+        Read(@Sfx, ObjectExpr, StringExpr),
         Scale(ObjectExpr, Expr, Expr, Expr),
         MScale(ObjectExpr, Expr, Expr, Expr, Expr),
-        Scrn(Lit(Fade), Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
-        Scrn(Lit(Wipe), Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
-        Scrn(Lit(Hud), Lit(0), Expr),
-        Scrn(Lit(Hud), Lit(1), Expr),
-        Scrn(Lit(Hud), Lit(2), Expr),
-        Scrn(Lit(Hud), Lit(3), Expr, Expr, Expr, Expr),
-        Scrn(Lit(Hud), Lit(4), Lit(-4)),
-        Scrn(Lit(Hud), Lit(4), Lit(-3), Expr),
-        Scrn(Lit(Hud), Lit(4), Lit(-2)),
-        Scrn(Lit(Hud), Lit(4), Lit(-1)),
-        Scrn(Lit(Hud), Lit(4), Lit(0)),
-        Scrn(Lit(Hud), Lit(4), Lit(1)),
-        Scrn(Lit(Hud), Lit(4), Lit(2)),
-        Scrn(Lit(Hud), Lit(4), Lit(3)),
-        Scrn(Lit(ZBlur), Expr, Expr, Expr, Expr, Expr),
-        Scrn(Lit(Letterbox), Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
-        Scrn(Lit(Shake), Expr, Expr, Expr, Expr, Expr, Expr, Expr),
-        Scrn(Lit(Mono), Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
+        Scrn(@Fade, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
+        Scrn(@Wipe, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
+        Scrn(@Hud, 0, Expr),
+        Scrn(@Hud, 1, Expr),
+        Scrn(@Hud, 2, Expr),
+        Scrn(@Hud, 3, Expr, Expr, Expr, Expr),
+        Scrn(@Hud, 4, -4),
+        Scrn(@Hud, 4, -3, Expr),
+        Scrn(@Hud, 4, -2),
+        Scrn(@Hud, 4, -1),
+        Scrn(@Hud, 4, 0),
+        Scrn(@Hud, 4, 1),
+        Scrn(@Hud, 4, 2),
+        Scrn(@Hud, 4, 3),
+        Scrn(@ZBlur, Expr, Expr, Expr, Expr, Expr),
+        Scrn(@Letterbox, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
+        Scrn(@Shake, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
+        Scrn(@Mono, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr, Expr),
         Select(Message),
-        Sfx(SoundExpr, Lit(0)),
-        Sfx(SoundExpr, Lit(1)),
-        Sfx(SoundExpr, Lit(2), Expr),
-        Sfx(SoundExpr, Lit(3), Expr),
-        Sfx(SoundExpr, Lit(4), Expr, Expr),
-        Sfx(SoundExpr, Lit(5)),
-        Sfx(SoundExpr, Lit(6)),
-        Sfx(SoundExpr, Lit(Cue)),
+        Sfx(SoundExpr, 0),
+        Sfx(SoundExpr, 1),
+        Sfx(SoundExpr, 2, Expr),
+        Sfx(SoundExpr, 3, Expr),
+        Sfx(SoundExpr, 4, Expr, Expr),
+        Sfx(SoundExpr, 5),
+        Sfx(SoundExpr, 6),
+        Sfx(SoundExpr, @Cue),
         Timer(Expr, EventExpr),
-        Wait(Lit(Time), Expr),
-        Wait(Lit(Fade)),
-        Wait(Lit(Wipe)),
-        Wait(Lit(Unk203)),
-        Wait(Lit(Anim), ObjectExpr, Expr),
-        Wait(Lit(Dir), ObjectExpr),
-        Wait(Lit(Move), ObjectExpr),
-        Wait(Lit(Color), ObjectExpr),
-        Wait(Lit(Sfx), SoundExpr),
-        Wait(Lit(Real), Expr),
-        Wait(Lit(Cam)),
-        Wait(Lit(Read), ObjectExpr),
-        Wait(Lit(ZBlur)),
-        Wait(Lit(Letterbox)),
-        Wait(Lit(Shake)),
-        Wait(Lit(Mono)),
-        Wait(Lit(Scale), ObjectExpr),
-        Wait(Lit(Cue)),
-        Wait(Lit(Unk246), Expr),
+        Wait(@Time, Expr),
+        Wait(@Fade),
+        Wait(@Wipe),
+        Wait(@Unk203),
+        Wait(@Anim, ObjectExpr, Expr),
+        Wait(@Dir, ObjectExpr),
+        Wait(@Move, ObjectExpr),
+        Wait(@Color, ObjectExpr),
+        Wait(@Sfx, SoundExpr),
+        Wait(@Real, Expr),
+        Wait(@Cam),
+        Wait(@Read, ObjectExpr),
+        Wait(@ZBlur),
+        Wait(@Letterbox),
+        Wait(@Shake),
+        Wait(@Mono),
+        Wait(@Scale, ObjectExpr),
+        Wait(@Cue),
+        Wait(@Unk246, Expr),
         Warp(Expr, Expr),
-        Win(Lit(Pos), Expr, Expr),
-        Win(Lit(Obj), ObjectExpr, Expr, Expr, Expr),
-        Win(Lit(Reset)),
-        Win(Lit(Color), Expr, Expr, Expr, Expr),
-        Win(Lit(Letterbox)),
+        Win(@Pos, Expr, Expr),
+        Win(@Obj, ObjectExpr, Expr, Expr, Expr),
+        Win(@Reset),
+        Win(@Color, Expr, Expr, Expr, Expr),
+        Win(@Letterbox),
         Movie(StringExpr, Expr, Expr, Expr, Expr, Expr),
     }
 
-    EXPR_SIGNATURES<ExprOp> {
-        Equal(Expr, Expr),
-        NotEqual(Expr, Expr),
-        Less(Expr, Expr),
-        LessEqual(Expr, Expr),
-        Greater(Expr, Expr),
-        GreaterEqual(Expr, Expr),
-        Not(Expr),
-        Add(Expr, Expr),
-        Subtract(Expr, Expr),
-        Multiply(Expr, Expr),
-        Divide(Expr, Expr),
-        Modulo(Expr, Expr),
-        BitAnd(Expr, Expr),
-        BitOr(Expr, Expr),
-        BitXor(Expr, Expr),
-        AddAssign(Expr, Expr),
-        SubtractAssign(Expr, Expr),
-        MultiplyAssign(Expr, Expr),
-        DivideAssign(Expr, Expr),
-        ModuloAssign(Expr, Expr),
-        BitAndAssign(Expr, Expr),
-        BitOrAssign(Expr, Expr),
-        BitXorAssign(Expr, Expr),
+    EXPR_SIGNATURES: ExprOp {
+        Equal(lhs: Expr, rhs: Expr),
+        NotEqual(lhs: Expr, rhs: Expr),
+        Less(lhs: Expr, rhs: Expr),
+        LessEqual(lhs: Expr, rhs: Expr),
+        Greater(lhs: Expr, rhs: Expr),
+        GreaterEqual(lhs: Expr, rhs: Expr),
+        Not(condition: Expr),
+        Add(lhs: Expr, rhs: Expr),
+        Subtract(lhs: Expr, rhs: Expr),
+        Multiply(lhs: Expr, rhs: Expr),
+        Divide(lhs: Expr, rhs: Expr),
+        Modulo(lhs: Expr, rhs: Expr),
+        BitAnd(lhs: Expr, rhs: Expr),
+        BitOr(lhs: Expr, rhs: Expr),
+        BitXor(lhs: Expr, rhs: Expr),
+        AddAssign(dest: Expr, src: Expr),
+        SubtractAssign(dest: Expr, src: Expr),
+        MultiplyAssign(dest: Expr, src: Expr),
+        DivideAssign(dest: Expr, src: Expr),
+        ModuloAssign(dest: Expr, src: Expr),
+        BitAndAssign(dest: Expr, src: Expr),
+        BitOrAssign(dest: Expr, src: Expr),
+        BitXorAssign(dest: Expr, src: Expr),
         Imm16(Integer),
         Imm32(Integer),
         AddressOf(Pointer),
@@ -348,39 +382,39 @@ signatures! {
         Use(),
         Hit(),
         StickerName(Expr),
-        Obj(Lit(Anim), ObjectExpr),
-        Obj(Lit(Dir), ObjectExpr),
-        Obj(Lit(PosX), ObjectExpr),
-        Obj(Lit(PosY), ObjectExpr),
-        Obj(Lit(PosZ), ObjectExpr),
-        Obj(Lit(BoneX), ArrayExpr),
-        Obj(Lit(BoneY), ArrayExpr),
-        Obj(Lit(BoneZ), ArrayExpr),
-        Obj(Lit(DirTo), ArrayExpr),
-        Obj(Lit(Distance), ArrayExpr),
-        Obj(Lit(Unk235), ObjectExpr),
-        Obj(Lit(Unk247), ObjectExpr),
-        Obj(Lit(Unk248), ObjectExpr),
-        Obj(Lit(Unk249), ArrayExpr),
-        Obj(Lit(Unk250), ArrayExpr),
+        Obj(@Anim, ObjectExpr),
+        Obj(@Dir, ObjectExpr),
+        Obj(@PosX, ObjectExpr),
+        Obj(@PosY, ObjectExpr),
+        Obj(@PosZ, ObjectExpr),
+        Obj(@BoneX, ArrayExpr),
+        Obj(@BoneY, ArrayExpr),
+        Obj(@BoneZ, ArrayExpr),
+        Obj(@DirTo, ArrayExpr),
+        Obj(@Distance, ArrayExpr),
+        Obj(@Unk235, ObjectExpr),
+        Obj(@Unk247, ObjectExpr),
+        Obj(@Unk248, ObjectExpr),
+        Obj(@Unk249, ArrayExpr),
+        Obj(@Unk250, ArrayExpr),
         Random(Expr),
         Sin(Expr),
         Cos(Expr),
         ArrayElement(Expr, Expr, ArrayExpr),
     }
 
-    MSG_SIGNATURES<AsmMsgOp> {
+    MSG_SIGNATURES: AsmMsgOp {
         Speed(Integer),
         Wait(Integer),
         Anim(Integer, Integer, Integer),
-        Sfx(Sound, Lit(-1)),
-        Sfx(Sound, Lit(0)),
-        Sfx(Sound, Lit(1)),
-        Sfx(Sound, Lit(2), Integer),
-        Sfx(Sound, Lit(3), Integer),
-        Sfx(Sound, Lit(4), Integer, Integer),
-        Sfx(Sound, Lit(5)),
-        Sfx(Sound, Lit(6)),
+        Sfx(Sound, -1),
+        Sfx(Sound, 0),
+        Sfx(Sound, 1),
+        Sfx(Sound, 2, Integer),
+        Sfx(Sound, 3, Integer),
+        Sfx(Sound, 4, Integer, Integer),
+        Sfx(Sound, 5),
+        Sfx(Sound, 6),
         Voice(Integer),
         Default(Integer, Integer),
         Format(String),
@@ -548,11 +582,11 @@ mod tests {
                             values.push(Value::Integer(j));
                         }
                     }
-                    ArgSignature::LitAtom(t) => {
+                    ArgSignature::Atom(t) => {
                         values.push(Value::Expr(ExprOp::Imm32));
                         values.push(Value::Integer(Ggte::value(t).unwrap() as i16));
                     }
-                    ArgSignature::LitInteger(i) => {
+                    ArgSignature::Literal(i) => {
                         values.push(Value::Expr(ExprOp::Imm32));
                         values.push(Value::Integer(i));
                     }
