@@ -1,3 +1,4 @@
+mod animation;
 mod atc;
 mod item;
 mod music;
@@ -11,6 +12,7 @@ mod spawnable;
 mod stage;
 mod suit;
 
+pub use animation::{Animation, ObjectAnimations};
 pub use atc::Atc;
 pub use item::{Item, ItemFlags};
 pub use music::Music;

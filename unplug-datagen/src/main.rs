@@ -15,7 +15,7 @@ use std::fmt::Write as FmtWrite;
 use std::fmt::{self, Debug};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 use time::macros::format_description;
 use unplug::audio::metadata::SfxPlaylist;
@@ -56,6 +56,10 @@ const UNKNOWN_PREFIX: &str = "Unk";
 
 const NUM_ITEMS: usize = 159;
 const STRIP_ITEM_LABEL: &str = "Item";
+
+const NPC_DOL_PATH: &str = "sys/main.dol";
+const NPC_BRSAR_PATH: &str = "files/snd/cb_robo.brsar";
+const NPC_OBJECTS_ADDR: u32 = 0x802f0138;
 
 /// Names of sound banks within the ISO and their corresponding BRSAR groups. This does not include
 /// `sfx_hori` because it has a bad base index and cannot be loaded.
@@ -98,9 +102,9 @@ const OUTPUT_DIR_NAME: &str = "gen";
 
 const GEN_HEADER: &str = "// Generated with unplug-datagen. DO NOT EDIT.\n\
                           // To regenerate: cargo run -p unplug-datagen -- <iso path>\n\n";
-const GEN_HEADER_BRSAR: &str = "// Generated with unplug-datagen. DO NOT EDIT.\n\
-                                // To regenerate: cargo run -p unplug-datagen -- <iso path> \
-                                --brsar <cb_robo.brsar path>\n\n";
+const GEN_HEADER_NPC: &str = "// Generated with unplug-datagen. DO NOT EDIT.\n\
+                              // To regenerate: cargo run -p unplug-datagen -- <iso path> \
+                              --npc <NPC data path>\n\n";
 
 const OBJECTS_FILE_NAME: &str = "objects.inc.rs";
 const OBJECTS_HEADER: &str = "declare_objects! {\n";
@@ -142,6 +146,10 @@ const SFX_FOOTER: &str = "}\n";
 const SFX_SAMPLES_FILE_NAME: &str = "sfx_samples.inc.rs";
 const SFX_SAMPLES_HEADER: &str = "declare_sfx_samples! {\n";
 const SFX_SAMPLES_FOOTER: &str = "}\n";
+
+const ANIMATIONS_FILE_NAME: &str = "animations.inc.rs";
+const ANIMATIONS_HEADER: &str = "declare_animations! {\n";
+const ANIMATIONS_FOOTER: &str = "}\n";
 
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
@@ -222,13 +230,13 @@ fn init_logging() {
 struct Options {
     /// Path to the ISO to load.
     iso: PathBuf,
-    /// Path to cb_robo.brsar.
-    brsar: Option<PathBuf>,
+    /// Path to an extracted data partition from New Play Control! Chibi-Robo.
+    npc: Option<PathBuf>,
 }
 
 fn parse_options() -> Result<Options> {
     let mut iso: Option<PathBuf> = None;
-    let mut brsar: Option<PathBuf> = None;
+    let mut npc: Option<PathBuf> = None;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_ref() {
@@ -236,21 +244,22 @@ fn parse_options() -> Result<Options> {
                 usage();
                 process::exit(0);
             }
-            "--brsar" => {
-                let path = args.next().ok_or_else(|| anyhow!("--brsar: path expected"))?;
-                brsar = Some(PathBuf::from(path));
+            "--npc" => {
+                let path = args.next().ok_or_else(|| anyhow!("--npc: path expected"))?;
+                npc = Some(PathBuf::from(path));
             }
             arg if iso.is_none() => iso = Some(PathBuf::from(arg)),
             arg => bail!("unrecognized argument: {}", arg),
         }
     }
-    Ok(Options { iso: iso.ok_or_else(|| anyhow!("ISO path expected"))?, brsar })
+    Ok(Options { iso: iso.ok_or_else(|| anyhow!("ISO path expected"))?, npc })
 }
 
 fn usage() {
-    eprintln!("Usage: cargo run -p unplug-datagen -- <iso> [--brsar <path>]\n");
-    eprintln!("To generate sound names, --brsar must be provided with a path to cb_robo.brsar");
-    eprintln!("from the Wii release of the game (R24J01).\n");
+    eprintln!("Usage: cargo run -p unplug-datagen -- <iso> [--npc <path>]");
+    eprintln!("\nTo generate animation and sound names, --npc must be provided");
+    eprintln!("along with a path to the data partition extracted from the Wii");
+    eprintln!("release of the game (R24J01).");
 }
 
 /// The raw representation of an object in the executable.
@@ -489,6 +498,81 @@ fn object_index(object: i32) -> usize {
         (object - INTERNAL_OBJECTS_BASE_ID) as usize + NUM_MAIN_OBJECTS
     } else {
         object as usize
+    }
+}
+
+/// Animation name info which is written to the generated source.
+#[derive(Debug, Clone)]
+struct AnimationDefinition {
+    object: i32,
+    index: i32,
+    label: Label,
+    name: String,
+}
+
+/// Reads animations for `count` objects from `address` in the NPC executable.
+fn read_npc_animations(
+    dol: &DolHeader,
+    reader: &mut (impl Read + Seek),
+    address: u32,
+    count: usize,
+) -> Result<Vec<AnimationDefinition>> {
+    let offset = dol.address_to_offset(address)? as u64;
+    let mut anims = Vec::new();
+    for obj_index in 0..count {
+        reader.seek(SeekFrom::Start(offset + (obj_index as u64) * 0x18))?;
+        let _name = reader.read_u32::<BE>()?;
+        let _unk_4 = reader.read_u32::<BE>()?;
+        let _unk_8 = reader.read_u32::<BE>()?;
+        let _unk_c = reader.read_u32::<BE>()?;
+        let anim_address = reader.read_u32::<BE>()?;
+        let _unk_14 = reader.read_u32::<BE>()?;
+        if anim_address != 0 {
+            let anim_offset = dol.address_to_offset(anim_address)? as u64;
+            let mut anim_index: usize = 0;
+            loop {
+                reader.seek(SeekFrom::Start(anim_offset + (anim_index as u64) * 4))?;
+                let name_address = reader.read_u32::<BE>()?;
+                if name_address == 0 {
+                    break;
+                }
+                let name_offset = dol.address_to_offset(name_address)? as u64;
+                reader.seek(SeekFrom::Start(name_offset))?;
+                let name = CString::read_from(reader)?.into_string()?;
+                anims.push(AnimationDefinition {
+                    object: obj_index as i32,
+                    index: anim_index as i32,
+                    label: Label::pascal_case(&name),
+                    name,
+                });
+                anim_index += 1;
+            }
+        }
+    }
+    Ok(anims)
+}
+
+fn deduplicate_animations(anims: &mut [AnimationDefinition]) {
+    // Build a map of how many times each label appears
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for anim in anims.iter() {
+        counts.entry(anim.label.0.clone()).and_modify(|c| *c += 1).or_insert(1);
+    }
+
+    let mut current_prefix = "unk".to_owned();
+    for anim in anims {
+        let count = counts.get(&anim.label.0).copied().unwrap_or(0);
+        if count > 1 {
+            let prefixed = format!("{}_{}", current_prefix, anim.name);
+            anim.label = Label::pascal_case(&prefixed);
+            anim.label.append_discriminator(anim.index as usize);
+            anim.name = format!("{}_{}", prefixed, anim.index);
+            assert!(!counts.contains_key(&anim.label.0));
+        } else if let Some((prefix, _)) = anim.name.split_once('_') {
+            if current_prefix != prefix {
+                current_prefix = prefix.to_owned();
+            }
+        }
     }
 }
 
@@ -1195,7 +1279,7 @@ fn write_sfx_groups(mut writer: impl Write, groups: &[SfxGroupDefinition]) -> Re
 
 /// Writes the list of sound effects to the generated file.
 fn write_sfx(mut writer: impl Write, sfx_defs: &[SfxDefinition]) -> Result<()> {
-    write!(writer, "{}{}", GEN_HEADER_BRSAR, SFX_HEADER)?;
+    write!(writer, "{}{}", GEN_HEADER_NPC, SFX_HEADER)?;
     for sfx in sfx_defs {
         writeln!(writer, "    0x{:>06x} => {} {{ \"{}\" }},", sfx.id, sfx.label.0, sfx.name)?;
     }
@@ -1206,11 +1290,35 @@ fn write_sfx(mut writer: impl Write, sfx_defs: &[SfxDefinition]) -> Result<()> {
 
 /// Writes the list of sounds to the generated file.
 fn write_sfx_samples(mut writer: impl Write, samples: &[SfxSampleDefinition]) -> Result<()> {
-    write!(writer, "{}{}", GEN_HEADER_BRSAR, SFX_SAMPLES_HEADER)?;
+    write!(writer, "{}{}", GEN_HEADER_NPC, SFX_SAMPLES_HEADER)?;
     for sound in samples {
         writeln!(writer, "    {} => {} {{ \"{}\" }},", sound.id, sound.label.0, sound.name)?;
     }
     write!(writer, "{}", SFX_SAMPLES_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
+/// Writes the list of animations to the generated file.
+fn write_animations(
+    mut writer: impl Write,
+    anims: &[AnimationDefinition],
+    objects: &[ObjectDefinition],
+) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER_NPC, ANIMATIONS_HEADER)?;
+    let mut last_object = None;
+    for anim in anims {
+        if last_object != Some(anim.object) {
+            if last_object.is_some() {
+                writeln!(writer, "    }}")?;
+            }
+            writeln!(writer, "    {} {{", objects[anim.object as usize].label.0)?;
+            last_object = Some(anim.object);
+        }
+        writeln!(writer, "        {} => {} {{ \"{}\" }},", anim.index, anim.label.0, anim.name,)?;
+    }
+    writeln!(writer, "    }}")?;
+    write!(writer, "{}", ANIMATIONS_FOOTER)?;
     writer.flush()?;
     Ok(())
 }
@@ -1246,17 +1354,6 @@ fn run_app() -> Result<()> {
 
     info!("Reading SFX groups");
     let sfx_groups = read_sfx_groups(&mut iso, &playlist)?;
-
-    let mut sfx = vec![];
-    let mut sfx_samples = vec![];
-    if let Some(brsar_path) = options.brsar {
-        info!("Reading BRSAR");
-        let mut brsar_reader = BufReader::new(File::open(brsar_path)?);
-        let brsar = Brsar::read_from(&mut brsar_reader)?;
-        info!("Matching sound effect names");
-        sfx = build_sfx(&playlist, &brsar, &sfx_groups);
-        sfx_samples = build_sfx_samples(&playlist, &sfx);
-    }
 
     let metadata = {
         info!("Opening {}", QP_PATH);
@@ -1301,6 +1398,30 @@ fn run_app() -> Result<()> {
 
     info!("Reading music data");
     let music = read_music(&dol, &mut dol_reader)?;
+
+    let mut sfx = vec![];
+    let mut sfx_samples = vec![];
+    let mut animations = vec![];
+    if let Some(npc_path) = options.npc {
+        info!("Reading NPC sounds");
+        let brsar_path = Path::new(&npc_path).join(NPC_BRSAR_PATH);
+        let mut brsar_reader = BufReader::new(File::open(brsar_path)?);
+        let brsar = Brsar::read_from(&mut brsar_reader)?;
+
+        info!("Matching sound effect names");
+        sfx = build_sfx(&playlist, &brsar, &sfx_groups);
+        sfx_samples = build_sfx_samples(&playlist, &sfx);
+
+        info!("Opening NPC main.dol");
+        let dol_path = Path::new(&npc_path).join(NPC_DOL_PATH);
+        let mut dol_reader = BufReader::new(File::open(dol_path)?);
+        let dol = DolHeader::read_from(&mut dol_reader)?;
+
+        info!("Matching animation names");
+        animations =
+            read_npc_animations(&dol, &mut dol_reader, NPC_OBJECTS_ADDR, NUM_MAIN_OBJECTS)?;
+        deduplicate_animations(&mut animations);
+    }
 
     let out_dir: PathBuf = [UNPLUG_DATA_PATH, SRC_DIR_NAME, OUTPUT_DIR_NAME].iter().collect();
     fs::create_dir_all(&out_dir)?;
@@ -1357,6 +1478,13 @@ fn run_app() -> Result<()> {
         info!("Writing {}", sfx_samples_path.display());
         let sfx_samples_writer = BufWriter::new(File::create(sfx_samples_path)?);
         write_sfx_samples(sfx_samples_writer, &sfx_samples)?;
+    }
+
+    if !animations.is_empty() {
+        let animations_path = out_dir.join(ANIMATIONS_FILE_NAME);
+        info!("Writing {}", animations_path.display());
+        let animations_writer = BufWriter::new(File::create(animations_path)?);
+        write_animations(animations_writer, &animations, &objects)?;
     }
 
     Ok(())

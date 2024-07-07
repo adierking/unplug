@@ -1,5 +1,5 @@
 // Generated with unplug-datagen. DO NOT EDIT.
-// To regenerate: cargo run -p unplug-datagen -- <iso path> --brsar <cb_robo.brsar path>
+// To regenerate: cargo run -p unplug-datagen -- <iso path> --npc <NPC data path>
 
 declare_sfx! {
     0x000000 => None { "none" },
