@@ -3,6 +3,7 @@
     "displayName": "Unplug",
     "description": "Unplug assembly support",
     "version": "0.0.1",
+    "publisher": "adierking",
     "engines": {
         "vscode": "^1.68.0"
     },
