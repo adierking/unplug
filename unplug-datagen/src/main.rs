@@ -1,13 +1,13 @@
 use anyhow::{anyhow, bail, Error, Result};
 use bitflags::bitflags;
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{ReadBytesExt, BE, LE};
 use lazy_static::lazy_static;
 use log::{debug, error, info, trace, warn};
 use num_enum::TryFromPrimitive;
 use regex::{Regex, RegexSet};
 use simplelog::{Color, ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::env;
 use std::ffi::CString;
@@ -23,7 +23,8 @@ use unplug::audio::transport::Brsar;
 use unplug::common::{NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek};
 use unplug::dvd::{ArchiveReader, DiscStream, DolHeader, OpenFile};
 use unplug::globals::metadata::{Atc, Item, Stage, Suit};
-use unplug::globals::GlobalsReader;
+use unplug::globals::{GlobalsReader, Metadata};
+use unplug::stage::Actor;
 
 const MAIN_OBJECTS_ADDR: u32 = 0x8021c70c;
 const NUM_MAIN_OBJECTS: usize = 1162;
@@ -49,7 +50,8 @@ const NUM_MUSIC: usize = 109;
 const MUSIC_EXT: &str = ".hps";
 
 const QP_PATH: &str = "qp.bin";
-const QP_GLOBALS_PATH: &str = "bin/e/globals.bin";
+const QP_STAGES_PATH: &str = "bin/e";
+const QP_GLOBALS_NAME: &str = "globals.bin";
 
 const INTERNAL_PREFIX: &str = "Internal";
 const UNKNOWN_PREFIX: &str = "Unk";
@@ -151,6 +153,10 @@ const ANIMATIONS_FILE_NAME: &str = "animations.inc.rs";
 const ANIMATIONS_HEADER: &str = "declare_animations! {\n";
 const ANIMATIONS_FOOTER: &str = "}\n";
 
+const ACTORS_FILE_NAME: &str = "actors.inc.rs";
+const ACTORS_HEADER: &str = "declare_actors! {\n";
+const ACTORS_FOOTER: &str = "}\n";
+
 lazy_static! {
     /// Each object's label will be matched against these regexes in order. The first match found
     /// will be replaced by the associated string.
@@ -189,6 +195,14 @@ lazy_static! {
         ("SoukoWineBottleA".into(), "BrokenBottleA"),
         ("SoukoWineBottleB".into(), "BrokenBottleB"),
     ].into_iter().collect();
+
+    /// Strings to remove from actor names when making them into labels.
+    static ref ACTOR_NAME_FIXUPS: Vec<Regex> = vec![
+        Regex::new(r"^Space Hunter ").unwrap(),
+        Regex::new(r"^Captain ").unwrap(),
+        Regex::new(r"^The Great ").unwrap(),
+        Regex::new(r"^Princess ").unwrap(),
+    ];
 
     /// Find-and-replace pairs for music paths
     static ref MUSIC_PATH_FIXUPS: Vec<(Regex, &'static str)> = vec![
@@ -634,11 +648,15 @@ bitflags! {
     }
 }
 
-impl<R: Read + ?Sized> ReadFrom<R> for ObjectPlacement {
+impl<R: Read + ?Sized> ReadOptionFrom<R> for ObjectPlacement {
     type Error = Error;
-    fn read_from(reader: &mut R) -> Result<Self> {
-        Ok(Self {
-            id: reader.read_i32::<BE>()?,
+    fn read_option_from(reader: &mut R) -> Result<Option<Self>> {
+        let id = reader.read_i32::<BE>()?;
+        if id < 0 {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            id,
             x: reader.read_i32::<BE>()?,
             y: reader.read_i32::<BE>()?,
             z: reader.read_i32::<BE>()?,
@@ -652,7 +670,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for ObjectPlacement {
             _spawn_flag: reader.read_i32::<BE>()?,
             variant: reader.read_i32::<BE>()?,
             flags: ObjectFlags::from_bits_truncate(reader.read_u32::<BE>()?),
-        })
+        }))
     }
 }
 
@@ -673,7 +691,7 @@ fn read_spawnables(
     let mut spawnables = Vec::with_capacity(NUM_SPAWNABLES);
     let mut label_counts: HashMap<String, usize> = HashMap::new();
     for i in 0..NUM_SPAWNABLES {
-        let placement = ObjectPlacement::read_from(reader)?;
+        let placement = ObjectPlacement::read_option_from(reader)?.unwrap();
         let object = object_index(placement.id);
         let mut label = objects[object].label.0.clone();
         if let Some(stripped) = label.strip_prefix(INTERNAL_PREFIX) {
@@ -1134,6 +1152,25 @@ fn build_sfx_samples(
     defs
 }
 
+fn read_stage_actors(reader: &mut (impl Read + Seek), out: &mut BTreeMap<i32, i32>) -> Result<()> {
+    reader.seek(SeekFrom::Start(0x4))?;
+    let objects_offset = reader.read_u32::<LE>()?;
+    reader.seek(SeekFrom::Start(objects_offset as u64))?;
+    let objects = NonNoneList::<ObjectPlacement>::read_from(reader)?.into_vec();
+
+    reader.seek(SeekFrom::Start(0x24))?;
+    let actors_offset = reader.read_u32::<LE>()?;
+    reader.seek(SeekFrom::Start(actors_offset as u64))?;
+    let actors = NonNoneList::<Actor>::read_from(reader)?;
+
+    for actor in actors {
+        if let Some(object) = objects.get(actor.obj as usize) {
+            out.insert(actor.id, object.id);
+        }
+    }
+    Ok(())
+}
+
 /// Writes the list of objects to the generated file.
 fn write_objects(mut writer: impl Write, objects: &[ObjectDefinition]) -> Result<()> {
     write!(writer, "{}{}", GEN_HEADER, OBJECTS_HEADER)?;
@@ -1323,6 +1360,46 @@ fn write_animations(
     Ok(())
 }
 
+fn write_actors(
+    mut writer: impl Write,
+    actors: &BTreeMap<i32, i32>,
+    metadata: &Metadata,
+    objects: &[ObjectDefinition],
+) -> Result<()> {
+    write!(writer, "{}{}", GEN_HEADER, ACTORS_HEADER)?;
+    for (i, actor) in metadata.actors.iter().enumerate() {
+        let actor_index = i as i32;
+        let actor_id = actor_index + 20000;
+        let actor_name = actor.name.decode()?;
+        let mut actor_short_name = actor_name.clone().into_owned();
+        for fixup in &*ACTOR_NAME_FIXUPS {
+            if let Cow::Owned(owned) = fixup.replace(&actor_short_name, "") {
+                actor_short_name = owned;
+            }
+        }
+        let object_id = actors.get(&actor_id).copied();
+        let object = object_id.map(|i| &objects[object_index(i)]);
+        let enum_label = if !actor_short_name.is_empty() {
+            Label::pascal_case(&*actor_short_name)
+        } else {
+            Label(format!("{}{}", UNKNOWN_PREFIX, actor_index))
+        };
+        let string_label = Label::snake_case(&enum_label.0);
+        writeln!(
+            writer,
+            "    {} => {} {{ \"{}\", \"{}\", {} }},",
+            actor_id,
+            &enum_label.0,
+            &string_label.0,
+            actor_name,
+            object.map(|o| o.label.0.as_str()).unwrap_or("None"),
+        )?;
+    }
+    write!(writer, "{}", ACTORS_FOOTER)?;
+    writer.flush()?;
+    Ok(())
+}
+
 fn run_app() -> Result<()> {
     init_logging();
 
@@ -1355,11 +1432,11 @@ fn run_app() -> Result<()> {
     info!("Reading SFX groups");
     let sfx_groups = read_sfx_groups(&mut iso, &playlist)?;
 
+    info!("Reading globals.bin");
+    let globals_path = format!("{}/{}", QP_STAGES_PATH, QP_GLOBALS_NAME);
     let metadata = {
-        info!("Opening {}", QP_PATH);
         let mut qp = ArchiveReader::open(iso.open_file_at(QP_PATH)?)?;
-        info!("Reading globals.bin");
-        let mut globals = GlobalsReader::open(qp.open_file_at(QP_GLOBALS_PATH)?)?;
+        let mut globals = GlobalsReader::open(qp.open_file_at(&globals_path)?)?;
         globals.read_metadata()?
     };
 
@@ -1398,6 +1475,19 @@ fn run_app() -> Result<()> {
 
     info!("Reading music data");
     let music = read_music(&dol, &mut dol_reader)?;
+    drop(dol_reader);
+
+    let actors = {
+        let mut qp = ArchiveReader::open(iso.open_file_at(QP_PATH)?)?;
+        let mut results = BTreeMap::new();
+        for stage in stages.iter().filter(|s| s.id < 100) {
+            info!("Reading {}.bin", stage.name);
+            let path = format!("{}/{}.bin", QP_STAGES_PATH, stage.name);
+            let mut stage_reader = qp.open_file_at(&path)?;
+            read_stage_actors(&mut stage_reader, &mut results)?;
+        }
+        results
+    };
 
     let mut sfx = vec![];
     let mut sfx_samples = vec![];
@@ -1455,6 +1545,11 @@ fn run_app() -> Result<()> {
     info!("Writing {}", stages_path.display());
     let stages_writer = BufWriter::new(File::create(stages_path)?);
     write_stages(stages_writer, &stages)?;
+
+    let actors_path = out_dir.join(ACTORS_FILE_NAME);
+    info!("Writing {}", actors_path.display());
+    let actors_writer = BufWriter::new(File::create(actors_path)?);
+    write_actors(actors_writer, &actors, &metadata, &objects)?;
 
     let music_path = out_dir.join(MUSIC_FILE_NAME);
     info!("Writing {}", music_path.display());
