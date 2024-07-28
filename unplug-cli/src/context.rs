@@ -354,6 +354,27 @@ impl<T: ReadSeek> OpenContext<T> {
         self.open_file(&file)
     }
 
+    /// Reads a file into memory and deserializes it into a type implementing `ReadFrom`.
+    pub fn deserialize_file<S>(&mut self, file: &FileId) -> Result<S>
+    where
+        S: ReadFrom<MemoryCursor>,
+        S::Error: std::error::Error + Send + Sync + 'static,
+    {
+        let reader = self.open_file(file)?;
+        let mut cursor = copy_into_memory(reader)?;
+        Ok(S::read_from(&mut cursor)?)
+    }
+
+    /// Reads a file into memory and deserializes it into a type implementing `ReadFrom`.
+    pub fn deserialize_file_at<S>(&mut self, path: impl AsRef<str>) -> Result<S>
+    where
+        S: ReadFrom<MemoryCursor>,
+        S::Error: std::error::Error + Send + Sync + 'static,
+    {
+        let file = self.file_at(path)?;
+        self.deserialize_file(&file)
+    }
+
     /// Opens a `GlobalsReader` on globals.bin.
     pub fn read_globals(&mut self) -> Result<GlobalsReader<MemoryCursor>> {
         let reader = self.open_qp_file_at(StageId::QP_GLOBALS_PATH)?;
@@ -466,6 +487,28 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
         Ok(self.write_file(&file, reader))
     }
 
+    /// Enqueues `file` to be serialized from a type implementing `WriteTo`.
+    pub fn serialize_file<W>(self, file: &FileId, data: &W) -> Result<Self>
+    where
+        W: WriteTo<Cursor<Vec<u8>>>,
+        W::Error: std::error::Error + Send + Sync + 'static,
+    {
+        let mut writer = Cursor::new(vec![]);
+        data.write_to(&mut writer)?;
+        writer.rewind()?;
+        Ok(self.write_file(file, writer))
+    }
+
+    /// Enqueues the file at `path` to be serialized from a type implementing `WriteTo`.
+    pub fn serialize_file_at<W>(self, path: &str, data: &W) -> Result<Self>
+    where
+        W: WriteTo<Cursor<Vec<u8>>>,
+        W::Error: std::error::Error + Send + Sync + 'static,
+    {
+        let file = self.ctx.file_at(path)?;
+        self.serialize_file(&file, data)
+    }
+
     /// Enqueues globals.bin to be built from `builder`.
     pub fn write_globals(self, builder: &mut GlobalsBuilder<'_>) -> Result<Self> {
         let mut writer = Cursor::new(vec![]);
@@ -482,10 +525,7 @@ impl<'c, 'r, T: ReadWriteSeek> UpdateQueue<'c, 'r, T> {
 
     /// Enqueues the stage file at `file` to be written from `stage`.
     pub fn write_stage_file(self, file: &FileId, stage: &Stage) -> Result<Self> {
-        let mut writer = Cursor::new(vec![]);
-        stage.write_to(&mut writer)?;
-        writer.rewind()?;
-        Ok(self.write_file(file, writer))
+        self.serialize_file(file, stage)
     }
 
     fn write_impl(mut self, file: &FileId, reader: Box<dyn ReadSeek + 'r>) -> Self {
