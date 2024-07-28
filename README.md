@@ -28,6 +28,8 @@ guaranteed to work correctly.
 If command-line tools aren't your thing and you want to use Unplug through a GUI, check out
 emistro's [Unplugger](https://emistro.itch.io/unplugger)!
 
+(Note that this packages its own Unplug build which may be different from the latest release.)
+
 ![Unplugger stage tools screenshot](docs/images/unplugger.png)
 
 ## Goals
@@ -52,7 +54,7 @@ Stay tuned for more!
 ## How to Use
 
 You will need an NTSC-U (GGTE01) *Chibi-Robo! Plug Into Adventure!* ISO to use Unplug. Other
-versions of the game are not supported yet.
+versions of the game are not currently supported due to the amount of effort that would be required.
 
 Unplug is a command-line app, so you'll need to open PowerShell/Command Prompt/Terminal to use
 it. On Windows 10+, you should try downloading Windows Terminal from the Store.
@@ -112,6 +114,6 @@ There are lots of ways you can contribute to the project:
 - Make and share cool mods!
 
 Before implementing a complex feature, you should reach out to Derpky through the
-[community Discord](http://discord.gg/ymNDqTyjRQ) to discuss it.
+[community Discord](http://discord.gg/ymNDqTyjRQ).
 
 Unplug is currently licensed under the MIT license.
