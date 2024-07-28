@@ -18,10 +18,10 @@ fn command_info(ctx: Context) -> Result<()> {
     println!("{}: [{}] {}", name, disc.game_id(), disc.game_name());
 
     let info = &banner.languages[0];
-    println!("Name: {}", info.name_long.decode().unwrap());
-    println!("Maker: {}", info.maker_long.decode().unwrap());
+    println!("Name: {}", info.name_long.decode_replacing());
+    println!("Maker: {}", info.maker_long.decode_replacing());
 
-    let description = info.description.decode().unwrap();
+    let description = info.description.decode_replacing();
     let mut lines = description.split('\n');
     println!("Description: {}", lines.next().unwrap_or(""));
     for line in lines {

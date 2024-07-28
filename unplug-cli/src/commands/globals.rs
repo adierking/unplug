@@ -8,27 +8,27 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
-use unplug::common::Text;
+use unplug::common::CText;
 use unplug::data::{Object, Resource, Sound};
 use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
 
-/// Serialize/Deserialize implementation for Text
+/// Serialize/Deserialize implementation for CText
 mod text {
     use serde::de::{self, Deserialize, Deserializer};
     use serde::ser::{self, Serializer};
-    use unplug::common::Text;
+    use unplug::common::CText;
 
-    pub(super) fn serialize<S: Serializer>(text: &Text, serializer: S) -> Result<S::Ok, S::Error> {
+    pub(super) fn serialize<S: Serializer>(text: &CText, serializer: S) -> Result<S::Ok, S::Error> {
         let decoded = text.decode().map_err(ser::Error::custom)?;
         serializer.serialize_str(&decoded)
     }
 
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
-    ) -> Result<Text, D::Error> {
+    ) -> Result<CText, D::Error> {
         let string = String::deserialize(deserializer)?;
-        Text::encode(&string).map_err(de::Error::custom)
+        CText::encode(&string).map_err(de::Error::custom)
     }
 }
 
@@ -172,9 +172,9 @@ struct CoinValuesDef {
 #[serde(remote = "Item", rename_all = "camelCase")]
 struct ItemDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
     #[serde(with = "text")]
-    description: Text,
+    description: CText,
     #[serde(with = "item_flags")]
     flags: ItemFlags,
     pickup_delay: i16,
@@ -191,7 +191,7 @@ serde_list_wrapper!(ItemWrapper, Item, "ItemDef");
 #[serde(remote = "Actor", rename_all = "camelCase")]
 struct ActorDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
 }
 
 serde_list_wrapper!(ActorWrapper, Actor, "ActorDef");
@@ -200,9 +200,9 @@ serde_list_wrapper!(ActorWrapper, Actor, "ActorDef");
 #[serde(remote = "Atc", rename_all = "camelCase")]
 struct AtcDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
     #[serde(with = "text")]
-    description: Text,
+    description: CText,
     price: i16,
 }
 
@@ -212,7 +212,7 @@ serde_list_wrapper!(AtcWrapper, Atc, "AtcDef");
 #[serde(remote = "Suit", rename_all = "camelCase")]
 struct SuitDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
 }
 
 serde_list_wrapper!(SuitWrapper, Suit, "SuitDef");
@@ -221,9 +221,9 @@ serde_list_wrapper!(SuitWrapper, Suit, "SuitDef");
 #[serde(remote = "Stage", rename_all = "camelCase")]
 struct StageDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
     #[serde(with = "text")]
-    description: Text,
+    description: CText,
 }
 
 serde_list_wrapper!(StageWrapper, Stage, "StageDef");
@@ -232,9 +232,9 @@ serde_list_wrapper!(StageWrapper, Stage, "StageDef");
 #[serde(remote = "Leticker", rename_all = "camelCase")]
 struct LetickerDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
     #[serde(with = "text")]
-    description: Text,
+    description: CText,
     price: i16,
 }
 
@@ -244,9 +244,9 @@ serde_list_wrapper!(LetickerWrapper, Leticker, "LetickerDef");
 #[serde(remote = "Sticker", rename_all = "camelCase")]
 struct StickerDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
     #[serde(with = "text")]
-    description: Text,
+    description: CText,
     flag_index: u32,
 }
 
@@ -256,9 +256,9 @@ serde_list_wrapper!(StickerWrapper, Sticker, "StickerDef");
 #[serde(remote = "Stat", rename_all = "camelCase")]
 struct StatDef {
     #[serde(with = "text")]
-    name: Text,
+    name: CText,
     #[serde(with = "text")]
-    description: Text,
+    description: CText,
 }
 
 serde_list_wrapper!(StatWrapper, Stat, "StatDef");

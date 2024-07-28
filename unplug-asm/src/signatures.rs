@@ -441,7 +441,7 @@ mod tests {
     use std::cmp::Ordering;
     use std::fmt::Display;
     use std::process::ExitCode;
-    use unplug::common::Text;
+    use unplug::common::VecText;
     use unplug::event::msg::MsgArgs;
     use unplug::event::opcodes::{ExprOp, Ggte, MsgOp, OpcodeMap};
     use unplug::event::serialize::{
@@ -670,9 +670,9 @@ mod tests {
             }
         }
 
-        fn deserialize_text(&mut self) -> SerResult<Text> {
+        fn deserialize_text(&mut self) -> SerResult<VecText> {
             match self.next() {
-                Some(Value::String) => Ok(Text::new()),
+                Some(Value::String) => Ok(VecText::default()),
                 _ => Err(SerError::ExpectedText),
             }
         }

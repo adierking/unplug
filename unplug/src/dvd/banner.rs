@@ -1,5 +1,5 @@
-use crate::common::io::{read_fixed_string, write_fixed_string};
-use crate::common::{ReadFrom, Text, WriteTo};
+use crate::common::text::{self, FixedText, Text};
+use crate::common::{ReadFrom, WriteTo};
 use byteorder::{ByteOrder, ReadBytesExt, BE};
 use std::fmt::{self, Debug, Formatter};
 use std::io::{self, Read, Write};
@@ -37,9 +37,13 @@ pub enum Error {
 
     #[error(transparent)]
     Io(Box<io::Error>),
+
+    #[error(transparent)]
+    Text(Box<text::Error>),
 }
 
 from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Text, text::Error);
 
 /// A GameCube opening.bnr file.
 #[derive(Default, Clone, PartialEq, Eq)]
@@ -114,38 +118,34 @@ impl<W: Write> WriteTo<W> for Banner {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct GameInfo {
-    pub name_short: Text,
-    pub maker_short: Text,
-    pub name_long: Text,
-    pub maker_long: Text,
-    pub description: Text,
+    pub name_short: FixedText<SHORT_TEXT_SIZE>,
+    pub maker_short: FixedText<SHORT_TEXT_SIZE>,
+    pub name_long: FixedText<LONG_TEXT_SIZE>,
+    pub maker_long: FixedText<LONG_TEXT_SIZE>,
+    pub description: FixedText<DESCRIPTION_SIZE>,
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for GameInfo {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
-            name_short: read_fixed_string(&mut *reader, SHORT_TEXT_SIZE)?.into(),
-            maker_short: read_fixed_string(&mut *reader, SHORT_TEXT_SIZE)?.into(),
-            name_long: read_fixed_string(&mut *reader, LONG_TEXT_SIZE)?.into(),
-            maker_long: read_fixed_string(&mut *reader, LONG_TEXT_SIZE)?.into(),
-            description: read_fixed_string(&mut *reader, DESCRIPTION_SIZE)?.into(),
+            name_short: Text::read_from(reader)?,
+            maker_short: Text::read_from(reader)?,
+            name_long: Text::read_from(reader)?,
+            maker_long: Text::read_from(reader)?,
+            description: Text::read_from(reader)?,
         })
     }
-}
-
-fn write_fixed_text(writer: impl Write, text: &Text, size: usize) -> io::Result<()> {
-    write_fixed_string(writer, text.clone().into_c_string(), size)
 }
 
 impl<W: Write + ?Sized> WriteTo<W> for GameInfo {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
-        write_fixed_text(&mut *writer, &self.name_short, SHORT_TEXT_SIZE)?;
-        write_fixed_text(&mut *writer, &self.maker_short, SHORT_TEXT_SIZE)?;
-        write_fixed_text(&mut *writer, &self.name_long, LONG_TEXT_SIZE)?;
-        write_fixed_text(&mut *writer, &self.maker_long, LONG_TEXT_SIZE)?;
-        write_fixed_text(&mut *writer, &self.description, DESCRIPTION_SIZE)?;
+        self.name_short.write_to(writer)?;
+        self.maker_short.write_to(writer)?;
+        self.name_long.write_to(writer)?;
+        self.maker_long.write_to(writer)?;
+        self.description.write_to(writer)?;
         Ok(())
     }
 }
@@ -159,11 +159,11 @@ mod tests {
 
     fn game_info() -> GameInfo {
         GameInfo {
-            name_short: Text::with_bytes("name_short"),
-            maker_short: Text::with_bytes("maker_short"),
-            name_long: Text::with_bytes("name_long"),
-            maker_long: Text::with_bytes("maker_long"),
-            description: Text::with_bytes("description"),
+            name_short: Text::from_bytes("name_short").unwrap(),
+            maker_short: Text::from_bytes("maker_short").unwrap(),
+            name_long: Text::from_bytes("name_long").unwrap(),
+            maker_long: Text::from_bytes("maker_long").unwrap(),
+            description: Text::from_bytes("description").unwrap(),
         }
     }
 
@@ -190,11 +190,11 @@ mod tests {
         assert!(banner.image.iter().all(|x| *x == 0xffff));
         assert_eq!(banner.languages.len(), 1);
         let info = &banner.languages[0];
-        assert_eq!(info.name_short, Text::with_bytes("Short Name"));
-        assert_eq!(info.maker_short, Text::with_bytes("Short Maker"));
-        assert_eq!(info.name_long, Text::with_bytes("Long Name"));
-        assert_eq!(info.maker_long, Text::with_bytes("Long Maker"));
-        assert_eq!(info.description, Text::with_bytes("Description line 1\nDescription line 2"));
+        assert_eq!(info.name_short.decode().unwrap(), "Short Name");
+        assert_eq!(info.maker_short.decode().unwrap(), "Short Maker");
+        assert_eq!(info.name_long.decode().unwrap(), "Long Name");
+        assert_eq!(info.maker_long.decode().unwrap(), "Long Maker");
+        assert_eq!(info.description.decode().unwrap(), "Description line 1\nDescription line 2");
         Ok(())
     }
 }

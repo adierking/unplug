@@ -3,7 +3,7 @@ use super::serialize::{
     DeserializeEvent, Error as SerError, EventDeserializer, EventSerializer, Result as SerResult,
     SerializeEvent,
 };
-use crate::common::text::{self, Text};
+use crate::common::text::{self, Text, VecText};
 use crate::data::{self, Sound};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -76,15 +76,15 @@ pub enum Error {
     Data(Box<data::Error>),
 
     #[error(transparent)]
-    Text(Box<text::Error>),
+    Serialize(Box<SerError>),
 
     #[error(transparent)]
-    Serialize(Box<SerError>),
+    Text(Box<text::Error>),
 }
 
 from_error_boxed!(Error::Data, data::Error);
-from_error_boxed!(Error::Text, text::Error);
 from_error_boxed!(Error::Serialize, SerError);
+from_error_boxed!(Error::Text, text::Error);
 
 /// Commands that make up a message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,7 +106,7 @@ pub enum MsgCommand {
     /// Functionally equivalent to `Newline` except it maps to a vertical tab character.
     NewlineVt,
     /// A printf format specifier.
-    Format(Text),
+    Format(VecText),
     /// Sets the font size (higher = larger, normal size is 22). Use 255 to reset.
     Size(u8),
     /// Sets the font color from a preset.
@@ -132,7 +132,7 @@ pub enum MsgCommand {
     /// Exits the msg() command but keeps the message on-screen.
     Stay,
     /// Displays raw text.
-    Text(Text),
+    Text(VecText),
 }
 
 impl MsgCommand {
@@ -186,8 +186,8 @@ impl fmt::Debug for MsgArgs {
     }
 }
 
-impl From<Text> for MsgArgs {
-    fn from(text: Text) -> Self {
+impl From<VecText> for MsgArgs {
+    fn from(text: VecText) -> Self {
         Self { commands: vec![MsgCommand::Text(text)] }
     }
 }
@@ -246,7 +246,7 @@ impl DeserializeEvent for MsgArgs {
                             ch => return Err(Error::Unsupported(ch)),
                         }
                     }
-                    Some(MsgCommand::Format(Text::with_bytes(format_text)))
+                    Some(MsgCommand::Format(Text::from_bytes(format_text)?))
                 }
                 MsgOp::Size => Some(MsgCommand::Size(de.deserialize_u8()?)),
                 MsgOp::Color => {
@@ -291,7 +291,7 @@ impl DeserializeEvent for MsgArgs {
                 MsgOp::Invalid => return Err(Error::Unsupported(ch)),
             };
             if !text.is_empty() {
-                commands.push(MsgCommand::Text(Text::with_bytes(text.clone())));
+                commands.push(MsgCommand::Text(Text::from_bytes(&text[..])?));
                 text.clear();
             }
             if let Some(command) = command {
@@ -325,7 +325,7 @@ impl SerializeEvent for MsgArgs {
                 MsgCommand::Default(arg) => arg.serialize(ser)?,
                 MsgCommand::Newline | MsgCommand::NewlineVt => (),
                 MsgCommand::Format(text) => {
-                    for &b in text.as_bytes() {
+                    for b in text.iter() {
                         ser.serialize_msg_char(MsgOp::Char(b))?;
                     }
                     ser.serialize_msg_char(MsgOp::Format)?;
@@ -350,19 +350,18 @@ impl SerializeEvent for MsgArgs {
                 MsgCommand::Question(arg) => arg.serialize(ser)?,
                 MsgCommand::Stay => (),
                 MsgCommand::Text(text) => {
-                    for &b in text.as_bytes() {
+                    for b in text.iter() {
                         let escaped = match b {
                             // '$' is an escape character for '"'
                             b'"' => b'$',
                             _ => b,
                         };
                         ser.serialize_msg_char(MsgOp::Char(escaped))?;
+                        // For the purposes of enforcing the MAX_CHARS limit, assume each byte is
+                        // one character because the NTSC-U version will always interpret text as
+                        // Windows-1252. Supporting other regions may require changing this.
+                        num_chars += 1;
                     }
-                    // For the purposes of enforcing the MAX_CHARS limit, assume each byte is one
-                    // character. We shouldn't call `from_str()` here because it handles SHIFT-JIS
-                    // and the NTSC-U version will always interpret text as Windows-1252. Supporting
-                    // other regions may require changing this calculation.
-                    num_chars += text.as_bytes().len();
                 }
             }
         }
@@ -742,8 +741,8 @@ mod tests {
         MsgWrapper(vec![command].into())
     }
 
-    fn text(string: &str) -> Text {
-        Text::encode(string).unwrap()
+    fn text(string: &str) -> VecText {
+        VecText::encode(string).unwrap()
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use byteorder::ReadBytesExt;
 use std::ffi::CString;
 use std::io::{self, Read, Seek, Write};
+use std::mem::MaybeUninit;
 
 /// Trait for a readable and seekable stream.
 pub trait ReadSeek: Read + Seek + Send {}
@@ -91,12 +92,12 @@ impl<R: Read + ?Sized> ReadFrom<R> for CString {
         let mut bytes: Vec<u8> = vec![];
         loop {
             let b = reader.read_u8()?;
+            bytes.push(b);
             if b == 0 {
                 break;
             }
-            bytes.push(b);
         }
-        Ok(CString::new(bytes).unwrap())
+        unsafe { Ok(CString::from_vec_with_nul_unchecked(bytes)) }
     }
 }
 
@@ -105,5 +106,50 @@ impl<W: Write + ?Sized> WriteTo<W> for CString {
     type Error = io::Error;
     fn write_to(&self, writer: &mut W) -> io::Result<()> {
         writer.write_all(self.as_bytes_with_nul())
+    }
+}
+
+/// `ReadFrom` implementation for reading bytes
+impl<R: Read + ?Sized> ReadFrom<R> for u8 {
+    type Error = io::Error;
+    fn read_from(reader: &mut R) -> Result<Self, Self::Error> {
+        let b = &mut [0u8];
+        reader.read_exact(b)?;
+        Ok(b[0])
+    }
+    fn read_all_from(reader: &mut R, buf: &mut [u8]) -> Result<(), Self::Error> {
+        reader.read_exact(buf)
+    }
+}
+
+/// `WriteTo` implementation for writing bytes
+impl<W: Write + ?Sized> WriteTo<W> for u8 {
+    type Error = io::Error;
+    fn write_to(&self, writer: &mut W) -> Result<(), Self::Error> {
+        writer.write_all(&[*self])
+    }
+    fn write_all_to(writer: &mut W, buf: &[u8]) -> Result<(), Self::Error> {
+        writer.write_all(buf)
+    }
+}
+
+/// `ReadFrom` implementation for reading arrays of trivial types
+impl<R: Read + ?Sized, T: ReadFrom<R> + Copy, const N: usize> ReadFrom<R> for [T; N] {
+    type Error = T::Error;
+    fn read_from(reader: &mut R) -> Result<Self, Self::Error> {
+        let mut result = MaybeUninit::<[T; N]>::uninit();
+        unsafe {
+            let slice = std::slice::from_raw_parts_mut(result.as_mut_ptr().cast(), N);
+            T::read_all_from(reader, slice)?;
+            Ok(result.assume_init())
+        }
+    }
+}
+
+/// `WriteTo` implementation for writing arrays of trivial types
+impl<W: Write + ?Sized, T: WriteTo<W> + Copy, const N: usize> WriteTo<W> for [T; N] {
+    type Error = T::Error;
+    fn write_to(&self, writer: &mut W) -> Result<(), Self::Error> {
+        T::write_all_to(writer, self)
     }
 }

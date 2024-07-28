@@ -1,39 +1,7 @@
 use std::cmp;
-use std::ffi::{CStr, CString};
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 
 pub const BUFFER_SIZE: usize = 0x8000;
-
-/// Reads a fixed-size null-terminated string from `reader`. This will allocate `size` bytes.
-pub fn read_fixed_string(mut reader: impl Read, size: usize) -> io::Result<CString> {
-    let mut bytes = vec![0u8; size];
-    reader.read_exact(&mut bytes[..size])?;
-    let len = match bytes.iter().position(|&b| b == 0) {
-        Some(i) => i,
-        None => {
-            return Err(io::Error::new(ErrorKind::InvalidData, "string is not null-terminated"))
-        }
-    };
-    bytes.resize(len, 0);
-    Ok(CString::new(bytes)?)
-}
-
-/// Writes a fixed-size null-terminated string to `writer`. This will allocate `size` bytes.
-pub fn write_fixed_string(
-    mut writer: impl Write,
-    string: impl AsRef<CStr>,
-    size: usize,
-) -> io::Result<()> {
-    let mut out_bytes = vec![0u8; size];
-    let in_bytes = string.as_ref().to_bytes();
-    let len = in_bytes.len();
-    if len >= size {
-        return Err(io::Error::new(ErrorKind::InvalidInput, "string is too long"));
-    }
-    out_bytes[..len].copy_from_slice(in_bytes);
-    writer.write_all(&out_bytes)?;
-    Ok(())
-}
 
 /// Fills the next `len` bytes in `writer` with `byte`.
 pub fn fill(mut writer: impl Write, byte: u8, len: u64) -> io::Result<()> {
@@ -107,38 +75,6 @@ pub fn copy_within(
 mod tests {
     use super::*;
     use std::io::Cursor;
-
-    #[test]
-    fn test_read_fixed_string() -> io::Result<()> {
-        let mut cursor = Cursor::new(&[b't', b'e', b's', b't', 0, 0, 0, 0]);
-
-        assert_eq!(read_fixed_string(&mut cursor, 8)?, CString::new("test")?);
-        assert_eq!(cursor.stream_position()?, 8);
-        cursor.rewind()?;
-
-        assert_eq!(read_fixed_string(&mut cursor, 5)?, CString::new("test")?);
-        assert_eq!(cursor.stream_position()?, 5);
-        cursor.rewind()?;
-
-        assert!(read_fixed_string(&mut cursor, 4).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn test_write_fixed_string() -> io::Result<()> {
-        let mut bytes = vec![];
-        write_fixed_string(&mut bytes, CString::new("test")?, 8)?;
-        assert_eq!(bytes, &[b't', b'e', b's', b't', 0, 0, 0, 0]);
-
-        let mut bytes = vec![];
-        write_fixed_string(&mut bytes, CString::new("test")?, 5)?;
-        assert_eq!(bytes, &[b't', b'e', b's', b't', 0]);
-
-        let mut bytes = vec![];
-        assert!(write_fixed_string(&mut bytes, CString::new("test")?, 4).is_err());
-        assert_eq!(bytes, &[]);
-        Ok(())
-    }
 
     #[test]
     fn test_copy_buffered() -> io::Result<()> {

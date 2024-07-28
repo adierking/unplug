@@ -1,10 +1,9 @@
 use super::{Error, Result};
-use crate::common::{ReadFrom, Text, WriteTo};
+use crate::common::{CText, ReadFrom, WriteTo};
 use crate::data::Sound;
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 use std::convert::TryInto;
-use std::ffi::CString;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
 const NUM_PICKUP_SOUNDS: usize = 4;
@@ -38,22 +37,22 @@ impl<R: Read> StringReader<R> {
     }
 
     /// Reads a 32-bit string offset and caches it.
-    /// Returns an empty `Text` for convenience purposes.
-    fn read_string_offset(&mut self) -> io::Result<Text> {
+    /// Returns an empty `CText` for convenience purposes.
+    fn read_string_offset(&mut self) -> Result<CText> {
         let offset = self.inner.read_u32::<LE>()?;
         self.offsets.push(offset);
-        Ok(Text::new())
+        Ok(CText::default())
     }
 }
 
 impl<R: Read + Seek> StringReader<R> {
     /// Reads the next unread string (in order the offsets were read).
-    fn read_next_string(&mut self) -> io::Result<Text> {
+    fn read_next_string(&mut self) -> Result<CText> {
         assert!(self.index < self.offsets.len(), "no more unread strings");
         let offset = self.offsets[self.index];
         self.index += 1;
         self.inner.seek(SeekFrom::Start(offset as u64))?;
-        Ok(CString::read_from(&mut self.inner)?.into())
+        Ok(CText::read_from(&mut self.inner)?)
     }
 }
 
@@ -75,7 +74,7 @@ struct StringWriter<W: Write + Seek> {
     inner: W,
     /// The list of strings that need to be written. The first element of the tuple is the offset of
     /// the string's placeholder offset.
-    strings: Vec<(u64, Text)>,
+    strings: Vec<(u64, CText)>,
 }
 
 impl<W: Write + Seek> StringWriter<W> {
@@ -85,7 +84,7 @@ impl<W: Write + Seek> StringWriter<W> {
     }
 
     /// Writes a placeholder string offset.
-    fn write_string_offset(&mut self, string: &Text) -> io::Result<()> {
+    fn write_string_offset(&mut self, string: &CText) -> io::Result<()> {
         let offset = self.inner.stream_position()?;
         self.strings.push((offset, string.clone()));
         self.inner.write_u32::<LE>(0)?;
@@ -97,9 +96,8 @@ impl<W: Write + Seek> StringWriter<W> {
         let mut cur_offset = self.inner.stream_position()?;
         for (ptr_offset, string) in &self.strings {
             let str_offset = cur_offset;
-            self.inner.write_all(string.as_bytes())?;
-            self.inner.write_u8(0)?;
-            cur_offset += string.as_bytes().len() as u64 + 1;
+            string.write_to(&mut self.inner)?;
+            cur_offset += string.as_raw_bytes().len() as u64;
             self.inner.seek(SeekFrom::Start(*ptr_offset))?;
             self.inner.write_u32::<LE>(str_offset.try_into().expect("string offset overflow"))?;
             self.inner.seek(SeekFrom::Start(cur_offset))?;
@@ -670,9 +668,9 @@ bitflags! {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Item {
     /// The item's display name.
-    pub name: Text,
+    pub name: CText,
     /// The item's description (shown in the inventory and the shop).
-    pub description: Text,
+    pub description: CText,
     /// The item's flags.
     pub flags: ItemFlags,
     /// The amount of time it takes to pick up the item in hundredths of seconds.
@@ -695,7 +693,7 @@ impl Item {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         self.description = reader.read_next_string()?;
         Ok(())
@@ -745,7 +743,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Item {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Actor {
     /// The actor's display name.
-    pub name: Text,
+    pub name: CText,
 }
 
 impl Actor {
@@ -754,7 +752,7 @@ impl Actor {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         Ok(())
     }
@@ -779,9 +777,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Actor {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Atc {
     /// The attachment's display name.
-    pub name: Text,
+    pub name: CText,
     /// The attachment's description (unused?).
-    pub description: Text,
+    pub description: CText,
     /// The attachment's shop price.
     pub price: i16,
 }
@@ -792,7 +790,7 @@ impl Atc {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         self.description = reader.read_next_string()?;
         Ok(())
@@ -827,7 +825,7 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Atc {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Suit {
     /// The suit's display name.
-    pub name: Text,
+    pub name: CText,
 }
 
 impl Suit {
@@ -836,7 +834,7 @@ impl Suit {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         Ok(())
     }
@@ -861,9 +859,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Suit {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stage {
     /// The stage's display name (shown on the loading screen).
-    pub name: Text,
+    pub name: CText,
     /// The stage's description (shown on the level select menu).
-    pub description: Text,
+    pub description: CText,
 }
 
 impl Stage {
@@ -872,7 +870,7 @@ impl Stage {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         self.description = reader.read_next_string()?;
         Ok(())
@@ -899,9 +897,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Stage {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Leticker {
     /// The utilibot's display name.
-    pub name: Text,
+    pub name: CText,
     /// The utilibot's description (shown in the shop).
-    pub description: Text,
+    pub description: CText,
     /// The utilibot's shop price.
     pub price: i16,
 }
@@ -912,7 +910,7 @@ impl Leticker {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         self.description = reader.read_next_string()?;
         Ok(())
@@ -947,9 +945,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Leticker {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Sticker {
     /// The sticker's display name.
-    pub name: Text,
+    pub name: CText,
     /// The sticker's description (shown in the sticker menu).
-    pub description: Text,
+    pub description: CText,
     /// The index of the flag which determines whether the sticker is unlocked.
     pub flag_index: u32,
 }
@@ -960,7 +958,7 @@ impl Sticker {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         self.description = reader.read_next_string()?;
         Ok(())
@@ -992,9 +990,9 @@ impl<W: Write + Seek> WriteTo<StringWriter<W>> for Sticker {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stat {
     /// The stat's display name.
-    pub name: Text,
+    pub name: CText,
     /// The stat's description (unused?).
-    pub description: Text,
+    pub description: CText,
 }
 
 impl Stat {
@@ -1003,7 +1001,7 @@ impl Stat {
         Self::default()
     }
 
-    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> io::Result<()> {
+    fn read_strings(&mut self, reader: &mut StringReader<impl Read + Seek>) -> Result<()> {
         self.name = reader.read_next_string()?;
         self.description = reader.read_next_string()?;
         Ok(())
@@ -1396,8 +1394,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Item,
             Item {
-                name: Text::encode("name").unwrap(),
-                description: Text::encode("description").unwrap(),
+                name: CText::encode("name").unwrap(),
+                description: CText::encode("description").unwrap(),
                 flags: ItemFlags::JUNK | ItemFlags::CHIBI_VISION | ItemFlags::INVENTORY,
                 pickup_delay: 2,
                 price: 3,
@@ -1411,7 +1409,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_actor() {
-        assert_write_and_read_with_strings!(Actor, Actor { name: Text::encode("name").unwrap() });
+        assert_write_and_read_with_strings!(Actor, Actor { name: CText::encode("name").unwrap() });
     }
 
     #[test]
@@ -1419,8 +1417,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Atc,
             Atc {
-                name: Text::encode("name").unwrap(),
-                description: Text::encode("description").unwrap(),
+                name: CText::encode("name").unwrap(),
+                description: CText::encode("description").unwrap(),
                 price: 1,
             }
         );
@@ -1428,7 +1426,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_suit() {
-        assert_write_and_read_with_strings!(Suit, Suit { name: Text::encode("name").unwrap() });
+        assert_write_and_read_with_strings!(Suit, Suit { name: CText::encode("name").unwrap() });
     }
 
     #[test]
@@ -1436,8 +1434,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Stage,
             Stage {
-                name: Text::encode("name").unwrap(),
-                description: Text::encode("description").unwrap(),
+                name: CText::encode("name").unwrap(),
+                description: CText::encode("description").unwrap(),
             }
         );
     }
@@ -1447,8 +1445,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Leticker,
             Leticker {
-                name: Text::encode("name").unwrap(),
-                description: Text::encode("description").unwrap(),
+                name: CText::encode("name").unwrap(),
+                description: CText::encode("description").unwrap(),
                 price: 1,
             }
         );
@@ -1459,8 +1457,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Sticker,
             Sticker {
-                name: Text::encode("name").unwrap(),
-                description: Text::encode("description").unwrap(),
+                name: CText::encode("name").unwrap(),
+                description: CText::encode("description").unwrap(),
                 flag_index: 1,
             }
         );
@@ -1471,8 +1469,8 @@ mod tests {
         assert_write_and_read_with_strings!(
             Stat,
             Stat {
-                name: Text::encode("name").unwrap(),
-                description: Text::encode("description").unwrap(),
+                name: CText::encode("name").unwrap(),
+                description: CText::encode("description").unwrap(),
             }
         );
     }

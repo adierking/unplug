@@ -11,7 +11,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Deref, DerefMut};
-use unplug::common::Text;
+use unplug::common::VecText;
 use unplug::event::opcodes::{Atom, CmdOp, ExprOp, Opcode};
 use unplug::event::BlockId;
 use unplug::stage::Event;
@@ -93,7 +93,7 @@ pub enum Operand {
     /// A 32-bit unsigned integer.
     U32(u32),
     /// A printable text string.
-    Text(Text),
+    Text(VecText),
     /// A label reference.
     Label(LabelId),
     /// A label reference indicating it is an "else" condition.
@@ -152,7 +152,7 @@ impl_operand_from!(i16, I16);
 impl_operand_from!(u16, U16);
 impl_operand_from!(i32, I32);
 impl_operand_from!(u32, U32);
-impl_operand_from!(Text, Text);
+impl_operand_from!(VecText, Text);
 impl_operand_from!(Atom, Atom);
 impl_operand_from!(Operation<ExprOp>, Expr);
 impl_operand_from!(Operation<AsmMsgOp>, MsgCommand);

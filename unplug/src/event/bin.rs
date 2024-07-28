@@ -1,10 +1,8 @@
 use super::opcodes::{Atom, CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap};
 use super::pointer::{Pointer, WritePointer};
 use super::serialize::{Error, EventDeserializer, EventSerializer, Result};
-use crate::common::text::Text;
-use crate::common::{ReadFrom, WriteTo};
+use crate::common::{CText, ReadFrom, VecText, WriteTo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
-use std::ffi::CString;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 /// The maximum size of a serialized message command list in bytes.
@@ -115,8 +113,8 @@ impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
         self.serialize_imm_expr(opcode)
     }
 
-    fn serialize_text(&mut self, text: &Text) -> Result<()> {
-        self.writer.write_all(text.as_bytes())?;
+    fn serialize_text(&mut self, text: &VecText) -> Result<()> {
+        self.writer.write_all(text.as_raw_bytes())?;
         self.writer.write_u8(0)?;
         Ok(())
     }
@@ -335,8 +333,8 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
         Ggte::get(value).map_err(Error::UnrecognizedAtom)
     }
 
-    fn deserialize_text(&mut self) -> Result<Text> {
-        Ok(CString::read_from(&mut self.reader)?.into())
+    fn deserialize_text(&mut self) -> Result<VecText> {
+        Ok(CText::read_from(&mut self.reader)?.convert().unwrap())
     }
 
     fn deserialize_rgba(&mut self) -> Result<u32> {

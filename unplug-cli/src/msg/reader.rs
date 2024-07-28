@@ -684,7 +684,7 @@ mod tests {
     fn test_import_format() -> Result<()> {
         assert_eq!(
             cmd(b"<text><f>%s</f></text>")?,
-            MsgCommand::Format(Text::with_bytes(b"%s".to_vec()))
+            MsgCommand::Format(Text::from_bytes("%s").unwrap())
         );
         Ok(())
     }

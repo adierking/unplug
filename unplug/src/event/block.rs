@@ -2,7 +2,7 @@ use super::command::Command;
 use super::expr::{ObjBone, ObjPair};
 use super::pointer::Pointer;
 use super::serialize::{self, EventSerializer, SerializeEvent};
-use crate::common::Text;
+use crate::common::VecText;
 
 /// A block of data in a script.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,7 +129,7 @@ pub enum DataBlock {
     /// The block is a pair of object IDs.
     ObjPair(ObjPair),
     /// The block is text data.
-    String(Text),
+    String(VecText),
     /// The block is a contiguous stream of varying data types.
     ///
     /// These blocks are not used by the game and currently cannot be read back in correctly.
@@ -155,7 +155,7 @@ impl_data_block_from!(Vec<u32>, U32Array);
 impl_data_block_from!(Vec<Pointer>, PtrArray);
 impl_data_block_from!(ObjBone, ObjBone);
 impl_data_block_from!(ObjPair, ObjPair);
-impl_data_block_from!(Text, String);
+impl_data_block_from!(VecText, String);
 impl_data_block_from!(Vec<DataBlock>, Variable);
 
 impl SerializeEvent for DataBlock {

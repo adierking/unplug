@@ -12,6 +12,7 @@ pub use libs::*;
 pub use metadata::Metadata;
 pub use reader::*;
 
+use crate::common::text;
 use crate::data;
 use crate::event::script;
 use std::io;
@@ -47,8 +48,12 @@ pub enum Error {
 
     #[error(transparent)]
     Io(Box<io::Error>),
+
+    #[error(transparent)]
+    Text(Box<text::Error>),
 }
 
 from_error_boxed!(Error::Data, data::Error);
 from_error_boxed!(Error::Script, script::Error);
 from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Text, text::Error);

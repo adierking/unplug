@@ -9,7 +9,7 @@ use crate::Result;
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::io::{self, Write};
-use unplug::common::Text;
+use unplug::common::{Text, VecText};
 use unplug::data::Resource;
 use unplug::event::opcodes::{Atom, CmdOp, ExprOp, MsgOp};
 use unplug::event::script::{BlockOffsetMap, ScriptLayout};
@@ -274,7 +274,7 @@ impl EventSerializer for AsmSerializer<'_> {
         Ok(())
     }
 
-    fn serialize_text(&mut self, text: &Text) -> SerResult<()> {
+    fn serialize_text(&mut self, text: &VecText) -> SerResult<()> {
         self.push_operand(Operand::Text(text.clone()));
         Ok(())
     }
@@ -336,9 +336,9 @@ impl EventSerializer for AsmSerializer<'_> {
                 // Coalesce characters into newline-terminated text strings.
                 if let MsgOp::Char(b) = ch {
                     if let Operand::Text(text) = &mut *cmd.operands[0] {
-                        let last = text.as_bytes().last().copied().unwrap_or(0);
+                        let last = text.to_bytes().last().copied().unwrap_or(0);
                         if last != b'\n' && last != VT as u8 {
-                            text.push(b);
+                            text.push(b).unwrap();
                             return Ok(());
                         }
                     } else {
@@ -382,8 +382,8 @@ impl EventSerializer for AsmSerializer<'_> {
         };
         self.begin_operation(Operation::new(cmd.into()));
         match ch {
-            MsgOp::Char(b) => self.push_operand(Operand::Text(Text::with_bytes(vec![b]))),
-            MsgOp::Format => self.push_operand(Operand::Text(Text::new())),
+            MsgOp::Char(b) => self.push_operand(Operand::Text(Text::from_bytes(vec![b]).unwrap())),
+            MsgOp::Format => self.push_operand(Operand::Text(Text::default())),
             _ => (),
         }
         Ok(())

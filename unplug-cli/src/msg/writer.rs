@@ -7,7 +7,7 @@ use quick_xml::events::{BytesDecl, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::borrow::Cow;
 use std::io::Write;
-use unplug::common::Text;
+use unplug::common::text::{Text, TextData};
 use unplug::event::msg::{
     DefaultFlags, Layout, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags,
 };
@@ -15,7 +15,7 @@ use unplug::event::Script;
 
 /// Converts `text` to an escaped XML string.
 /// quick-xml's built-in string escaping converts quote characters, which isn't user-friendly.
-fn text_to_xml(text: &Text) -> Result<Cow<'_, str>> {
+fn text_to_xml(text: &Text<impl TextData>) -> Result<Cow<'_, str>> {
     let text_str = text.decode()?;
     trace!("text_to_xml({:?})", text_str);
     let mut escaped = String::new();
@@ -378,14 +378,15 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use std::str;
+    use unplug::common::CText;
     use unplug::data::Music;
     use unplug::event::msg::{
         Color, DefaultArgs, Icon, MsgAnimArgs, MsgSfxFadeArgs, NumInputArgs, QuestionArgs,
         ShakeArgs, Voice,
     };
 
-    fn text(s: &str) -> Text {
-        Text::encode(s).unwrap()
+    fn text(s: &str) -> CText {
+        CText::encode(s).unwrap()
     }
 
     fn xml(command: MsgCommand) -> Result<String> {

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::result::Result as StdResult;
-use unplug::common::Text;
+use unplug::common::{Text, VecText};
 use unplug::event::analysis::SubroutineEffectsMap;
 use unplug::event::block::Block as ScriptBlock;
 use unplug::event::opcodes::{Atom, CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap};
@@ -300,7 +300,7 @@ impl<'a> OperandCursor<'a> {
                 let opcode = AsmMsgOp::Text;
                 let op = Operation::with_operands(
                     Located::new(opcode),
-                    [Located::new(Operand::Text(Text::new()))],
+                    [Located::new(Operand::Text(Text::default()))],
                 );
                 (opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
@@ -375,17 +375,17 @@ impl Spanned for OperandCursor<'_> {
 /// A cursor which iterates over a text string and produces a `MsgOp` for each byte.
 #[derive(Debug)]
 struct TextCursor {
-    text: Text,
+    text: VecText,
     offset: usize,
 }
 
 impl TextCursor {
-    fn new(text: Text) -> Self {
+    fn new(text: VecText) -> Self {
         Self { text, offset: 0 }
     }
 
     fn next(&mut self) -> Option<MsgOp> {
-        let bytes = self.text.as_bytes();
+        let bytes = self.text.to_bytes();
         if self.offset < bytes.len() {
             let b = bytes[self.offset];
             self.offset += 1;
@@ -550,17 +550,17 @@ impl EventDeserializer for AsmDeserializer<'_> {
         }
     }
 
-    fn deserialize_text(&mut self) -> SerResult<Text> {
+    fn deserialize_text(&mut self) -> SerResult<VecText> {
         let Some(operand) = self.next_operand() else {
             self.report(Diagnostic::expected_string(self.cursor_span().at_end(0)));
-            return Ok(Text::new());
+            return Ok(VecText::default());
         };
         let span = operand.span();
         match &**operand {
-            Operand::Text(text) => Ok(text.clone()), // TODO: Avoid this clone?
+            Operand::Text(text) => Ok(text.clone().convert().unwrap()), // TODO: Avoid this clone?
             _ => {
                 self.report(Diagnostic::expected_string(span));
-                Ok(Text::new())
+                Ok(VecText::default())
             }
         }
     }
@@ -770,8 +770,8 @@ fn try_append_data(program: &Program, block: &mut DataBlock, value: &Operand) ->
             array.push(ptr);
         }
         DataBlock::String(text) => match value {
-            Operand::I8(b) => text.push(*b as u8),
-            Operand::U8(b) => text.push(*b),
+            Operand::I8(b) if *b != 0 => text.push(*b as u8).unwrap(),
+            Operand::U8(b) if *b != 0 => text.push(*b).unwrap(),
             Operand::Text(other) => text.extend(other.iter()),
             _ => return false,
         },

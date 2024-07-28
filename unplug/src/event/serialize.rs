@@ -1,6 +1,6 @@
 use super::opcodes::{Atom, CmdOp, ExprOp, MsgOp};
 use super::Pointer;
-use crate::common::Text;
+use crate::common::text::{self, VecText};
 use std::io;
 use thiserror::Error;
 use tracing::error;
@@ -91,6 +91,9 @@ pub enum Error {
     Io(Box<io::Error>),
 
     #[error(transparent)]
+    Text(Box<text::Error>),
+
+    #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -107,6 +110,7 @@ impl Error {
 }
 
 from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Text, text::Error);
 
 /// An object which can serialize event data.
 pub trait EventSerializer {
@@ -155,8 +159,8 @@ pub trait EventSerializer {
     /// Serializes an atom expression.
     fn serialize_atom(&mut self, atom: Atom) -> Result<()>;
 
-    /// Serializes a null-terminated text string.
-    fn serialize_text(&mut self, text: &Text) -> Result<()>;
+    /// Serializes a text string.
+    fn serialize_text(&mut self, text: &VecText) -> Result<()>;
 
     /// Serializes an RGBA color value.
     fn serialize_rgba(&mut self, rgba: u32) -> Result<()>;
@@ -230,8 +234,8 @@ pub trait EventDeserializer {
     /// Deserializes an atom expression and returns it.
     fn deserialize_atom(&mut self) -> Result<Atom>;
 
-    /// Deserializes a null-terminated text string and returns it.
-    fn deserialize_text(&mut self) -> Result<Text>;
+    /// Deserializes a text string and returns it.
+    fn deserialize_text(&mut self) -> Result<VecText>;
 
     /// Deserializes an RGBA color value and returns it.
     fn deserialize_rgba(&mut self) -> Result<u32>;
@@ -281,11 +285,11 @@ pub trait DeserializeEvent: Sized {
 
 /// Implements serialization for a value type.
 macro_rules! impl_serialize {
-    ($type:ty, $sfunc:ident, $dfunc:ident) => {
+    ($type:ty, $sfunc:ident, $dfunc:ident $(,$deref:tt)?) => {
         impl SerializeEvent for $type {
             type Error = Error;
             fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
-                ser.$sfunc(*self)
+                ser.$sfunc($($deref)? self)
             }
         }
         impl DeserializeEvent for $type {
@@ -296,24 +300,12 @@ macro_rules! impl_serialize {
         }
     };
 }
-impl_serialize!(i8, serialize_i8, deserialize_i8);
-impl_serialize!(u8, serialize_u8, deserialize_u8);
-impl_serialize!(i16, serialize_i16, deserialize_i16);
-impl_serialize!(u16, serialize_u16, deserialize_u16);
-impl_serialize!(i32, serialize_i32, deserialize_i32);
-impl_serialize!(u32, serialize_u32, deserialize_u32);
-impl_serialize!(Pointer, serialize_pointer, deserialize_pointer);
-impl_serialize!(Atom, serialize_atom, deserialize_atom);
-
-impl SerializeEvent for Text {
-    type Error = Error;
-    fn serialize(&self, ser: &mut dyn EventSerializer) -> Result<()> {
-        ser.serialize_text(self)
-    }
-}
-impl DeserializeEvent for Text {
-    type Error = Error;
-    fn deserialize(de: &mut dyn EventDeserializer) -> Result<Self> {
-        de.deserialize_text()
-    }
-}
+impl_serialize!(i8, serialize_i8, deserialize_i8, *);
+impl_serialize!(u8, serialize_u8, deserialize_u8, *);
+impl_serialize!(i16, serialize_i16, deserialize_i16, *);
+impl_serialize!(u16, serialize_u16, deserialize_u16, *);
+impl_serialize!(i32, serialize_i32, deserialize_i32, *);
+impl_serialize!(u32, serialize_u32, deserialize_u32, *);
+impl_serialize!(Pointer, serialize_pointer, deserialize_pointer, *);
+impl_serialize!(Atom, serialize_atom, deserialize_atom, *);
+impl_serialize!(VecText, serialize_text, deserialize_text);

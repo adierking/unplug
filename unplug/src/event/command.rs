@@ -5,7 +5,7 @@ use super::pointer::Pointer;
 use super::serialize::{
     self, DeserializeEvent, EventDeserializer, EventSerializer, SerializeEvent,
 };
-use crate::common::Text;
+use crate::common::VecText;
 use std::convert::TryInto;
 use std::fmt;
 use thiserror::Error;
@@ -678,12 +678,12 @@ pub struct PosArgs {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct PrintFArgs(pub Text);
+pub struct PrintFArgs(pub VecText);
 
 impl DeserializeEvent for PrintFArgs {
     type Error = serialize::Error;
     fn deserialize(de: &mut dyn EventDeserializer) -> serialize::Result<Self> {
-        Ok(Self(de.deserialize_text()?))
+        de.deserialize_text().map(Self)
     }
 }
 
@@ -887,7 +887,6 @@ pub struct MovieArgs {
 mod tests {
     use super::*;
     use crate::assert_reserialize;
-    use crate::common::Text;
     use crate::data::Music;
     use crate::event::expr::BinaryOp;
     use crate::event::msg::MsgCommand;
@@ -908,8 +907,8 @@ mod tests {
         Box::new(IfArgs { condition: expr(), else_target: ptr() })
     }
 
-    fn text(string: &str) -> Text {
-        Text::encode(string).unwrap()
+    fn text(string: &str) -> VecText {
+        VecText::encode(string).unwrap()
     }
 
     #[test]

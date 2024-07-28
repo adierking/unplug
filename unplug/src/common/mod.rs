@@ -15,4 +15,4 @@ pub use math::*;
 pub use read_write::*;
 pub use region::*;
 pub use string_table::StringTable;
-pub use text::Text;
+pub use text::{CText, FixedText, Text, VecText};

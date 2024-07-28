@@ -3,13 +3,14 @@ use super::dol::{self, DolHeader};
 use super::fst::{
     self, EditFile, Entry, EntryId, FileStringTable, FileTree, FstEntryKind, OpenFile,
 };
-use crate::common::io::{copy_within, fill, read_fixed_string, write_fixed_string};
-use crate::common::{self, ReadFrom, ReadSeek, ReadWriteSeek, Region, WriteTo};
+use crate::common::io::{copy_within, fill};
+use crate::common::{
+    self, text, FixedText, ReadFrom, ReadSeek, ReadWriteSeek, Region, Text, WriteTo,
+};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
-use encoding_rs::{mem, SHIFT_JIS};
+use encoding_rs::mem::decode_latin1;
 use std::cmp;
 use std::convert::TryFrom;
-use std::ffi::CString;
 use std::fmt;
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
@@ -17,6 +18,9 @@ use tracing::{debug, trace};
 
 const GCN_MAGIC: u32 = 0xc2339f3d;
 const WII_MAGIC: u32 = 0x5d1c9ea3;
+
+/// Size of the game name in the disc header.
+const GAME_NAME_SIZE: usize = 0x3e0;
 
 // Optimal alignment is on 32KB boundaries (cluster size)
 // PiA doesn't actually use this but some other games (e.g. Melee) do
@@ -56,12 +60,16 @@ pub enum Error {
 
     #[error(transparent)]
     Io(Box<io::Error>),
+
+    #[error(transparent)]
+    Text(Box<text::Error>),
 }
 
 from_error_boxed!(Error::Banner, banner::Error);
 from_error_boxed!(Error::Fst, fst::Error);
 from_error_boxed!(Error::Dol, dol::Error);
 from_error_boxed!(Error::Io, io::Error);
+from_error_boxed!(Error::Text, text::Error);
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct DiscHeader {
@@ -74,7 +82,7 @@ struct DiscHeader {
     unused_00a: [u8; 0x0e],
     wii_magic: u32,
     gcn_magic: u32,
-    game_name: CString,
+    game_name: FixedText<GAME_NAME_SIZE>,
     debug_monitor_offset: u32,
     debug_monitor_addr: u32,
     unused_408: [u8; 0x18],
@@ -114,7 +122,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for DiscHeader {
         if header.gcn_magic != GCN_MAGIC {
             return Err(Error::InvalidMagic);
         }
-        header.game_name = read_fixed_string(&mut *reader, 0x3e0)?;
+        header.game_name = Text::read_from(reader)?;
         header.debug_monitor_offset = reader.read_u32::<BE>()?;
         header.debug_monitor_addr = reader.read_u32::<BE>()?;
         reader.read_exact(&mut header.unused_408)?;
@@ -142,7 +150,7 @@ impl<W: Write + ?Sized> WriteTo<W> for DiscHeader {
         writer.write_all(&self.unused_00a)?;
         writer.write_u32::<BE>(self.wii_magic)?;
         writer.write_u32::<BE>(self.gcn_magic)?;
-        write_fixed_string(&mut *writer, &self.game_name, 0x3e0)?;
+        self.game_name.write_to(writer)?;
         writer.write_u32::<BE>(self.debug_monitor_offset)?;
         writer.write_u32::<BE>(self.debug_monitor_addr)?;
         writer.write_all(&self.unused_408)?;
@@ -191,16 +199,12 @@ impl<S: ReadSeek> DiscStream<S> {
         let mut game_id = [0u8; 6];
         game_id[..4].copy_from_slice(&self.header.game_code);
         game_id[4..].copy_from_slice(&self.header.maker_code);
-        mem::decode_latin1(&game_id).into()
+        decode_latin1(&game_id).into()
     }
 
     /// Returns the disc's game name.
     pub fn game_name(&self) -> String {
-        let bytes = self.header.game_name.as_bytes();
-        match SHIFT_JIS.decode_without_bom_handling_and_without_replacement(bytes) {
-            Some(s) => s.into_owned(),
-            None => mem::decode_latin1(bytes).into_owned(),
-        }
+        self.header.game_name.decode_replacing().into_owned()
     }
 
     /// Returns the DOL header and a stream that can be used to read the main.dol file.
@@ -545,8 +549,8 @@ mod tests {
     #[test]
     fn test_write_and_read_disc_header() {
         assert_write_and_read!(DiscHeader {
-            game_code: [0; 4],
-            maker_code: [1; 2],
+            game_code: *b"GGTE",
+            maker_code: *b"01",
             disc_id: 2,
             version: 3,
             audio_streaming: 4,
@@ -554,7 +558,7 @@ mod tests {
             unused_00a: [6; 0x0e],
             wii_magic: 0,
             gcn_magic: GCN_MAGIC,
-            game_name: CString::new("test").unwrap(),
+            game_name: Text::from_bytes("test").unwrap(),
             debug_monitor_offset: 8,
             debug_monitor_addr: 9,
             unused_408: [10; 0x18],
