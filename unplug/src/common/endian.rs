@@ -1,3 +1,4 @@
+#![allow(unused_qualifications)]
 use super::I24;
 use byte_slice_cast::{self as bsc, AsByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice};
 use byteorder::{ByteOrder, NativeEndian, BE, LE};
