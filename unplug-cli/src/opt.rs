@@ -598,6 +598,23 @@ pub enum IsoCommand {
     ExtractAll(IsoExtractAllOpt),
     /// Replace a file in the ISO
     Replace(IsoReplaceOpt),
+    /// Change properties of the ISO
+    #[clap(subcommand)]
+    Set(IsoSetCommand),
+}
+
+#[derive(Subcommand)]
+pub enum IsoSetCommand {
+    /// The maker display name (max 63 bytes)
+    Maker {
+        /// The new maker name
+        name: String,
+    },
+    /// The title display name (max 63 bytes)
+    Name {
+        /// The new title name
+        name: String,
+    },
 }
 
 #[derive(Args)]
@@ -1267,6 +1284,19 @@ mod tests {
         assert_eq!(error(["iso", "replace"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["iso", "replace", "foo"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["iso", "replace", "foo", "bar", "baz"]), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_cli_iso_set() {
+        let map = mapper!(Command::Iso(IsoCommand::Set(command)) => command);
+        parse(["iso", "set", "maker", "The"], map, |command| {
+            let IsoSetCommand::Maker { name } = command else { panic!() };
+            assert_eq!(name, "The");
+        });
+        parse(["iso", "set", "name", "This"], map, |command| {
+            let IsoSetCommand::Name { name } = command else { panic!() };
+            assert_eq!(name, "This");
+        });
     }
 
     #[test]

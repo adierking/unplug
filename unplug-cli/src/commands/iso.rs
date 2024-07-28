@@ -1,13 +1,18 @@
 use crate::common::output_dir_and_name;
 use crate::context::Context;
 use crate::fst::{extract_file, list_files};
-use crate::opt::{IsoCommand, IsoExtractAllOpt, IsoExtractOpt, IsoListOpt, IsoReplaceOpt};
+use crate::opt::{
+    IsoCommand, IsoExtractAllOpt, IsoExtractOpt, IsoListOpt, IsoReplaceOpt, IsoSetCommand,
+};
 use anyhow::{bail, Result};
 use humansize::{FormatSize, BINARY};
 use log::info;
 use std::fs::{self, File};
 use unplug::common::io::BUFFER_SIZE;
-use unplug::dvd::{DiscStream, Glob, GlobMode};
+use unplug::common::Text;
+use unplug::dvd::{Banner, DiscStream, Glob, GlobMode};
+
+const BANNER_PATH: &str = "opening.bnr";
 
 /// The `iso info` CLI command.
 fn command_info(ctx: Context) -> Result<()> {
@@ -89,6 +94,42 @@ fn command_replace(ctx: Context, opt: IsoReplaceOpt) -> Result<()> {
     Ok(())
 }
 
+/// Read, edit, and save opening.bnr.
+fn edit_banner<F>(ctx: Context, f: F) -> Result<()>
+where
+    F: FnOnce(&mut Banner) -> Result<()>,
+{
+    let mut ctx = ctx.open_read_write()?;
+    let file = ctx.disc_file_at(BANNER_PATH)?;
+    let mut banner = ctx.deserialize_file(&file)?;
+    f(&mut banner)?;
+    info!("Writing {}", BANNER_PATH);
+    ctx.begin_update().serialize_file(&file, &banner)?.commit()?;
+    Ok(())
+}
+
+/// The `iso set maker` CLI command.
+fn command_set_maker(ctx: Context, name: String) -> Result<()> {
+    edit_banner(ctx, |banner| {
+        let lang = &mut banner.languages[0];
+        let short_len = name.len().min(lang.maker_short.max_len());
+        lang.maker_short = Text::encode(&name[..short_len])?;
+        lang.maker_long = Text::encode(&name)?;
+        Ok(())
+    })
+}
+
+/// The `iso set name` CLI command.
+fn command_set_name(ctx: Context, name: String) -> Result<()> {
+    edit_banner(ctx, |banner| {
+        let lang = &mut banner.languages[0];
+        let short_len = name.len().min(lang.name_short.max_len());
+        lang.name_short = Text::encode(&name[..short_len])?;
+        lang.name_long = Text::encode(&name)?;
+        Ok(())
+    })
+}
+
 /// The `iso` CLI command.
 pub fn command(ctx: Context, opt: IsoCommand) -> Result<()> {
     match opt {
@@ -97,5 +138,7 @@ pub fn command(ctx: Context, opt: IsoCommand) -> Result<()> {
         IsoCommand::Extract(opt) => command_extract(ctx, opt),
         IsoCommand::ExtractAll(opt) => command_extract_all(ctx, opt),
         IsoCommand::Replace(opt) => command_replace(ctx, opt),
+        IsoCommand::Set(IsoSetCommand::Maker { name }) => command_set_maker(ctx, name),
+        IsoCommand::Set(IsoSetCommand::Name { name }) => command_set_name(ctx, name),
     }
 }

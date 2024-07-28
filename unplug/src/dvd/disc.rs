@@ -12,7 +12,7 @@ use encoding_rs::mem::decode_latin1;
 use std::cmp;
 use std::convert::TryFrom;
 use std::fmt;
-use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
 use tracing::{debug, trace};
 
@@ -478,6 +478,14 @@ impl<S: ReadWriteSeek> DiscStream<S> {
         // Everything succeeded, so update our free list
         self.free_regions = Self::find_free_regions(&self.header, &fst);
         Ok(())
+    }
+
+    /// Writes the disc's banner file.
+    pub fn write_banner(&mut self, banner: &Banner) -> Result<()> {
+        let mut bytes = Cursor::new(vec![]);
+        banner.write_to(&mut bytes)?;
+        bytes.rewind()?;
+        self.replace_file_at(BANNER_PATH, bytes)
     }
 }
 
