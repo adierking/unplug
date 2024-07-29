@@ -1,5 +1,5 @@
 use super::{ReadFrom, WriteTo};
-use encoding_rs::{SHIFT_JIS, WINDOWS_1252};
+use encoding_rs::{EncoderResult, SHIFT_JIS, WINDOWS_1252};
 use std::borrow::Cow;
 use std::error::Error as StdError;
 use std::ffi::CString;
@@ -276,18 +276,46 @@ impl<D: TextData> Text<D> {
         }
     }
 
-    /// Encodes a UTF-8 string as text.
+    /// Encodes a UTF-8 string as text. This will fail if the string cannot be encoded or if the
+    /// string cannot fit the data format.
     pub fn encode(string: &str) -> Result<Self> {
-        let (bytes, _, unmappable) = SHIFT_JIS.encode(string);
-        if unmappable {
-            let (bytes, _, unmappable) = WINDOWS_1252.encode(string);
-            match unmappable {
-                false => Self::from_bytes(bytes),
-                true => Err(Error::Encode(string.to_owned())),
-            }
-        } else {
-            Self::from_bytes(bytes)
+        Self::do_encode(string, Self::MAX_LEN, false)
+    }
+
+    /// Encodes a UTF-8 string as text, truncating the output if the string cannot fit the data
+    /// format. This will fail if the string cannot be encoded.
+    pub fn encode_truncated(string: &str) -> Result<Self> {
+        Self::do_encode(string, Self::MAX_LEN, true)
+    }
+
+    /// Encodes a UTF-8 string as text, truncating the output if the string cannot fit the requested
+    /// maximum length in bytes. This will fail if the string cannot be encoded.
+    pub fn encode_truncated_to(string: &str, max_len: usize) -> Result<Self> {
+        Self::do_encode(string, max_len, true)
+    }
+
+    fn do_encode(string: &str, max_len: usize, truncate: bool) -> Result<Self> {
+        let mut jis_encoder = SHIFT_JIS.new_encoder();
+        let buffer_size = jis_encoder
+            .max_buffer_length_from_utf8_without_replacement(string.len())
+            .unwrap_or(usize::MAX)
+            .min(max_len);
+        let mut buffer = vec![0u8; buffer_size];
+        let (mut status, mut _num_read, mut num_written) =
+            jis_encoder.encode_from_utf8_without_replacement(string, &mut buffer, true);
+        if let EncoderResult::Unmappable(_) = status {
+            (status, _num_read, num_written) = WINDOWS_1252
+                .new_encoder()
+                .encode_from_utf8_without_replacement(string, &mut buffer, true);
         }
+        match status {
+            EncoderResult::InputEmpty => (),
+            EncoderResult::OutputFull if truncate => (),
+            EncoderResult::OutputFull => return Err(Error::TooLong(max_len)),
+            EncoderResult::Unmappable(_) => return Err(Error::Encode(string.to_owned())),
+        }
+        buffer.truncate(num_written);
+        Self::from_bytes(buffer)
     }
 
     /// Attempts to convert the underlying data format.
@@ -472,6 +500,11 @@ mod tests {
         let result = Text::<[u8; 4]>::encode("abcd");
         assert!(matches!(result, Err(Error::TooLong(3))));
 
+        let text = Text::<[u8; 4]>::encode_truncated("abcd").unwrap();
+        assert_eq!(text.to_bytes().len(), 3);
+        assert_eq!(text.as_raw_bytes().len(), 4);
+        assert_eq!(text.decode().unwrap(), "abc");
+
         let result = Text::<[u8; 64]>::from_bytes(b"Hello, world!\0".to_vec());
         assert!(matches!(result, Err(Error::UnexpectedNul)));
 
@@ -502,8 +535,27 @@ mod tests {
     }
 
     #[test]
+    fn test_empty() {
+        let text = Text::<Vec<u8>>::encode("").unwrap();
+        assert!(text.is_empty());
+        let text = Text::<[u8; 1]>::encode("").unwrap();
+        assert!(text.is_empty());
+        let text = Text::<Vec<u8>>::default();
+        assert!(text.decode().unwrap().is_empty());
+    }
+
+    #[test]
     fn test_jis() {
         let s = "スプラトゥーン";
+        let text = Text::<Vec<u8>>::encode(s).unwrap();
+        assert_eq!(text.decode().unwrap(), s);
+        let text = Text::<[u8; 13]>::encode_truncated(s).unwrap();
+        assert_eq!(text.decode().unwrap(), "スプラトゥー");
+        let text = Text::<[u8; 14]>::encode_truncated(s).unwrap();
+        assert_eq!(text.decode().unwrap(), "スプラトゥー");
+
+        // This triggers a weird edge case where the encoder needs 4 bytes instead of 3
+        let s = "× ";
         let text = Text::<Vec<u8>>::encode(s).unwrap();
         assert_eq!(text.decode().unwrap(), s);
     }
@@ -513,6 +565,8 @@ mod tests {
         let s = "ááááá";
         let text = Text::<Vec<u8>>::encode(s).unwrap();
         assert_eq!(text.decode().unwrap(), s);
+        let result = Text::<Vec<u8>>::encode("😳");
+        assert!(matches!(result, Err(Error::Encode(_))));
     }
 
     #[test]

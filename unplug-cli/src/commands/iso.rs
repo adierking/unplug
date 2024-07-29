@@ -112,9 +112,8 @@ where
 fn command_set_maker(ctx: Context, name: String) -> Result<()> {
     edit_banner(ctx, |banner| {
         let lang = &mut banner.languages[0];
-        let short_len = name.len().min(lang.maker_short.max_len());
-        lang.maker_short = Text::encode(&name[..short_len])?;
         lang.maker_long = Text::encode(&name)?;
+        lang.maker_short = Text::encode_truncated(&name)?;
         Ok(())
     })
 }
@@ -123,9 +122,8 @@ fn command_set_maker(ctx: Context, name: String) -> Result<()> {
 fn command_set_name(ctx: Context, name: String) -> Result<()> {
     edit_banner(ctx, |banner| {
         let lang = &mut banner.languages[0];
-        let short_len = name.len().min(lang.name_short.max_len());
-        lang.name_short = Text::encode(&name[..short_len])?;
         lang.name_long = Text::encode(&name)?;
+        lang.name_short = Text::encode_truncated(&name)?;
         Ok(())
     })
 }
