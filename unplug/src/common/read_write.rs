@@ -1,7 +1,6 @@
 use byteorder::ReadBytesExt;
 use std::ffi::CString;
 use std::io::{self, Read, Seek, Write};
-use std::mem::MaybeUninit;
 
 /// Trait for a readable and seekable stream.
 pub trait ReadSeek: Read + Seek + Send {}
@@ -134,20 +133,17 @@ impl<W: Write + ?Sized> WriteTo<W> for u8 {
 }
 
 /// `ReadFrom` implementation for reading arrays of trivial types
-impl<R: Read + ?Sized, T: ReadFrom<R> + Copy, const N: usize> ReadFrom<R> for [T; N] {
+impl<R: Read + ?Sized, T: ReadFrom<R> + Default + Copy, const N: usize> ReadFrom<R> for [T; N] {
     type Error = T::Error;
     fn read_from(reader: &mut R) -> Result<Self, Self::Error> {
-        let mut result = MaybeUninit::<[T; N]>::uninit();
-        unsafe {
-            let slice = std::slice::from_raw_parts_mut(result.as_mut_ptr().cast(), N);
-            T::read_all_from(reader, slice)?;
-            Ok(result.assume_init())
-        }
+        let mut result = [T::default(); N];
+        T::read_all_from(reader, &mut result)?;
+        Ok(result)
     }
 }
 
 /// `WriteTo` implementation for writing arrays of trivial types
-impl<W: Write + ?Sized, T: WriteTo<W> + Copy, const N: usize> WriteTo<W> for [T; N] {
+impl<W: Write + ?Sized, T: WriteTo<W>, const N: usize> WriteTo<W> for [T; N] {
     type Error = T::Error;
     fn write_to(&self, writer: &mut W) -> Result<(), Self::Error> {
         T::write_all_to(writer, self)
