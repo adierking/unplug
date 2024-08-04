@@ -28,7 +28,7 @@ fn command_info(ctx: Context, path: &str) -> Result<()> {
 }
 
 /// The `archive list` CLI command.
-fn command_list(ctx: Context, path: &str, opt: ArchiveListOpt) -> Result<()> {
+fn command_list(ctx: Context, path: &str, opt: ListArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let archive = ArchiveReader::open(ctx.open_file_at(path)?)?;
     list_files(&archive.files, &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))?;
@@ -36,7 +36,7 @@ fn command_list(ctx: Context, path: &str, opt: ArchiveListOpt) -> Result<()> {
 }
 
 /// The `archive extract` CLI command.
-fn command_extract(ctx: Context, path: &str, opt: ArchiveExtractOpt) -> Result<()> {
+fn command_extract(ctx: Context, path: &str, opt: ExtractArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let mut archive = ArchiveReader::open(ctx.open_file_at(path)?)?;
     let files = Glob::new(GlobMode::Exact, opt.paths).find(&archive.files).collect::<Vec<_>>();
@@ -53,7 +53,7 @@ fn command_extract(ctx: Context, path: &str, opt: ArchiveExtractOpt) -> Result<(
 }
 
 /// The `archive extract-all` CLI command.
-fn command_extract_all(ctx: Context, path: &str, opt: ArchiveExtractAllOpt) -> Result<()> {
+fn command_extract_all(ctx: Context, path: &str, opt: ExtractAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let mut archive = ArchiveReader::open(ctx.open_file_at(path)?)?;
     let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
@@ -65,7 +65,7 @@ fn command_extract_all(ctx: Context, path: &str, opt: ArchiveExtractAllOpt) -> R
 }
 
 /// The `archive replace` CLI command.
-fn command_replace(ctx: Context, path: &str, opt: ArchiveReplaceOpt) -> Result<()> {
+fn command_replace(ctx: Context, path: &str, opt: ReplaceArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     let file = ctx.file_at(path)?;
     let info = ctx.query_file(&file)?;

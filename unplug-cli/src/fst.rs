@@ -1,4 +1,4 @@
-use crate::opt::list::ListOpt;
+use crate::opt::list::Options;
 use anyhow::{bail, Result};
 use log::info;
 use std::fs::{self, File};
@@ -8,7 +8,7 @@ use unplug::common::io::copy_buffered;
 use unplug::dvd::{Entry, EntryId, FileTree, Glob, OpenFile};
 
 /// Lists files in an FST matched by `glob`.
-pub fn list_files(tree: &FileTree, opt: &ListOpt, glob: &Glob) -> Result<()> {
+pub fn list_files(tree: &FileTree, opt: &Options, glob: &Glob) -> Result<()> {
     let get_file = |(p, e)| tree[e].file().map(|f| (p, f));
     let mut files = glob.find(tree).filter_map(get_file).collect::<Vec<_>>();
     if files.is_empty() {

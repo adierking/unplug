@@ -13,7 +13,7 @@ const MAX_VOLUME: i32 = 100;
 #[clap(name = "Unplug", version)]
 #[clap(about = "Chibi-Robo! Plug Into Adventure! Modding Toolkit")]
 #[clap(help_expected = true, infer_subcommands = true)]
-pub struct Opt {
+pub struct CliArgs {
     /// Show debug logs
     ///
     /// Use -vv in non-distribution builds to show trace logs as well
@@ -26,17 +26,17 @@ pub struct Opt {
     pub trace: Option<PathBuf>,
 
     #[clap(flatten)]
-    pub config: ConfigOpt,
+    pub config: GlobalConfigArgs,
 
     #[clap(flatten)]
-    pub context: ContextOpt,
+    pub context: GlobalContextArgs,
 
     #[clap(subcommand)]
     pub command: Command,
 }
 
 #[derive(Args)]
-pub struct ConfigOpt {
+pub struct GlobalConfigArgs {
     /// Path to the config file to use (will be created if necessary)
     #[clap(long, value_name("PATH"), global(true))]
     pub config: Option<PathBuf>,
@@ -47,7 +47,7 @@ pub struct ConfigOpt {
 }
 
 #[derive(Args)]
-pub struct ContextOpt {
+pub struct GlobalContextArgs {
     /// Run the command on an ISO
     #[clap(long, value_name("PATH"), global(true), group("context"))]
     pub iso: Option<PathBuf>,
@@ -76,7 +76,7 @@ pub enum Command {
     Config(config::Subcommand),
 
     /// Run Dolphin with the current project/ISO
-    Dolphin(dolphin::Options),
+    Dolphin(dolphin::Args),
 
     /// Edit global metadata
     #[clap(subcommand)]
@@ -171,32 +171,32 @@ pub mod project {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// Show information about a project (or the current one)
-        Info(ProjectInfoOpt),
+        Info(InfoArgs),
         /// List defined projects
         List,
         /// Create a new project by copying the default ISO
-        New(ProjectNewOpt),
+        New(NewArgs),
         /// Delete a project's files and unregister it
-        Wipe(ProjectWipeOpt),
+        Wipe(WipeArgs),
         /// Register an existing project
-        Add(ProjectAddOpt),
+        Add(AddArgs),
         /// Unregister a project without deleting any of its files
         #[clap(alias = "forget")]
-        Remove(ProjectRemoveOpt),
+        Remove(RemoveArgs),
         /// Open a project to be automatically used for future Unplug commands
-        Open(ProjectOpenOpt),
+        Open(OpenArgs),
         /// Close the currently-open project
         Close,
     }
 
     #[derive(Args)]
-    pub struct ProjectInfoOpt {
+    pub struct InfoArgs {
         /// Name of the project to show
         pub name: Option<String>,
     }
 
     #[derive(Args)]
-    pub struct ProjectAddOpt {
+    pub struct AddArgs {
         /// Path to the project file(s)
         pub path: PathBuf,
 
@@ -206,19 +206,19 @@ pub mod project {
     }
 
     #[derive(Args)]
-    pub struct ProjectRemoveOpt {
+    pub struct RemoveArgs {
         /// Name of the project to remove
         pub name: String,
     }
 
     #[derive(Args)]
-    pub struct ProjectOpenOpt {
+    pub struct OpenArgs {
         /// Name of the project to open
         pub name: String,
     }
 
     #[derive(Args)]
-    pub struct ProjectNewOpt {
+    pub struct NewArgs {
         /// Name of the new project
         pub name: String,
 
@@ -240,7 +240,7 @@ pub mod project {
     }
 
     #[derive(Args)]
-    pub struct ProjectWipeOpt {
+    pub struct WipeArgs {
         /// Name of the project to wipe
         pub name: String,
 
@@ -254,7 +254,7 @@ pub mod list {
     use super::*;
 
     #[derive(Args)]
-    pub struct ListOpt {
+    pub struct Options {
         /// List file offsets and sizes
         #[clap(short, long)]
         pub long: bool,
@@ -277,7 +277,7 @@ pub mod list {
     }
 
     #[derive(Args)]
-    pub struct ListIdsOpt {
+    pub struct IdArgs {
         /// Sort by name (default)
         #[clap(long, overrides_with_all(&["by_id"]))]
         pub by_name: bool,
@@ -294,23 +294,23 @@ pub mod list {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// List each item
-        Items(ListItemsOpt),
+        Items(ItemsArgs),
         /// List each type of equipment
-        Equipment(ListEquipmentOpt),
+        Equipment(EquipmentArgs),
         /// List each stage
-        Stages(ListIdsOpt),
+        Stages(IdArgs),
         /// List each object
-        Objects(ListIdsOpt),
+        Objects(IdArgs),
         /// List each music file
-        Music(ListIdsOpt),
+        Music(IdArgs),
         /// List each sound effect
-        Sounds(ListIdsOpt),
+        Sounds(IdArgs),
     }
 
     #[derive(Args)]
-    pub struct ListItemsOpt {
+    pub struct ItemsArgs {
         #[clap(flatten)]
-        pub settings: ListIdsOpt,
+        pub settings: IdArgs,
 
         /// Include items without names
         #[clap(long)]
@@ -318,9 +318,9 @@ pub mod list {
     }
 
     #[derive(Args)]
-    pub struct ListEquipmentOpt {
+    pub struct EquipmentArgs {
         #[clap(flatten)]
-        pub settings: ListIdsOpt,
+        pub settings: IdArgs,
 
         /// Include equipment without names
         #[clap(long)]
@@ -334,19 +334,19 @@ pub mod script {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// Dump the script data from a single stage
-        Dump(ScriptDumpOpt),
+        Dump(DumpArgs),
         /// Dump all script data
-        DumpAll(ScriptDumpAllOpt),
+        DumpAll(DumpAllArgs),
         /// Disassemble a single stage's script
-        Disassemble(ScriptDisassembleOpt),
+        Disassemble(DisassembleArgs),
         /// Disassemble all scripts
-        DisassembleAll(ScriptDisassembleAllOpt),
+        DisassembleAll(DisassembleAllArgs),
         /// Assemble a single stage's script
-        Assemble(ScriptAssembleOpt),
+        Assemble(AssembleArgs),
     }
 
     #[derive(Args)]
-    pub struct ScriptDumpFlags {
+    pub struct DumpFlags {
         /// Dump unknown structs
         #[clap(long)]
         pub dump_unknown: bool,
@@ -357,7 +357,7 @@ pub mod script {
     }
 
     #[derive(Args)]
-    pub struct ScriptDumpOpt {
+    pub struct DumpArgs {
         /// Name of the stage to dump, or "globals" to dump globals
         pub stage: String,
 
@@ -366,21 +366,21 @@ pub mod script {
         pub output: Option<PathBuf>,
 
         #[clap(flatten)]
-        pub flags: ScriptDumpFlags,
+        pub flags: DumpFlags,
     }
 
     #[derive(Args)]
-    pub struct ScriptDumpAllOpt {
+    pub struct DumpAllArgs {
         /// Path to the output directory
         #[clap(short, value_name("PATH"))]
         pub output: PathBuf,
 
         #[clap(flatten)]
-        pub flags: ScriptDumpFlags,
+        pub flags: DumpFlags,
     }
 
     #[derive(Args)]
-    pub struct ScriptDisassembleOpt {
+    pub struct DisassembleArgs {
         /// Name of the stage to dump
         pub stage: String,
 
@@ -390,14 +390,14 @@ pub mod script {
     }
 
     #[derive(Args)]
-    pub struct ScriptDisassembleAllOpt {
+    pub struct DisassembleAllArgs {
         /// Path to the output directory
         #[clap(short, value_name("PATH"))]
         pub output: PathBuf,
     }
 
     #[derive(Args)]
-    pub struct ScriptAssembleOpt {
+    pub struct AssembleArgs {
         /// Path to the assembly source
         #[clap(value_name("PATH"))]
         pub path: PathBuf,
@@ -410,20 +410,20 @@ pub mod messages {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// Export messages to an XML file
-        Export(MessagesExportOpt),
+        Export(ExportArgs),
         /// Import messages from an XML file
-        Import(MessagesImportOpt),
+        Import(ImportArgs),
     }
 
     #[derive(Args)]
-    pub struct MessagesExportOpt {
+    pub struct ExportArgs {
         /// Path to the output XML file
         #[clap(short, value_name("PATH"))]
         pub output: PathBuf,
     }
 
     #[derive(Args)]
-    pub struct MessagesImportOpt {
+    pub struct ImportArgs {
         /// Path to the input XML file
         pub input: PathBuf,
     }
@@ -435,15 +435,15 @@ pub mod globals {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// Export global metadata to a JSON file
-        Export(GlobalsExportOpt),
+        Export(ExportArgs),
         /// Import global metadata from a JSON file
-        Import(GlobalsImportOpt),
+        Import(ImportArgs),
         /// Dump collision data to a text file
-        DumpColliders(GlobalsDumpCollidersOpt),
+        DumpColliders(DumpCollidersArgs),
     }
 
     #[derive(Args)]
-    pub struct GlobalsExportOpt {
+    pub struct ExportArgs {
         /// Don't output unnecessary whitespace
         #[clap(short, long)]
         pub compact: bool,
@@ -454,13 +454,13 @@ pub mod globals {
     }
 
     #[derive(Args)]
-    pub struct GlobalsImportOpt {
+    pub struct ImportArgs {
         /// Path to the input JSON file
         pub input: PathBuf,
     }
 
     #[derive(Args)]
-    pub struct GlobalsDumpCollidersOpt {
+    pub struct DumpCollidersArgs {
         /// Redirect output to a file instead of stdout
         #[clap(short, value_name("PATH"))]
         pub output: Option<PathBuf>,
@@ -472,13 +472,13 @@ pub mod shop {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// Export shop data to a JSON file
-        Export(ShopExportOpt),
+        Export(ExportArgs),
         /// Import shop data from a JSON file
-        Import(ShopImportOpt),
+        Import(ImportArgs),
     }
 
     #[derive(Args)]
-    pub struct ShopExportOpt {
+    pub struct ExportArgs {
         /// Don't output unnecessary whitespace
         #[clap(short, long)]
         pub compact: bool,
@@ -489,7 +489,7 @@ pub mod shop {
     }
 
     #[derive(Args)]
-    pub struct ShopImportOpt {
+    pub struct ImportArgs {
         /// Path to the input JSON file
         pub input: PathBuf,
     }
@@ -501,21 +501,21 @@ pub mod audio {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// Show information about an audio resource
-        Info(AudioInfoOpt),
+        Info(InfoArgs),
         /// Export one or more audio resources to wav files
-        Export(AudioExportOpt),
+        Export(ExportArgs),
         /// Export an entire sample bank to a directory
-        ExportBank(AudioExportBankOpt),
+        ExportBank(ExportBankArgs),
         /// Export all audio resources to a directory
-        ExportAll(AudioExportAllOpt),
+        ExportAll(ExportAllArgs),
         /// Import an audio resource from an audio file
-        Import(AudioImportOpt),
+        Import(ImportArgs),
         /// Play an audio resource
-        Play(AudioPlayOpt),
+        Play(PlayArgs),
     }
 
     #[derive(Args)]
-    pub struct AudioExportSettings {
+    pub struct ExportSettings {
         /// If an audio file has cue points, export a .labels.txt file which defines the cues using
         /// Audacity's label track format
         #[clap(long)]
@@ -523,27 +523,27 @@ pub mod audio {
     }
 
     #[derive(Args)]
-    pub struct AudioImportSettings {
+    pub struct ImportSettings {
         /// If an audio file has a .labels.txt file alongside it, import Audacity labels from it
         #[clap(long)]
         pub labels: bool,
     }
 
     #[derive(Args)]
-    pub struct AudioInfoOpt {
+    pub struct InfoArgs {
         /// The name or path of the audio resource
         pub name: String,
     }
 
     #[derive(Args)]
-    pub struct AudioExportOpt {
+    pub struct ExportArgs {
         /// If extracting one audio resource, the path of the .wav file to write, otherwise the
         /// directory to write the audio files to
         #[clap(short, value_name("PATH"))]
         pub output: Option<PathBuf>,
 
         #[clap(flatten)]
-        pub settings: AudioExportSettings,
+        pub settings: ExportSettings,
 
         /// Names or paths of the audio resources to export
         #[clap(required = true)]
@@ -551,35 +551,35 @@ pub mod audio {
     }
 
     #[derive(Args)]
-    pub struct AudioExportBankOpt {
+    pub struct ExportBankArgs {
         /// The directory to write the bank's .wav files to (defaults to the bank name)
         #[clap(short, value_name("PATH"))]
         pub output: Option<PathBuf>,
 
         #[clap(flatten)]
-        pub settings: AudioExportSettings,
+        pub settings: ExportSettings,
 
         /// Name or path of the sample bank to export
         pub name: String,
     }
 
     #[derive(Args)]
-    pub struct AudioExportAllOpt {
+    pub struct ExportAllArgs {
         /// The directory to write files to
         #[clap(short, value_name("PATH"))]
         pub output: PathBuf,
 
         #[clap(flatten)]
-        pub settings: AudioExportSettings,
+        pub settings: ExportSettings,
     }
 
     #[derive(Args)]
-    pub struct AudioImportOpt {
+    pub struct ImportArgs {
         /// Name or path of the sound resource to import
         pub name: String,
 
         #[clap(flatten)]
-        pub settings: AudioImportSettings,
+        pub settings: ImportSettings,
 
         /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
         pub path: PathBuf,
@@ -596,7 +596,7 @@ pub mod audio {
     }
 
     #[derive(Args)]
-    pub struct AudioPlayOpt {
+    pub struct PlayArgs {
         /// Name or path of the audio resource to play
         pub name: String,
 
@@ -610,7 +610,7 @@ pub mod dolphin {
     use super::*;
 
     #[derive(Args)]
-    pub struct Options {
+    pub struct Args {
         /// Wait for Dolphin to exit and capture console output
         #[clap(short, long)]
         pub wait: bool,
@@ -629,13 +629,13 @@ pub mod iso {
         /// Show information about the ISO
         Info,
         /// List files in the ISO
-        List(IsoListOpt),
+        List(ListArgs),
         /// Extract files from the ISO
-        Extract(IsoExtractOpt),
+        Extract(ExtractArgs),
         /// Extract all files from the ISO
-        ExtractAll(IsoExtractAllOpt),
+        ExtractAll(ExtractAllArgs),
         /// Replace a file in the ISO
-        Replace(IsoReplaceOpt),
+        Replace(ReplaceArgs),
         /// Change properties of the ISO
         #[clap(subcommand)]
         Set(SetCommand),
@@ -656,16 +656,16 @@ pub mod iso {
     }
 
     #[derive(Args)]
-    pub struct IsoListOpt {
+    pub struct ListArgs {
         #[clap(flatten)]
-        pub settings: list::ListOpt,
+        pub settings: list::Options,
 
         /// Paths to list (globbing is supported)
         pub paths: Vec<String>,
     }
 
     #[derive(Args)]
-    pub struct IsoExtractOpt {
+    pub struct ExtractArgs {
         /// If extracting one file, the path of the output file, otherwise the
         /// directory to extract files to
         #[clap(short, value_name("PATH"))]
@@ -676,14 +676,14 @@ pub mod iso {
     }
 
     #[derive(Args)]
-    pub struct IsoExtractAllOpt {
+    pub struct ExtractAllArgs {
         /// The directory to extract files to
         #[clap(short, value_name("PATH"))]
         pub output: Option<PathBuf>,
     }
 
     #[derive(Args)]
-    pub struct IsoReplaceOpt {
+    pub struct ReplaceArgs {
         /// Path of the file in the ISO to replace
         #[clap(value_name("dest"))]
         pub dest_path: String,
@@ -709,42 +709,42 @@ pub mod archive {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ArchiveListOpt,
+            opt: ListArgs,
         },
         /// Extract files from the archive
         Extract {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ArchiveExtractOpt,
+            opt: ExtractArgs,
         },
         /// Extract all files from the archive
         ExtractAll {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ArchiveExtractAllOpt,
+            opt: ExtractAllArgs,
         },
         /// Replace a file in the archive
         Replace {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ArchiveReplaceOpt,
+            opt: ReplaceArgs,
         },
     }
 
     #[derive(Args)]
-    pub struct ArchiveListOpt {
+    pub struct ListArgs {
         #[clap(flatten)]
-        pub settings: list::ListOpt,
+        pub settings: list::Options,
 
         /// Paths to list (globbing is supported)
         pub paths: Vec<String>,
     }
 
     #[derive(Args)]
-    pub struct ArchiveExtractOpt {
+    pub struct ExtractArgs {
         /// If extracting one file, the path of the output file, otherwise the
         /// directory to extract files to
         #[clap(short, value_name("PATH"))]
@@ -755,14 +755,14 @@ pub mod archive {
     }
 
     #[derive(Args)]
-    pub struct ArchiveExtractAllOpt {
+    pub struct ExtractAllArgs {
         /// The directory to extract files to
         #[clap(short, value_name("PATH"))]
         pub output: Option<PathBuf>,
     }
 
     #[derive(Args)]
-    pub struct ArchiveReplaceOpt {
+    pub struct ReplaceArgs {
         /// Path of the file in the archive to replace
         #[clap(value_name("dest"))]
         pub dest_path: String,
@@ -777,13 +777,13 @@ pub mod archive {
         /// Show information about qp.bin
         Info,
         /// List files in qp.bin
-        List(ArchiveListOpt),
+        List(ListArgs),
         /// Extract files from qp.bin
-        Extract(ArchiveExtractOpt),
+        Extract(ExtractArgs),
         /// Extract all files from qp.bin
-        ExtractAll(ArchiveExtractAllOpt),
+        ExtractAll(ExtractAllArgs),
         /// Replace a file in qp.bin
-        Replace(ArchiveReplaceOpt),
+        Replace(ReplaceArgs),
     }
 }
 
@@ -804,17 +804,17 @@ pub mod stage {
     #[derive(Subcommand)]
     pub enum Subcommand {
         /// Export stage data to a JSON file
-        Export(StageExportOpt),
+        Export(ExportArgs),
         /// Export data for all stages to JSON files
-        ExportAll(StageExportAllOpt),
+        ExportAll(ExportAllArgs),
         /// Import stage data from a JSON file
-        Import(StageImportOpt),
+        Import(ImportArgs),
         /// Import all stages from JSON files
-        ImportAll(StageImportAllOpt),
+        ImportAll(ImportAllArgs),
     }
 
     #[derive(Args)]
-    pub struct StageExportOpt {
+    pub struct ExportArgs {
         /// Name of the stage to export
         pub stage: String,
 
@@ -824,14 +824,14 @@ pub mod stage {
     }
 
     #[derive(Args)]
-    pub struct StageExportAllOpt {
+    pub struct ExportAllArgs {
         /// Path to the output directory
         #[clap(short, value_name("PATH"))]
         pub output: PathBuf,
     }
 
     #[derive(Args)]
-    pub struct StageImportOpt {
+    pub struct ImportArgs {
         /// Name of the stage to import
         pub stage: String,
 
@@ -840,7 +840,7 @@ pub mod stage {
     }
 
     #[derive(Args)]
-    pub struct StageImportAllOpt {
+    pub struct ImportAllArgs {
         /// Path to the input directory
         pub input: PathBuf,
 
@@ -862,7 +862,7 @@ mod tests {
     /// Generates a mapping function which pattern-matches a parsed command
     macro_rules! mapper {
         ($p:pat => $out:expr) => {
-            |a: Opt| {
+            |a: CliArgs| {
                 let $p = a.command else { panic!() };
                 $out
             }
@@ -907,7 +907,7 @@ mod tests {
     }
 
     fn error(args: impl IntoIterator<Item = &'static str>) -> ErrorKind {
-        Opt::try_parse_from(iter::once("unplug").chain(args)).err().expect("error").kind()
+        CliArgs::try_parse_from(iter::once("unplug").chain(args)).err().expect("error").kind()
     }
 
     #[test]
@@ -917,7 +917,7 @@ mod tests {
 
     #[test]
     fn test_cli_global_options() {
-        let map = std::convert::identity::<Opt>;
+        let map = std::convert::identity::<CliArgs>;
         parse(["-v", "test"], map, |opt| {
             assert_eq!(opt.verbose, 1);
         });
@@ -946,14 +946,14 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_list_opt() {
+    fn test_cli_list_options() {
         use list::*;
         #[derive(Parser)]
-        struct ListOptParser {
+        struct ListOptionsParser {
             #[clap(flatten)]
-            inner: ListOpt,
+            inner: Options,
         }
-        let map = |o: ListOptParser| o.inner;
+        let map = |o: ListOptionsParser| o.inner;
         parse(["--reverse"], map, |opt| {
             assert!(opt.reverse);
         });
@@ -990,14 +990,14 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_list_ids_opt() {
+    fn test_cli_list_ids_args() {
         use list::*;
         #[derive(Parser)]
-        struct ListIdsOptParser {
+        struct ListIdArgsParser {
             #[clap(flatten)]
-            inner: ListIdsOpt,
+            inner: IdArgs,
         }
-        let map = |o: ListIdsOptParser| o.inner;
+        let map = |o: ListIdArgsParser| o.inner;
         parse(["--reverse"], map, |opt| {
             assert!(opt.reverse);
         });
@@ -1198,42 +1198,42 @@ mod tests {
     fn test_cli_config() {
         use config::*;
         let map = std::convert::identity;
-        parse(["config", "clear"], map, |a: Opt| {
+        parse(["config", "clear"], map, |a: CliArgs| {
             assert!(matches!(a.command, Command::Config(Subcommand::Clear)));
         });
-        parse(["config", "path"], map, |a: Opt| {
+        parse(["config", "path"], map, |a: CliArgs| {
             assert!(matches!(a.command, Command::Config(Subcommand::Path)));
         });
-        parse(["config", "get", "default-iso"], map, |a: Opt| {
+        parse(["config", "get", "default-iso"], map, |a: CliArgs| {
             let Command::Config(Subcommand::Get(opt)) = a.command else { panic!() };
             assert!(matches!(opt, GetSetting::DefaultIso));
         });
-        parse(["config", "get", "dolphin-path"], map, |a: Opt| {
+        parse(["config", "get", "dolphin-path"], map, |a: CliArgs| {
             let Command::Config(Subcommand::Get(opt)) = a.command else { panic!() };
             assert!(matches!(opt, GetSetting::DolphinPath));
         });
-        parse(["config", "set", "default-iso"], map, |a: Opt| {
+        parse(["config", "set", "default-iso"], map, |a: CliArgs| {
             let Command::Config(Subcommand::Set(SetSetting::DefaultIso { path })) = a.command
             else {
                 panic!()
             };
             assert_eq!(path, None);
         });
-        parse(["config", "set", "default-iso", "foo"], map, |a: Opt| {
+        parse(["config", "set", "default-iso", "foo"], map, |a: CliArgs| {
             let Command::Config(Subcommand::Set(SetSetting::DefaultIso { path })) = a.command
             else {
                 panic!()
             };
             assert_eq!(path.as_deref(), Some("foo"));
         });
-        parse(["config", "set", "dolphin-path"], map, |a: Opt| {
+        parse(["config", "set", "dolphin-path"], map, |a: CliArgs| {
             let Command::Config(Subcommand::Set(SetSetting::DolphinPath { path })) = a.command
             else {
                 panic!()
             };
             assert_eq!(path, None);
         });
-        parse(["config", "set", "dolphin-path", "foo"], map, |a: Opt| {
+        parse(["config", "set", "dolphin-path", "foo"], map, |a: CliArgs| {
             let Command::Config(Subcommand::Set(SetSetting::DolphinPath { path })) = a.command
             else {
                 panic!()
@@ -1436,7 +1436,7 @@ mod tests {
     fn test_cli_project_list() {
         use project::*;
         let map = std::convert::identity;
-        parse(["project", "list"], map, |opt: Opt| {
+        parse(["project", "list"], map, |opt: CliArgs| {
             assert!(matches!(opt.command, Command::Project(Subcommand::List)));
         });
         assert_eq!(error(["project", "list", "foo"]), ErrorKind::UnknownArgument);

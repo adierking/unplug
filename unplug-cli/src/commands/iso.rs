@@ -47,14 +47,14 @@ fn command_info(ctx: Context) -> Result<()> {
 }
 
 /// The `iso list` CLI command.
-fn command_list(ctx: Context, opt: IsoListOpt) -> Result<()> {
+fn command_list(ctx: Context, opt: ListArgs) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let disc = DiscStream::open(File::open(path)?)?;
     list_files(disc.files(), &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))
 }
 
 /// The `iso extract` CLI command.
-fn command_extract(ctx: Context, opt: IsoExtractOpt) -> Result<()> {
+fn command_extract(ctx: Context, opt: ExtractArgs) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let mut disc = DiscStream::open(File::open(path)?)?;
     let files = Glob::new(GlobMode::Exact, opt.paths).find(disc.files()).collect::<Vec<_>>();
@@ -71,7 +71,7 @@ fn command_extract(ctx: Context, opt: IsoExtractOpt) -> Result<()> {
 }
 
 /// The `iso extract-all` CLI command.
-fn command_extract_all(ctx: Context, opt: IsoExtractAllOpt) -> Result<()> {
+fn command_extract_all(ctx: Context, opt: ExtractAllArgs) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let mut disc = DiscStream::open(File::open(path)?)?;
     let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
@@ -83,7 +83,7 @@ fn command_extract_all(ctx: Context, opt: IsoExtractAllOpt) -> Result<()> {
 }
 
 /// The `iso replace` CLI command.
-fn command_replace(ctx: Context, opt: IsoReplaceOpt) -> Result<()> {
+fn command_replace(ctx: Context, opt: ReplaceArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     let file = ctx.disc_file_at(&opt.dest_path)?;
     let info = ctx.query_file(&file)?;

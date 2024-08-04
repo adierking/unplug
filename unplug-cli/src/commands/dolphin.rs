@@ -71,7 +71,7 @@ fn dolphin_command() -> Result<Command> {
 }
 
 /// The `dolphin` CLI command.
-pub fn command(ctx: Context, opt: Options) -> Result<()> {
+pub fn command(ctx: Context, opt: Args) -> Result<()> {
     let mut command = dolphin_command()?;
     command.arg(DOLPHIN_OPT_EXEC).arg(ctx.into_iso_path()?);
     if !opt.ui {

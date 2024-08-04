@@ -10,7 +10,7 @@ use unplug::shop::Shop;
 use unplug::stage::Stage;
 use unplug_cli::commands::shop;
 use unplug_cli::context::Context;
-use unplug_cli::opt::shop::{ShopExportOpt, ShopImportOpt};
+use unplug_cli::opt::shop::{ExportArgs, ImportArgs};
 use unplug_test as common;
 
 #[test]
@@ -22,9 +22,9 @@ fn test_reimport_shop() -> Result<()> {
     let json_path = NamedTempFile::new()?.into_temp_path();
     shop::command_export(
         ctx.clone(),
-        ShopExportOpt { compact: false, output: Some(json_path.to_owned()) },
+        ExportArgs { compact: false, output: Some(json_path.to_owned()) },
     )?;
-    shop::command_import(ctx, ShopImportOpt { input: json_path.to_owned() })?;
+    shop::command_import(ctx, ImportArgs { input: json_path.to_owned() })?;
 
     info!("Opening original ISO");
     let mut original_iso = common::open_iso()?;

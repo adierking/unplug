@@ -11,7 +11,7 @@ use unplug::stage::Stage;
 use unplug_cli::commands::messages;
 use unplug_cli::context::Context;
 use unplug_cli::msg::{iter_messages, MessageId, MessageSource};
-use unplug_cli::opt::messages::{MessagesExportOpt, MessagesImportOpt};
+use unplug_cli::opt::messages::{ExportArgs, ImportArgs};
 use unplug_test as common;
 
 fn collect_messages(source: MessageSource, script: &Script) -> Vec<(MessageId, &MsgArgs)> {
@@ -36,8 +36,8 @@ fn test_reimport_messages() -> Result<()> {
     let copy_path = common::copy_iso()?;
     let ctx = Context::Iso(copy_path.to_path_buf());
     let xml_path = NamedTempFile::new()?.into_temp_path();
-    messages::command_export(ctx.clone(), MessagesExportOpt { output: xml_path.to_owned() })?;
-    messages::command_import(ctx, MessagesImportOpt { input: xml_path.to_owned() })?;
+    messages::command_export(ctx.clone(), ExportArgs { output: xml_path.to_owned() })?;
+    messages::command_import(ctx, ImportArgs { input: xml_path.to_owned() })?;
 
     info!("Opening original ISO");
     let mut original_iso = common::open_iso()?;

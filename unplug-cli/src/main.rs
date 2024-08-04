@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process;
 use unplug_cli::config::{self, Config};
 use unplug_cli::context::Context;
-use unplug_cli::opt::{ConfigOpt, ContextOpt, Opt};
+use unplug_cli::opt::{CliArgs, GlobalConfigArgs, GlobalContextArgs};
 use unplug_cli::{commands, terminal};
 
 #[cfg(feature = "trace")]
@@ -26,7 +26,7 @@ fn init_tracing(path: &Path) -> Result<impl Drop> {
     Ok(guard)
 }
 
-fn load_config(opt: ConfigOpt) {
+fn load_config(opt: GlobalConfigArgs) {
     if opt.no_config {
         return;
     }
@@ -39,7 +39,7 @@ fn load_config(opt: ConfigOpt) {
     }
 }
 
-fn get_context(opt: ContextOpt) -> Result<Context> {
+fn get_context(opt: GlobalContextArgs) -> Result<Context> {
     // Command-line args take precedence
     if let Some(path) = opt.iso {
         return Ok(Context::Iso(path));
@@ -63,7 +63,7 @@ fn get_context(opt: ContextOpt) -> Result<Context> {
 }
 
 fn run_app() -> Result<()> {
-    let opt = Opt::parse();
+    let opt = CliArgs::parse();
     terminal::init_logging(opt.verbose);
     load_config(opt.config);
 

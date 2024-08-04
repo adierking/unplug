@@ -6,7 +6,7 @@ use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug_cli::commands::globals;
 use unplug_cli::context::Context;
-use unplug_cli::opt::globals::{GlobalsExportOpt, GlobalsImportOpt};
+use unplug_cli::opt::globals::{ExportArgs, ImportArgs};
 use unplug_test as common;
 
 #[test]
@@ -18,9 +18,9 @@ fn test_reimport_metadata() -> Result<()> {
     let json_path = NamedTempFile::new()?.into_temp_path();
     globals::command_export(
         ctx.clone(),
-        GlobalsExportOpt { compact: false, output: Some(json_path.to_owned()) },
+        ExportArgs { compact: false, output: Some(json_path.to_owned()) },
     )?;
-    globals::command_import(ctx, GlobalsImportOpt { input: json_path.to_owned() })?;
+    globals::command_import(ctx, ImportArgs { input: json_path.to_owned() })?;
 
     info!("Opening original ISO");
     let mut original_iso = common::open_iso()?;

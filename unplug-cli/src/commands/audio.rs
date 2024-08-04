@@ -44,7 +44,7 @@ const LABELS_EXT: &str = "labels.txt";
 /// for resampling if the sample rate is higher than `max_sample_rate`.
 fn open_sound_file(
     path: &Path,
-    settings: &AudioImportSettings,
+    settings: &ImportSettings,
     max_sample_rate: u32,
 ) -> Result<Box<dyn ReadSamples<'static, Format = PcmS16Le>>> {
     let name = path.file_name().map(|p| p.to_str().unwrap()).unwrap_or_default().to_owned();
@@ -319,7 +319,7 @@ fn export_labels(cues: Vec<Cue>, sample_rate: u32, sound_path: &Path) -> Result<
 }
 
 /// The `audio info` CLI command.
-fn command_info(ctx: Context, opt: AudioInfoOpt) -> Result<()> {
+fn command_info(ctx: Context, opt: InfoArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let mut cache = AudioCache::new();
     let resource = AudioResource::find(&mut ctx, &opt.name)?;
@@ -349,7 +349,7 @@ fn command_info(ctx: Context, opt: AudioInfoOpt) -> Result<()> {
 }
 
 /// The `audio export` CLI command.
-fn command_export(ctx: Context, opt: AudioExportOpt) -> Result<()> {
+fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let mut cache = AudioCache::new();
     if opt.names.is_empty() {
@@ -371,7 +371,7 @@ fn command_export(ctx: Context, opt: AudioExportOpt) -> Result<()> {
 }
 
 /// The `audio export-bank` CLI command.
-fn command_export_bank(ctx: Context, opt: AudioExportBankOpt) -> Result<()> {
+fn command_export_bank(ctx: Context, opt: ExportBankArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let file = find_bank(&mut ctx, &opt.name)?;
     let name = ctx.query_file(&file)?.name;
@@ -382,7 +382,7 @@ fn command_export_bank(ctx: Context, opt: AudioExportBankOpt) -> Result<()> {
 }
 
 /// The `audio export-all` CLI command.
-fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
+fn command_export_all(ctx: Context, opt: ExportAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
 
     // Export registered banks
@@ -410,7 +410,7 @@ fn command_export_all(ctx: Context, opt: AudioExportAllOpt) -> Result<()> {
     Ok(())
 }
 
-fn export(audio: &AudioReader<'_>, settings: &AudioExportSettings, path: &Path) -> Result<()> {
+fn export(audio: &AudioReader<'_>, settings: &ExportSettings, path: &Path) -> Result<()> {
     let progress = progress_bar(1);
     if !progress.is_hidden() {
         let out_name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
@@ -433,7 +433,7 @@ fn export(audio: &AudioReader<'_>, settings: &AudioExportSettings, path: &Path) 
 /// named after the bank.
 fn export_bank_subdir<T: ReadSeek>(
     ctx: &mut OpenContext<T>,
-    settings: &AudioExportSettings,
+    settings: &ExportSettings,
     file: &FileId,
     dir: &Path,
 ) -> Result<()> {
@@ -446,7 +446,7 @@ fn export_bank_subdir<T: ReadSeek>(
 
 fn export_bank_impl<T: ReadSeek>(
     ctx: &mut OpenContext<T>,
-    settings: &AudioExportSettings,
+    settings: &ExportSettings,
     file: &FileId,
     dir: &Path,
     display_prefix: &str,
@@ -481,7 +481,7 @@ fn export_bank_impl<T: ReadSeek>(
 }
 
 /// The `audio import` CLI command.
-fn command_import(ctx: Context, opt: AudioImportOpt) -> Result<()> {
+fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     let resource = AudioResource::find(&mut ctx, &opt.name)?;
     info!("Opening {}", resource.name());
@@ -495,7 +495,7 @@ fn command_import(ctx: Context, opt: AudioImportOpt) -> Result<()> {
 
 fn import_music<T: ReadWriteSeek>(
     ctx: &mut OpenContext<T>,
-    opt: AudioImportOpt,
+    opt: ImportArgs,
     file: FileId,
 ) -> Result<()> {
     let name = ctx.query_file(&file)?.name;
@@ -529,7 +529,7 @@ fn import_music<T: ReadWriteSeek>(
 
 fn import_sfx<T: ReadWriteSeek>(
     ctx: &mut OpenContext<T>,
-    opt: AudioImportOpt,
+    opt: ImportArgs,
     file: FileId,
     index: usize,
 ) -> Result<()> {
@@ -559,7 +559,7 @@ fn import_sfx<T: ReadWriteSeek>(
 }
 
 /// The `audio play` subcommand.
-fn command_play(ctx: Context, opt: AudioPlayOpt) -> Result<()> {
+fn command_play(ctx: Context, opt: PlayArgs) -> Result<()> {
     let ctx = Box::leak(Box::new(ctx.open_read()?));
     let mut cache = AudioCache::new();
     let resource = AudioResource::find(ctx, &opt.name)?;

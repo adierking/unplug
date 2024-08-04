@@ -7,7 +7,7 @@ use unplug::data::{Atc, Item, ItemFlags, Music, Object, Resource, Sfx, Stage};
 
 const UNKNOWN_ID_PREFIX: &str = "unk";
 
-fn sort_ids<I: Copy + Ord>(ids: &mut [(I, &str)], settings: &ListIdsOpt) {
+fn sort_ids<I: Copy + Ord>(ids: &mut [(I, &str)], settings: &IdArgs) {
     if settings.by_id {
         ids.sort_unstable_by_key(|i| i.0);
     } else {
@@ -19,7 +19,7 @@ fn sort_ids<I: Copy + Ord>(ids: &mut [(I, &str)], settings: &ListIdsOpt) {
 }
 
 /// The `list items` CLI command.
-fn command_items(opt: ListItemsOpt) -> Result<()> {
+fn command_items(opt: ItemsArgs) -> Result<()> {
     let mut items: Vec<_> = if opt.show_unknown {
         Item::iter().map(|i| (i, i.name())).collect()
     } else {
@@ -36,7 +36,7 @@ fn command_items(opt: ListItemsOpt) -> Result<()> {
 }
 
 /// The `list equipment` CLI command.
-fn command_equipment(opt: ListEquipmentOpt) -> Result<()> {
+fn command_equipment(opt: EquipmentArgs) -> Result<()> {
     let mut atcs: Vec<_> = Atc::iter().map(|a| (a, a.name())).collect();
     sort_ids(&mut atcs, &opt.settings);
     for (id, name) in atcs {
@@ -48,7 +48,7 @@ fn command_equipment(opt: ListEquipmentOpt) -> Result<()> {
 }
 
 /// The `list stages` CLI command.
-fn command_stages(opt: ListIdsOpt) -> Result<()> {
+fn command_stages(opt: IdArgs) -> Result<()> {
     let mut stages: Vec<_> = Stage::iter().map(|s| (s, s.title())).collect();
     sort_ids(&mut stages, &opt);
     for (id, title) in stages {
@@ -58,7 +58,7 @@ fn command_stages(opt: ListIdsOpt) -> Result<()> {
 }
 
 /// The `list objects` CLI command.
-fn command_objects(opt: ListIdsOpt) -> Result<()> {
+fn command_objects(opt: IdArgs) -> Result<()> {
     let mut objects: Vec<_> = Object::iter().map(|o| (o, o.name())).collect();
     sort_ids(&mut objects, &opt);
     for (id, name) in objects {
@@ -68,7 +68,7 @@ fn command_objects(opt: ListIdsOpt) -> Result<()> {
 }
 
 /// The `list music` CLI command.
-fn command_music(opt: ListIdsOpt) -> Result<()> {
+fn command_music(opt: IdArgs) -> Result<()> {
     let mut music: Vec<_> = Music::iter().map(|m| (m, m.name())).collect();
     sort_ids(&mut music, &opt);
     for (id, name) in music {
@@ -78,7 +78,7 @@ fn command_music(opt: ListIdsOpt) -> Result<()> {
 }
 
 /// The `list sounds` CLI command.
-fn command_sounds(opt: ListIdsOpt) -> Result<()> {
+fn command_sounds(opt: IdArgs) -> Result<()> {
     let mut sfx: Vec<_> = Sfx::iter().map(|s| (s, s.name())).collect();
     sort_ids(&mut sfx, &opt);
     for (id, name) in sfx {

@@ -246,7 +246,7 @@ pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
 }
 
 /// The `stage export` CLI command.
-fn command_export(ctx: Context, opt: StageExportOpt) -> Result<()> {
+fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
 
     let out = BufWriter::new(OutputRedirect::new(opt.output.as_deref())?);
@@ -264,7 +264,7 @@ fn command_export(ctx: Context, opt: StageExportOpt) -> Result<()> {
 }
 
 /// The `stage export-all` CLI command.
-pub fn command_export_all(ctx: Context, opt: StageExportAllOpt) -> Result<()> {
+pub fn command_export_all(ctx: Context, opt: ExportAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     fs::create_dir_all(&opt.output)?;
     let libs = ctx.read_globals()?.read_libs()?;
@@ -339,7 +339,7 @@ fn patch_scripts(
 }
 
 /// The `stage import` CLI command.
-fn command_import(ctx: Context, opt: StageImportOpt) -> Result<()> {
+fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
 
     info!("Reading input JSON");
@@ -358,7 +358,7 @@ fn command_import(ctx: Context, opt: StageImportOpt) -> Result<()> {
 }
 
 /// The `stage import-all` CLI command.
-pub fn command_import_all(ctx: Context, opt: StageImportAllOpt) -> Result<()> {
+pub fn command_import_all(ctx: Context, opt: ImportAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
 
     info!("Reading input JSON");

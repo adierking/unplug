@@ -28,7 +28,7 @@ fn apply_messages(
 }
 
 /// The `messages export` CLI command.
-pub fn command_export(ctx: Context, opt: MessagesExportOpt) -> Result<()> {
+pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     info!("Reading script globals");
     let libs = ctx.read_globals()?.read_libs()?;
@@ -49,7 +49,7 @@ pub fn command_export(ctx: Context, opt: MessagesExportOpt) -> Result<()> {
 }
 
 /// The `messages import` CLI command.
-pub fn command_import(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
+pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading messages from {}", opt.input.to_str().unwrap());
     let file = BufReader::new(File::open(opt.input)?);

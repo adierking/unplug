@@ -11,7 +11,7 @@ use std::mem;
 use std::path::Path;
 
 /// The `project info` CLI command.
-fn command_info(opt: ProjectInfoOpt) -> Result<()> {
+fn command_info(opt: InfoArgs) -> Result<()> {
     let config = Config::get();
     let (name, project) = match &opt.name {
         Some(name) => config.find_project(name)?,
@@ -37,7 +37,7 @@ fn command_list() -> Result<()> {
 }
 
 /// The `project new` CLI command.
-fn command_new(opt: ProjectNewOpt) -> Result<()> {
+fn command_new(opt: NewArgs) -> Result<()> {
     let mut config = Config::get();
     let project_key = IString::new(&opt.name);
     if !opt.force && config.projects.contains_key(&project_key) {
@@ -81,7 +81,7 @@ fn command_new(opt: ProjectNewOpt) -> Result<()> {
 }
 
 /// The `project wipe` CLI command.
-fn command_wipe(opt: ProjectWipeOpt) -> Result<()> {
+fn command_wipe(opt: WipeArgs) -> Result<()> {
     let mut config = Config::get();
     let (name, project) = config.find_project(&opt.name)?;
 
@@ -106,7 +106,7 @@ fn command_wipe(opt: ProjectWipeOpt) -> Result<()> {
 }
 
 /// The `project add` CLI command.
-fn command_add(opt: ProjectAddOpt) -> Result<()> {
+fn command_add(opt: AddArgs) -> Result<()> {
     let filename = opt
         .path
         .file_name()
@@ -139,7 +139,7 @@ fn command_add(opt: ProjectAddOpt) -> Result<()> {
 }
 
 /// The `project remove` CLI command.
-fn command_remove(opt: ProjectRemoveOpt) -> Result<()> {
+fn command_remove(opt: RemoveArgs) -> Result<()> {
     let mut config = Config::get();
     let project_key = IString::new(opt.name.clone());
     let result = config.projects.remove_entry(&project_key);
@@ -156,7 +156,7 @@ fn command_remove(opt: ProjectRemoveOpt) -> Result<()> {
 }
 
 /// The `project open` CLI command.
-fn command_open(opt: ProjectOpenOpt) -> Result<()> {
+fn command_open(opt: OpenArgs) -> Result<()> {
     let mut config = Config::get();
     let (name, project) = config.find_project(&opt.name)?;
     let (name, path) = (name.to_owned(), project.path.clone());

@@ -8,7 +8,7 @@ use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
 use unplug_cli::commands::stage;
 use unplug_cli::context::Context;
-use unplug_cli::opt::stage::{StageExportAllOpt, StageImportAllOpt};
+use unplug_cli::opt::stage::{ExportAllArgs, ImportAllArgs};
 use unplug_test as common;
 
 #[test]
@@ -19,13 +19,10 @@ fn test_reimport_stages() -> Result<()> {
     let ctx = Context::Iso(copy_path.to_path_buf());
 
     let json_dir = TempDir::new()?;
-    stage::command_export_all(
-        ctx.clone(),
-        StageExportAllOpt { output: json_dir.path().to_owned() },
-    )?;
+    stage::command_export_all(ctx.clone(), ExportAllArgs { output: json_dir.path().to_owned() })?;
     stage::command_import_all(
         ctx,
-        StageImportAllOpt { input: json_dir.path().to_owned(), force: true },
+        ImportAllArgs { input: json_dir.path().to_owned(), force: true },
     )?;
     json_dir.close()?;
 

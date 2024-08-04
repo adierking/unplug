@@ -26,7 +26,7 @@ use unplug_asm::parser::Parser;
 use unplug_asm::program::Target;
 use unplug_asm::span::Spanned;
 
-fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
+fn do_dump_libs(libs: &Libs, flags: &DumpFlags, mut out: impl Write) -> Result<()> {
     for (i, id) in libs.entry_points.iter().enumerate() {
         writeln!(out, "lib[{}]: {:?}", i, id)?;
     }
@@ -34,7 +34,7 @@ fn do_dump_libs(libs: &Libs, flags: &ScriptDumpFlags, mut out: impl Write) -> Re
     Ok(())
 }
 
-fn do_dump_stage(stage: &Stage, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
+fn do_dump_stage(stage: &Stage, flags: &DumpFlags, mut out: impl Write) -> Result<()> {
     for (i, object) in stage.objects.iter().enumerate() {
         writeln!(out, "obj[{}]: {:?}", i, object)?;
     }
@@ -68,7 +68,7 @@ fn do_dump_stage(stage: &Stage, flags: &ScriptDumpFlags, mut out: impl Write) ->
     Ok(())
 }
 
-fn dump_script(script: &Script, flags: &ScriptDumpFlags, mut out: impl Write) -> Result<()> {
+fn dump_script(script: &Script, flags: &DumpFlags, mut out: impl Write) -> Result<()> {
     write!(out, "\nDATA\n\n")?;
     if flags.no_offsets {
         writeln!(out, "id   value")?;
@@ -103,7 +103,7 @@ fn dump_script(script: &Script, flags: &ScriptDumpFlags, mut out: impl Write) ->
 }
 
 /// The `script dump` CLI command.
-pub fn command_dump(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
+pub fn command_dump(ctx: Context, opt: DumpArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
     let file = find_stage_file(&mut ctx, &opt.stage)?;
@@ -116,7 +116,7 @@ pub fn command_dump(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
 }
 
 /// The `script dump globals` CLI command.
-pub fn command_dump_globals(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
+pub fn command_dump_globals(ctx: Context, opt: DumpArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
     info!("Dumping script globals");
@@ -125,7 +125,7 @@ pub fn command_dump_globals(ctx: Context, opt: ScriptDumpOpt) -> Result<()> {
 }
 
 /// The `script dump-all` CLI command.
-pub fn command_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
+pub fn command_dump_all(ctx: Context, opt: DumpAllArgs) -> Result<()> {
     let start_time = Instant::now();
     let mut ctx = ctx.open_read()?;
 
@@ -146,7 +146,7 @@ pub fn command_dump_all(ctx: Context, opt: ScriptDumpAllOpt) -> Result<()> {
     Ok(())
 }
 
-fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
+fn command_disassemble(ctx: Context, opt: DisassembleArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(File::create(opt.output)?);
     let file = find_stage_file(&mut ctx, &opt.stage)?;
@@ -163,7 +163,7 @@ fn command_disassemble(ctx: Context, opt: ScriptDisassembleOpt) -> Result<()> {
     Ok(())
 }
 
-pub fn command_disassemble_all(ctx: Context, opt: ScriptDisassembleAllOpt) -> Result<()> {
+pub fn command_disassemble_all(ctx: Context, opt: DisassembleAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     fs::create_dir_all(&opt.output)?;
 
@@ -247,7 +247,7 @@ where
 }
 
 /// The `script assemble` CLI command.
-fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
+fn command_assemble(ctx: Context, opt: AssembleArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
 
     let name = opt.path.file_name().unwrap_or_default().to_string_lossy();

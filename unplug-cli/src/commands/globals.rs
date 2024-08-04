@@ -349,7 +349,7 @@ impl From<Metadata> for MetadataDef {
 }
 
 /// The `globals export` CLI command.
-pub fn command_export(ctx: Context, opt: GlobalsExportOpt) -> Result<()> {
+pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
 
@@ -365,7 +365,7 @@ pub fn command_export(ctx: Context, opt: GlobalsExportOpt) -> Result<()> {
 }
 
 /// The `globals import` CLI command.
-pub fn command_import(ctx: Context, opt: GlobalsImportOpt) -> Result<()> {
+pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);
@@ -410,7 +410,7 @@ pub fn command_import(ctx: Context, opt: GlobalsImportOpt) -> Result<()> {
 }
 
 /// The `globals dump-colliders` CLI command.
-fn command_dump_colliders(ctx: Context, opt: GlobalsDumpCollidersOpt) -> Result<()> {
+fn command_dump_colliders(ctx: Context, opt: DumpCollidersArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let mut out = BufWriter::new(OutputRedirect::new(opt.output)?);
     info!("Dumping collider globals");

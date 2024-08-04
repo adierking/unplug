@@ -108,7 +108,7 @@ impl TryFrom<&SlotModel> for Slot {
 }
 
 /// The `shop export` CLI command.
-pub fn command_export(ctx: Context, opt: ShopExportOpt) -> Result<()> {
+pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(OutputRedirect::new(opt.output)?);
 
@@ -140,7 +140,7 @@ pub fn command_export(ctx: Context, opt: ShopExportOpt) -> Result<()> {
 }
 
 /// The `shop import` CLI command.
-pub fn command_import(ctx: Context, opt: ShopImportOpt) -> Result<()> {
+pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
     let json = BufReader::new(File::open(opt.input)?);
