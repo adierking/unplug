@@ -8,24 +8,24 @@ use unplug::common::io::copy_buffered;
 use unplug::dvd::{Entry, EntryId, FileTree, Glob, OpenFile};
 
 /// Lists files in an FST matched by `glob`.
-pub fn list_files(tree: &FileTree, opt: &Options, glob: &Glob) -> Result<()> {
+pub fn list_files(tree: &FileTree, args: &Options, glob: &Glob) -> Result<()> {
     let get_file = |(p, e)| tree[e].file().map(|f| (p, f));
     let mut files = glob.find(tree).filter_map(get_file).collect::<Vec<_>>();
     if files.is_empty() {
         bail!("No files found");
     }
-    if opt.by_offset {
+    if args.by_offset {
         files.sort_unstable_by_key(|(_, f)| f.offset);
-    } else if opt.by_size {
+    } else if args.by_size {
         files.sort_unstable_by_key(|(_, f)| f.size);
     } else {
         files.sort_unstable_by(|(p1, _), (p2, _)| UniCase::new(p1).cmp(&UniCase::new(p2)));
     }
-    if opt.reverse {
+    if args.reverse {
         files.reverse();
     }
     for (path, file) in files {
-        if opt.long {
+        if args.long {
             println!("{:<8x} {:<8x} {}", file.offset, file.size, path);
         } else {
             println!("{}", path);

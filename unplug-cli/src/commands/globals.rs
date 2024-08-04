@@ -349,14 +349,14 @@ impl From<Metadata> for MetadataDef {
 }
 
 /// The `globals export` CLI command.
-pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
+pub fn command_export(ctx: Context, args: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let out = BufWriter::new(OutputRedirect::new(opt.output)?);
+    let out = BufWriter::new(OutputRedirect::new(args.output)?);
 
     info!("Dumping global metadata");
     let metadata = ctx.read_globals()?.read_metadata()?;
     let root = MetadataDef::from(metadata);
-    if opt.compact {
+    if args.compact {
         serde_json::to_writer(out, &root)?;
     } else {
         serde_json::to_writer_pretty(out, &root)?;
@@ -365,10 +365,10 @@ pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
 }
 
 /// The `globals import` CLI command.
-pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
+pub fn command_import(ctx: Context, args: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
-    let json = BufReader::new(File::open(opt.input)?);
+    let json = BufReader::new(File::open(args.input)?);
     let root: MetadataDef = serde_json::from_reader(json)?;
 
     info!("Reading global metadata");
@@ -410,9 +410,9 @@ pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
 }
 
 /// The `globals dump-colliders` CLI command.
-fn command_dump_colliders(ctx: Context, opt: DumpCollidersArgs) -> Result<()> {
+fn command_dump_colliders(ctx: Context, args: DumpCollidersArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let mut out = BufWriter::new(OutputRedirect::new(opt.output)?);
+    let mut out = BufWriter::new(OutputRedirect::new(args.output)?);
     info!("Dumping collider globals");
     let colliders = ctx.read_globals()?.read_colliders()?;
     for (obj, list) in colliders.objects.iter().enumerate() {
@@ -426,10 +426,10 @@ fn command_dump_colliders(ctx: Context, opt: DumpCollidersArgs) -> Result<()> {
 }
 
 /// The `globals` CLI command.
-pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
-        Subcommand::Export(opt) => command_export(ctx, opt),
-        Subcommand::Import(opt) => command_import(ctx, opt),
-        Subcommand::DumpColliders(opt) => command_dump_colliders(ctx, opt),
+pub fn command(ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
+        Subcommand::Export(args) => command_export(ctx, args),
+        Subcommand::Import(args) => command_import(ctx, args),
+        Subcommand::DumpColliders(args) => command_dump_colliders(ctx, args),
     }
 }

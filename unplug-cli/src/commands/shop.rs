@@ -108,9 +108,9 @@ impl TryFrom<&SlotModel> for Slot {
 }
 
 /// The `shop export` CLI command.
-pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
+pub fn command_export(ctx: Context, args: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let out = BufWriter::new(OutputRedirect::new(opt.output)?);
+    let out = BufWriter::new(OutputRedirect::new(args.output)?);
 
     info!("Reading global metadata");
     let mut globals = ctx.read_globals()?;
@@ -128,7 +128,7 @@ pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
     info!("Writing to JSON");
     let slots: Vec<_> =
         shop.slots().iter().map(|i| SlotModel::with_slot_and_globals(i, &metadata)).collect();
-    if opt.compact {
+    if args.compact {
         serde_json::to_writer(out, &slots)?;
     } else {
         let formatter = MaxIndentJsonFormatter::new(MAX_INDENT);
@@ -140,10 +140,10 @@ pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
 }
 
 /// The `shop import` CLI command.
-pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
+pub fn command_import(ctx: Context, args: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
     info!("Reading input JSON");
-    let json = BufReader::new(File::open(opt.input)?);
+    let json = BufReader::new(File::open(args.input)?);
     let models: Vec<SlotModel> = serde_json::from_reader(json)?;
 
     let mut slots: Vec<Slot> = vec![];
@@ -201,10 +201,10 @@ pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
 }
 
 /// The `shop` CLI command.
-pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
-        Subcommand::Export(opt) => command_export(ctx, opt),
-        Subcommand::Import(opt) => command_import(ctx, opt),
+pub fn command(ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
+        Subcommand::Export(args) => command_export(ctx, args),
+        Subcommand::Import(args) => command_import(ctx, args),
     }
 }
 

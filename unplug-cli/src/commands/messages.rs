@@ -28,12 +28,12 @@ fn apply_messages(
 }
 
 /// The `messages export` CLI command.
-pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
+pub fn command_export(ctx: Context, args: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     info!("Reading script globals");
     let libs = ctx.read_globals()?.read_libs()?;
 
-    let out_file = BufWriter::new(File::create(opt.output)?);
+    let out_file = BufWriter::new(File::create(args.output)?);
     let mut writer = MessageWriter::new(out_file);
     writer.start()?;
     writer.write_script(MessageSource::Globals, &libs.script)?;
@@ -49,10 +49,10 @@ pub fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
 }
 
 /// The `messages import` CLI command.
-pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
+pub fn command_import(ctx: Context, args: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
-    info!("Reading messages from {}", opt.input.to_str().unwrap());
-    let file = BufReader::new(File::open(opt.input)?);
+    info!("Reading messages from {}", args.input.to_str().unwrap());
+    let file = BufReader::new(File::open(args.input)?);
     let mut reader = MessageReader::new(file);
     reader.read_header()?;
     let mut messages = HashMap::new();
@@ -115,9 +115,9 @@ pub fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
 }
 
 /// The `messages` CLI command.
-pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
-        Subcommand::Export(opt) => command_export(ctx, opt),
-        Subcommand::Import(opt) => command_import(ctx, opt),
+pub fn command(ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
+        Subcommand::Export(args) => command_export(ctx, args),
+        Subcommand::Import(args) => command_import(ctx, args),
     }
 }

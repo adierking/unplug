@@ -75,11 +75,11 @@ where
 }
 
 /// The `config` CLI command.
-pub fn command(_ctx: Context, opt: Subcommand) -> Result<()> {
+pub fn command(_ctx: Context, command: Subcommand) -> Result<()> {
     if !Config::get().is_loaded() {
         bail!("The `config` command requires a config file to be loaded");
     }
-    match opt {
+    match command {
         Subcommand::Clear => command_clear(),
         Subcommand::Path => command_path(),
         Subcommand::Get(setting) => command_get(setting),

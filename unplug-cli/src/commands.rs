@@ -23,21 +23,21 @@ use anyhow::Result;
 /// Runs a CLI command using `ctx`.
 pub fn execute(ctx: Context, command: Command) -> Result<()> {
     match command {
-        Command::Archive(opt) => archive::command(ctx, opt),
-        Command::Audio(opt) => audio::command(ctx, opt),
-        Command::Config(opt) => config::command(ctx, opt),
-        Command::Dolphin(opt) => dolphin::command(ctx, opt),
-        Command::Globals(opt) => globals::command(ctx, opt),
-        Command::Iso(opt) => iso::command(ctx, opt),
-        Command::List(opt) => list::command(ctx, opt),
-        Command::Messages(opt) => messages::command(ctx, opt),
-        Command::Project(opt) => project::command(ctx, opt),
-        Command::Qp(opt) => archive::command_qp(ctx, opt),
-        Command::Script(opt) => script::command(ctx, opt),
-        Command::Shop(opt) => shop::command(ctx, opt),
-        Command::Stage(opt) => stage::command(ctx, opt),
+        Command::Archive(command) => archive::command(ctx, command),
+        Command::Audio(command) => audio::command(ctx, command),
+        Command::Config(command) => config::command(ctx, command),
+        Command::Dolphin(args) => dolphin::command(ctx, args),
+        Command::Globals(command) => globals::command(ctx, command),
+        Command::Iso(command) => iso::command(ctx, command),
+        Command::List(command) => list::command(ctx, command),
+        Command::Messages(command) => messages::command(ctx, command),
+        Command::Project(command) => project::command(ctx, command),
+        Command::Qp(command) => archive::command_qp(ctx, command),
+        Command::Script(command) => script::command(ctx, command),
+        Command::Shop(command) => shop::command(ctx, command),
+        Command::Stage(command) => stage::command(ctx, command),
         #[cfg(feature = "debug")]
-        Command::Debug(opt) => debug::command(ctx, opt),
+        Command::Debug(command) => debug::command(ctx, command),
         #[cfg(test)]
         Command::Test => Ok(()),
     }

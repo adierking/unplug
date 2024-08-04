@@ -709,28 +709,28 @@ pub mod archive {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ListArgs,
+            args: ListArgs,
         },
         /// Extract files from the archive
         Extract {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ExtractArgs,
+            args: ExtractArgs,
         },
         /// Extract all files from the archive
         ExtractAll {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ExtractAllArgs,
+            args: ExtractAllArgs,
         },
         /// Replace a file in the archive
         Replace {
             /// Path to the U8 archive
             path: String,
             #[clap(flatten)]
-            opt: ReplaceArgs,
+            args: ReplaceArgs,
         },
     }
 
@@ -879,11 +879,11 @@ mod tests {
         M: FnOnce(O) -> A,
         F: FnOnce(A),
     {
-        let opt = O::try_parse_from(
+        let parsed = O::try_parse_from(
             iter::once(OsString::new()).chain(args.into_iter().map(|a| a.into())),
         )
         .unwrap();
-        predicate(mapper(opt));
+        predicate(mapper(parsed));
     }
 
     /// Parses each list of arguments in `argsets` using an argument parser, maps each result using
@@ -898,11 +898,11 @@ mod tests {
         F: Fn(A),
     {
         for args in argsets {
-            let opt = O::try_parse_from(
+            let parsed = O::try_parse_from(
                 iter::once(OsString::new()).chain(args.into_iter().map(|a| a.into())),
             )
             .unwrap();
-            predicate(mapper(opt));
+            predicate(mapper(parsed));
         }
     }
 
@@ -918,27 +918,27 @@ mod tests {
     #[test]
     fn test_cli_global_options() {
         let map = std::convert::identity::<CliArgs>;
-        parse(["-v", "test"], map, |opt| {
-            assert_eq!(opt.verbose, 1);
+        parse(["-v", "test"], map, |args| {
+            assert_eq!(args.verbose, 1);
         });
-        parse(["-vv", "test"], map, |opt| {
-            assert_eq!(opt.verbose, 2);
+        parse(["-vv", "test"], map, |args| {
+            assert_eq!(args.verbose, 2);
         });
-        parse(["--config", "foo", "test"], map, |opt| {
-            assert_eq!(opt.config.config.as_deref(), Some(Path::new("foo")));
+        parse(["--config", "foo", "test"], map, |args| {
+            assert_eq!(args.config.config.as_deref(), Some(Path::new("foo")));
         });
-        parse(["--no-config", "test"], map, |opt| {
-            assert!(opt.config.no_config);
+        parse(["--no-config", "test"], map, |args| {
+            assert!(args.config.no_config);
         });
         assert_eq!(error(["--config", "foo", "--no-config", "test"]), ErrorKind::ArgumentConflict);
-        parse(["--iso", "foo", "test"], map, |opt| {
-            assert_eq!(opt.context.iso.as_deref(), Some(Path::new("foo")));
+        parse(["--iso", "foo", "test"], map, |args| {
+            assert_eq!(args.context.iso.as_deref(), Some(Path::new("foo")));
         });
-        parse(["--default-iso", "test"], map, |opt| {
-            assert!(opt.context.default_iso);
+        parse(["--default-iso", "test"], map, |args| {
+            assert!(args.context.default_iso);
         });
-        multiparse([["-p", "foo", "test"], ["--project", "foo", "test"]], map, |opt| {
-            assert_eq!(opt.context.project.as_deref(), Some("foo"));
+        multiparse([["-p", "foo", "test"], ["--project", "foo", "test"]], map, |args| {
+            assert_eq!(args.context.project.as_deref(), Some("foo"));
         });
         assert_eq!(error(["--iso", "foo", "--default-iso", "test"]), ErrorKind::ArgumentConflict);
         assert_eq!(error(["--iso", "foo", "-p", "bar", "test"]), ErrorKind::ArgumentConflict);
@@ -954,37 +954,37 @@ mod tests {
             inner: Options,
         }
         let map = |o: ListOptionsParser| o.inner;
-        parse(["--reverse"], map, |opt| {
-            assert!(opt.reverse);
+        parse(["--reverse"], map, |args| {
+            assert!(args.reverse);
         });
-        multiparse([["-l"], ["--long"]], map, |opt| {
-            assert!(opt.long);
+        multiparse([["-l"], ["--long"]], map, |args| {
+            assert!(args.long);
         });
         multiparse(
             [&["--by-name"][..], &["--by-offset", "--by-name"], &["--by-size", "--by-name"]],
             map,
-            |opt| {
-                assert!(opt.by_name);
-                assert!(!opt.by_offset);
-                assert!(!opt.by_size);
+            |args| {
+                assert!(args.by_name);
+                assert!(!args.by_offset);
+                assert!(!args.by_size);
             },
         );
         multiparse(
             [&["--by-offset"][..], &["--by-name", "--by-offset"], &["--by-size", "--by-offset"]],
             map,
-            |opt| {
-                assert!(!opt.by_name);
-                assert!(opt.by_offset);
-                assert!(!opt.by_size);
+            |args| {
+                assert!(!args.by_name);
+                assert!(args.by_offset);
+                assert!(!args.by_size);
             },
         );
         multiparse(
             [&["--by-size"][..], &["--by-name", "--by-size"], &["--by-offset", "--by-size"]],
             map,
-            |opt| {
-                assert!(!opt.by_name);
-                assert!(!opt.by_offset);
-                assert!(opt.by_size);
+            |args| {
+                assert!(!args.by_name);
+                assert!(!args.by_offset);
+                assert!(args.by_size);
             },
         );
     }
@@ -998,16 +998,16 @@ mod tests {
             inner: IdArgs,
         }
         let map = |o: ListIdArgsParser| o.inner;
-        parse(["--reverse"], map, |opt| {
-            assert!(opt.reverse);
+        parse(["--reverse"], map, |args| {
+            assert!(args.reverse);
         });
-        multiparse([&["--by-name"][..], &["--by-id", "--by-name"]], map, |opt| {
-            assert!(opt.by_name);
-            assert!(!opt.by_id);
+        multiparse([&["--by-name"][..], &["--by-id", "--by-name"]], map, |args| {
+            assert!(args.by_name);
+            assert!(!args.by_id);
         });
-        multiparse([&["--by-id"][..], &["--by-name", "--by-id"]], map, |opt| {
-            assert!(!opt.by_name);
-            assert!(opt.by_id);
+        multiparse([&["--by-id"][..], &["--by-name", "--by-id"]], map, |args| {
+            assert!(!args.by_name);
+            assert!(args.by_id);
         });
     }
 
@@ -1024,19 +1024,19 @@ mod tests {
     #[test]
     fn test_cli_archive_list() {
         use archive::*;
-        let map = mapper!(Command::Archive(Subcommand::List { path, opt }) => (path, opt));
-        parse(["archive", "list", "qp.bin"], map, |(path, opt)| {
+        let map = mapper!(Command::Archive(Subcommand::List { path, args }) => (path, args));
+        parse(["archive", "list", "qp.bin"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert!(opt.paths.is_empty());
+            assert!(args.paths.is_empty());
         });
-        parse(["archive", "list", "qp.bin", "foo"], map, |(path, opt)| {
+        parse(["archive", "list", "qp.bin", "foo"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert_eq!(opt.paths, ["foo"]);
+            assert_eq!(args.paths, ["foo"]);
         });
-        parse(["archive", "list", "qp.bin", "foo", "bar", "--long"], map, |(path, opt)| {
+        parse(["archive", "list", "qp.bin", "foo", "bar", "--long"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert_eq!(opt.paths, ["foo", "bar"]);
-            assert!(opt.settings.long);
+            assert_eq!(args.paths, ["foo", "bar"]);
+            assert!(args.settings.long);
         });
         assert_eq!(error(["archive", "list"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1044,16 +1044,16 @@ mod tests {
     #[test]
     fn test_cli_archive_extract() {
         use archive::*;
-        let map = mapper!(Command::Archive(Subcommand::Extract { path, opt }) => (path, opt));
-        parse(["archive", "extract", "qp.bin"], map, |(path, opt)| {
+        let map = mapper!(Command::Archive(Subcommand::Extract { path, args }) => (path, args));
+        parse(["archive", "extract", "qp.bin"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert_eq!(opt.output, None);
-            assert!(opt.paths.is_empty());
+            assert_eq!(args.output, None);
+            assert!(args.paths.is_empty());
         });
-        parse(["archive", "extract", "qp.bin", "-o", "out", "foo", "bar"], map, |(path, opt)| {
+        parse(["archive", "extract", "qp.bin", "-o", "out", "foo", "bar"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert_eq!(opt.output, Some("out".into()));
-            assert_eq!(opt.paths, ["foo", "bar"]);
+            assert_eq!(args.output, Some("out".into()));
+            assert_eq!(args.paths, ["foo", "bar"]);
         });
         assert_eq!(error(["archive", "extract"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1061,14 +1061,14 @@ mod tests {
     #[test]
     fn test_cli_archive_extract_all() {
         use archive::*;
-        let map = mapper!(Command::Archive(Subcommand::ExtractAll { path, opt }) => (path, opt));
-        parse(["archive", "extract-all", "qp.bin"], map, |(path, opt)| {
+        let map = mapper!(Command::Archive(Subcommand::ExtractAll { path, args }) => (path, args));
+        parse(["archive", "extract-all", "qp.bin"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert_eq!(opt.output, None);
+            assert_eq!(args.output, None);
         });
-        parse(["archive", "extract-all", "qp.bin", "-o", "out"], map, |(path, opt)| {
+        parse(["archive", "extract-all", "qp.bin", "-o", "out"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert_eq!(opt.output, Some("out".into()));
+            assert_eq!(args.output, Some("out".into()));
         });
         assert_eq!(error(["archive", "extract-all"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1076,11 +1076,11 @@ mod tests {
     #[test]
     fn test_cli_archive_replace() {
         use archive::*;
-        let map = mapper!(Command::Archive(Subcommand::Replace { path, opt }) => (path, opt));
-        parse(["archive", "replace", "qp.bin", "foo", "bar"], map, |(path, opt)| {
+        let map = mapper!(Command::Archive(Subcommand::Replace { path, args }) => (path, args));
+        parse(["archive", "replace", "qp.bin", "foo", "bar"], map, |(path, args)| {
             assert_eq!(path, "qp.bin");
-            assert_eq!(opt.dest_path, "foo");
-            assert_eq!(opt.src_path, Path::new("bar"));
+            assert_eq!(args.dest_path, "foo");
+            assert_eq!(args.src_path, Path::new("bar"));
         });
         assert_eq!(error(["archive", "replace"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["archive", "replace", "qp.bin"]), ErrorKind::MissingRequiredArgument);
@@ -1093,9 +1093,9 @@ mod tests {
     #[test]
     fn test_cli_audio_info() {
         use audio::*;
-        let map = mapper!(Command::Audio(Subcommand::Info(opt)) => opt);
-        parse(["audio", "info", "foo"], map, |opt| {
-            assert_eq!(opt.name, "foo");
+        let map = mapper!(Command::Audio(Subcommand::Info(args)) => args);
+        parse(["audio", "info", "foo"], map, |args| {
+            assert_eq!(args.name, "foo");
         });
         assert_eq!(error(["audio", "info"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1103,19 +1103,19 @@ mod tests {
     #[test]
     fn test_cli_audio_export() {
         use audio::*;
-        let map = mapper!(Command::Audio(Subcommand::Export(opt)) => opt);
-        parse(["audio", "export", "foo"], map, |opt| {
-            assert_eq!(opt.output, None);
-            assert_eq!(opt.names, ["foo"]);
+        let map = mapper!(Command::Audio(Subcommand::Export(args)) => args);
+        parse(["audio", "export", "foo"], map, |args| {
+            assert_eq!(args.output, None);
+            assert_eq!(args.names, ["foo"]);
         });
-        parse(["audio", "export", "foo", "bar", "baz"], map, |opt| {
-            assert_eq!(opt.output, None);
-            assert_eq!(opt.names, ["foo", "bar", "baz"]);
+        parse(["audio", "export", "foo", "bar", "baz"], map, |args| {
+            assert_eq!(args.output, None);
+            assert_eq!(args.names, ["foo", "bar", "baz"]);
         });
-        parse(["audio", "export", "-o", "out", "--labels", "foo"], map, |opt| {
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
-            assert!(opt.settings.labels);
-            assert_eq!(opt.names, ["foo"]);
+        parse(["audio", "export", "-o", "out", "--labels", "foo"], map, |args| {
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
+            assert!(args.settings.labels);
+            assert_eq!(args.names, ["foo"]);
         });
         assert_eq!(error(["audio", "export"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1123,15 +1123,15 @@ mod tests {
     #[test]
     fn test_cli_audio_export_bank() {
         use audio::*;
-        let map = mapper!(Command::Audio(Subcommand::ExportBank(opt)) => opt);
-        parse(["audio", "export-bank", "foo"], map, |opt| {
-            assert_eq!(opt.output, None);
-            assert_eq!(opt.name, "foo");
+        let map = mapper!(Command::Audio(Subcommand::ExportBank(args)) => args);
+        parse(["audio", "export-bank", "foo"], map, |args| {
+            assert_eq!(args.output, None);
+            assert_eq!(args.name, "foo");
         });
-        parse(["audio", "export-bank", "-o", "out", "--labels", "foo"], map, |opt| {
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
-            assert!(opt.settings.labels);
-            assert_eq!(opt.name, "foo");
+        parse(["audio", "export-bank", "-o", "out", "--labels", "foo"], map, |args| {
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
+            assert!(args.settings.labels);
+            assert_eq!(args.name, "foo");
         });
         assert_eq!(error(["audio", "export-bank"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["audio", "export-bank", "foo", "bar"]), ErrorKind::UnknownArgument);
@@ -1140,14 +1140,14 @@ mod tests {
     #[test]
     fn test_cli_audio_export_all() {
         use audio::*;
-        let map = mapper!(Command::Audio(Subcommand::ExportAll(opt)) => opt);
-        parse(["audio", "export-all", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output, Path::new("out"));
-            assert!(!opt.settings.labels);
+        let map = mapper!(Command::Audio(Subcommand::ExportAll(args)) => args);
+        parse(["audio", "export-all", "-o", "out"], map, |args| {
+            assert_eq!(args.output, Path::new("out"));
+            assert!(!args.settings.labels);
         });
-        parse(["audio", "export-all", "-o", "out", "--labels"], map, |opt| {
-            assert_eq!(opt.output, Path::new("out"));
-            assert!(opt.settings.labels);
+        parse(["audio", "export-all", "-o", "out", "--labels"], map, |args| {
+            assert_eq!(args.output, Path::new("out"));
+            assert!(args.settings.labels);
         });
         assert_eq!(error(["audio", "export-all"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1155,16 +1155,16 @@ mod tests {
     #[test]
     fn test_cli_audio_import() {
         use audio::*;
-        let map = mapper!(Command::Audio(Subcommand::Import(opt)) => opt);
-        parse(["audio", "import", "foo", "bar"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert_eq!(opt.path, Path::new("bar"));
-            assert!(!opt.settings.labels);
+        let map = mapper!(Command::Audio(Subcommand::Import(args)) => args);
+        parse(["audio", "import", "foo", "bar"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert_eq!(args.path, Path::new("bar"));
+            assert!(!args.settings.labels);
         });
-        parse(["audio", "import", "foo", "bar", "--labels"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert_eq!(opt.path, Path::new("bar"));
-            assert!(opt.settings.labels);
+        parse(["audio", "import", "foo", "bar", "--labels"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert_eq!(args.path, Path::new("bar"));
+            assert!(args.settings.labels);
         });
         assert_eq!(error(["audio", "import"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["audio", "import", "foo"]), ErrorKind::MissingRequiredArgument);
@@ -1174,19 +1174,19 @@ mod tests {
     #[test]
     fn test_cli_audio_play() {
         use audio::*;
-        let map = mapper!(Command::Audio(Subcommand::Play(opt)) => opt);
-        parse(["audio", "play", "foo"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert!(approx_eq!(f64, opt.volume, 0.8));
+        let map = mapper!(Command::Audio(Subcommand::Play(args)) => args);
+        parse(["audio", "play", "foo"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert!(approx_eq!(f64, args.volume, 0.8));
         });
-        parse(["audio", "play", "foo", "--volume", "0"], map, |opt| {
-            assert!(approx_eq!(f64, opt.volume, 0.0));
+        parse(["audio", "play", "foo", "--volume", "0"], map, |args| {
+            assert!(approx_eq!(f64, args.volume, 0.0));
         });
-        parse(["audio", "play", "foo", "--volume", "50"], map, |opt| {
-            assert!(approx_eq!(f64, opt.volume, 0.5));
+        parse(["audio", "play", "foo", "--volume", "50"], map, |args| {
+            assert!(approx_eq!(f64, args.volume, 0.5));
         });
-        parse(["audio", "play", "foo", "--volume", "100"], map, |opt| {
-            assert!(approx_eq!(f64, opt.volume, 1.0));
+        parse(["audio", "play", "foo", "--volume", "100"], map, |args| {
+            assert!(approx_eq!(f64, args.volume, 1.0));
         });
         assert_eq!(error(["audio", "play"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["audio", "play", "foo", "bar"]), ErrorKind::UnknownArgument);
@@ -1205,12 +1205,12 @@ mod tests {
             assert!(matches!(a.command, Command::Config(Subcommand::Path)));
         });
         parse(["config", "get", "default-iso"], map, |a: CliArgs| {
-            let Command::Config(Subcommand::Get(opt)) = a.command else { panic!() };
-            assert!(matches!(opt, GetSetting::DefaultIso));
+            let Command::Config(Subcommand::Get(args)) = a.command else { panic!() };
+            assert!(matches!(args, GetSetting::DefaultIso));
         });
         parse(["config", "get", "dolphin-path"], map, |a: CliArgs| {
-            let Command::Config(Subcommand::Get(opt)) = a.command else { panic!() };
-            assert!(matches!(opt, GetSetting::DolphinPath));
+            let Command::Config(Subcommand::Get(args)) = a.command else { panic!() };
+            assert!(matches!(args, GetSetting::DolphinPath));
         });
         parse(["config", "set", "default-iso"], map, |a: CliArgs| {
             let Command::Config(Subcommand::Set(SetSetting::DefaultIso { path })) = a.command
@@ -1246,41 +1246,45 @@ mod tests {
 
     #[test]
     fn test_cli_dolphin() {
-        let map = mapper!(Command::Dolphin(opt) => opt);
-        parse(["dolphin"], map, |opt| {
-            assert!(!opt.wait);
-            assert!(!opt.ui);
+        let map = mapper!(Command::Dolphin(args) => args);
+        parse(["dolphin"], map, |args| {
+            assert!(!args.wait);
+            assert!(!args.ui);
         });
-        parse(["dolphin", "--ui"], map, |opt| {
-            assert!(opt.ui);
+        parse(["dolphin", "--ui"], map, |args| {
+            assert!(args.ui);
         });
-        multiparse([["dolphin", "-w"], ["dolphin", "--wait"]], map, |opt| {
-            assert!(opt.wait);
+        multiparse([["dolphin", "-w"], ["dolphin", "--wait"]], map, |args| {
+            assert!(args.wait);
         });
     }
 
     #[test]
     fn test_cli_globals_export() {
         use globals::*;
-        let map = mapper!(Command::Globals(Subcommand::Export(opt)) => opt);
-        parse(["globals", "export"], map, |opt| {
-            assert!(!opt.compact);
-            assert_eq!(opt.output, None);
+        let map = mapper!(Command::Globals(Subcommand::Export(args)) => args);
+        parse(["globals", "export"], map, |args| {
+            assert!(!args.compact);
+            assert_eq!(args.output, None);
         });
-        multiparse([["globals", "export", "-c"], ["globals", "export", "--compact"]], map, |opt| {
-            assert!(opt.compact);
-        });
-        parse(["globals", "export", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        multiparse(
+            [["globals", "export", "-c"], ["globals", "export", "--compact"]],
+            map,
+            |args| {
+                assert!(args.compact);
+            },
+        );
+        parse(["globals", "export", "-o", "out"], map, |args| {
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
         });
     }
 
     #[test]
     fn test_cli_globals_import() {
         use globals::*;
-        let map = mapper!(Command::Globals(Subcommand::Import(opt)) => opt);
-        parse(["globals", "import", "foo"], map, |opt| {
-            assert_eq!(opt.input, Path::new("foo"));
+        let map = mapper!(Command::Globals(Subcommand::Import(args)) => args);
+        parse(["globals", "import", "foo"], map, |args| {
+            assert_eq!(args.input, Path::new("foo"));
         });
         assert_eq!(error(["globals", "import"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1288,12 +1292,12 @@ mod tests {
     #[test]
     fn test_cli_globals_dump_colliders() {
         use globals::*;
-        let map = mapper!(Command::Globals(Subcommand::DumpColliders(opt)) => opt);
-        parse(["globals", "dump-colliders"], map, |opt| {
-            assert_eq!(opt.output, None);
+        let map = mapper!(Command::Globals(Subcommand::DumpColliders(args)) => args);
+        parse(["globals", "dump-colliders"], map, |args| {
+            assert_eq!(args.output, None);
         });
-        parse(["globals", "dump-colliders", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        parse(["globals", "dump-colliders", "-o", "out"], map, |args| {
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
         });
     }
 
@@ -1309,49 +1313,49 @@ mod tests {
     #[test]
     fn test_cli_iso_list() {
         use iso::*;
-        let map = mapper!(Command::Iso(Subcommand::List(opt)) => opt);
-        parse(["iso", "list"], map, |opt| {
-            assert!(opt.paths.is_empty());
+        let map = mapper!(Command::Iso(Subcommand::List(args)) => args);
+        parse(["iso", "list"], map, |args| {
+            assert!(args.paths.is_empty());
         });
-        parse(["iso", "list", "foo", "bar", "--long"], map, |opt| {
-            assert_eq!(opt.paths, ["foo", "bar"]);
-            assert!(opt.settings.long);
+        parse(["iso", "list", "foo", "bar", "--long"], map, |args| {
+            assert_eq!(args.paths, ["foo", "bar"]);
+            assert!(args.settings.long);
         });
     }
 
     #[test]
     fn test_cli_iso_extract() {
         use iso::*;
-        let map = mapper!(Command::Iso(Subcommand::Extract(opt)) => opt);
-        parse(["iso", "extract"], map, |opt| {
-            assert_eq!(opt.output, None);
-            assert!(opt.paths.is_empty());
+        let map = mapper!(Command::Iso(Subcommand::Extract(args)) => args);
+        parse(["iso", "extract"], map, |args| {
+            assert_eq!(args.output, None);
+            assert!(args.paths.is_empty());
         });
-        parse(["iso", "extract", "foo", "bar", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
-            assert_eq!(opt.paths, ["foo", "bar"]);
+        parse(["iso", "extract", "foo", "bar", "-o", "out"], map, |args| {
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
+            assert_eq!(args.paths, ["foo", "bar"]);
         });
     }
 
     #[test]
     fn test_cli_iso_extract_all() {
         use iso::*;
-        let map = mapper!(Command::Iso(Subcommand::ExtractAll(opt)) => opt);
-        parse(["iso", "extract-all"], map, |opt| {
-            assert_eq!(opt.output, None);
+        let map = mapper!(Command::Iso(Subcommand::ExtractAll(args)) => args);
+        parse(["iso", "extract-all"], map, |args| {
+            assert_eq!(args.output, None);
         });
-        parse(["iso", "extract-all", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        parse(["iso", "extract-all", "-o", "out"], map, |args| {
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
         });
     }
 
     #[test]
     fn test_cli_iso_replace() {
         use iso::*;
-        let map = mapper!(Command::Iso(Subcommand::Replace(opt)) => opt);
-        parse(["iso", "replace", "foo", "bar"], map, |opt| {
-            assert_eq!(opt.dest_path, "foo");
-            assert_eq!(opt.src_path, Path::new("bar"));
+        let map = mapper!(Command::Iso(Subcommand::Replace(args)) => args);
+        parse(["iso", "replace", "foo", "bar"], map, |args| {
+            assert_eq!(args.dest_path, "foo");
+            assert_eq!(args.src_path, Path::new("bar"));
         });
         assert_eq!(error(["iso", "replace"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["iso", "replace", "foo"]), ErrorKind::MissingRequiredArgument);
@@ -1377,20 +1381,20 @@ mod tests {
         use list::*;
         let map = mapper!(Command::List(c) => c);
         parse(["list", "items"], map, |c| {
-            let Subcommand::Items(opt) = c else { panic!() };
-            assert!(!opt.show_unknown);
+            let Subcommand::Items(args) = c else { panic!() };
+            assert!(!args.show_unknown);
         });
         parse(["list", "items", "--show-unknown"], map, |c| {
-            let Subcommand::Items(opt) = c else { panic!() };
-            assert!(opt.show_unknown);
+            let Subcommand::Items(args) = c else { panic!() };
+            assert!(args.show_unknown);
         });
         parse(["list", "equipment"], map, |c| {
-            let Subcommand::Equipment(opt) = c else { panic!() };
-            assert!(!opt.show_unknown);
+            let Subcommand::Equipment(args) = c else { panic!() };
+            assert!(!args.show_unknown);
         });
         parse(["list", "equipment", "--show-unknown"], map, |c| {
-            let Subcommand::Equipment(opt) = c else { panic!() };
-            assert!(opt.show_unknown);
+            let Subcommand::Equipment(args) = c else { panic!() };
+            assert!(args.show_unknown);
         });
         parse(["list", "stages"], map, |c| {
             assert!(matches!(c, Subcommand::Stages(_)));
@@ -1411,24 +1415,24 @@ mod tests {
         use messages::*;
         let map = mapper!(Command::Messages(c) => c);
         parse(["messages", "export", "-o", "out"], map, |c| {
-            let Subcommand::Export(opt) = c else { panic!() };
-            assert_eq!(opt.output, Path::new("out"));
+            let Subcommand::Export(args) = c else { panic!() };
+            assert_eq!(args.output, Path::new("out"));
         });
         parse(["messages", "import", "foo"], map, |c| {
-            let Subcommand::Import(opt) = c else { panic!() };
-            assert_eq!(opt.input, Path::new("foo"));
+            let Subcommand::Import(args) = c else { panic!() };
+            assert_eq!(args.input, Path::new("foo"));
         });
     }
 
     #[test]
     fn test_cli_project_info() {
         use project::*;
-        let map = mapper!(Command::Project(Subcommand::Info(opt)) => opt);
-        parse(["project", "info"], map, |opt| {
-            assert_eq!(opt.name, None);
+        let map = mapper!(Command::Project(Subcommand::Info(args)) => args);
+        parse(["project", "info"], map, |args| {
+            assert_eq!(args.name, None);
         });
-        parse(["project", "info", "foo"], map, |opt| {
-            assert_eq!(opt.name.as_deref(), Some("foo"));
+        parse(["project", "info", "foo"], map, |args| {
+            assert_eq!(args.name.as_deref(), Some("foo"));
         });
     }
 
@@ -1436,8 +1440,8 @@ mod tests {
     fn test_cli_project_list() {
         use project::*;
         let map = std::convert::identity;
-        parse(["project", "list"], map, |opt: CliArgs| {
-            assert!(matches!(opt.command, Command::Project(Subcommand::List)));
+        parse(["project", "list"], map, |args: CliArgs| {
+            assert!(matches!(args.command, Command::Project(Subcommand::List)));
         });
         assert_eq!(error(["project", "list", "foo"]), ErrorKind::UnknownArgument);
     }
@@ -1445,32 +1449,32 @@ mod tests {
     #[test]
     fn test_cli_project_new() {
         use project::*;
-        let map = mapper!(Command::Project(Subcommand::New(opt)) => opt);
-        parse(["project", "new", "foo"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert_eq!(opt.source, None);
-            assert_eq!(opt.output, None);
-            assert!(!opt.force);
-            assert!(!opt.no_open);
+        let map = mapper!(Command::Project(Subcommand::New(args)) => args);
+        parse(["project", "new", "foo"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert_eq!(args.source, None);
+            assert_eq!(args.output, None);
+            assert!(!args.force);
+            assert!(!args.no_open);
         });
-        parse(["project", "new", "foo", "-s", "src"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert_eq!(opt.source.as_deref(), Some(Path::new("src")));
+        parse(["project", "new", "foo", "-s", "src"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert_eq!(args.source.as_deref(), Some(Path::new("src")));
         });
-        parse(["project", "new", "foo", "-o", "out"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        parse(["project", "new", "foo", "-o", "out"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
         });
-        parse(["project", "new", "foo", "--no-open"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert!(opt.no_open);
+        parse(["project", "new", "foo", "--no-open"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert!(args.no_open);
         });
         multiparse(
             [["project", "new", "foo", "-f"], ["project", "new", "foo", "--force"]],
             map,
-            |opt| {
-                assert_eq!(opt.name, "foo");
-                assert!(opt.force);
+            |args| {
+                assert_eq!(args.name, "foo");
+                assert!(args.force);
             },
         );
         assert_eq!(error(["project", "new"]), ErrorKind::MissingRequiredArgument);
@@ -1479,17 +1483,17 @@ mod tests {
     #[test]
     fn test_cli_project_wipe() {
         use project::*;
-        let map = mapper!(Command::Project(Subcommand::Wipe(opt)) => opt);
-        parse(["project", "wipe", "foo"], map, |opt| {
-            assert_eq!(opt.name, "foo");
-            assert!(!opt.force);
+        let map = mapper!(Command::Project(Subcommand::Wipe(args)) => args);
+        parse(["project", "wipe", "foo"], map, |args| {
+            assert_eq!(args.name, "foo");
+            assert!(!args.force);
         });
         multiparse(
             [["project", "wipe", "foo", "-f"], ["project", "wipe", "foo", "--force"]],
             map,
-            |opt| {
-                assert_eq!(opt.name, "foo");
-                assert!(opt.force);
+            |args| {
+                assert_eq!(args.name, "foo");
+                assert!(args.force);
             },
         );
         assert_eq!(error(["project", "wipe"]), ErrorKind::MissingRequiredArgument);
@@ -1498,17 +1502,17 @@ mod tests {
     #[test]
     fn test_cli_project_add() {
         use project::*;
-        let map = mapper!(Command::Project(Subcommand::Add(opt)) => opt);
-        parse(["project", "add", "foo"], map, |opt| {
-            assert_eq!(opt.path, Path::new("foo"));
-            assert_eq!(opt.name, None);
+        let map = mapper!(Command::Project(Subcommand::Add(args)) => args);
+        parse(["project", "add", "foo"], map, |args| {
+            assert_eq!(args.path, Path::new("foo"));
+            assert_eq!(args.name, None);
         });
         multiparse(
             [["project", "add", "foo", "-n", "bar"], ["project", "add", "foo", "--name", "bar"]],
             map,
-            |opt| {
-                assert_eq!(opt.path, Path::new("foo"));
-                assert_eq!(opt.name.as_deref(), Some("bar"));
+            |args| {
+                assert_eq!(args.path, Path::new("foo"));
+                assert_eq!(args.name.as_deref(), Some("bar"));
             },
         );
         assert_eq!(error(["project", "add"]), ErrorKind::MissingRequiredArgument);
@@ -1517,9 +1521,9 @@ mod tests {
     #[test]
     fn test_cli_project_remove() {
         use project::*;
-        let map = mapper!(Command::Project(Subcommand::Remove(opt)) => opt);
-        multiparse([["project", "remove", "foo"], ["project", "forget", "foo"]], map, |opt| {
-            assert_eq!(opt.name, "foo");
+        let map = mapper!(Command::Project(Subcommand::Remove(args)) => args);
+        multiparse([["project", "remove", "foo"], ["project", "forget", "foo"]], map, |args| {
+            assert_eq!(args.name, "foo");
         });
         assert_eq!(error(["project", "remove"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["project", "remove", "foo", "bar"]), ErrorKind::UnknownArgument);
@@ -1528,9 +1532,9 @@ mod tests {
     #[test]
     fn test_cli_project_open() {
         use project::*;
-        let map = mapper!(Command::Project(Subcommand::Open(opt)) => opt);
-        parse(["project", "open", "foo"], map, |opt| {
-            assert_eq!(opt.name, "foo");
+        let map = mapper!(Command::Project(Subcommand::Open(args)) => args);
+        parse(["project", "open", "foo"], map, |args| {
+            assert_eq!(args.name, "foo");
         });
         assert_eq!(error(["project", "open"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["project", "open", "foo", "bar"]), ErrorKind::UnknownArgument);
@@ -1570,36 +1574,36 @@ mod tests {
     #[test]
     fn test_cli_script_dump() {
         use script::*;
-        let map = mapper!(Command::Script(Subcommand::Dump(opt)) => opt);
-        parse(["script", "dump", "foo"], map, |opt| {
-            assert_eq!(opt.stage, "foo");
-            assert_eq!(opt.output, None);
-            assert!(!opt.flags.dump_unknown);
-            assert!(!opt.flags.no_offsets);
+        let map = mapper!(Command::Script(Subcommand::Dump(args)) => args);
+        parse(["script", "dump", "foo"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output, None);
+            assert!(!args.flags.dump_unknown);
+            assert!(!args.flags.no_offsets);
         });
-        parse(["script", "dump", "foo", "-o", "out"], map, |opt| {
-            assert_eq!(opt.stage, "foo");
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        parse(["script", "dump", "foo", "-o", "out"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
         });
-        parse(["script", "dump", "foo", "--dump-unknown", "--no-offsets"], map, |opt| {
-            assert_eq!(opt.stage, "foo");
-            assert_eq!(opt.output, None);
-            assert!(opt.flags.dump_unknown);
-            assert!(opt.flags.no_offsets);
+        parse(["script", "dump", "foo", "--dump-unknown", "--no-offsets"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output, None);
+            assert!(args.flags.dump_unknown);
+            assert!(args.flags.no_offsets);
         });
     }
 
     #[test]
     fn test_cli_script_dump_all() {
         use script::*;
-        let map = mapper!(Command::Script(Subcommand::DumpAll(opt)) => opt);
-        parse(["script", "dump-all", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output, Path::new("out"));
+        let map = mapper!(Command::Script(Subcommand::DumpAll(args)) => args);
+        parse(["script", "dump-all", "-o", "out"], map, |args| {
+            assert_eq!(args.output, Path::new("out"));
         });
-        parse(["script", "dump-all", "-o", "out", "--dump-unknown", "--no-offsets"], map, |opt| {
-            assert_eq!(opt.output, Path::new("out"));
-            assert!(opt.flags.dump_unknown);
-            assert!(opt.flags.no_offsets);
+        parse(["script", "dump-all", "-o", "out", "--dump-unknown", "--no-offsets"], map, |args| {
+            assert_eq!(args.output, Path::new("out"));
+            assert!(args.flags.dump_unknown);
+            assert!(args.flags.no_offsets);
         });
         assert_eq!(error(["script", "dump-all"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1607,53 +1611,53 @@ mod tests {
     #[test]
     fn test_cli_script_disassemble() {
         use script::*;
-        let map = mapper!(Command::Script(Subcommand::Disassemble(opt)) => opt);
-        parse(["script", "disassemble", "foo", "-o", "out"], map, |opt| {
-            assert_eq!(opt.stage, "foo");
-            assert_eq!(opt.output, Path::new("out"));
+        let map = mapper!(Command::Script(Subcommand::Disassemble(args)) => args);
+        parse(["script", "disassemble", "foo", "-o", "out"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output, Path::new("out"));
         });
     }
 
     #[test]
     fn test_cli_script_disassemble_all() {
         use script::*;
-        let map = mapper!(Command::Script(Subcommand::DisassembleAll(opt)) => opt);
-        parse(["script", "disassemble-all", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output, Path::new("out"));
+        let map = mapper!(Command::Script(Subcommand::DisassembleAll(args)) => args);
+        parse(["script", "disassemble-all", "-o", "out"], map, |args| {
+            assert_eq!(args.output, Path::new("out"));
         });
     }
 
     #[test]
     fn test_cli_script_assemble() {
         use script::*;
-        let map = mapper!(Command::Script(Subcommand::Assemble(opt)) => opt);
-        parse(["script", "assemble", "foo"], map, |opt| {
-            assert_eq!(opt.path, Path::new("foo"));
+        let map = mapper!(Command::Script(Subcommand::Assemble(args)) => args);
+        parse(["script", "assemble", "foo"], map, |args| {
+            assert_eq!(args.path, Path::new("foo"));
         });
     }
 
     #[test]
     fn test_cli_shop_export() {
         use shop::*;
-        let map = mapper!(Command::Shop(Subcommand::Export(opt)) => opt);
-        parse(["shop", "export"], map, |opt| {
-            assert!(!opt.compact);
-            assert_eq!(opt.output, None);
+        let map = mapper!(Command::Shop(Subcommand::Export(args)) => args);
+        parse(["shop", "export"], map, |args| {
+            assert!(!args.compact);
+            assert_eq!(args.output, None);
         });
-        parse(["shop", "export", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        parse(["shop", "export", "-o", "out"], map, |args| {
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
         });
-        multiparse([["shop", "export", "-c"], ["shop", "export", "--compact"]], map, |opt| {
-            assert!(opt.compact);
+        multiparse([["shop", "export", "-c"], ["shop", "export", "--compact"]], map, |args| {
+            assert!(args.compact);
         });
     }
 
     #[test]
     fn test_cli_shop_import() {
         use shop::*;
-        let map = mapper!(Command::Shop(Subcommand::Import(opt)) => opt);
-        parse(["shop", "import", "foo"], map, |opt| {
-            assert_eq!(opt.input, Path::new("foo"));
+        let map = mapper!(Command::Shop(Subcommand::Import(args)) => args);
+        parse(["shop", "import", "foo"], map, |args| {
+            assert_eq!(args.input, Path::new("foo"));
         });
         assert_eq!(error(["shop", "import"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1661,14 +1665,14 @@ mod tests {
     #[test]
     fn test_cli_stage_export() {
         use stage::*;
-        let map = mapper!(Command::Stage(Subcommand::Export(opt)) => opt);
-        parse(["stage", "export", "foo"], map, |opt| {
-            assert_eq!(opt.stage, "foo");
-            assert_eq!(opt.output, None);
+        let map = mapper!(Command::Stage(Subcommand::Export(args)) => args);
+        parse(["stage", "export", "foo"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output, None);
         });
-        parse(["stage", "export", "foo", "-o", "out"], map, |opt| {
-            assert_eq!(opt.stage, "foo");
-            assert_eq!(opt.output.as_deref(), Some(Path::new("out")));
+        parse(["stage", "export", "foo", "-o", "out"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
         });
         assert_eq!(error(["stage", "export"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1676,9 +1680,9 @@ mod tests {
     #[test]
     fn test_cli_stage_export_all() {
         use stage::*;
-        let map = mapper!(Command::Stage(Subcommand::ExportAll(opt)) => opt);
-        parse(["stage", "export-all", "-o", "out"], map, |opt| {
-            assert_eq!(opt.output, Path::new("out"));
+        let map = mapper!(Command::Stage(Subcommand::ExportAll(args)) => args);
+        parse(["stage", "export-all", "-o", "out"], map, |args| {
+            assert_eq!(args.output, Path::new("out"));
         });
         assert_eq!(error(["stage", "export-all"]), ErrorKind::MissingRequiredArgument);
     }
@@ -1686,10 +1690,10 @@ mod tests {
     #[test]
     fn test_cli_stage_import() {
         use stage::*;
-        let map = mapper!(Command::Stage(Subcommand::Import(opt)) => opt);
-        parse(["stage", "import", "foo", "bar"], map, |opt| {
-            assert_eq!(opt.stage, "foo");
-            assert_eq!(opt.input, Path::new("bar"));
+        let map = mapper!(Command::Stage(Subcommand::Import(args)) => args);
+        parse(["stage", "import", "foo", "bar"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.input, Path::new("bar"));
         });
         assert_eq!(error(["stage", "import"]), ErrorKind::MissingRequiredArgument);
         assert_eq!(error(["stage", "import", "foo"]), ErrorKind::MissingRequiredArgument);
@@ -1698,17 +1702,17 @@ mod tests {
     #[test]
     fn test_cli_stage_import_all() {
         use stage::*;
-        let map = mapper!(Command::Stage(Subcommand::ImportAll(opt)) => opt);
-        parse(["stage", "import-all", "foo"], map, |opt| {
-            assert_eq!(opt.input, Path::new("foo"));
-            assert!(!opt.force);
+        let map = mapper!(Command::Stage(Subcommand::ImportAll(args)) => args);
+        parse(["stage", "import-all", "foo"], map, |args| {
+            assert_eq!(args.input, Path::new("foo"));
+            assert!(!args.force);
         });
         multiparse(
             [["stage", "import-all", "foo", "-f"], ["stage", "import-all", "foo", "--force"]],
             map,
-            |opt| {
-                assert_eq!(opt.input, Path::new("foo"));
-                assert!(opt.force);
+            |args| {
+                assert_eq!(args.input, Path::new("foo"));
+                assert!(args.force);
             },
         );
         assert_eq!(error(["stage", "import-all"]), ErrorKind::MissingRequiredArgument);

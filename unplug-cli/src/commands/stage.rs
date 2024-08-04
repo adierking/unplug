@@ -236,43 +236,43 @@ fn write_stage(stage: Stage, out: impl Write) -> Result<()> {
 }
 
 /// The `stage` CLI command.
-pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
-        Subcommand::Export(opt) => command_export(ctx, opt),
-        Subcommand::ExportAll(opt) => command_export_all(ctx, opt),
-        Subcommand::Import(opt) => command_import(ctx, opt),
-        Subcommand::ImportAll(opt) => command_import_all(ctx, opt),
+pub fn command(ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
+        Subcommand::Export(args) => command_export(ctx, args),
+        Subcommand::ExportAll(args) => command_export_all(ctx, args),
+        Subcommand::Import(args) => command_import(ctx, args),
+        Subcommand::ImportAll(args) => command_import_all(ctx, args),
     }
 }
 
 /// The `stage export` CLI command.
-fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
+fn command_export(ctx: Context, args: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
 
-    let out = BufWriter::new(OutputRedirect::new(opt.output.as_deref())?);
-    let filename = opt
+    let out = BufWriter::new(OutputRedirect::new(args.output.as_deref())?);
+    let filename = args
         .output
         .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
         .unwrap_or_else(|| "JSON".to_owned());
     info!("Exporting {}", filename);
 
     let libs = ctx.read_globals()?.read_libs()?;
-    let file = find_stage_file(&mut ctx, &opt.stage)?;
+    let file = find_stage_file(&mut ctx, &args.stage)?;
     let stage = ctx.read_stage_file(&libs, &file)?;
     write_stage(stage, out)?;
     Ok(())
 }
 
 /// The `stage export-all` CLI command.
-pub fn command_export_all(ctx: Context, opt: ExportAllArgs) -> Result<()> {
+pub fn command_export_all(ctx: Context, args: ExportAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    fs::create_dir_all(&opt.output)?;
+    fs::create_dir_all(&args.output)?;
     let libs = ctx.read_globals()?.read_libs()?;
     for id in StageId::iter() {
         let filename = format!("{}.json", id.name());
         info!("Exporting {}", filename);
         let stage = ctx.read_stage(&libs, id)?;
-        let path = opt.output.join(filename);
+        let path = args.output.join(filename);
         let out = BufWriter::new(File::create(path)?);
         write_stage(stage, out)?;
     }
@@ -339,13 +339,13 @@ fn patch_scripts(
 }
 
 /// The `stage import` CLI command.
-fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
+fn command_import(ctx: Context, args: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
 
     info!("Reading input JSON");
-    let mut imported = read_stage(&opt.input)?;
+    let mut imported = read_stage(&args.input)?;
 
-    let file = find_stage_file(&mut ctx, &opt.stage)?;
+    let file = find_stage_file(&mut ctx, &args.stage)?;
     let info = ctx.query_file(&file)?;
     info!("Patching {}", info.name);
     let libs = ctx.read_globals()?.read_libs()?;
@@ -358,7 +358,7 @@ fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
 }
 
 /// The `stage import-all` CLI command.
-pub fn command_import_all(ctx: Context, opt: ImportAllArgs) -> Result<()> {
+pub fn command_import_all(ctx: Context, args: ImportAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
 
     info!("Reading input JSON");
@@ -366,8 +366,8 @@ pub fn command_import_all(ctx: Context, opt: ImportAllArgs) -> Result<()> {
     for id in StageId::iter() {
         let filename = format!("{}.json", id.name());
         debug!("Reading {}", filename);
-        let path = opt.input.join(&filename);
-        if opt.force || path.exists() {
+        let path = args.input.join(&filename);
+        if args.force || path.exists() {
             let imported = match read_stage(&path) {
                 Ok(x) => x,
                 Err(e) => bail!("Error reading {}: {:#}", filename, e),
@@ -384,7 +384,7 @@ pub fn command_import_all(ctx: Context, opt: ImportAllArgs) -> Result<()> {
     let mut updated: Vec<(StageId, Box<Stage>)> = vec![];
     for (id, mut imported) in jsons {
         let mut stage = ctx.read_stage(&libs, id)?;
-        if !opt.force && stage.objects == imported.objects {
+        if !args.force && stage.objects == imported.objects {
             continue;
         }
 

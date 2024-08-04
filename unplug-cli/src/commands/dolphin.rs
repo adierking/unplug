@@ -71,14 +71,14 @@ fn dolphin_command() -> Result<Command> {
 }
 
 /// The `dolphin` CLI command.
-pub fn command(ctx: Context, opt: Args) -> Result<()> {
+pub fn command(ctx: Context, args: Args) -> Result<()> {
     let mut command = dolphin_command()?;
     command.arg(DOLPHIN_OPT_EXEC).arg(ctx.into_iso_path()?);
-    if !opt.ui {
+    if !args.ui {
         command.arg(DOLPHIN_OPT_NO_UI);
         command.arg(DOLPHIN_OPT_CONFIG).arg(DOLPHIN_CONFIG_NO_CONFIRM_STOP);
     }
-    if opt.wait {
+    if args.wait {
         command.stdin(Stdio::inherit());
         command.stdout(Stdio::inherit());
         command.stderr(Stdio::inherit());
@@ -91,7 +91,7 @@ pub fn command(ctx: Context, opt: Args) -> Result<()> {
     info!("Starting Dolphin");
     debug!("Command: {:?}", command);
     let mut child = command.spawn()?;
-    if opt.wait {
+    if args.wait {
         let status = child.wait()?;
         if !status.success() {
             bail!("Dolphin exited abnormally");

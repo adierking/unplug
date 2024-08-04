@@ -26,11 +26,11 @@ fn init_tracing(path: &Path) -> Result<impl Drop> {
     Ok(guard)
 }
 
-fn load_config(opt: GlobalConfigArgs) {
-    if opt.no_config {
+fn load_config(args: GlobalConfigArgs) {
+    if args.no_config {
         return;
     }
-    let result = match opt.config {
+    let result = match args.config {
         Some(path) => Config::get().load_from(path),
         None => Config::get().load(),
     };
@@ -39,16 +39,16 @@ fn load_config(opt: GlobalConfigArgs) {
     }
 }
 
-fn get_context(opt: GlobalContextArgs) -> Result<Context> {
+fn get_context(args: GlobalContextArgs) -> Result<Context> {
     // Command-line args take precedence
-    if let Some(path) = opt.iso {
+    if let Some(path) = args.iso {
         return Ok(Context::Iso(path));
     }
 
     // Try loading a project
     let config = Config::get();
-    if !opt.default_iso {
-        if let Some(context) = config::load_project(&config, opt.project.as_deref())? {
+    if !args.default_iso {
+        if let Some(context) = config::load_project(&config, args.project.as_deref())? {
             return Ok(context);
         }
     }
@@ -63,19 +63,19 @@ fn get_context(opt: GlobalContextArgs) -> Result<Context> {
 }
 
 fn run_app() -> Result<()> {
-    let opt = CliArgs::parse();
-    terminal::init_logging(opt.verbose);
-    load_config(opt.config);
+    let args = CliArgs::parse();
+    terminal::init_logging(args.verbose);
+    load_config(args.config);
 
     #[cfg(feature = "trace")]
     let mut _trace_guard = None;
     #[cfg(feature = "trace")]
-    if let Some(path) = &opt.trace {
+    if let Some(path) = &args.trace {
         _trace_guard = Some(init_tracing(path)?);
     }
 
-    let ctx = get_context(opt.context)?;
-    commands::execute(ctx, opt.command)
+    let ctx = get_context(args.context)?;
+    commands::execute(ctx, args.command)
 }
 
 fn main() {

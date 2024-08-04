@@ -35,8 +35,8 @@ fn command_rebuild_scripts(ctx: Context) -> Result<()> {
 }
 
 /// The `debug` CLI command.
-pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
+pub fn command(ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
         Subcommand::RebuildScripts => command_rebuild_scripts(ctx),
     }
 }

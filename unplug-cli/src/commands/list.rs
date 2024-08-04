@@ -19,8 +19,8 @@ fn sort_ids<I: Copy + Ord>(ids: &mut [(I, &str)], settings: &IdArgs) {
 }
 
 /// The `list items` CLI command.
-fn command_items(opt: ItemsArgs) -> Result<()> {
-    let mut items: Vec<_> = if opt.show_unknown {
+fn command_items(args: ItemsArgs) -> Result<()> {
+    let mut items: Vec<_> = if args.show_unknown {
         Item::iter().map(|i| (i, i.name())).collect()
     } else {
         Item::iter()
@@ -28,7 +28,7 @@ fn command_items(opt: ItemsArgs) -> Result<()> {
             .map(|i| (i, i.name()))
             .collect()
     };
-    sort_ids(&mut items, &opt.settings);
+    sort_ids(&mut items, &args.settings);
     for (id, name) in items {
         println!("[{:>3}] {}", i16::from(id), name);
     }
@@ -36,11 +36,11 @@ fn command_items(opt: ItemsArgs) -> Result<()> {
 }
 
 /// The `list equipment` CLI command.
-fn command_equipment(opt: EquipmentArgs) -> Result<()> {
+fn command_equipment(args: EquipmentArgs) -> Result<()> {
     let mut atcs: Vec<_> = Atc::iter().map(|a| (a, a.name())).collect();
-    sort_ids(&mut atcs, &opt.settings);
+    sort_ids(&mut atcs, &args.settings);
     for (id, name) in atcs {
-        if opt.show_unknown || !name.starts_with(UNKNOWN_ID_PREFIX) {
+        if args.show_unknown || !name.starts_with(UNKNOWN_ID_PREFIX) {
             println!("[{:>1}] {}", i16::from(id), name);
         }
     }
@@ -48,9 +48,9 @@ fn command_equipment(opt: EquipmentArgs) -> Result<()> {
 }
 
 /// The `list stages` CLI command.
-fn command_stages(opt: IdArgs) -> Result<()> {
+fn command_stages(args: IdArgs) -> Result<()> {
     let mut stages: Vec<_> = Stage::iter().map(|s| (s, s.title())).collect();
-    sort_ids(&mut stages, &opt);
+    sort_ids(&mut stages, &args);
     for (id, title) in stages {
         println!("[{:>3}] {}", i32::from(id), title);
     }
@@ -58,9 +58,9 @@ fn command_stages(opt: IdArgs) -> Result<()> {
 }
 
 /// The `list objects` CLI command.
-fn command_objects(opt: IdArgs) -> Result<()> {
+fn command_objects(args: IdArgs) -> Result<()> {
     let mut objects: Vec<_> = Object::iter().map(|o| (o, o.name())).collect();
-    sort_ids(&mut objects, &opt);
+    sort_ids(&mut objects, &args);
     for (id, name) in objects {
         println!("[{:>5}] {}", i32::from(id), name);
     }
@@ -68,9 +68,9 @@ fn command_objects(opt: IdArgs) -> Result<()> {
 }
 
 /// The `list music` CLI command.
-fn command_music(opt: IdArgs) -> Result<()> {
+fn command_music(args: IdArgs) -> Result<()> {
     let mut music: Vec<_> = Music::iter().map(|m| (m, m.name())).collect();
-    sort_ids(&mut music, &opt);
+    sort_ids(&mut music, &args);
     for (id, name) in music {
         println!("[{:>3}] {}", u8::from(id), name);
     }
@@ -78,9 +78,9 @@ fn command_music(opt: IdArgs) -> Result<()> {
 }
 
 /// The `list sounds` CLI command.
-fn command_sounds(opt: IdArgs) -> Result<()> {
+fn command_sounds(args: IdArgs) -> Result<()> {
     let mut sfx: Vec<_> = Sfx::iter().map(|s| (s, s.name())).collect();
-    sort_ids(&mut sfx, &opt);
+    sort_ids(&mut sfx, &args);
     for (id, name) in sfx {
         println!("[{:>08x}] {}", u32::from(id), name);
     }
@@ -88,13 +88,13 @@ fn command_sounds(opt: IdArgs) -> Result<()> {
 }
 
 /// The `list` CLI command.
-pub fn command(_ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
-        Subcommand::Items(opt) => command_items(opt),
-        Subcommand::Equipment(opt) => command_equipment(opt),
-        Subcommand::Stages(opt) => command_stages(opt),
-        Subcommand::Objects(opt) => command_objects(opt),
-        Subcommand::Music(opt) => command_music(opt),
-        Subcommand::Sounds(opt) => command_sounds(opt),
+pub fn command(_ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
+        Subcommand::Items(args) => command_items(args),
+        Subcommand::Equipment(args) => command_equipment(args),
+        Subcommand::Stages(args) => command_stages(args),
+        Subcommand::Objects(args) => command_objects(args),
+        Subcommand::Music(args) => command_music(args),
+        Subcommand::Sounds(args) => command_sounds(args),
     }
 }

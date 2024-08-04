@@ -319,10 +319,10 @@ fn export_labels(cues: Vec<Cue>, sample_rate: u32, sound_path: &Path) -> Result<
 }
 
 /// The `audio info` CLI command.
-fn command_info(ctx: Context, opt: InfoArgs) -> Result<()> {
+fn command_info(ctx: Context, args: InfoArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let mut cache = AudioCache::new();
-    let resource = AudioResource::find(&mut ctx, &opt.name)?;
+    let resource = AudioResource::find(&mut ctx, &args.name)?;
     let name = resource.name();
     let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
     let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
@@ -349,15 +349,15 @@ fn command_info(ctx: Context, opt: InfoArgs) -> Result<()> {
 }
 
 /// The `audio export` CLI command.
-fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
+fn command_export(ctx: Context, args: ExportArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let mut cache = AudioCache::new();
-    if opt.names.is_empty() {
+    if args.names.is_empty() {
         bail!("Nothing to export");
     }
-    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), opt.names.len() > 1);
+    let (out_dir, out_name) = output_dir_and_name(args.output.as_deref(), args.names.len() > 1);
     fs::create_dir_all(out_dir)?;
-    for name in &opt.names {
+    for name in &args.names {
         let resource = AudioResource::find(&mut ctx, name)?;
         let default_name = format!("{}.wav", resource.name());
         let filename = out_name.as_ref().unwrap_or(&default_name);
@@ -365,38 +365,39 @@ fn command_export(ctx: Context, opt: ExportArgs) -> Result<()> {
         let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
         let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
         let output = out_dir.join(filename);
-        export(&audio, &opt.settings, &output)?;
+        export(&audio, &args.settings, &output)?;
     }
     Ok(())
 }
 
 /// The `audio export-bank` CLI command.
-fn command_export_bank(ctx: Context, opt: ExportBankArgs) -> Result<()> {
+fn command_export_bank(ctx: Context, args: ExportBankArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
-    let file = find_bank(&mut ctx, &opt.name)?;
+    let file = find_bank(&mut ctx, &args.name)?;
     let name = ctx.query_file(&file)?.name;
-    let dir =
-        opt.output.unwrap_or_else(|| PathBuf::from(name.rsplit_once('.').unwrap_or((&name, "")).0));
-    export_bank_impl(&mut ctx, &opt.settings, &file, &dir, "")?;
+    let dir = args
+        .output
+        .unwrap_or_else(|| PathBuf::from(name.rsplit_once('.').unwrap_or((&name, "")).0));
+    export_bank_impl(&mut ctx, &args.settings, &file, &dir, "")?;
     Ok(())
 }
 
 /// The `audio export-all` CLI command.
-fn command_export_all(ctx: Context, opt: ExportAllArgs) -> Result<()> {
+fn command_export_all(ctx: Context, args: ExportAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
 
     // Export registered banks
     for group in SfxGroup::iter() {
         let file = ctx.disc_file_at(&group.disc_path())?;
-        export_bank_subdir(&mut ctx, &opt.settings, &file, &opt.output)?;
+        export_bank_subdir(&mut ctx, &args.settings, &file, &args.output)?;
     }
 
     // Export sfx_hori, which is not a registered bank because it has bogus sound IDs
     let hori = ctx.disc_file_at(SFX_HORI_PATH)?;
-    export_bank_subdir(&mut ctx, &opt.settings, &hori, &opt.output)?;
+    export_bank_subdir(&mut ctx, &args.settings, &hori, &args.output)?;
 
     // Export music into a subdirectory
-    let music_dir = opt.output.join(MUSIC_DIR);
+    let music_dir = args.output.join(MUSIC_DIR);
     fs::create_dir_all(&music_dir)?;
     let mut cache = AudioCache::new();
     for music in Music::iter().filter(|m| m.is_some()) {
@@ -405,7 +406,7 @@ fn command_export_all(ctx: Context, opt: ExportAllArgs) -> Result<()> {
         let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
         let audio = AudioReader::open(&mut ctx, &mut cache, &file)?;
         let output = music_dir.join(format!("{}.wav", music.name()));
-        export(&audio, &opt.settings, &output)?;
+        export(&audio, &args.settings, &output)?;
     }
     Ok(())
 }
@@ -481,27 +482,27 @@ fn export_bank_impl<T: ReadSeek>(
 }
 
 /// The `audio import` CLI command.
-fn command_import(ctx: Context, opt: ImportArgs) -> Result<()> {
+fn command_import(ctx: Context, args: ImportArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
-    let resource = AudioResource::find(&mut ctx, &opt.name)?;
+    let resource = AudioResource::find(&mut ctx, &args.name)?;
     info!("Opening {}", resource.name());
     let mut cache = AudioCache::new();
     let file = AudioFileId::get(&mut ctx, &mut cache, &resource)?;
     match file {
-        AudioFileId::Music(file) => import_music(&mut ctx, opt, file),
-        AudioFileId::Sfx { file, index } => import_sfx(&mut ctx, opt, file, index),
+        AudioFileId::Music(file) => import_music(&mut ctx, args, file),
+        AudioFileId::Sfx { file, index } => import_sfx(&mut ctx, args, file, index),
     }
 }
 
 fn import_music<T: ReadWriteSeek>(
     ctx: &mut OpenContext<T>,
-    opt: ImportArgs,
+    args: ImportArgs,
     file: FileId,
 ) -> Result<()> {
     let name = ctx.query_file(&file)?.name;
     let original_loop = ctx.open_music_file(&file)?.loop_start();
 
-    let audio = open_sound_file(&opt.path, &opt.settings, MAX_MUSIC_SAMPLE_RATE)?;
+    let audio = open_sound_file(&args.path, &args.settings, MAX_MUSIC_SAMPLE_RATE)?;
     info!("Analyzing audio waveform");
     let progress = progress_bar(1);
     progress.set_message(audio.tag().name.clone());
@@ -529,14 +530,14 @@ fn import_music<T: ReadWriteSeek>(
 
 fn import_sfx<T: ReadWriteSeek>(
     ctx: &mut OpenContext<T>,
-    opt: ImportArgs,
+    args: ImportArgs,
     file: FileId,
     index: usize,
 ) -> Result<()> {
     let name = ctx.query_file(&file)?.name;
     let mut bank = ctx.read_bank_file(&file)?;
 
-    let mut audio = open_sound_file(&opt.path, &opt.settings, MAX_SFX_SAMPLE_RATE)?;
+    let mut audio = open_sound_file(&args.path, &args.settings, MAX_SFX_SAMPLE_RATE)?;
     info!("Encoding audio to GameCube format");
     let mut new_sample = BankSample::from_pcm(&mut audio)?;
     let old_sample = bank.sample(index);
@@ -559,14 +560,14 @@ fn import_sfx<T: ReadWriteSeek>(
 }
 
 /// The `audio play` subcommand.
-fn command_play(ctx: Context, opt: PlayArgs) -> Result<()> {
+fn command_play(ctx: Context, args: PlayArgs) -> Result<()> {
     let ctx = Box::leak(Box::new(ctx.open_read()?));
     let mut cache = AudioCache::new();
-    let resource = AudioResource::find(ctx, &opt.name)?;
+    let resource = AudioResource::find(ctx, &args.name)?;
     let file = AudioFileId::get(ctx, &mut cache, &resource)?;
     let audio = Box::leak(Box::new(AudioReader::open(ctx, &mut cache, &file)?));
     let decoder = audio.decoder();
-    let source = PlaybackSource::new(decoder)?.with_volume(opt.volume);
+    let source = PlaybackSource::new(decoder)?.with_volume(args.volume);
 
     info!("Checking system audio configuration");
     let mut device = PlaybackDevice::open_default(source.sample_rate())?;
@@ -579,13 +580,13 @@ fn command_play(ctx: Context, opt: PlayArgs) -> Result<()> {
 }
 
 /// The `audio` CLI command.
-pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
-        Subcommand::Info(opt) => command_info(ctx, opt),
-        Subcommand::Export(opt) => command_export(ctx, opt),
-        Subcommand::ExportBank(opt) => command_export_bank(ctx, opt),
-        Subcommand::ExportAll(opt) => command_export_all(ctx, opt),
-        Subcommand::Import(opt) => command_import(ctx, opt),
-        Subcommand::Play(opt) => command_play(ctx, opt),
+pub fn command(ctx: Context, args: Subcommand) -> Result<()> {
+    match args {
+        Subcommand::Info(args) => command_info(ctx, args),
+        Subcommand::Export(args) => command_export(ctx, args),
+        Subcommand::ExportBank(args) => command_export_bank(ctx, args),
+        Subcommand::ExportAll(args) => command_export_all(ctx, args),
+        Subcommand::Import(args) => command_import(ctx, args),
+        Subcommand::Play(args) => command_play(ctx, args),
     }
 }

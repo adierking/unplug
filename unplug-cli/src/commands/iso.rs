@@ -47,21 +47,21 @@ fn command_info(ctx: Context) -> Result<()> {
 }
 
 /// The `iso list` CLI command.
-fn command_list(ctx: Context, opt: ListArgs) -> Result<()> {
+fn command_list(ctx: Context, args: ListArgs) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let disc = DiscStream::open(File::open(path)?)?;
-    list_files(disc.files(), &opt.settings, &Glob::new(GlobMode::Prefix, opt.paths))
+    list_files(disc.files(), &args.settings, &Glob::new(GlobMode::Prefix, args.paths))
 }
 
 /// The `iso extract` CLI command.
-fn command_extract(ctx: Context, opt: ExtractArgs) -> Result<()> {
+fn command_extract(ctx: Context, args: ExtractArgs) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let mut disc = DiscStream::open(File::open(path)?)?;
-    let files = Glob::new(GlobMode::Exact, opt.paths).find(disc.files()).collect::<Vec<_>>();
+    let files = Glob::new(GlobMode::Exact, args.paths).find(disc.files()).collect::<Vec<_>>();
     if files.is_empty() {
         bail!("Nothing to extract");
     }
-    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), files.len() > 1);
+    let (out_dir, out_name) = output_dir_and_name(args.output.as_deref(), files.len() > 1);
     fs::create_dir_all(out_dir)?;
     let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
     for (path, entry) in files {
@@ -71,10 +71,10 @@ fn command_extract(ctx: Context, opt: ExtractArgs) -> Result<()> {
 }
 
 /// The `iso extract-all` CLI command.
-fn command_extract_all(ctx: Context, opt: ExtractAllArgs) -> Result<()> {
+fn command_extract_all(ctx: Context, args: ExtractAllArgs) -> Result<()> {
     let path = ctx.into_iso_path()?;
     let mut disc = DiscStream::open(File::open(path)?)?;
-    let (out_dir, out_name) = output_dir_and_name(opt.output.as_deref(), false);
+    let (out_dir, out_name) = output_dir_and_name(args.output.as_deref(), false);
     fs::create_dir_all(out_dir)?;
     let mut io_buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
     let root = disc.files().root();
@@ -83,11 +83,11 @@ fn command_extract_all(ctx: Context, opt: ExtractAllArgs) -> Result<()> {
 }
 
 /// The `iso replace` CLI command.
-fn command_replace(ctx: Context, opt: ReplaceArgs) -> Result<()> {
+fn command_replace(ctx: Context, args: ReplaceArgs) -> Result<()> {
     let mut ctx = ctx.open_read_write()?;
-    let file = ctx.disc_file_at(&opt.dest_path)?;
+    let file = ctx.disc_file_at(&args.dest_path)?;
     let info = ctx.query_file(&file)?;
-    let reader = File::open(&opt.src_path)?;
+    let reader = File::open(&args.src_path)?;
     info!("Writing {}", info.name);
     ctx.begin_update().write_file(&file, reader).commit()?;
     Ok(())
@@ -128,13 +128,13 @@ fn command_set_name(ctx: Context, name: String) -> Result<()> {
 }
 
 /// The `iso` CLI command.
-pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
-    match opt {
+pub fn command(ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
         Subcommand::Info => command_info(ctx),
-        Subcommand::List(opt) => command_list(ctx, opt),
-        Subcommand::Extract(opt) => command_extract(ctx, opt),
-        Subcommand::ExtractAll(opt) => command_extract_all(ctx, opt),
-        Subcommand::Replace(opt) => command_replace(ctx, opt),
+        Subcommand::List(args) => command_list(ctx, args),
+        Subcommand::Extract(args) => command_extract(ctx, args),
+        Subcommand::ExtractAll(args) => command_extract_all(ctx, args),
+        Subcommand::Replace(args) => command_replace(ctx, args),
         Subcommand::Set(SetCommand::Maker { name }) => command_set_maker(ctx, name),
         Subcommand::Set(SetCommand::Name { name }) => command_set_name(ctx, name),
     }
