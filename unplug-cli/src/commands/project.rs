@@ -1,10 +1,8 @@
+use crate::opt::project::*;
+
 use crate::common::IString;
 use crate::config::{Config, Project, ProjectKind};
 use crate::context::Context;
-use crate::opt::{
-    ProjectAddOpt, ProjectCommand, ProjectInfoOpt, ProjectNewOpt, ProjectOpenOpt, ProjectRemoveOpt,
-    ProjectWipeOpt,
-};
 use crate::terminal::ask_yes_no;
 use anyhow::{anyhow, bail, Result};
 use log::info;
@@ -182,18 +180,18 @@ fn command_close() -> Result<()> {
 }
 
 /// The `project` CLI command.
-pub fn command(_ctx: Context, opt: ProjectCommand) -> Result<()> {
+pub fn command(_ctx: Context, opt: Subcommand) -> Result<()> {
     if !Config::get().is_loaded() {
         bail!("The `project` command requires a config file to be loaded");
     }
     match opt {
-        ProjectCommand::Info(opt) => command_info(opt),
-        ProjectCommand::List => command_list(),
-        ProjectCommand::New(opt) => command_new(opt),
-        ProjectCommand::Wipe(opt) => command_wipe(opt),
-        ProjectCommand::Add(opt) => command_add(opt),
-        ProjectCommand::Remove(opt) => command_remove(opt),
-        ProjectCommand::Open(opt) => command_open(opt),
-        ProjectCommand::Close => command_close(),
+        Subcommand::Info(opt) => command_info(opt),
+        Subcommand::List => command_list(),
+        Subcommand::New(opt) => command_new(opt),
+        Subcommand::Wipe(opt) => command_wipe(opt),
+        Subcommand::Add(opt) => command_add(opt),
+        Subcommand::Remove(opt) => command_remove(opt),
+        Subcommand::Open(opt) => command_open(opt),
+        Subcommand::Close => command_close(),
     }
 }

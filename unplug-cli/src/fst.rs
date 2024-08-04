@@ -1,4 +1,4 @@
-use crate::opt::*;
+use crate::opt::list::ListOpt;
 use anyhow::{bail, Result};
 use log::info;
 use std::fs::{self, File};

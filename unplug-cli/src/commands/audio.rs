@@ -1,9 +1,7 @@
+use crate::opt::audio::*;
+
 use crate::common::{format_duration, output_dir_and_name};
 use crate::context::{Context, FileId, OpenContext};
-use crate::opt::{
-    AudioCommand, AudioExportAllOpt, AudioExportBankOpt, AudioExportOpt, AudioExportSettings,
-    AudioImportOpt, AudioImportSettings, AudioInfoOpt, AudioPlayOpt,
-};
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
 use anyhow::{anyhow, bail, Result};
@@ -581,13 +579,13 @@ fn command_play(ctx: Context, opt: AudioPlayOpt) -> Result<()> {
 }
 
 /// The `audio` CLI command.
-pub fn command(ctx: Context, opt: AudioCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        AudioCommand::Info(opt) => command_info(ctx, opt),
-        AudioCommand::Export(opt) => command_export(ctx, opt),
-        AudioCommand::ExportBank(opt) => command_export_bank(ctx, opt),
-        AudioCommand::ExportAll(opt) => command_export_all(ctx, opt),
-        AudioCommand::Import(opt) => command_import(ctx, opt),
-        AudioCommand::Play(opt) => command_play(ctx, opt),
+        Subcommand::Info(opt) => command_info(ctx, opt),
+        Subcommand::Export(opt) => command_export(ctx, opt),
+        Subcommand::ExportBank(opt) => command_export_bank(ctx, opt),
+        Subcommand::ExportAll(opt) => command_export_all(ctx, opt),
+        Subcommand::Import(opt) => command_import(ctx, opt),
+        Subcommand::Play(opt) => command_play(ctx, opt),
     }
 }

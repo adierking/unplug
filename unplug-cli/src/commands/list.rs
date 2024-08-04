@@ -1,5 +1,6 @@
+use crate::opt::list::*;
+
 use crate::context::Context;
-use crate::opt::{ListCommand, ListEquipmentOpt, ListIdsOpt, ListItemsOpt};
 use anyhow::Result;
 use unicase::Ascii;
 use unplug::data::{Atc, Item, ItemFlags, Music, Object, Resource, Sfx, Stage};
@@ -87,13 +88,13 @@ fn command_sounds(opt: ListIdsOpt) -> Result<()> {
 }
 
 /// The `list` CLI command.
-pub fn command(_ctx: Context, opt: ListCommand) -> Result<()> {
+pub fn command(_ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        ListCommand::Items(opt) => command_items(opt),
-        ListCommand::Equipment(opt) => command_equipment(opt),
-        ListCommand::Stages(opt) => command_stages(opt),
-        ListCommand::Objects(opt) => command_objects(opt),
-        ListCommand::Music(opt) => command_music(opt),
-        ListCommand::Sounds(opt) => command_sounds(opt),
+        Subcommand::Items(opt) => command_items(opt),
+        Subcommand::Equipment(opt) => command_equipment(opt),
+        Subcommand::Stages(opt) => command_stages(opt),
+        Subcommand::Objects(opt) => command_objects(opt),
+        Subcommand::Music(opt) => command_music(opt),
+        Subcommand::Sounds(opt) => command_sounds(opt),
     }
 }

@@ -10,7 +10,7 @@ use unplug::shop::Shop;
 use unplug::stage::Stage;
 use unplug_cli::commands::shop;
 use unplug_cli::context::Context;
-use unplug_cli::opt::{ShopExportOpt, ShopImportOpt};
+use unplug_cli::opt::shop::{ShopExportOpt, ShopImportOpt};
 use unplug_test as common;
 
 #[test]

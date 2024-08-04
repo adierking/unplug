@@ -11,7 +11,7 @@ use unplug::stage::Stage;
 use unplug_cli::commands::messages;
 use unplug_cli::context::Context;
 use unplug_cli::msg::{iter_messages, MessageId, MessageSource};
-use unplug_cli::opt::{MessagesExportOpt, MessagesImportOpt};
+use unplug_cli::opt::messages::{MessagesExportOpt, MessagesImportOpt};
 use unplug_test as common;
 
 fn collect_messages(source: MessageSource, script: &Script) -> Vec<(MessageId, &MsgArgs)> {

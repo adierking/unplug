@@ -1,10 +1,8 @@
+use crate::opt::archive::*;
+
 use crate::common::output_dir_and_name;
 use crate::context::Context;
 use crate::fst::{extract_file, list_files};
-use crate::opt::{
-    ArchiveCommand, ArchiveExtractAllOpt, ArchiveExtractOpt, ArchiveListOpt, ArchiveReplaceOpt,
-    QpCommand,
-};
 use anyhow::{bail, Result};
 use humansize::{FormatSize, BINARY};
 use log::{debug, info};
@@ -93,23 +91,23 @@ fn command_replace(ctx: Context, path: &str, opt: ArchiveReplaceOpt) -> Result<(
 }
 
 /// The `archive` CLI command.
-pub fn command(ctx: Context, opt: ArchiveCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        ArchiveCommand::Info { path } => command_info(ctx, &path),
-        ArchiveCommand::List { path, opt } => command_list(ctx, &path, opt),
-        ArchiveCommand::Extract { path, opt } => command_extract(ctx, &path, opt),
-        ArchiveCommand::ExtractAll { path, opt } => command_extract_all(ctx, &path, opt),
-        ArchiveCommand::Replace { path, opt } => command_replace(ctx, &path, opt),
+        Subcommand::Info { path } => command_info(ctx, &path),
+        Subcommand::List { path, opt } => command_list(ctx, &path, opt),
+        Subcommand::Extract { path, opt } => command_extract(ctx, &path, opt),
+        Subcommand::ExtractAll { path, opt } => command_extract_all(ctx, &path, opt),
+        Subcommand::Replace { path, opt } => command_replace(ctx, &path, opt),
     }
 }
 
 /// The `qp` CLI command.
-pub fn command_qp(ctx: Context, opt: QpCommand) -> Result<()> {
+pub fn command_qp(ctx: Context, opt: QpSubcommand) -> Result<()> {
     match opt {
-        QpCommand::Info => command_info(ctx, QP_ALIAS_PATH),
-        QpCommand::List(opt) => command_list(ctx, QP_ALIAS_PATH, opt),
-        QpCommand::Extract(opt) => command_extract(ctx, QP_ALIAS_PATH, opt),
-        QpCommand::ExtractAll(opt) => command_extract_all(ctx, QP_ALIAS_PATH, opt),
-        QpCommand::Replace(opt) => command_replace(ctx, QP_ALIAS_PATH, opt),
+        QpSubcommand::Info => command_info(ctx, QP_ALIAS_PATH),
+        QpSubcommand::List(opt) => command_list(ctx, QP_ALIAS_PATH, opt),
+        QpSubcommand::Extract(opt) => command_extract(ctx, QP_ALIAS_PATH, opt),
+        QpSubcommand::ExtractAll(opt) => command_extract_all(ctx, QP_ALIAS_PATH, opt),
+        QpSubcommand::Replace(opt) => command_replace(ctx, QP_ALIAS_PATH, opt),
     }
 }

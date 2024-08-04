@@ -1,6 +1,7 @@
+use crate::opt::config::*;
+
 use crate::config::{Config, Settings};
 use crate::context::Context;
-use crate::opt::{ConfigCommand, GetSetting, SetSetting};
 use anyhow::{bail, Result};
 use log::info;
 use std::fmt::Display;
@@ -74,14 +75,14 @@ where
 }
 
 /// The `config` CLI command.
-pub fn command(_ctx: Context, opt: ConfigCommand) -> Result<()> {
+pub fn command(_ctx: Context, opt: Subcommand) -> Result<()> {
     if !Config::get().is_loaded() {
         bail!("The `config` command requires a config file to be loaded");
     }
     match opt {
-        ConfigCommand::Clear => command_clear(),
-        ConfigCommand::Path => command_path(),
-        ConfigCommand::Get(setting) => command_get(setting),
-        ConfigCommand::Set(setting) => command_set(setting),
+        Subcommand::Clear => command_clear(),
+        Subcommand::Path => command_path(),
+        Subcommand::Get(setting) => command_get(setting),
+        Subcommand::Set(setting) => command_set(setting),
     }
 }

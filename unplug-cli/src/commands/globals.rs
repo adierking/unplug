@@ -1,6 +1,7 @@
+use crate::opt::globals::*;
+
 use crate::context::Context;
 use crate::io::OutputRedirect;
-use crate::opt::{GlobalsCommand, GlobalsDumpCollidersOpt, GlobalsExportOpt, GlobalsImportOpt};
 use crate::serde_list_wrapper;
 use anyhow::{bail, Result};
 use log::info;
@@ -425,10 +426,10 @@ fn command_dump_colliders(ctx: Context, opt: GlobalsDumpCollidersOpt) -> Result<
 }
 
 /// The `globals` CLI command.
-pub fn command(ctx: Context, opt: GlobalsCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        GlobalsCommand::Export(opt) => command_export(ctx, opt),
-        GlobalsCommand::Import(opt) => command_import(ctx, opt),
-        GlobalsCommand::DumpColliders(opt) => command_dump_colliders(ctx, opt),
+        Subcommand::Export(opt) => command_export(ctx, opt),
+        Subcommand::Import(opt) => command_import(ctx, opt),
+        Subcommand::DumpColliders(opt) => command_dump_colliders(ctx, opt),
     }
 }

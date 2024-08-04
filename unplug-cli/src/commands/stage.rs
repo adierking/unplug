@@ -1,10 +1,9 @@
+use crate::opt::stage::*;
+
 use crate::common::find_stage_file;
 use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::json::MaxIndentJsonFormatter;
-use crate::opt::{
-    StageCommand, StageExportAllOpt, StageExportOpt, StageImportAllOpt, StageImportOpt,
-};
 use crate::serde_list_wrapper;
 use anyhow::{bail, Result};
 use log::{debug, info, warn};
@@ -237,12 +236,12 @@ fn write_stage(stage: Stage, out: impl Write) -> Result<()> {
 }
 
 /// The `stage` CLI command.
-pub fn command(ctx: Context, opt: StageCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        StageCommand::Export(opt) => command_export(ctx, opt),
-        StageCommand::ExportAll(opt) => command_export_all(ctx, opt),
-        StageCommand::Import(opt) => command_import(ctx, opt),
-        StageCommand::ImportAll(opt) => command_import_all(ctx, opt),
+        Subcommand::Export(opt) => command_export(ctx, opt),
+        Subcommand::ExportAll(opt) => command_export_all(ctx, opt),
+        Subcommand::Import(opt) => command_import(ctx, opt),
+        Subcommand::ImportAll(opt) => command_import_all(ctx, opt),
     }
 }
 

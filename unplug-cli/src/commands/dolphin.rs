@@ -1,6 +1,7 @@
+use crate::opt::dolphin::*;
+
 use crate::config::Config;
 use crate::context::Context;
-use crate::opt::DolphinOpt;
 use anyhow::{bail, Result};
 use cfg_if::cfg_if;
 use log::{debug, info};
@@ -70,7 +71,7 @@ fn dolphin_command() -> Result<Command> {
 }
 
 /// The `dolphin` CLI command.
-pub fn command(ctx: Context, opt: DolphinOpt) -> Result<()> {
+pub fn command(ctx: Context, opt: Options) -> Result<()> {
     let mut command = dolphin_command()?;
     command.arg(DOLPHIN_OPT_EXEC).arg(ctx.into_iso_path()?);
     if !opt.ui {

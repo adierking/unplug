@@ -1,5 +1,6 @@
+use crate::opt::debug::*;
+
 use crate::context::Context;
-use crate::opt::DebugCommand;
 use anyhow::Result;
 use log::info;
 use unplug::data::{Resource, Stage};
@@ -34,8 +35,8 @@ fn command_rebuild_scripts(ctx: Context) -> Result<()> {
 }
 
 /// The `debug` CLI command.
-pub fn command(ctx: Context, opt: DebugCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        DebugCommand::RebuildScripts => command_rebuild_scripts(ctx),
+        Subcommand::RebuildScripts => command_rebuild_scripts(ctx),
     }
 }

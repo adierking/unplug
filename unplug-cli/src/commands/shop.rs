@@ -1,7 +1,8 @@
+use crate::opt::shop::*;
+
 use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::json::MaxIndentJsonFormatter;
-use crate::opt::{ShopCommand, ShopExportOpt, ShopImportOpt};
 use anyhow::{bail, Error, Result};
 use lazy_static::lazy_static;
 use log::{error, info, warn};
@@ -200,10 +201,10 @@ pub fn command_import(ctx: Context, opt: ShopImportOpt) -> Result<()> {
 }
 
 /// The `shop` CLI command.
-pub fn command(ctx: Context, opt: ShopCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        ShopCommand::Export(opt) => command_export(ctx, opt),
-        ShopCommand::Import(opt) => command_import(ctx, opt),
+        Subcommand::Export(opt) => command_export(ctx, opt),
+        Subcommand::Import(opt) => command_import(ctx, opt),
     }
 }
 

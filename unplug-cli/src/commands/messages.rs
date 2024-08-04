@@ -1,6 +1,7 @@
+use crate::opt::messages::*;
+
 use crate::context::Context;
 use crate::msg::{self, MessageId, MessageReader, MessageSource, MessageWriter};
-use crate::opt::{MessagesCommand, MessagesExportOpt, MessagesImportOpt};
 use anyhow::Result;
 use log::{info, warn};
 use std::collections::{HashMap, HashSet};
@@ -114,9 +115,9 @@ pub fn command_import(ctx: Context, opt: MessagesImportOpt) -> Result<()> {
 }
 
 /// The `messages` CLI command.
-pub fn command(ctx: Context, opt: MessagesCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        MessagesCommand::Export(opt) => command_export(ctx, opt),
-        MessagesCommand::Import(opt) => command_import(ctx, opt),
+        Subcommand::Export(opt) => command_export(ctx, opt),
+        Subcommand::Import(opt) => command_import(ctx, opt),
     }
 }

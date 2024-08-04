@@ -1,9 +1,8 @@
+use crate::opt::iso::*;
+
 use crate::common::output_dir_and_name;
 use crate::context::Context;
 use crate::fst::{extract_file, list_files};
-use crate::opt::{
-    IsoCommand, IsoExtractAllOpt, IsoExtractOpt, IsoListOpt, IsoReplaceOpt, IsoSetCommand,
-};
 use anyhow::{bail, Result};
 use humansize::{FormatSize, BINARY};
 use log::info;
@@ -129,14 +128,14 @@ fn command_set_name(ctx: Context, name: String) -> Result<()> {
 }
 
 /// The `iso` CLI command.
-pub fn command(ctx: Context, opt: IsoCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        IsoCommand::Info => command_info(ctx),
-        IsoCommand::List(opt) => command_list(ctx, opt),
-        IsoCommand::Extract(opt) => command_extract(ctx, opt),
-        IsoCommand::ExtractAll(opt) => command_extract_all(ctx, opt),
-        IsoCommand::Replace(opt) => command_replace(ctx, opt),
-        IsoCommand::Set(IsoSetCommand::Maker { name }) => command_set_maker(ctx, name),
-        IsoCommand::Set(IsoSetCommand::Name { name }) => command_set_name(ctx, name),
+        Subcommand::Info => command_info(ctx),
+        Subcommand::List(opt) => command_list(ctx, opt),
+        Subcommand::Extract(opt) => command_extract(ctx, opt),
+        Subcommand::ExtractAll(opt) => command_extract_all(ctx, opt),
+        Subcommand::Replace(opt) => command_replace(ctx, opt),
+        Subcommand::Set(SetCommand::Maker { name }) => command_set_maker(ctx, name),
+        Subcommand::Set(SetCommand::Name { name }) => command_set_name(ctx, name),
     }
 }

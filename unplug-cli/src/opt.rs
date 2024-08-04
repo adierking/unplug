@@ -65,738 +65,789 @@ pub struct ContextOpt {
 pub enum Command {
     /// View, edit, or extract U8 archives
     #[clap(subcommand)]
-    Archive(ArchiveCommand),
+    Archive(archive::Subcommand),
 
     /// Export, import, or play audio resources
     #[clap(subcommand)]
-    Audio(AudioCommand),
+    Audio(audio::Subcommand),
 
     /// Edit Unplug configuration options
     #[clap(subcommand)]
-    Config(ConfigCommand),
+    Config(config::Subcommand),
 
     /// Run Dolphin with the current project/ISO
-    Dolphin(DolphinOpt),
+    Dolphin(dolphin::Options),
 
     /// Edit global metadata
     #[clap(subcommand)]
-    Globals(GlobalsCommand),
+    Globals(globals::Subcommand),
 
     /// View, edit, or extract the game ISO
     #[clap(subcommand)]
-    Iso(IsoCommand),
+    Iso(iso::Subcommand),
 
     /// List information about game assets
     #[clap(subcommand)]
-    List(ListCommand),
+    List(list::Subcommand),
 
     /// Edit cutscene messages
     #[clap(subcommand)]
-    Messages(MessagesCommand),
+    Messages(messages::Subcommand),
 
     /// Manage Unplug projects
     #[clap(subcommand)]
-    Project(ProjectCommand),
+    Project(project::Subcommand),
 
     /// View, edit, or extract qp.bin
     ///
     /// This is an alias for `archive dvd:qp.bin`.
     #[clap(subcommand)]
-    Qp(QpCommand),
+    Qp(archive::QpSubcommand),
 
     /// Dump event scripts
     #[clap(subcommand)]
-    Script(ScriptCommand),
+    Script(script::Subcommand),
 
     /// Edit the in-game shop
     #[clap(subcommand)]
-    Shop(ShopCommand),
+    Shop(shop::Subcommand),
 
     /// Edit stage data
     #[clap(subcommand)]
-    Stage(StageCommand),
+    Stage(stage::Subcommand),
 
     #[cfg(feature = "debug")]
     #[clap(subcommand)]
     /// Debugging commands (development builds only)
-    Debug(DebugCommand),
+    Debug(debug::Subcommand),
 
     #[cfg(test)]
     Test,
 }
 
-#[derive(Subcommand)]
-pub enum ConfigCommand {
-    /// Reset all configuration options to their default values
-    Clear,
-    /// Print the absolute path to the config file
-    Path,
-    /// Print the value of a setting
-    #[clap(subcommand)]
-    Get(GetSetting),
-    /// Set the value of a setting
-    #[clap(subcommand)]
-    Set(SetSetting),
-}
-
-#[derive(Subcommand)]
-pub enum GetSetting {
-    /// A path to an ISO to load by default
-    DefaultIso,
-    /// The path to the Dolphin executable (or macOS app bundle) to run projects with
-    DolphinPath,
-}
-
-#[derive(Subcommand)]
-pub enum SetSetting {
-    /// A path to an ISO to load by default
-    DefaultIso {
-        /// The new path
-        path: Option<String>,
-    },
-    /// The path to the Dolphin executable (or macOS app bundle) to run projects with
-    DolphinPath {
-        /// The new path
-        path: Option<String>,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum ProjectCommand {
-    /// Show information about a project (or the current one)
-    Info(ProjectInfoOpt),
-    /// List defined projects
-    List,
-    /// Create a new project by copying the default ISO
-    New(ProjectNewOpt),
-    /// Delete a project's files and unregister it
-    Wipe(ProjectWipeOpt),
-    /// Register an existing project
-    Add(ProjectAddOpt),
-    /// Unregister a project without deleting any of its files
-    #[clap(alias = "forget")]
-    Remove(ProjectRemoveOpt),
-    /// Open a project to be automatically used for future Unplug commands
-    Open(ProjectOpenOpt),
-    /// Close the currently-open project
-    Close,
-}
-
-#[derive(Args)]
-pub struct ProjectInfoOpt {
-    /// Name of the project to show
-    pub name: Option<String>,
-}
-
-#[derive(Args)]
-pub struct ProjectAddOpt {
-    /// Path to the project file(s)
-    pub path: PathBuf,
-
-    /// The project name (defaults to the filename)
-    #[clap(short, long)]
-    pub name: Option<String>,
-}
-
-#[derive(Args)]
-pub struct ProjectRemoveOpt {
-    /// Name of the project to remove
-    pub name: String,
-}
-
-#[derive(Args)]
-pub struct ProjectOpenOpt {
-    /// Name of the project to open
-    pub name: String,
-}
-
-#[derive(Args)]
-pub struct ProjectNewOpt {
-    /// Name of the new project
-    pub name: String,
-
-    /// Path to the ISO to copy from
-    #[clap(short, value_name("PATH"))]
-    pub source: Option<PathBuf>,
-
-    /// Path of the new ISO
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-
-    /// Allow overwriting existing projects/files
-    #[clap(short, long)]
-    pub force: bool,
-
-    /// Do not open the new project
-    #[clap(long)]
-    pub no_open: bool,
-}
-
-#[derive(Args)]
-pub struct ProjectWipeOpt {
-    /// Name of the project to wipe
-    pub name: String,
-
-    /// Do not prompt for confirmation
-    #[clap(short, long)]
-    pub force: bool,
-}
-
-#[derive(Args)]
-pub struct ListOpt {
-    /// List file offsets and sizes
-    #[clap(short, long)]
-    pub long: bool,
-
-    /// Sort files by name (default)
-    #[clap(long, overrides_with_all(&["by_offset", "by_size"]))]
-    pub by_name: bool,
-
-    /// Sort files by offset
-    #[clap(long, overrides_with_all(&["by_name", "by_size"]))]
-    pub by_offset: bool,
-
-    /// Sort files by size
-    #[clap(long, overrides_with_all(&["by_name", "by_offset"]))]
-    pub by_size: bool,
-
-    /// Sort in reverse order
-    #[clap(long)]
-    pub reverse: bool,
-}
-
-#[derive(Args)]
-pub struct ListIdsOpt {
-    /// Sort by name (default)
-    #[clap(long, overrides_with_all(&["by_id"]))]
-    pub by_name: bool,
-
-    /// Sort by ID number
-    #[clap(long, overrides_with_all(&["by_name"]))]
-    pub by_id: bool,
-
-    /// Sort in reverse order
-    #[clap(long)]
-    pub reverse: bool,
-}
-
-#[derive(Subcommand)]
-pub enum ListCommand {
-    /// List each item
-    Items(ListItemsOpt),
-    /// List each type of equipment
-    Equipment(ListEquipmentOpt),
-    /// List each stage
-    Stages(ListIdsOpt),
-    /// List each object
-    Objects(ListIdsOpt),
-    /// List each music file
-    Music(ListIdsOpt),
-    /// List each sound effect
-    Sounds(ListIdsOpt),
-}
-
-#[derive(Args)]
-pub struct ListItemsOpt {
-    #[clap(flatten)]
-    pub settings: ListIdsOpt,
-
-    /// Include items without names
-    #[clap(long)]
-    pub show_unknown: bool,
-}
-
-#[derive(Args)]
-pub struct ListEquipmentOpt {
-    #[clap(flatten)]
-    pub settings: ListIdsOpt,
-
-    /// Include equipment without names
-    #[clap(long)]
-    pub show_unknown: bool,
-}
-
-#[derive(Subcommand)]
-pub enum ScriptCommand {
-    /// Dump the script data from a single stage
-    Dump(ScriptDumpOpt),
-    /// Dump all script data
-    DumpAll(ScriptDumpAllOpt),
-    /// Disassemble a single stage's script
-    Disassemble(ScriptDisassembleOpt),
-    /// Disassemble all scripts
-    DisassembleAll(ScriptDisassembleAllOpt),
-    /// Assemble a single stage's script
-    Assemble(ScriptAssembleOpt),
-}
-
-#[derive(Args)]
-pub struct ScriptDumpFlags {
-    /// Dump unknown structs
-    #[clap(long)]
-    pub dump_unknown: bool,
-
-    /// Do not show file offsets
-    #[clap(long)]
-    pub no_offsets: bool,
-}
-
-#[derive(Args)]
-pub struct ScriptDumpOpt {
-    /// Name of the stage to dump, or "globals" to dump globals
-    pub stage: String,
-
-    /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-
-    #[clap(flatten)]
-    pub flags: ScriptDumpFlags,
-}
-
-#[derive(Args)]
-pub struct ScriptDumpAllOpt {
-    /// Path to the output directory
-    #[clap(short, value_name("PATH"))]
-    pub output: PathBuf,
-
-    #[clap(flatten)]
-    pub flags: ScriptDumpFlags,
-}
-
-#[derive(Args)]
-pub struct ScriptDisassembleOpt {
-    /// Name of the stage to dump
-    pub stage: String,
-
-    /// Path to the output file
-    #[clap(short, value_name("PATH"))]
-    pub output: PathBuf,
-}
-
-#[derive(Args)]
-pub struct ScriptDisassembleAllOpt {
-    /// Path to the output directory
-    #[clap(short, value_name("PATH"))]
-    pub output: PathBuf,
-}
-
-#[derive(Args)]
-pub struct ScriptAssembleOpt {
-    /// Path to the assembly source
-    #[clap(value_name("PATH"))]
-    pub path: PathBuf,
-}
-
-#[derive(Subcommand)]
-pub enum MessagesCommand {
-    /// Export messages to an XML file
-    Export(MessagesExportOpt),
-    /// Import messages from an XML file
-    Import(MessagesImportOpt),
-}
-
-#[derive(Args)]
-pub struct MessagesExportOpt {
-    /// Path to the output XML file
-    #[clap(short, value_name("PATH"))]
-    pub output: PathBuf,
-}
-
-#[derive(Args)]
-pub struct MessagesImportOpt {
-    /// Path to the input XML file
-    pub input: PathBuf,
-}
-
-#[derive(Subcommand)]
-pub enum GlobalsCommand {
-    /// Export global metadata to a JSON file
-    Export(GlobalsExportOpt),
-    /// Import global metadata from a JSON file
-    Import(GlobalsImportOpt),
-    /// Dump collision data to a text file
-    DumpColliders(GlobalsDumpCollidersOpt),
-}
-
-#[derive(Args)]
-pub struct GlobalsExportOpt {
-    /// Don't output unnecessary whitespace
-    #[clap(short, long)]
-    pub compact: bool,
-
-    /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-}
-
-#[derive(Args)]
-pub struct GlobalsImportOpt {
-    /// Path to the input JSON file
-    pub input: PathBuf,
-}
-
-#[derive(Args)]
-pub struct GlobalsDumpCollidersOpt {
-    /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-}
-
-#[derive(Subcommand)]
-pub enum ShopCommand {
-    /// Export shop data to a JSON file
-    Export(ShopExportOpt),
-    /// Import shop data from a JSON file
-    Import(ShopImportOpt),
-}
-
-#[derive(Args)]
-pub struct ShopExportOpt {
-    /// Don't output unnecessary whitespace
-    #[clap(short, long)]
-    pub compact: bool,
-
-    /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-}
-
-#[derive(Args)]
-pub struct ShopImportOpt {
-    /// Path to the input JSON file
-    pub input: PathBuf,
-}
-
-#[derive(Subcommand)]
-pub enum AudioCommand {
-    /// Show information about an audio resource
-    Info(AudioInfoOpt),
-    /// Export one or more audio resources to wav files
-    Export(AudioExportOpt),
-    /// Export an entire sample bank to a directory
-    ExportBank(AudioExportBankOpt),
-    /// Export all audio resources to a directory
-    ExportAll(AudioExportAllOpt),
-    /// Import an audio resource from an audio file
-    Import(AudioImportOpt),
-    /// Play an audio resource
-    Play(AudioPlayOpt),
-}
-
-#[derive(Args)]
-pub struct AudioExportSettings {
-    /// If an audio file has cue points, export a .labels.txt file which defines the cues using
-    /// Audacity's label track format
-    #[clap(long)]
-    pub labels: bool,
-}
-
-#[derive(Args)]
-pub struct AudioImportSettings {
-    /// If an audio file has a .labels.txt file alongside it, import Audacity labels from it
-    #[clap(long)]
-    pub labels: bool,
-}
-
-#[derive(Args)]
-pub struct AudioInfoOpt {
-    /// The name or path of the audio resource
-    pub name: String,
-}
-
-#[derive(Args)]
-pub struct AudioExportOpt {
-    /// If extracting one audio resource, the path of the .wav file to write, otherwise the
-    /// directory to write the audio files to
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-
-    #[clap(flatten)]
-    pub settings: AudioExportSettings,
-
-    /// Names or paths of the audio resources to export
-    #[clap(required = true)]
-    pub names: Vec<String>,
-}
-
-#[derive(Args)]
-pub struct AudioExportBankOpt {
-    /// The directory to write the bank's .wav files to (defaults to the bank name)
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-
-    #[clap(flatten)]
-    pub settings: AudioExportSettings,
-
-    /// Name or path of the sample bank to export
-    pub name: String,
-}
-
-#[derive(Args)]
-pub struct AudioExportAllOpt {
-    /// The directory to write files to
-    #[clap(short, value_name("PATH"))]
-    pub output: PathBuf,
-
-    #[clap(flatten)]
-    pub settings: AudioExportSettings,
-}
-
-#[derive(Args)]
-pub struct AudioImportOpt {
-    /// Name or path of the sound resource to import
-    pub name: String,
-
-    #[clap(flatten)]
-    pub settings: AudioImportSettings,
-
-    /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
-    pub path: PathBuf,
-}
-
-/// Clap value parser for parsing a playback volume
-fn parse_volume(s: &str) -> Result<f64> {
-    let volume = s.parse::<i32>()?;
-    if (MIN_VOLUME..=MAX_VOLUME).contains(&volume) {
-        Ok(f64::from(volume) / 100.0)
-    } else {
-        Err(anyhow!("volume must be between {} and {}", MIN_VOLUME, MAX_VOLUME))
+pub mod config {
+    use super::*;
+
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Reset all configuration options to their default values
+        Clear,
+        /// Print the absolute path to the config file
+        Path,
+        /// Print the value of a setting
+        #[clap(subcommand)]
+        Get(GetSetting),
+        /// Set the value of a setting
+        #[clap(subcommand)]
+        Set(SetSetting),
+    }
+
+    #[derive(Subcommand)]
+    pub enum GetSetting {
+        /// A path to an ISO to load by default
+        DefaultIso,
+        /// The path to the Dolphin executable (or macOS app bundle) to run projects with
+        DolphinPath,
+    }
+
+    #[derive(Subcommand)]
+    pub enum SetSetting {
+        /// A path to an ISO to load by default
+        DefaultIso {
+            /// The new path
+            path: Option<String>,
+        },
+        /// The path to the Dolphin executable (or macOS app bundle) to run projects with
+        DolphinPath {
+            /// The new path
+            path: Option<String>,
+        },
     }
 }
 
-#[derive(Args)]
-pub struct AudioPlayOpt {
-    /// Name or path of the audio resource to play
-    pub name: String,
+pub mod project {
+    use super::*;
 
-    /// Volume level as a percentage (0-100, default 80)
-    #[clap(long, default_value = "80", allow_hyphen_values = true, value_parser = parse_volume)]
-    pub volume: f64,
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Show information about a project (or the current one)
+        Info(ProjectInfoOpt),
+        /// List defined projects
+        List,
+        /// Create a new project by copying the default ISO
+        New(ProjectNewOpt),
+        /// Delete a project's files and unregister it
+        Wipe(ProjectWipeOpt),
+        /// Register an existing project
+        Add(ProjectAddOpt),
+        /// Unregister a project without deleting any of its files
+        #[clap(alias = "forget")]
+        Remove(ProjectRemoveOpt),
+        /// Open a project to be automatically used for future Unplug commands
+        Open(ProjectOpenOpt),
+        /// Close the currently-open project
+        Close,
+    }
+
+    #[derive(Args)]
+    pub struct ProjectInfoOpt {
+        /// Name of the project to show
+        pub name: Option<String>,
+    }
+
+    #[derive(Args)]
+    pub struct ProjectAddOpt {
+        /// Path to the project file(s)
+        pub path: PathBuf,
+
+        /// The project name (defaults to the filename)
+        #[clap(short, long)]
+        pub name: Option<String>,
+    }
+
+    #[derive(Args)]
+    pub struct ProjectRemoveOpt {
+        /// Name of the project to remove
+        pub name: String,
+    }
+
+    #[derive(Args)]
+    pub struct ProjectOpenOpt {
+        /// Name of the project to open
+        pub name: String,
+    }
+
+    #[derive(Args)]
+    pub struct ProjectNewOpt {
+        /// Name of the new project
+        pub name: String,
+
+        /// Path to the ISO to copy from
+        #[clap(short, value_name("PATH"))]
+        pub source: Option<PathBuf>,
+
+        /// Path of the new ISO
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+
+        /// Allow overwriting existing projects/files
+        #[clap(short, long)]
+        pub force: bool,
+
+        /// Do not open the new project
+        #[clap(long)]
+        pub no_open: bool,
+    }
+
+    #[derive(Args)]
+    pub struct ProjectWipeOpt {
+        /// Name of the project to wipe
+        pub name: String,
+
+        /// Do not prompt for confirmation
+        #[clap(short, long)]
+        pub force: bool,
+    }
 }
 
-#[derive(Args)]
-pub struct DolphinOpt {
-    /// Wait for Dolphin to exit and capture console output
-    #[clap(short, long)]
-    pub wait: bool,
+pub mod list {
+    use super::*;
 
-    /// Show Dolphin's UI
-    #[clap(long)]
-    pub ui: bool,
-}
+    #[derive(Args)]
+    pub struct ListOpt {
+        /// List file offsets and sizes
+        #[clap(short, long)]
+        pub long: bool,
 
-#[derive(Subcommand)]
-pub enum IsoCommand {
-    /// Show information about the ISO
-    Info,
-    /// List files in the ISO
-    List(IsoListOpt),
-    /// Extract files from the ISO
-    Extract(IsoExtractOpt),
-    /// Extract all files from the ISO
-    ExtractAll(IsoExtractAllOpt),
-    /// Replace a file in the ISO
-    Replace(IsoReplaceOpt),
-    /// Change properties of the ISO
-    #[clap(subcommand)]
-    Set(IsoSetCommand),
-}
+        /// Sort files by name (default)
+        #[clap(long, overrides_with_all(&["by_offset", "by_size"]))]
+        pub by_name: bool,
 
-#[derive(Subcommand)]
-pub enum IsoSetCommand {
-    /// The maker display name (max 63 bytes)
-    Maker {
-        /// The new maker name
-        name: String,
-    },
-    /// The title display name (max 63 bytes)
-    Name {
-        /// The new title name
-        name: String,
-    },
-}
+        /// Sort files by offset
+        #[clap(long, overrides_with_all(&["by_name", "by_size"]))]
+        pub by_offset: bool,
 
-#[derive(Args)]
-pub struct IsoListOpt {
-    #[clap(flatten)]
-    pub settings: ListOpt,
+        /// Sort files by size
+        #[clap(long, overrides_with_all(&["by_name", "by_offset"]))]
+        pub by_size: bool,
 
-    /// Paths to list (globbing is supported)
-    pub paths: Vec<String>,
-}
+        /// Sort in reverse order
+        #[clap(long)]
+        pub reverse: bool,
+    }
 
-#[derive(Args)]
-pub struct IsoExtractOpt {
-    /// If extracting one file, the path of the output file, otherwise the
-    /// directory to extract files to
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
+    #[derive(Args)]
+    pub struct ListIdsOpt {
+        /// Sort by name (default)
+        #[clap(long, overrides_with_all(&["by_id"]))]
+        pub by_name: bool,
 
-    /// Paths of files to extract
-    pub paths: Vec<String>,
-}
+        /// Sort by ID number
+        #[clap(long, overrides_with_all(&["by_name"]))]
+        pub by_id: bool,
 
-#[derive(Args)]
-pub struct IsoExtractAllOpt {
-    /// The directory to extract files to
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-}
+        /// Sort in reverse order
+        #[clap(long)]
+        pub reverse: bool,
+    }
 
-#[derive(Args)]
-pub struct IsoReplaceOpt {
-    /// Path of the file in the ISO to replace
-    #[clap(value_name("dest"))]
-    pub dest_path: String,
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// List each item
+        Items(ListItemsOpt),
+        /// List each type of equipment
+        Equipment(ListEquipmentOpt),
+        /// List each stage
+        Stages(ListIdsOpt),
+        /// List each object
+        Objects(ListIdsOpt),
+        /// List each music file
+        Music(ListIdsOpt),
+        /// List each sound effect
+        Sounds(ListIdsOpt),
+    }
 
-    /// Path to the file to replace it with
-    #[clap(value_name("src"))]
-    pub src_path: PathBuf,
-}
-
-#[derive(Subcommand)]
-pub enum ArchiveCommand {
-    /// Show information about the archive
-    Info {
-        /// Path to the U8 archive
-        path: String,
-    },
-    /// List files in the archive
-    List {
-        /// Path to the U8 archive
-        path: String,
+    #[derive(Args)]
+    pub struct ListItemsOpt {
         #[clap(flatten)]
-        opt: ArchiveListOpt,
-    },
-    /// Extract files from the archive
-    Extract {
-        /// Path to the U8 archive
-        path: String,
+        pub settings: ListIdsOpt,
+
+        /// Include items without names
+        #[clap(long)]
+        pub show_unknown: bool,
+    }
+
+    #[derive(Args)]
+    pub struct ListEquipmentOpt {
         #[clap(flatten)]
-        opt: ArchiveExtractOpt,
-    },
-    /// Extract all files from the archive
-    ExtractAll {
-        /// Path to the U8 archive
-        path: String,
+        pub settings: ListIdsOpt,
+
+        /// Include equipment without names
+        #[clap(long)]
+        pub show_unknown: bool,
+    }
+}
+
+pub mod script {
+    use super::*;
+
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Dump the script data from a single stage
+        Dump(ScriptDumpOpt),
+        /// Dump all script data
+        DumpAll(ScriptDumpAllOpt),
+        /// Disassemble a single stage's script
+        Disassemble(ScriptDisassembleOpt),
+        /// Disassemble all scripts
+        DisassembleAll(ScriptDisassembleAllOpt),
+        /// Assemble a single stage's script
+        Assemble(ScriptAssembleOpt),
+    }
+
+    #[derive(Args)]
+    pub struct ScriptDumpFlags {
+        /// Dump unknown structs
+        #[clap(long)]
+        pub dump_unknown: bool,
+
+        /// Do not show file offsets
+        #[clap(long)]
+        pub no_offsets: bool,
+    }
+
+    #[derive(Args)]
+    pub struct ScriptDumpOpt {
+        /// Name of the stage to dump, or "globals" to dump globals
+        pub stage: String,
+
+        /// Redirect output to a file instead of stdout
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+
         #[clap(flatten)]
-        opt: ArchiveExtractAllOpt,
-    },
-    /// Replace a file in the archive
-    Replace {
-        /// Path to the U8 archive
-        path: String,
+        pub flags: ScriptDumpFlags,
+    }
+
+    #[derive(Args)]
+    pub struct ScriptDumpAllOpt {
+        /// Path to the output directory
+        #[clap(short, value_name("PATH"))]
+        pub output: PathBuf,
+
         #[clap(flatten)]
-        opt: ArchiveReplaceOpt,
-    },
+        pub flags: ScriptDumpFlags,
+    }
+
+    #[derive(Args)]
+    pub struct ScriptDisassembleOpt {
+        /// Name of the stage to dump
+        pub stage: String,
+
+        /// Path to the output file
+        #[clap(short, value_name("PATH"))]
+        pub output: PathBuf,
+    }
+
+    #[derive(Args)]
+    pub struct ScriptDisassembleAllOpt {
+        /// Path to the output directory
+        #[clap(short, value_name("PATH"))]
+        pub output: PathBuf,
+    }
+
+    #[derive(Args)]
+    pub struct ScriptAssembleOpt {
+        /// Path to the assembly source
+        #[clap(value_name("PATH"))]
+        pub path: PathBuf,
+    }
 }
 
-#[derive(Args)]
-pub struct ArchiveListOpt {
-    #[clap(flatten)]
-    pub settings: ListOpt,
+pub mod messages {
+    use super::*;
 
-    /// Paths to list (globbing is supported)
-    pub paths: Vec<String>,
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Export messages to an XML file
+        Export(MessagesExportOpt),
+        /// Import messages from an XML file
+        Import(MessagesImportOpt),
+    }
+
+    #[derive(Args)]
+    pub struct MessagesExportOpt {
+        /// Path to the output XML file
+        #[clap(short, value_name("PATH"))]
+        pub output: PathBuf,
+    }
+
+    #[derive(Args)]
+    pub struct MessagesImportOpt {
+        /// Path to the input XML file
+        pub input: PathBuf,
+    }
 }
 
-#[derive(Args)]
-pub struct ArchiveExtractOpt {
-    /// If extracting one file, the path of the output file, otherwise the
-    /// directory to extract files to
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
+pub mod globals {
+    use super::*;
 
-    /// Paths of files to extract
-    pub paths: Vec<String>,
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Export global metadata to a JSON file
+        Export(GlobalsExportOpt),
+        /// Import global metadata from a JSON file
+        Import(GlobalsImportOpt),
+        /// Dump collision data to a text file
+        DumpColliders(GlobalsDumpCollidersOpt),
+    }
+
+    #[derive(Args)]
+    pub struct GlobalsExportOpt {
+        /// Don't output unnecessary whitespace
+        #[clap(short, long)]
+        pub compact: bool,
+
+        /// Redirect output to a file instead of stdout
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+    }
+
+    #[derive(Args)]
+    pub struct GlobalsImportOpt {
+        /// Path to the input JSON file
+        pub input: PathBuf,
+    }
+
+    #[derive(Args)]
+    pub struct GlobalsDumpCollidersOpt {
+        /// Redirect output to a file instead of stdout
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+    }
 }
 
-#[derive(Args)]
-pub struct ArchiveExtractAllOpt {
-    /// The directory to extract files to
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
+pub mod shop {
+    use super::*;
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Export shop data to a JSON file
+        Export(ShopExportOpt),
+        /// Import shop data from a JSON file
+        Import(ShopImportOpt),
+    }
+
+    #[derive(Args)]
+    pub struct ShopExportOpt {
+        /// Don't output unnecessary whitespace
+        #[clap(short, long)]
+        pub compact: bool,
+
+        /// Redirect output to a file instead of stdout
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+    }
+
+    #[derive(Args)]
+    pub struct ShopImportOpt {
+        /// Path to the input JSON file
+        pub input: PathBuf,
+    }
 }
 
-#[derive(Args)]
-pub struct ArchiveReplaceOpt {
-    /// Path of the file in the archive to replace
-    #[clap(value_name("dest"))]
-    pub dest_path: String,
+pub mod audio {
+    use super::*;
 
-    /// Path to the file to replace it with
-    #[clap(value_name("src"))]
-    pub src_path: PathBuf,
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Show information about an audio resource
+        Info(AudioInfoOpt),
+        /// Export one or more audio resources to wav files
+        Export(AudioExportOpt),
+        /// Export an entire sample bank to a directory
+        ExportBank(AudioExportBankOpt),
+        /// Export all audio resources to a directory
+        ExportAll(AudioExportAllOpt),
+        /// Import an audio resource from an audio file
+        Import(AudioImportOpt),
+        /// Play an audio resource
+        Play(AudioPlayOpt),
+    }
+
+    #[derive(Args)]
+    pub struct AudioExportSettings {
+        /// If an audio file has cue points, export a .labels.txt file which defines the cues using
+        /// Audacity's label track format
+        #[clap(long)]
+        pub labels: bool,
+    }
+
+    #[derive(Args)]
+    pub struct AudioImportSettings {
+        /// If an audio file has a .labels.txt file alongside it, import Audacity labels from it
+        #[clap(long)]
+        pub labels: bool,
+    }
+
+    #[derive(Args)]
+    pub struct AudioInfoOpt {
+        /// The name or path of the audio resource
+        pub name: String,
+    }
+
+    #[derive(Args)]
+    pub struct AudioExportOpt {
+        /// If extracting one audio resource, the path of the .wav file to write, otherwise the
+        /// directory to write the audio files to
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+
+        #[clap(flatten)]
+        pub settings: AudioExportSettings,
+
+        /// Names or paths of the audio resources to export
+        #[clap(required = true)]
+        pub names: Vec<String>,
+    }
+
+    #[derive(Args)]
+    pub struct AudioExportBankOpt {
+        /// The directory to write the bank's .wav files to (defaults to the bank name)
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+
+        #[clap(flatten)]
+        pub settings: AudioExportSettings,
+
+        /// Name or path of the sample bank to export
+        pub name: String,
+    }
+
+    #[derive(Args)]
+    pub struct AudioExportAllOpt {
+        /// The directory to write files to
+        #[clap(short, value_name("PATH"))]
+        pub output: PathBuf,
+
+        #[clap(flatten)]
+        pub settings: AudioExportSettings,
+    }
+
+    #[derive(Args)]
+    pub struct AudioImportOpt {
+        /// Name or path of the sound resource to import
+        pub name: String,
+
+        #[clap(flatten)]
+        pub settings: AudioImportSettings,
+
+        /// Path to the audio file to import (WAV, FLAC, MP3, OGG)
+        pub path: PathBuf,
+    }
+
+    /// Clap value parser for parsing a playback volume
+    fn parse_volume(s: &str) -> Result<f64> {
+        let volume = s.parse::<i32>()?;
+        if (MIN_VOLUME..=MAX_VOLUME).contains(&volume) {
+            Ok(f64::from(volume) / 100.0)
+        } else {
+            Err(anyhow!("volume must be between {} and {}", MIN_VOLUME, MAX_VOLUME))
+        }
+    }
+
+    #[derive(Args)]
+    pub struct AudioPlayOpt {
+        /// Name or path of the audio resource to play
+        pub name: String,
+
+        /// Volume level as a percentage (0-100, default 80)
+        #[clap(long, default_value = "80", allow_hyphen_values = true, value_parser = parse_volume)]
+        pub volume: f64,
+    }
+}
+
+pub mod dolphin {
+    use super::*;
+
+    #[derive(Args)]
+    pub struct Options {
+        /// Wait for Dolphin to exit and capture console output
+        #[clap(short, long)]
+        pub wait: bool,
+
+        /// Show Dolphin's UI
+        #[clap(long)]
+        pub ui: bool,
+    }
+}
+
+pub mod iso {
+    use super::*;
+
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Show information about the ISO
+        Info,
+        /// List files in the ISO
+        List(IsoListOpt),
+        /// Extract files from the ISO
+        Extract(IsoExtractOpt),
+        /// Extract all files from the ISO
+        ExtractAll(IsoExtractAllOpt),
+        /// Replace a file in the ISO
+        Replace(IsoReplaceOpt),
+        /// Change properties of the ISO
+        #[clap(subcommand)]
+        Set(SetCommand),
+    }
+
+    #[derive(Subcommand)]
+    pub enum SetCommand {
+        /// The maker display name (max 63 bytes)
+        Maker {
+            /// The new maker name
+            name: String,
+        },
+        /// The title display name (max 63 bytes)
+        Name {
+            /// The new title name
+            name: String,
+        },
+    }
+
+    #[derive(Args)]
+    pub struct IsoListOpt {
+        #[clap(flatten)]
+        pub settings: list::ListOpt,
+
+        /// Paths to list (globbing is supported)
+        pub paths: Vec<String>,
+    }
+
+    #[derive(Args)]
+    pub struct IsoExtractOpt {
+        /// If extracting one file, the path of the output file, otherwise the
+        /// directory to extract files to
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+
+        /// Paths of files to extract
+        pub paths: Vec<String>,
+    }
+
+    #[derive(Args)]
+    pub struct IsoExtractAllOpt {
+        /// The directory to extract files to
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+    }
+
+    #[derive(Args)]
+    pub struct IsoReplaceOpt {
+        /// Path of the file in the ISO to replace
+        #[clap(value_name("dest"))]
+        pub dest_path: String,
+
+        /// Path to the file to replace it with
+        #[clap(value_name("src"))]
+        pub src_path: PathBuf,
+    }
+}
+
+pub mod archive {
+    use super::*;
+
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Show information about the archive
+        Info {
+            /// Path to the U8 archive
+            path: String,
+        },
+        /// List files in the archive
+        List {
+            /// Path to the U8 archive
+            path: String,
+            #[clap(flatten)]
+            opt: ArchiveListOpt,
+        },
+        /// Extract files from the archive
+        Extract {
+            /// Path to the U8 archive
+            path: String,
+            #[clap(flatten)]
+            opt: ArchiveExtractOpt,
+        },
+        /// Extract all files from the archive
+        ExtractAll {
+            /// Path to the U8 archive
+            path: String,
+            #[clap(flatten)]
+            opt: ArchiveExtractAllOpt,
+        },
+        /// Replace a file in the archive
+        Replace {
+            /// Path to the U8 archive
+            path: String,
+            #[clap(flatten)]
+            opt: ArchiveReplaceOpt,
+        },
+    }
+
+    #[derive(Args)]
+    pub struct ArchiveListOpt {
+        #[clap(flatten)]
+        pub settings: list::ListOpt,
+
+        /// Paths to list (globbing is supported)
+        pub paths: Vec<String>,
+    }
+
+    #[derive(Args)]
+    pub struct ArchiveExtractOpt {
+        /// If extracting one file, the path of the output file, otherwise the
+        /// directory to extract files to
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+
+        /// Paths of files to extract
+        pub paths: Vec<String>,
+    }
+
+    #[derive(Args)]
+    pub struct ArchiveExtractAllOpt {
+        /// The directory to extract files to
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+    }
+
+    #[derive(Args)]
+    pub struct ArchiveReplaceOpt {
+        /// Path of the file in the archive to replace
+        #[clap(value_name("dest"))]
+        pub dest_path: String,
+
+        /// Path to the file to replace it with
+        #[clap(value_name("src"))]
+        pub src_path: PathBuf,
+    }
+
+    #[derive(Subcommand)]
+    pub enum QpSubcommand {
+        /// Show information about qp.bin
+        Info,
+        /// List files in qp.bin
+        List(ArchiveListOpt),
+        /// Extract files from qp.bin
+        Extract(ArchiveExtractOpt),
+        /// Extract all files from qp.bin
+        ExtractAll(ArchiveExtractAllOpt),
+        /// Replace a file in qp.bin
+        Replace(ArchiveReplaceOpt),
+    }
 }
 
 #[cfg(feature = "debug")]
-#[derive(Subcommand)]
-pub enum DebugCommand {
-    /// Read and rewrite script data
-    RebuildScripts,
+pub mod debug {
+    use super::*;
+
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Read and rewrite script data
+        RebuildScripts,
+    }
 }
 
-#[derive(Subcommand)]
-pub enum QpCommand {
-    /// Show information about qp.bin
-    Info,
-    /// List files in qp.bin
-    List(ArchiveListOpt),
-    /// Extract files from qp.bin
-    Extract(ArchiveExtractOpt),
-    /// Extract all files from qp.bin
-    ExtractAll(ArchiveExtractAllOpt),
-    /// Replace a file in qp.bin
-    Replace(ArchiveReplaceOpt),
-}
+pub mod stage {
+    use super::*;
 
-#[derive(Subcommand)]
-pub enum StageCommand {
-    /// Export stage data to a JSON file
-    Export(StageExportOpt),
-    /// Export data for all stages to JSON files
-    ExportAll(StageExportAllOpt),
-    /// Import stage data from a JSON file
-    Import(StageImportOpt),
-    /// Import all stages from JSON files
-    ImportAll(StageImportAllOpt),
-}
+    #[derive(Subcommand)]
+    pub enum Subcommand {
+        /// Export stage data to a JSON file
+        Export(StageExportOpt),
+        /// Export data for all stages to JSON files
+        ExportAll(StageExportAllOpt),
+        /// Import stage data from a JSON file
+        Import(StageImportOpt),
+        /// Import all stages from JSON files
+        ImportAll(StageImportAllOpt),
+    }
 
-#[derive(Args)]
-pub struct StageExportOpt {
-    /// Name of the stage to export
-    pub stage: String,
+    #[derive(Args)]
+    pub struct StageExportOpt {
+        /// Name of the stage to export
+        pub stage: String,
 
-    /// Redirect output to a file instead of stdout
-    #[clap(short, value_name("PATH"))]
-    pub output: Option<PathBuf>,
-}
+        /// Redirect output to a file instead of stdout
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+    }
 
-#[derive(Args)]
-pub struct StageExportAllOpt {
-    /// Path to the output directory
-    #[clap(short, value_name("PATH"))]
-    pub output: PathBuf,
-}
+    #[derive(Args)]
+    pub struct StageExportAllOpt {
+        /// Path to the output directory
+        #[clap(short, value_name("PATH"))]
+        pub output: PathBuf,
+    }
 
-#[derive(Args)]
-pub struct StageImportOpt {
-    /// Name of the stage to import
-    pub stage: String,
+    #[derive(Args)]
+    pub struct StageImportOpt {
+        /// Name of the stage to import
+        pub stage: String,
 
-    /// Path to the input JSON file
-    pub input: PathBuf,
-}
+        /// Path to the input JSON file
+        pub input: PathBuf,
+    }
 
-#[derive(Args)]
-pub struct StageImportAllOpt {
-    /// Path to the input directory
-    pub input: PathBuf,
+    #[derive(Args)]
+    pub struct StageImportAllOpt {
+        /// Path to the input directory
+        pub input: PathBuf,
 
-    /// Always import a stage even if it hasn't changed
-    #[clap(short, long)]
-    pub force: bool,
+        /// Always import a stage even if it hasn't changed
+        #[clap(short, long)]
+        pub force: bool,
+    }
 }
 
 #[cfg(test)]
@@ -896,6 +947,7 @@ mod tests {
 
     #[test]
     fn test_cli_list_opt() {
+        use list::*;
         #[derive(Parser)]
         struct ListOptParser {
             #[clap(flatten)]
@@ -939,6 +991,7 @@ mod tests {
 
     #[test]
     fn test_cli_list_ids_opt() {
+        use list::*;
         #[derive(Parser)]
         struct ListIdsOptParser {
             #[clap(flatten)]
@@ -960,7 +1013,8 @@ mod tests {
 
     #[test]
     fn test_cli_archive_info() {
-        let map = mapper!(Command::Archive(ArchiveCommand::Info { path }) => path);
+        use archive::*;
+        let map = mapper!(Command::Archive(Subcommand::Info { path }) => path);
         parse(["archive", "info", "foo"], map, |path| {
             assert_eq!(path, "foo");
         });
@@ -969,7 +1023,8 @@ mod tests {
 
     #[test]
     fn test_cli_archive_list() {
-        let map = mapper!(Command::Archive(ArchiveCommand::List { path, opt }) => (path, opt));
+        use archive::*;
+        let map = mapper!(Command::Archive(Subcommand::List { path, opt }) => (path, opt));
         parse(["archive", "list", "qp.bin"], map, |(path, opt)| {
             assert_eq!(path, "qp.bin");
             assert!(opt.paths.is_empty());
@@ -988,7 +1043,8 @@ mod tests {
 
     #[test]
     fn test_cli_archive_extract() {
-        let map = mapper!(Command::Archive(ArchiveCommand::Extract { path, opt }) => (path, opt));
+        use archive::*;
+        let map = mapper!(Command::Archive(Subcommand::Extract { path, opt }) => (path, opt));
         parse(["archive", "extract", "qp.bin"], map, |(path, opt)| {
             assert_eq!(path, "qp.bin");
             assert_eq!(opt.output, None);
@@ -1004,8 +1060,8 @@ mod tests {
 
     #[test]
     fn test_cli_archive_extract_all() {
-        let map =
-            mapper!(Command::Archive(ArchiveCommand::ExtractAll { path, opt }) => (path, opt));
+        use archive::*;
+        let map = mapper!(Command::Archive(Subcommand::ExtractAll { path, opt }) => (path, opt));
         parse(["archive", "extract-all", "qp.bin"], map, |(path, opt)| {
             assert_eq!(path, "qp.bin");
             assert_eq!(opt.output, None);
@@ -1019,7 +1075,8 @@ mod tests {
 
     #[test]
     fn test_cli_archive_replace() {
-        let map = mapper!(Command::Archive(ArchiveCommand::Replace { path, opt }) => (path, opt));
+        use archive::*;
+        let map = mapper!(Command::Archive(Subcommand::Replace { path, opt }) => (path, opt));
         parse(["archive", "replace", "qp.bin", "foo", "bar"], map, |(path, opt)| {
             assert_eq!(path, "qp.bin");
             assert_eq!(opt.dest_path, "foo");
@@ -1035,7 +1092,8 @@ mod tests {
 
     #[test]
     fn test_cli_audio_info() {
-        let map = mapper!(Command::Audio(AudioCommand::Info(opt)) => opt);
+        use audio::*;
+        let map = mapper!(Command::Audio(Subcommand::Info(opt)) => opt);
         parse(["audio", "info", "foo"], map, |opt| {
             assert_eq!(opt.name, "foo");
         });
@@ -1044,7 +1102,8 @@ mod tests {
 
     #[test]
     fn test_cli_audio_export() {
-        let map = mapper!(Command::Audio(AudioCommand::Export(opt)) => opt);
+        use audio::*;
+        let map = mapper!(Command::Audio(Subcommand::Export(opt)) => opt);
         parse(["audio", "export", "foo"], map, |opt| {
             assert_eq!(opt.output, None);
             assert_eq!(opt.names, ["foo"]);
@@ -1063,7 +1122,8 @@ mod tests {
 
     #[test]
     fn test_cli_audio_export_bank() {
-        let map = mapper!(Command::Audio(AudioCommand::ExportBank(opt)) => opt);
+        use audio::*;
+        let map = mapper!(Command::Audio(Subcommand::ExportBank(opt)) => opt);
         parse(["audio", "export-bank", "foo"], map, |opt| {
             assert_eq!(opt.output, None);
             assert_eq!(opt.name, "foo");
@@ -1079,7 +1139,8 @@ mod tests {
 
     #[test]
     fn test_cli_audio_export_all() {
-        let map = mapper!(Command::Audio(AudioCommand::ExportAll(opt)) => opt);
+        use audio::*;
+        let map = mapper!(Command::Audio(Subcommand::ExportAll(opt)) => opt);
         parse(["audio", "export-all", "-o", "out"], map, |opt| {
             assert_eq!(opt.output, Path::new("out"));
             assert!(!opt.settings.labels);
@@ -1093,7 +1154,8 @@ mod tests {
 
     #[test]
     fn test_cli_audio_import() {
-        let map = mapper!(Command::Audio(AudioCommand::Import(opt)) => opt);
+        use audio::*;
+        let map = mapper!(Command::Audio(Subcommand::Import(opt)) => opt);
         parse(["audio", "import", "foo", "bar"], map, |opt| {
             assert_eq!(opt.name, "foo");
             assert_eq!(opt.path, Path::new("bar"));
@@ -1111,7 +1173,8 @@ mod tests {
 
     #[test]
     fn test_cli_audio_play() {
-        let map = mapper!(Command::Audio(AudioCommand::Play(opt)) => opt);
+        use audio::*;
+        let map = mapper!(Command::Audio(Subcommand::Play(opt)) => opt);
         parse(["audio", "play", "foo"], map, |opt| {
             assert_eq!(opt.name, "foo");
             assert!(approx_eq!(f64, opt.volume, 0.8));
@@ -1133,44 +1196,45 @@ mod tests {
 
     #[test]
     fn test_cli_config() {
+        use config::*;
         let map = std::convert::identity;
         parse(["config", "clear"], map, |a: Opt| {
-            assert!(matches!(a.command, Command::Config(ConfigCommand::Clear)));
+            assert!(matches!(a.command, Command::Config(Subcommand::Clear)));
         });
         parse(["config", "path"], map, |a: Opt| {
-            assert!(matches!(a.command, Command::Config(ConfigCommand::Path)));
+            assert!(matches!(a.command, Command::Config(Subcommand::Path)));
         });
         parse(["config", "get", "default-iso"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Get(opt)) = a.command else { panic!() };
+            let Command::Config(Subcommand::Get(opt)) = a.command else { panic!() };
             assert!(matches!(opt, GetSetting::DefaultIso));
         });
         parse(["config", "get", "dolphin-path"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Get(opt)) = a.command else { panic!() };
+            let Command::Config(Subcommand::Get(opt)) = a.command else { panic!() };
             assert!(matches!(opt, GetSetting::DolphinPath));
         });
         parse(["config", "set", "default-iso"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command
+            let Command::Config(Subcommand::Set(SetSetting::DefaultIso { path })) = a.command
             else {
                 panic!()
             };
             assert_eq!(path, None);
         });
         parse(["config", "set", "default-iso", "foo"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DefaultIso { path })) = a.command
+            let Command::Config(Subcommand::Set(SetSetting::DefaultIso { path })) = a.command
             else {
                 panic!()
             };
             assert_eq!(path.as_deref(), Some("foo"));
         });
         parse(["config", "set", "dolphin-path"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command
+            let Command::Config(Subcommand::Set(SetSetting::DolphinPath { path })) = a.command
             else {
                 panic!()
             };
             assert_eq!(path, None);
         });
         parse(["config", "set", "dolphin-path", "foo"], map, |a: Opt| {
-            let Command::Config(ConfigCommand::Set(SetSetting::DolphinPath { path })) = a.command
+            let Command::Config(Subcommand::Set(SetSetting::DolphinPath { path })) = a.command
             else {
                 panic!()
             };
@@ -1197,7 +1261,8 @@ mod tests {
 
     #[test]
     fn test_cli_globals_export() {
-        let map = mapper!(Command::Globals(GlobalsCommand::Export(opt)) => opt);
+        use globals::*;
+        let map = mapper!(Command::Globals(Subcommand::Export(opt)) => opt);
         parse(["globals", "export"], map, |opt| {
             assert!(!opt.compact);
             assert_eq!(opt.output, None);
@@ -1212,7 +1277,8 @@ mod tests {
 
     #[test]
     fn test_cli_globals_import() {
-        let map = mapper!(Command::Globals(GlobalsCommand::Import(opt)) => opt);
+        use globals::*;
+        let map = mapper!(Command::Globals(Subcommand::Import(opt)) => opt);
         parse(["globals", "import", "foo"], map, |opt| {
             assert_eq!(opt.input, Path::new("foo"));
         });
@@ -1221,7 +1287,8 @@ mod tests {
 
     #[test]
     fn test_cli_globals_dump_colliders() {
-        let map = mapper!(Command::Globals(GlobalsCommand::DumpColliders(opt)) => opt);
+        use globals::*;
+        let map = mapper!(Command::Globals(Subcommand::DumpColliders(opt)) => opt);
         parse(["globals", "dump-colliders"], map, |opt| {
             assert_eq!(opt.output, None);
         });
@@ -1232,15 +1299,17 @@ mod tests {
 
     #[test]
     fn test_cli_iso_info() {
+        use iso::*;
         let map = mapper!(Command::Iso(c) => c);
         parse(["iso", "info"], map, |c| {
-            assert!(matches!(c, IsoCommand::Info));
+            assert!(matches!(c, Subcommand::Info));
         });
     }
 
     #[test]
     fn test_cli_iso_list() {
-        let map = mapper!(Command::Iso(IsoCommand::List(opt)) => opt);
+        use iso::*;
+        let map = mapper!(Command::Iso(Subcommand::List(opt)) => opt);
         parse(["iso", "list"], map, |opt| {
             assert!(opt.paths.is_empty());
         });
@@ -1252,7 +1321,8 @@ mod tests {
 
     #[test]
     fn test_cli_iso_extract() {
-        let map = mapper!(Command::Iso(IsoCommand::Extract(opt)) => opt);
+        use iso::*;
+        let map = mapper!(Command::Iso(Subcommand::Extract(opt)) => opt);
         parse(["iso", "extract"], map, |opt| {
             assert_eq!(opt.output, None);
             assert!(opt.paths.is_empty());
@@ -1265,7 +1335,8 @@ mod tests {
 
     #[test]
     fn test_cli_iso_extract_all() {
-        let map = mapper!(Command::Iso(IsoCommand::ExtractAll(opt)) => opt);
+        use iso::*;
+        let map = mapper!(Command::Iso(Subcommand::ExtractAll(opt)) => opt);
         parse(["iso", "extract-all"], map, |opt| {
             assert_eq!(opt.output, None);
         });
@@ -1276,7 +1347,8 @@ mod tests {
 
     #[test]
     fn test_cli_iso_replace() {
-        let map = mapper!(Command::Iso(IsoCommand::Replace(opt)) => opt);
+        use iso::*;
+        let map = mapper!(Command::Iso(Subcommand::Replace(opt)) => opt);
         parse(["iso", "replace", "foo", "bar"], map, |opt| {
             assert_eq!(opt.dest_path, "foo");
             assert_eq!(opt.src_path, Path::new("bar"));
@@ -1288,66 +1360,70 @@ mod tests {
 
     #[test]
     fn test_cli_iso_set() {
-        let map = mapper!(Command::Iso(IsoCommand::Set(command)) => command);
+        use iso::*;
+        let map = mapper!(Command::Iso(Subcommand::Set(command)) => command);
         parse(["iso", "set", "maker", "The"], map, |command| {
-            let IsoSetCommand::Maker { name } = command else { panic!() };
+            let SetCommand::Maker { name } = command else { panic!() };
             assert_eq!(name, "The");
         });
         parse(["iso", "set", "name", "This"], map, |command| {
-            let IsoSetCommand::Name { name } = command else { panic!() };
+            let SetCommand::Name { name } = command else { panic!() };
             assert_eq!(name, "This");
         });
     }
 
     #[test]
     fn test_cli_list() {
+        use list::*;
         let map = mapper!(Command::List(c) => c);
         parse(["list", "items"], map, |c| {
-            let ListCommand::Items(opt) = c else { panic!() };
+            let Subcommand::Items(opt) = c else { panic!() };
             assert!(!opt.show_unknown);
         });
         parse(["list", "items", "--show-unknown"], map, |c| {
-            let ListCommand::Items(opt) = c else { panic!() };
+            let Subcommand::Items(opt) = c else { panic!() };
             assert!(opt.show_unknown);
         });
         parse(["list", "equipment"], map, |c| {
-            let ListCommand::Equipment(opt) = c else { panic!() };
+            let Subcommand::Equipment(opt) = c else { panic!() };
             assert!(!opt.show_unknown);
         });
         parse(["list", "equipment", "--show-unknown"], map, |c| {
-            let ListCommand::Equipment(opt) = c else { panic!() };
+            let Subcommand::Equipment(opt) = c else { panic!() };
             assert!(opt.show_unknown);
         });
         parse(["list", "stages"], map, |c| {
-            assert!(matches!(c, ListCommand::Stages(_)));
+            assert!(matches!(c, Subcommand::Stages(_)));
         });
         parse(["list", "objects"], map, |c| {
-            assert!(matches!(c, ListCommand::Objects(_)));
+            assert!(matches!(c, Subcommand::Objects(_)));
         });
         parse(["list", "music"], map, |c| {
-            assert!(matches!(c, ListCommand::Music(_)));
+            assert!(matches!(c, Subcommand::Music(_)));
         });
         parse(["list", "sounds"], map, |c| {
-            assert!(matches!(c, ListCommand::Sounds(_)));
+            assert!(matches!(c, Subcommand::Sounds(_)));
         });
     }
 
     #[test]
     fn test_cli_messages() {
+        use messages::*;
         let map = mapper!(Command::Messages(c) => c);
         parse(["messages", "export", "-o", "out"], map, |c| {
-            let MessagesCommand::Export(opt) = c else { panic!() };
+            let Subcommand::Export(opt) = c else { panic!() };
             assert_eq!(opt.output, Path::new("out"));
         });
         parse(["messages", "import", "foo"], map, |c| {
-            let MessagesCommand::Import(opt) = c else { panic!() };
+            let Subcommand::Import(opt) = c else { panic!() };
             assert_eq!(opt.input, Path::new("foo"));
         });
     }
 
     #[test]
     fn test_cli_project_info() {
-        let map = mapper!(Command::Project(ProjectCommand::Info(opt)) => opt);
+        use project::*;
+        let map = mapper!(Command::Project(Subcommand::Info(opt)) => opt);
         parse(["project", "info"], map, |opt| {
             assert_eq!(opt.name, None);
         });
@@ -1358,16 +1434,18 @@ mod tests {
 
     #[test]
     fn test_cli_project_list() {
+        use project::*;
         let map = std::convert::identity;
         parse(["project", "list"], map, |opt: Opt| {
-            assert!(matches!(opt.command, Command::Project(ProjectCommand::List)));
+            assert!(matches!(opt.command, Command::Project(Subcommand::List)));
         });
         assert_eq!(error(["project", "list", "foo"]), ErrorKind::UnknownArgument);
     }
 
     #[test]
     fn test_cli_project_new() {
-        let map = mapper!(Command::Project(ProjectCommand::New(opt)) => opt);
+        use project::*;
+        let map = mapper!(Command::Project(Subcommand::New(opt)) => opt);
         parse(["project", "new", "foo"], map, |opt| {
             assert_eq!(opt.name, "foo");
             assert_eq!(opt.source, None);
@@ -1400,7 +1478,8 @@ mod tests {
 
     #[test]
     fn test_cli_project_wipe() {
-        let map = mapper!(Command::Project(ProjectCommand::Wipe(opt)) => opt);
+        use project::*;
+        let map = mapper!(Command::Project(Subcommand::Wipe(opt)) => opt);
         parse(["project", "wipe", "foo"], map, |opt| {
             assert_eq!(opt.name, "foo");
             assert!(!opt.force);
@@ -1418,7 +1497,8 @@ mod tests {
 
     #[test]
     fn test_cli_project_add() {
-        let map = mapper!(Command::Project(ProjectCommand::Add(opt)) => opt);
+        use project::*;
+        let map = mapper!(Command::Project(Subcommand::Add(opt)) => opt);
         parse(["project", "add", "foo"], map, |opt| {
             assert_eq!(opt.path, Path::new("foo"));
             assert_eq!(opt.name, None);
@@ -1436,7 +1516,8 @@ mod tests {
 
     #[test]
     fn test_cli_project_remove() {
-        let map = mapper!(Command::Project(ProjectCommand::Remove(opt)) => opt);
+        use project::*;
+        let map = mapper!(Command::Project(Subcommand::Remove(opt)) => opt);
         multiparse([["project", "remove", "foo"], ["project", "forget", "foo"]], map, |opt| {
             assert_eq!(opt.name, "foo");
         });
@@ -1446,7 +1527,8 @@ mod tests {
 
     #[test]
     fn test_cli_project_open() {
-        let map = mapper!(Command::Project(ProjectCommand::Open(opt)) => opt);
+        use project::*;
+        let map = mapper!(Command::Project(Subcommand::Open(opt)) => opt);
         parse(["project", "open", "foo"], map, |opt| {
             assert_eq!(opt.name, "foo");
         });
@@ -1456,36 +1538,39 @@ mod tests {
 
     #[test]
     fn test_cli_project_close() {
+        use project::*;
         let map = mapper!(Command::Project(c) => c);
         parse(["project", "close"], map, |c| {
-            assert!(matches!(c, ProjectCommand::Close));
+            assert!(matches!(c, Subcommand::Close));
         });
         assert_eq!(error(["project", "close", "foo"]), ErrorKind::UnknownArgument);
     }
 
     #[test]
     fn test_cli_qp() {
+        use archive::*;
         let map = mapper!(Command::Qp(c) => c);
         parse(["qp", "info"], map, |c| {
-            assert!(matches!(c, QpCommand::Info));
+            assert!(matches!(c, QpSubcommand::Info));
         });
         parse(["qp", "list"], map, |c| {
-            assert!(matches!(c, QpCommand::List(_)));
+            assert!(matches!(c, QpSubcommand::List(_)));
         });
         parse(["qp", "extract"], map, |c| {
-            assert!(matches!(c, QpCommand::Extract(_)));
+            assert!(matches!(c, QpSubcommand::Extract(_)));
         });
         parse(["qp", "extract-all"], map, |c| {
-            assert!(matches!(c, QpCommand::ExtractAll(_)));
+            assert!(matches!(c, QpSubcommand::ExtractAll(_)));
         });
         parse(["qp", "replace", "foo", "bar"], map, |c| {
-            assert!(matches!(c, QpCommand::Replace(_)));
+            assert!(matches!(c, QpSubcommand::Replace(_)));
         });
     }
 
     #[test]
     fn test_cli_script_dump() {
-        let map = mapper!(Command::Script(ScriptCommand::Dump(opt)) => opt);
+        use script::*;
+        let map = mapper!(Command::Script(Subcommand::Dump(opt)) => opt);
         parse(["script", "dump", "foo"], map, |opt| {
             assert_eq!(opt.stage, "foo");
             assert_eq!(opt.output, None);
@@ -1506,7 +1591,8 @@ mod tests {
 
     #[test]
     fn test_cli_script_dump_all() {
-        let map = mapper!(Command::Script(ScriptCommand::DumpAll(opt)) => opt);
+        use script::*;
+        let map = mapper!(Command::Script(Subcommand::DumpAll(opt)) => opt);
         parse(["script", "dump-all", "-o", "out"], map, |opt| {
             assert_eq!(opt.output, Path::new("out"));
         });
@@ -1520,7 +1606,8 @@ mod tests {
 
     #[test]
     fn test_cli_script_disassemble() {
-        let map = mapper!(Command::Script(ScriptCommand::Disassemble(opt)) => opt);
+        use script::*;
+        let map = mapper!(Command::Script(Subcommand::Disassemble(opt)) => opt);
         parse(["script", "disassemble", "foo", "-o", "out"], map, |opt| {
             assert_eq!(opt.stage, "foo");
             assert_eq!(opt.output, Path::new("out"));
@@ -1529,7 +1616,8 @@ mod tests {
 
     #[test]
     fn test_cli_script_disassemble_all() {
-        let map = mapper!(Command::Script(ScriptCommand::DisassembleAll(opt)) => opt);
+        use script::*;
+        let map = mapper!(Command::Script(Subcommand::DisassembleAll(opt)) => opt);
         parse(["script", "disassemble-all", "-o", "out"], map, |opt| {
             assert_eq!(opt.output, Path::new("out"));
         });
@@ -1537,7 +1625,8 @@ mod tests {
 
     #[test]
     fn test_cli_script_assemble() {
-        let map = mapper!(Command::Script(ScriptCommand::Assemble(opt)) => opt);
+        use script::*;
+        let map = mapper!(Command::Script(Subcommand::Assemble(opt)) => opt);
         parse(["script", "assemble", "foo"], map, |opt| {
             assert_eq!(opt.path, Path::new("foo"));
         });
@@ -1545,7 +1634,8 @@ mod tests {
 
     #[test]
     fn test_cli_shop_export() {
-        let map = mapper!(Command::Shop(ShopCommand::Export(opt)) => opt);
+        use shop::*;
+        let map = mapper!(Command::Shop(Subcommand::Export(opt)) => opt);
         parse(["shop", "export"], map, |opt| {
             assert!(!opt.compact);
             assert_eq!(opt.output, None);
@@ -1560,7 +1650,8 @@ mod tests {
 
     #[test]
     fn test_cli_shop_import() {
-        let map = mapper!(Command::Shop(ShopCommand::Import(opt)) => opt);
+        use shop::*;
+        let map = mapper!(Command::Shop(Subcommand::Import(opt)) => opt);
         parse(["shop", "import", "foo"], map, |opt| {
             assert_eq!(opt.input, Path::new("foo"));
         });
@@ -1569,7 +1660,8 @@ mod tests {
 
     #[test]
     fn test_cli_stage_export() {
-        let map = mapper!(Command::Stage(StageCommand::Export(opt)) => opt);
+        use stage::*;
+        let map = mapper!(Command::Stage(Subcommand::Export(opt)) => opt);
         parse(["stage", "export", "foo"], map, |opt| {
             assert_eq!(opt.stage, "foo");
             assert_eq!(opt.output, None);
@@ -1583,7 +1675,8 @@ mod tests {
 
     #[test]
     fn test_cli_stage_export_all() {
-        let map = mapper!(Command::Stage(StageCommand::ExportAll(opt)) => opt);
+        use stage::*;
+        let map = mapper!(Command::Stage(Subcommand::ExportAll(opt)) => opt);
         parse(["stage", "export-all", "-o", "out"], map, |opt| {
             assert_eq!(opt.output, Path::new("out"));
         });
@@ -1592,7 +1685,8 @@ mod tests {
 
     #[test]
     fn test_cli_stage_import() {
-        let map = mapper!(Command::Stage(StageCommand::Import(opt)) => opt);
+        use stage::*;
+        let map = mapper!(Command::Stage(Subcommand::Import(opt)) => opt);
         parse(["stage", "import", "foo", "bar"], map, |opt| {
             assert_eq!(opt.stage, "foo");
             assert_eq!(opt.input, Path::new("bar"));
@@ -1603,7 +1697,8 @@ mod tests {
 
     #[test]
     fn test_cli_stage_import_all() {
-        let map = mapper!(Command::Stage(StageCommand::ImportAll(opt)) => opt);
+        use stage::*;
+        let map = mapper!(Command::Stage(Subcommand::ImportAll(opt)) => opt);
         parse(["stage", "import-all", "foo"], map, |opt| {
             assert_eq!(opt.input, Path::new("foo"));
             assert!(!opt.force);
@@ -1622,9 +1717,10 @@ mod tests {
     #[cfg(feature = "debug")]
     #[test]
     fn test_debug() {
+        use debug::*;
         let map = mapper!(Command::Debug(c) => c);
         parse(["debug", "rebuild-scripts"], map, |c| {
-            assert!(matches!(c, DebugCommand::RebuildScripts));
+            assert!(matches!(c, Subcommand::RebuildScripts));
         });
     }
 }

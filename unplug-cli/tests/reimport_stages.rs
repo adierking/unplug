@@ -8,7 +8,7 @@ use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
 use unplug_cli::commands::stage;
 use unplug_cli::context::Context;
-use unplug_cli::opt::{StageExportAllOpt, StageImportAllOpt};
+use unplug_cli::opt::stage::{StageExportAllOpt, StageImportAllOpt};
 use unplug_test as common;
 
 #[test]

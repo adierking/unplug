@@ -6,7 +6,7 @@ use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug_cli::commands::globals;
 use unplug_cli::context::Context;
-use unplug_cli::opt::{GlobalsExportOpt, GlobalsImportOpt};
+use unplug_cli::opt::globals::{GlobalsExportOpt, GlobalsImportOpt};
 use unplug_test as common;
 
 #[test]

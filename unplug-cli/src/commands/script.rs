@@ -1,10 +1,8 @@
+use crate::opt::script::*;
+
 use crate::common::find_stage_file;
 use crate::context::Context;
 use crate::io::OutputRedirect;
-use crate::opt::{
-    ScriptAssembleOpt, ScriptCommand, ScriptDisassembleAllOpt, ScriptDisassembleOpt,
-    ScriptDumpAllOpt, ScriptDumpFlags, ScriptDumpOpt,
-};
 use anyhow::{anyhow, bail, Result};
 use asm::diagnostics::{CompileOutput, Diagnostic};
 use codespan_reporting::diagnostic::{Diagnostic as ReportDiagnostic, Label as ReportLabel};
@@ -290,13 +288,13 @@ fn command_assemble(ctx: Context, opt: ScriptAssembleOpt) -> Result<()> {
 }
 
 /// The `script` CLI command.
-pub fn command(ctx: Context, opt: ScriptCommand) -> Result<()> {
+pub fn command(ctx: Context, opt: Subcommand) -> Result<()> {
     match opt {
-        ScriptCommand::Dump(opt) if opt.stage == "globals" => command_dump_globals(ctx, opt),
-        ScriptCommand::Dump(opt) => command_dump(ctx, opt),
-        ScriptCommand::DumpAll(opt) => command_dump_all(ctx, opt),
-        ScriptCommand::Disassemble(opt) => command_disassemble(ctx, opt),
-        ScriptCommand::DisassembleAll(opt) => command_disassemble_all(ctx, opt),
-        ScriptCommand::Assemble(opt) => command_assemble(ctx, opt),
+        Subcommand::Dump(opt) if opt.stage == "globals" => command_dump_globals(ctx, opt),
+        Subcommand::Dump(opt) => command_dump(ctx, opt),
+        Subcommand::DumpAll(opt) => command_dump_all(ctx, opt),
+        Subcommand::Disassemble(opt) => command_disassemble(ctx, opt),
+        Subcommand::DisassembleAll(opt) => command_disassemble_all(ctx, opt),
+        Subcommand::Assemble(opt) => command_assemble(ctx, opt),
     }
 }
