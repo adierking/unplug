@@ -1,4 +1,4 @@
-use crate::opt::shop::*;
+use crate::args::shop::*;
 
 use crate::context::Context;
 use crate::io::OutputRedirect;

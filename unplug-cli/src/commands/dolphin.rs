@@ -1,4 +1,4 @@
-use crate::opt::dolphin::*;
+use crate::args::dolphin::*;
 
 use crate::config::Config;
 use crate::context::Context;

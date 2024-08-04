@@ -4,9 +4,9 @@ use std::fs::File;
 use tempfile::NamedTempFile;
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
+use unplug_cli::args::globals::{ExportArgs, ImportArgs};
 use unplug_cli::commands::globals;
 use unplug_cli::context::Context;
-use unplug_cli::opt::globals::{ExportArgs, ImportArgs};
 use unplug_test as common;
 
 #[test]

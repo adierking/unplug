@@ -1,4 +1,4 @@
-use crate::opt::config::*;
+use crate::args::config::*;
 
 use crate::config::{Config, Settings};
 use crate::context::Context;

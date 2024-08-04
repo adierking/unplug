@@ -16,8 +16,8 @@ pub mod stage;
 #[cfg(feature = "debug")]
 pub mod debug;
 
+use crate::args::Command;
 use crate::context::Context;
-use crate::opt::Command;
 use anyhow::Result;
 
 /// Runs a CLI command using `ctx`.

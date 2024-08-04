@@ -8,10 +8,10 @@ use unplug::event::msg::MsgArgs;
 use unplug::event::Script;
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
+use unplug_cli::args::messages::{ExportArgs, ImportArgs};
 use unplug_cli::commands::messages;
 use unplug_cli::context::Context;
 use unplug_cli::msg::{iter_messages, MessageId, MessageSource};
-use unplug_cli::opt::messages::{ExportArgs, ImportArgs};
 use unplug_test as common;
 
 fn collect_messages(source: MessageSource, script: &Script) -> Vec<(MessageId, &MsgArgs)> {

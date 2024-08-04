@@ -1,4 +1,4 @@
-use crate::opt::messages::*;
+use crate::args::messages::*;
 
 use crate::context::Context;
 use crate::msg::{self, MessageId, MessageReader, MessageSource, MessageWriter};

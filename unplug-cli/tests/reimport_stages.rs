@@ -6,9 +6,9 @@ use unplug::data::{Resource, Stage as StageId};
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
+use unplug_cli::args::stage::{ExportAllArgs, ImportAllArgs};
 use unplug_cli::commands::stage;
 use unplug_cli::context::Context;
-use unplug_cli::opt::stage::{ExportAllArgs, ImportAllArgs};
 use unplug_test as common;
 
 #[test]

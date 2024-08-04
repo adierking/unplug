@@ -3,9 +3,9 @@ use clap::Parser;
 use log::error;
 use std::path::Path;
 use std::process;
+use unplug_cli::args::{CliArgs, GlobalConfigArgs, GlobalContextArgs};
 use unplug_cli::config::{self, Config};
 use unplug_cli::context::Context;
-use unplug_cli::opt::{CliArgs, GlobalConfigArgs, GlobalContextArgs};
 use unplug_cli::{commands, terminal};
 
 #[cfg(feature = "trace")]

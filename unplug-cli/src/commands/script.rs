@@ -1,4 +1,4 @@
-use crate::opt::script::*;
+use crate::args::script::*;
 
 use crate::common::find_stage_file;
 use crate::context::Context;
@@ -288,8 +288,8 @@ fn command_assemble(ctx: Context, args: AssembleArgs) -> Result<()> {
 }
 
 /// The `script` CLI command.
-pub fn command(ctx: Context, args: Subcommand) -> Result<()> {
-    match args {
+pub fn command(ctx: Context, command: Subcommand) -> Result<()> {
+    match command {
         Subcommand::Dump(args) if args.stage == "globals" => command_dump_globals(ctx, args),
         Subcommand::Dump(args) => command_dump(ctx, args),
         Subcommand::DumpAll(args) => command_dump_all(ctx, args),

@@ -1,4 +1,4 @@
-use crate::opt::stage::*;
+use crate::args::stage::*;
 
 use crate::common::find_stage_file;
 use crate::context::Context;

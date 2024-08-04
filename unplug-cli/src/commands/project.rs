@@ -1,4 +1,4 @@
-use crate::opt::project::*;
+use crate::args::project::*;
 
 use crate::common::IString;
 use crate::config::{Config, Project, ProjectKind};

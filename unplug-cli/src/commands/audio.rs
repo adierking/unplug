@@ -1,4 +1,4 @@
-use crate::opt::audio::*;
+use crate::args::audio::*;
 
 use crate::common::{format_duration, output_dir_and_name};
 use crate::context::{Context, FileId, OpenContext};

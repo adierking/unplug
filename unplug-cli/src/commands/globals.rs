@@ -1,4 +1,4 @@
-use crate::opt::globals::*;
+use crate::args::globals::*;
 
 use crate::context::Context;
 use crate::io::OutputRedirect;
