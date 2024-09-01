@@ -5,7 +5,8 @@ use super::fst::{
 };
 use crate::common::io::{copy_within, fill};
 use crate::common::{
-    self, text, FixedText, ReadFrom, ReadSeek, ReadWriteSeek, Region, Text, WriteTo,
+    self, text, FixedText, ReadFrom, ReadSeek, ReadStructExt, ReadWriteSeek, Region, WriteTo,
+    WriteStructExt,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use encoding_rs::mem::decode_latin1;
@@ -122,7 +123,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for DiscHeader {
         if header.gcn_magic != GCN_MAGIC {
             return Err(Error::InvalidMagic);
         }
-        header.game_name = Text::read_from(reader)?;
+        header.game_name = reader.read_struct()?;
         header.debug_monitor_offset = reader.read_u32::<BE>()?;
         header.debug_monitor_addr = reader.read_u32::<BE>()?;
         reader.read_exact(&mut header.unused_408)?;
@@ -150,7 +151,7 @@ impl<W: Write + ?Sized> WriteTo<W> for DiscHeader {
         writer.write_all(&self.unused_00a)?;
         writer.write_u32::<BE>(self.wii_magic)?;
         writer.write_u32::<BE>(self.gcn_magic)?;
-        self.game_name.write_to(writer)?;
+        writer.write_struct(&self.game_name)?;
         writer.write_u32::<BE>(self.debug_monitor_offset)?;
         writer.write_u32::<BE>(self.debug_monitor_addr)?;
         writer.write_all(&self.unused_408)?;
@@ -180,10 +181,10 @@ impl<S: ReadSeek> DiscStream<S> {
     pub fn open(stream: S) -> Result<Self> {
         let mut stream = BufReader::new(stream);
         stream.rewind()?;
-        let header = DiscHeader::read_from(&mut stream)?;
+        let header = stream.read_struct::<DiscHeader>()?;
         debug!("Found FST at {:#x} (size = {:#x})", header.fst_offset, header.fst_size);
         stream.seek(SeekFrom::Start(header.fst_offset as u64))?;
-        let fst = FileStringTable::read_from(&mut stream.by_ref().take(header.fst_size as u64))?;
+        let fst = stream.by_ref().take(header.fst_size as u64).read_struct::<FileStringTable>()?;
         let free_regions = Self::find_free_regions(&header, &fst);
         let files = FileTree::from_fst(&fst)?;
         Ok(Self { header: header.into(), free_regions, stream: stream.into_inner(), files })
@@ -211,7 +212,7 @@ impl<S: ReadSeek> DiscStream<S> {
     pub fn open_dol(&mut self) -> Result<(DolHeader, Box<dyn ReadSeek + '_>)> {
         let start = self.header.dol_offset as u64;
         self.stream.seek(SeekFrom::Start(start))?;
-        let header = DolHeader::read_from(&mut BufReader::new(&mut self.stream))?;
+        let header = BufReader::new(&mut self.stream).read_struct::<DolHeader>()?;
         let len = header.file_size() as u64;
         let region: Box<dyn ReadSeek> = Box::new(Region::new(&mut self.stream, start, len));
         Ok((header, region))
@@ -235,7 +236,7 @@ impl<S: ReadSeek> DiscStream<S> {
     /// Reads the disc's banner file.
     pub fn read_banner(&mut self) -> Result<Banner> {
         let mut reader = BufReader::new(self.open_file_at(BANNER_PATH)?);
-        Ok(Banner::read_from(&mut reader)?)
+        Ok(reader.read_struct()?)
     }
 
     /// Returns the maximum amount of space that a file can be grown to occupy without overwriting
@@ -454,7 +455,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
         // Write the new FST
         self.stream.seek(SeekFrom::Start(self.header.fst_offset as u64))?;
         let mut buf = BufWriter::new(&mut self.stream);
-        fst.write_to(&mut buf)?;
+        buf.write_struct(&fst)?;
         buf.flush()?;
         drop(buf);
 
@@ -470,7 +471,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
             new_header.fst_size = disk_size;
             self.stream.rewind()?;
             let mut buf = BufWriter::new(&mut self.stream);
-            new_header.write_to(&mut buf)?;
+            buf.write_struct(&*new_header)?;
             buf.flush()?;
             self.header = new_header;
         }
@@ -483,7 +484,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
     /// Writes the disc's banner file.
     pub fn write_banner(&mut self, banner: &Banner) -> Result<()> {
         let mut bytes = Cursor::new(vec![]);
-        banner.write_to(&mut bytes)?;
+        bytes.write_struct(banner)?;
         bytes.rewind()?;
         self.replace_file_at(BANNER_PATH, bytes)
     }
@@ -553,6 +554,7 @@ impl fmt::Debug for DiscRegion {
 mod tests {
     use super::*;
     use crate::assert_write_and_read;
+    use text::Text;
 
     #[test]
     fn test_write_and_read_disc_header() {

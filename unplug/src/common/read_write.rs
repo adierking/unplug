@@ -149,3 +149,21 @@ impl<W: Write + ?Sized, T: WriteTo<W>, const N: usize> WriteTo<W> for [T; N] {
         T::write_all_to(writer, self)
     }
 }
+
+/// Extension for `Read` to read a value whose type implements `ReadFrom`.
+pub trait ReadStructExt: Read {
+    fn read_struct<T: ReadFrom<Self>>(&mut self) -> Result<T, T::Error> {
+        T::read_from(self)
+    }
+}
+
+impl<R: Read + ?Sized> ReadStructExt for R {}
+
+/// Extension for `Write` to write a value whose type implements `WriteTo`.
+pub trait WriteStructExt: Write {
+    fn write_struct<T: WriteTo<Self>>(&mut self, value: &T) -> Result<(), T::Error> {
+        value.write_to(self)
+    }
+}
+
+impl<W: Write + ?Sized> WriteStructExt for W {}

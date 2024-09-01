@@ -1,5 +1,5 @@
-use crate::common::text::{self, FixedText, Text};
-use crate::common::{ReadFrom, WriteTo};
+use crate::common::text::{self, FixedText};
+use crate::common::{ReadFrom, WriteTo, ReadStructExt, WriteStructExt};
 use byteorder::{ByteOrder, ReadBytesExt, BE};
 use std::fmt::{self, Debug, Formatter};
 use std::io::{self, Read, Write};
@@ -129,11 +129,11 @@ impl<R: Read + ?Sized> ReadFrom<R> for GameInfo {
     type Error = Error;
     fn read_from(reader: &mut R) -> Result<Self> {
         Ok(Self {
-            name_short: Text::read_from(reader)?,
-            maker_short: Text::read_from(reader)?,
-            name_long: Text::read_from(reader)?,
-            maker_long: Text::read_from(reader)?,
-            description: Text::read_from(reader)?,
+            name_short: reader.read_struct()?,
+            maker_short: reader.read_struct()?,
+            name_long: reader.read_struct()?,
+            maker_long: reader.read_struct()?,
+            description: reader.read_struct()?,
         })
     }
 }
@@ -141,11 +141,11 @@ impl<R: Read + ?Sized> ReadFrom<R> for GameInfo {
 impl<W: Write + ?Sized> WriteTo<W> for GameInfo {
     type Error = Error;
     fn write_to(&self, writer: &mut W) -> Result<()> {
-        self.name_short.write_to(writer)?;
-        self.maker_short.write_to(writer)?;
-        self.name_long.write_to(writer)?;
-        self.maker_long.write_to(writer)?;
-        self.description.write_to(writer)?;
+        writer.write_struct(&self.name_short)?;
+        writer.write_struct(&self.maker_short)?;
+        writer.write_struct(&self.name_long)?;
+        writer.write_struct(&self.maker_long)?;
+        writer.write_struct(&self.description)?;
         Ok(())
     }
 }
@@ -154,6 +154,7 @@ impl<W: Write + ?Sized> WriteTo<W> for GameInfo {
 mod tests {
     use super::*;
     use crate::assert_write_and_read;
+    use crate::common::Text;
     use crate::test::TEST_BANNER;
     use std::io::Cursor;
 
@@ -186,7 +187,7 @@ mod tests {
     #[test]
     fn test_parse_banner() -> Result<()> {
         let mut reader = Cursor::new(TEST_BANNER);
-        let banner = Banner::read_from(&mut reader)?;
+        let banner = reader.read_struct::<Banner>()?;
         assert!(banner.image.iter().all(|x| *x == 0xffff));
         assert_eq!(banner.languages.len(), 1);
         let info = &banner.languages[0];
