@@ -112,7 +112,8 @@ jobs:
           failOnError: false
 
   test:
-    name: "Test"
+    name: "Test (with ISO)"
+    if: ${{ github.secret_source == "Actions" }}
     strategy:
       fail-fast: false
       matrix:
@@ -176,8 +177,39 @@ jobs:
           path-to-lcov: lcov.info
           parallel: true
 
+  test-lite:
+    name: "Test (without ISO)"
+    if: ${{ github.secret_source != "Actions" }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            host: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: macos-x64
+            host: macos-latest
+            target: x86_64-apple-darwin
+          - name: linux-x64
+            host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.host }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Toolchain
+        uses: ./.github/actions/toolchain
+        with:
+          target: ${{ matrix.target }}
+          stable: ${{ env.stable_toolchain }}
+
+      - name: Build and Run Library Tests
+        run: cargo test -vv --workspace --target ${{ matrix.target }} --lib
+
   test-done:
     name: "Finalize Code Coverage"
+    if: github.event.push
     needs: test
     runs-on: ubuntu-latest
     steps:
