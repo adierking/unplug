@@ -105,7 +105,7 @@ jobs:
           path: unplug
           if-no-files-found: error
       - name: Delete Intermediate Artifacts
-        uses: geekyeggo/delete-artifact@v2
+        uses: geekyeggo/delete-artifact@v5
         with:
           name: |
             unplug-${{ env.branch_name }}-macos-arm64
