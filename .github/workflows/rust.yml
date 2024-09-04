@@ -113,7 +113,7 @@ jobs:
 
   test:
     name: "Test (with ISO)"
-    if: ${{ github.secret_source == "Actions" }}
+    if: ${{ github.secret_source == 'Actions' }}
     strategy:
       fail-fast: false
       matrix:
@@ -179,7 +179,7 @@ jobs:
 
   test-lite:
     name: "Test (without ISO)"
-    if: ${{ github.secret_source != "Actions" }}
+    if: ${{ github.secret_source != 'Actions' }}
     strategy:
       fail-fast: false
       matrix:
