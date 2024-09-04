@@ -209,7 +209,7 @@ jobs:
 
   test-done:
     name: "Finalize Code Coverage"
-    if: github.event.push
+    if: github.event.pusher
     needs: test
     runs-on: ubuntu-latest
     steps:
