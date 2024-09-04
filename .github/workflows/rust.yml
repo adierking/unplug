@@ -2,13 +2,17 @@ name: Unplug
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
     paths-ignore:
       - '.gitignore'
       - '**.md'
       - '**.txt'
       - 'docs/**'
       - '.vscode/**'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
   schedule:
     - cron: '0 8 * * *'
