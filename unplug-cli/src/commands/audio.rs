@@ -388,7 +388,7 @@ fn command_export_all(ctx: Context, args: ExportAllArgs) -> Result<()> {
 
     // Export registered banks
     for group in SfxGroup::iter() {
-        let file = ctx.disc_file_at(&group.disc_path())?;
+        let file = ctx.disc_file_at(group.disc_path())?;
         export_bank_subdir(&mut ctx, &args.settings, &file, &args.output)?;
     }
 

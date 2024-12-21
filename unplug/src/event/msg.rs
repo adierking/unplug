@@ -291,8 +291,7 @@ impl DeserializeEvent for MsgArgs {
                 MsgOp::Invalid => return Err(Error::Unsupported(ch)),
             };
             if !text.is_empty() {
-                commands.push(MsgCommand::Text(Text::from_bytes(&text[..])?));
-                text.clear();
+                commands.push(MsgCommand::Text(Text::from_bytes(text.split_off(0))?));
             }
             if let Some(command) = command {
                 commands.push(command);

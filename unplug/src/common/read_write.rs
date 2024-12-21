@@ -96,6 +96,7 @@ impl<R: Read + ?Sized> ReadFrom<R> for CString {
                 break;
             }
         }
+        // SAFETY: We stop reading after a NUL is encountered.
         unsafe { Ok(CString::from_vec_with_nul_unchecked(bytes)) }
     }
 }

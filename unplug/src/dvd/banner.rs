@@ -1,5 +1,5 @@
 use crate::common::text::{self, FixedText};
-use crate::common::{ReadFrom, WriteTo, ReadStructExt, WriteStructExt};
+use crate::common::{ReadFrom, ReadStructExt, WriteStructExt, WriteTo};
 use byteorder::{ByteOrder, ReadBytesExt, BE};
 use std::fmt::{self, Debug, Formatter};
 use std::io::{self, Read, Write};

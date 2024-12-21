@@ -5,8 +5,8 @@ use super::fst::{
 };
 use crate::common::io::{copy_within, fill};
 use crate::common::{
-    self, text, FixedText, ReadFrom, ReadSeek, ReadStructExt, ReadWriteSeek, Region, WriteTo,
-    WriteStructExt,
+    self, text, FixedText, ReadFrom, ReadSeek, ReadStructExt, ReadWriteSeek, Region,
+    WriteStructExt, WriteTo,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use encoding_rs::mem::decode_latin1;

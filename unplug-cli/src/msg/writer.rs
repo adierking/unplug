@@ -20,7 +20,7 @@ fn text_to_xml(text: &Text<impl TextData>) -> Result<Cow<'_, str>> {
     trace!("text_to_xml({:?})", text_str);
     let mut escaped = String::new();
     let mut i = 0;
-    while let Some(len) = text_str[i..].find(|c| c == '<' || c == '>' || c == '&') {
+    while let Some(len) = text_str[i..].find(['<', '>', '&']) {
         let next = i + len;
         escaped.push_str(&text_str[i..next]);
         match text_str.as_bytes()[next] {

@@ -144,7 +144,7 @@ impl<'a> CursorData<'a> {
     }
 }
 
-impl<'a> Deref for CursorData<'a> {
+impl Deref for CursorData<'_> {
     type Target = [Located<Operand>];
     fn deref(&self) -> &Self::Target {
         match self {

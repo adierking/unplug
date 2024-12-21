@@ -69,10 +69,7 @@ from_error_boxed!(Error::StringTable, string_table::Error);
 
 /// Returns true if a name is safe from directory traversal attacks.
 fn is_name_safe(name: &str) -> bool {
-    !name.is_empty()
-        && name != "."
-        && name != ".."
-        && !name.contains(|c| c == '/' || c == '\\' || c == ':')
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':'])
 }
 
 /// A file string table (FST) in a GameCube filesystem.
@@ -545,7 +542,7 @@ impl FileTree {
             Entry::File(_) => return Err(Error::ExpectedDirectory(cur_entry)),
             Entry::Directory(d) => d,
         };
-        let mut components = path.split(|c| c == '/' || c == '\\');
+        let mut components = path.split(['/', '\\']);
         let mut stack: Vec<EntryId> = Vec::new();
         loop {
             // Find the first non-empty and non-"." component. If this is the last component, return

@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::error::Error as StdError;
 use std::ffi::CString;
 use std::fmt;
+use std::hash::Hash;
 use std::io::{Read, Write};
 use std::iter;
 use std::result::Result as StdResult;
@@ -96,10 +97,10 @@ impl TextData for Vec<u8> {
 impl TextData for CString {
     const MAX_LEN: usize = usize::MAX;
     fn as_raw_bytes(&self) -> &[u8] {
-        CString::as_bytes_with_nul(&self)
+        CString::as_bytes_with_nul(self)
     }
     fn as_bytes_without_nul(&self) -> &[u8] {
-        CString::as_bytes(&self)
+        CString::as_bytes(self)
     }
     fn from_raw_bytes(bytes: Vec<u8>) -> Result<Self> {
         Self::from_vec_with_nul(bytes).map_err(|_| Error::NoNulTerminator)
@@ -184,7 +185,7 @@ pub type VecText = Text<Vec<u8>>;
 /// The data format is responsible for determining the length of a string without NULs. Except in
 /// the case of arrays, this information is usually available in the inner type, so `Text` does not
 /// track the length itself. Requesting the non-NUL bytes in an array requires a scan.
-#[derive(Copy, Clone, Hash, Eq)]
+#[derive(Copy, Clone, Eq)]
 pub struct Text<D: TextData>(D);
 
 impl<D: TextData> Text<D> {
@@ -330,6 +331,13 @@ impl<D: TextData> PartialEq for Text<D> {
     }
 }
 
+impl<D: TextData> Hash for Text<D> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_raw_bytes().hash(state);
+    }
+}
+
+#[allow(clippy::fallible_impl_from)]
 impl<D: TextData> From<Text<D>> for CString {
     fn from(text: Text<D>) -> Self {
         CString::new(text.into_bytes()).unwrap()
@@ -392,7 +400,7 @@ impl<D: TextData + Extend<u8>> Extend<u8> for Text<D> {
 
 impl<'a, D: TextData + Extend<u8>> Extend<&'a u8> for Text<D> {
     fn extend<T: IntoIterator<Item = &'a u8>>(&mut self, iter: T) {
-        self.extend(iter.into_iter().copied())
+        self.extend(iter.into_iter().copied());
     }
 }
 
@@ -480,7 +488,7 @@ mod tests {
         let text = Text::<[u8; 16]>::new(raw).unwrap();
         assert_eq!(text.to_bytes().len(), 13);
         assert_eq!(text.as_raw_bytes().len(), 16);
-        assert_eq!(text.clone().into_bytes().len(), 13);
+        assert_eq!(text.into_bytes().len(), 13);
         assert_eq!(text.into_raw_bytes().len(), 16);
 
         let text = Text::<[u8; 64]>::from_bytes("Hello, world!").unwrap();

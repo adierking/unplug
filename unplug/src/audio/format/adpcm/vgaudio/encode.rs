@@ -2,7 +2,7 @@ use crate::audio::format::adpcm::{Coefficients, Info, BYTES_PER_FRAME, SAMPLES_P
 use crate::common::clamp_i16;
 
 pub fn encode(pcm: &[i16], info: &mut Info) -> Vec<u8> {
-    let num_frames = (pcm.len() + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME;
+    let num_frames = pcm.len().div_ceil(SAMPLES_PER_FRAME);
     let mut adpcm = Vec::with_capacity(num_frames * BYTES_PER_FRAME);
 
     let mut adpcm_buf = [0; BYTES_PER_FRAME];

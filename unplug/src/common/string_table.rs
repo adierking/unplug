@@ -82,10 +82,10 @@ mod tests {
     #[test]
     fn test_push() -> Result<()> {
         let mut strings = StringTable::new();
-        assert_eq!(strings.push(&CString::new("").unwrap()), 0);
-        assert_eq!(strings.push(&CString::new("a").unwrap()), 1);
-        assert_eq!(strings.push(&CString::new("bc").unwrap()), 3);
-        assert_eq!(strings.push(&CString::new("def").unwrap()), 6);
+        assert_eq!(strings.push(CString::new("").unwrap()), 0);
+        assert_eq!(strings.push(CString::new("a").unwrap()), 1);
+        assert_eq!(strings.push(CString::new("bc").unwrap()), 3);
+        assert_eq!(strings.push(CString::new("def").unwrap()), 6);
         Ok(())
     }
 }

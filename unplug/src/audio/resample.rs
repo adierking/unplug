@@ -190,13 +190,13 @@ impl<'r, 's, F: AnyPcm> Resample<'r, 's, F> {
     }
 }
 
-impl<'r, 's, F: AnyPcm> Drop for Resample<'r, 's, F> {
+impl<F: AnyPcm> Drop for Resample<'_, '_, F> {
     fn drop(&mut self) {
         self.destroy_state();
     }
 }
 
-impl<'r, 's, F: AnyPcm> ReadSamples<'s> for Resample<'r, 's, F>
+impl<'s, F: AnyPcm> ReadSamples<'s> for Resample<'_, 's, F>
 where
     PcmF32Le: Convert<F>,
 {

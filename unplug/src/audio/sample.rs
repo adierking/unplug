@@ -30,7 +30,7 @@ pub struct Samples<'a, F: FormatTag> {
     pub params: F::Params,
 }
 
-impl<'a, F: FormatTag> Samples<'a, F> {
+impl<F: FormatTag> Samples<'_, F> {
     /// Ensures that the sample data is owned, cloning it if necessary.
     pub fn into_owned(self) -> Samples<'static, F> {
         Samples {
@@ -530,7 +530,7 @@ where
     }
 }
 
-impl<'r, 's, F, T> ReadSamples<'s> for ApplyFilter<'r, 's, F, T>
+impl<'s, F, T> ReadSamples<'s> for ApplyFilter<'_, 's, F, T>
 where
     F: StaticFormat,
     T: SampleFilter<Format = F> + Send,

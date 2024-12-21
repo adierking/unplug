@@ -1380,7 +1380,7 @@ fn write_actors(
         let object_id = actors.get(&actor_id).copied();
         let object = object_id.map(|i| &objects[object_index(i)]);
         let enum_label = if !actor_short_name.is_empty() {
-            Label::pascal_case(&*actor_short_name)
+            Label::pascal_case(&actor_short_name)
         } else {
             Label(format!("{}{}", UNKNOWN_PREFIX, actor_index))
         };
