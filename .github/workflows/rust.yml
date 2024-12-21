@@ -20,7 +20,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   stable_toolchain: 1.74.1
-  nightly_toolchain: nightly-2023-12-04
+  nightly_toolchain: nightly-2024-12-20
   branch_name: ${{ github.base_ref || github.ref_name }}
 
 jobs:
