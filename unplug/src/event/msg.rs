@@ -7,7 +7,6 @@ use crate::common::text::{self, Text, VecText};
 use crate::data::{self, Sound};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::TryFrom;
 use std::fmt;
 use thiserror::Error;
 use tracing::error;
@@ -211,94 +210,81 @@ impl DeserializeEvent for MsgArgs {
         // displayed as text. Keep reading until we hit a null terminator (MSG_END).
         let mut commands = vec![];
         let mut text = vec![];
-        let mut done = false;
         de.begin_variadic_args()?;
-        while !done {
+        loop {
             let ch = de.deserialize_msg_char()?;
-            let command = match ch {
-                MsgOp::End => {
-                    done = true;
-                    None
-                }
-                MsgOp::Speed => Some(MsgCommand::Speed(de.deserialize_u8()?)),
-                MsgOp::Wait => Some(MsgCommand::Wait(MsgWaitType::deserialize(de)?)),
-                MsgOp::Anim => Some(MsgCommand::Anim(MsgAnimArgs::deserialize(de)?)),
-                MsgOp::Sfx => {
-                    let sound = de.deserialize_u32()?.try_into()?;
-                    Some(MsgCommand::Sfx(sound, MsgSfxType::deserialize(de)?))
-                }
-                MsgOp::Voice => {
-                    let voice = de.deserialize_u8()?;
-                    match Voice::try_from(voice) {
-                        Ok(voice) => Some(MsgCommand::Voice(voice)),
-                        Err(_) => return Err(Error::UnrecognizedVoice(voice)),
-                    }
-                }
-                MsgOp::Default => Some(MsgCommand::Default(DefaultArgs::deserialize(de)?)),
-                MsgOp::Newline => Some(MsgCommand::Newline),
-                MsgOp::NewlineVt => Some(MsgCommand::NewlineVt),
-                MsgOp::Format => {
-                    let mut format_text = vec![];
-                    loop {
-                        match de.deserialize_msg_char()? {
-                            MsgOp::Format => break,
-                            MsgOp::Char(ch) => format_text.push(ch),
-                            ch => return Err(Error::Unsupported(ch)),
-                        }
-                    }
-                    Some(MsgCommand::Format(Text::from_bytes(format_text)?))
-                }
-                MsgOp::Size => Some(MsgCommand::Size(de.deserialize_u8()?)),
-                MsgOp::Color => {
-                    let color = de.deserialize_u8()?;
-                    match Color::try_from(color) {
-                        Ok(color) => Some(MsgCommand::Color(color)),
-                        Err(_) => return Err(Error::UnrecognizedColor(color)),
-                    }
-                }
-                MsgOp::Rgba => Some(MsgCommand::Rgba(de.deserialize_rgba()?)),
-                MsgOp::Layout => {
-                    let layout = de.deserialize_u8()?;
-                    match Layout::try_from(layout) {
-                        Ok(layout) => Some(MsgCommand::Layout(layout)),
-                        Err(_) => return Err(Error::UnrecognizedLayout(layout)),
-                    }
-                }
-                MsgOp::Icon => {
-                    let icon = de.deserialize_u8()?;
-                    match Icon::try_from(icon) {
-                        Ok(icon) => Some(MsgCommand::Icon(icon)),
-                        Err(_) => return Err(Error::UnrecognizedIcon(icon)),
-                    }
-                }
-                MsgOp::Shake => Some(MsgCommand::Shake(ShakeArgs::deserialize(de)?)),
-                MsgOp::Center => Some(MsgCommand::Center(de.deserialize_u8()? != 0)),
-                MsgOp::Rotate => Some(MsgCommand::Rotate(de.deserialize_i16()?)),
-                MsgOp::Scale => {
-                    Some(MsgCommand::Scale(de.deserialize_i16()?, de.deserialize_i16()?))
-                }
-                MsgOp::NumInput => Some(MsgCommand::NumInput(NumInputArgs::deserialize(de)?)),
-                MsgOp::Question => Some(MsgCommand::Question(QuestionArgs::deserialize(de)?)),
-                MsgOp::Stay => Some(MsgCommand::Stay),
-                MsgOp::Char(ch) => {
-                    text.push(match ch {
-                        // '$' is an escape character for '"'
-                        b'$' => b'"',
-                        _ => ch,
-                    });
-                    continue;
-                }
-                MsgOp::Invalid => return Err(Error::Unsupported(ch)),
-            };
+
+            // Aggregate consecutive characters into single text commands.
+            if let MsgOp::Char(x) = ch {
+                text.push(match x {
+                    // '$' is an escape character for '"'
+                    b'$' => b'"',
+                    _ => x,
+                });
+                continue;
+            }
             if !text.is_empty() {
                 commands.push(MsgCommand::Text(Text::from_bytes(text.split_off(0))?));
             }
-            if let Some(command) = command {
-                commands.push(command);
-            }
+
+            commands.push(match ch {
+                MsgOp::End => break,
+                MsgOp::Newline => MsgCommand::Newline,
+                MsgOp::NewlineVt => MsgCommand::NewlineVt,
+
+                MsgOp::Speed => MsgCommand::Speed(de.deserialize_u8()?),
+                MsgOp::Wait => MsgCommand::Wait(MsgWaitType::deserialize(de)?),
+                MsgOp::Anim => MsgCommand::Anim(MsgAnimArgs::deserialize(de)?),
+                MsgOp::Default => MsgCommand::Default(DefaultArgs::deserialize(de)?),
+                MsgOp::Size => MsgCommand::Size(de.deserialize_u8()?),
+                MsgOp::Rgba => MsgCommand::Rgba(de.deserialize_rgba()?),
+                MsgOp::Shake => MsgCommand::Shake(ShakeArgs::deserialize(de)?),
+                MsgOp::Center => MsgCommand::Center(de.deserialize_u8()? != 0),
+                MsgOp::Rotate => MsgCommand::Rotate(de.deserialize_i16()?),
+                MsgOp::Scale => MsgCommand::Scale(de.deserialize_i16()?, de.deserialize_i16()?),
+                MsgOp::NumInput => MsgCommand::NumInput(NumInputArgs::deserialize(de)?),
+                MsgOp::Question => MsgCommand::Question(QuestionArgs::deserialize(de)?),
+                MsgOp::Stay => MsgCommand::Stay,
+
+                MsgOp::Sfx => {
+                    let sound = de.deserialize_u32()?.try_into()?;
+                    MsgCommand::Sfx(sound, MsgSfxType::deserialize(de)?)
+                }
+                MsgOp::Voice => {
+                    let v = de.deserialize_u8()?;
+                    MsgCommand::Voice(v.try_into().map_err(|_| Error::UnrecognizedVoice(v))?)
+                }
+                MsgOp::Color => {
+                    let c = de.deserialize_u8()?;
+                    MsgCommand::Color(c.try_into().map_err(|_| Error::UnrecognizedColor(c))?)
+                }
+                MsgOp::Layout => {
+                    let l = de.deserialize_u8()?;
+                    MsgCommand::Layout(l.try_into().map_err(|_| Error::UnrecognizedLayout(l))?)
+                }
+                MsgOp::Icon => {
+                    let i = de.deserialize_u8()?;
+                    MsgCommand::Icon(i.try_into().map_err(|_| Error::UnrecognizedIcon(i))?)
+                }
+
+                MsgOp::Format => {
+                    // Read characters up to the next format boundary.
+                    let mut chars = vec![];
+                    loop {
+                        match de.deserialize_msg_char()? {
+                            MsgOp::Format => break,
+                            MsgOp::Char(ch) => chars.push(ch),
+                            other => return Err(Error::Unsupported(other)),
+                        }
+                    }
+                    MsgCommand::Format(Text::from_bytes(chars)?)
+                }
+
+                MsgOp::Invalid => return Err(Error::Unsupported(ch)),
+                MsgOp::Char(_) => unreachable!(),
+            });
         }
         de.end_variadic_args()?;
-        commands.shrink_to_fit();
         Ok(Self { commands })
     }
 }
