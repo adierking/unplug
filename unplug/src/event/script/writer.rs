@@ -169,7 +169,7 @@ impl<'a> ScriptWriter<'a> {
         Self {
             script,
             blobs: vec![],
-            visited: vec![0; (script.len() + 31) / 32].into_boxed_slice(),
+            visited: vec![0; script.len().div_ceil(32)].into_boxed_slice(),
         }
     }
 

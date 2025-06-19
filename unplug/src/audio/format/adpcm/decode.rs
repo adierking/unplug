@@ -47,7 +47,7 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
         );
 
         // Estimate the final sample count based on how many bytes there are
-        let num_bytes = (encoded.len + 1) / 2;
+        let num_bytes = encoded.len.div_ceil(2);
         let estimated = num_bytes.div_ceil(BYTES_PER_FRAME) * SAMPLES_PER_FRAME;
         let mut decoded: Vec<i16> = Vec::with_capacity(estimated);
 

@@ -94,7 +94,7 @@ pub(crate) fn has_loop_prefix(name: &str) -> bool {
     if chars.len() < prefix_len {
         return false; // Too short
     }
-    if chars.get(prefix_len).map_or(false, |c| c.is_alphanumeric()) {
+    if chars.get(prefix_len).is_some_and(|c| c.is_alphanumeric()) {
         return false; // Following character is alphanumeric
     }
     // Case-insensitive match

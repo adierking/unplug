@@ -24,7 +24,7 @@ pub fn encode(pcm: &[i16], info: &mut Info) -> Vec<u8> {
         pcm_buf.copy_within((end - 2)..end, 0);
 
         // Append the encoded frame and discard unused bytes
-        let frame_size = 1 + (samples.len() + 1) / 2;
+        let frame_size = 1 + samples.len().div_ceil(2);
         adpcm.extend(&adpcm_buf[..frame_size]);
     }
 

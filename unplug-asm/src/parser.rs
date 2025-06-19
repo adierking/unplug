@@ -336,7 +336,7 @@ impl<'s> Parser<'s> {
     where
         F: FnOnce(&Token) -> bool,
     {
-        self.token.as_ref().map_or(false, predicate)
+        self.token.as_ref().is_some_and(predicate)
     }
 
     /// Matches the lookahead token against a predicate. Returns true if the predicate matches,
@@ -348,7 +348,7 @@ impl<'s> Parser<'s> {
         if self.next.is_none() {
             self.next = self.read();
         }
-        self.next.as_ref().map_or(false, |(token, _)| predicate(token))
+        self.next.as_ref().is_some_and(|(token, _)| predicate(token))
     }
 
     /// Reads the next token from the stream until a non-error token or EOF is encountered.

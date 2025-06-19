@@ -52,7 +52,7 @@ impl Format {
 
     /// Converts an address to a byte offset, rounding up.
     pub fn address_to_byte_up(&self, address: usize) -> usize {
-        (address * self.bits() + 7) / 8
+        (address * self.bits()).div_ceil(8)
     }
 
     /// Converts a byte offset to an address.
