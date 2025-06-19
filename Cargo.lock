@@ -863,8 +863,7 @@ checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
 [[package]]
 name = "libsamplerate-sys"
 version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28853b399f78f8281cd88d333b54a63170c4275f6faea66726a2bea5cca72e0d"
+source = "git+https://github.com/adierking/libsamplerate-sys.git#018714731c41eb1fc029dd911016f9b8e1d06751"
 dependencies = [
  "cmake",
 ]
