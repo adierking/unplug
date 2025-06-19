@@ -77,8 +77,6 @@ tracing-subscriber = "0.3.16"
 unicase = "2.6"
 
 [patch.crates-io]
-# TODO: Remove this if the fix gets merged into mainline
-slice-ring-buffer = { git = "https://github.com/adierking/slice_ring_buffer.git", branch = "fix-asserts" }
 libsamplerate-sys = { git = "https://github.com/adierking/libsamplerate-sys.git" }
 
 [workspace.lints.rust]
