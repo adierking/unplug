@@ -7,12 +7,12 @@ pub mod sobj;
 
 mod archive;
 mod array;
-mod display_list;
+mod buffer;
 mod pointer;
 
 pub use archive::Archive;
 pub use array::PointerArray;
-pub use display_list::DisplayList;
+pub use buffer::Buffer;
 pub use pointer::{Node, Pointer, ReadPointer};
 
 #[derive(Error, Debug)]

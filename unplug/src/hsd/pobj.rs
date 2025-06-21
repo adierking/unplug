@@ -1,7 +1,9 @@
-use super::{DisplayList, Error, Node, Pointer, ReadPointer, Result};
+use super::{Buffer, Error, Node, Pointer, ReadPointer, Result};
 use crate::common::ReadFrom;
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, BE};
+
+const DISPLAY_LIST_BLOCK_SIZE: usize = 0x20;
 
 bitflags! {
     // From HSDLib
@@ -24,7 +26,7 @@ pub struct PObj<'a> {
     pub next: Pointer<'a, PObj<'a>>,
     pub attributes: Pointer<'a, ()>,
     pub flags: Flags,
-    pub display_list: Pointer<'a, DisplayList<'a>>,
+    pub display_list: Pointer<'a, Buffer<'a>>,
     pub jobj: Pointer<'a, ()>,
 }
 
@@ -39,9 +41,9 @@ impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for PObj<'a> {
             ..Default::default()
         };
         let num_blocks = reader.read_u16::<BE>()?;
-        let display_list = DisplayList::with_blocks(reader.arena(), num_blocks);
+        let buffer_size = num_blocks as usize * DISPLAY_LIST_BLOCK_SIZE;
         Ok(Self {
-            display_list: reader.read_pointer_into(display_list)?,
+            display_list: Buffer::read_pointer(reader, buffer_size)?,
             jobj: reader.read_pointer()?,
             ..result
         })
