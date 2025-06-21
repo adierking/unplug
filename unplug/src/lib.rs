@@ -8,6 +8,7 @@ pub mod common;
 pub mod dvd;
 pub mod event;
 pub mod globals;
+pub mod hsd;
 pub mod shop;
 pub mod stage;
 

@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 arrayvec.workspace = true
 bitflags.workspace = true
+bumpalo.workspace = true
 byte-slice-cast.workspace = true
 byteorder.workspace = true
 claxon.workspace = true
