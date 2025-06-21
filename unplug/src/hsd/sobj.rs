@@ -1,3 +1,4 @@
+use super::jobj::JObj;
 use super::{Error, Node, Pointer, PointerArray, ReadPointer, Result};
 use crate::common::ReadFrom;
 
@@ -23,10 +24,10 @@ impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for SObj<'a> {
 
 #[derive(Debug, Default, Clone)]
 pub struct JObjDesc<'a> {
-    pub root_joint: Pointer<'a, ()>,                       // HSD_JOBJ
-    pub joint_anims: Pointer<'a, PointerArray<'a, ()>>,    // HSD_AnimJoint
+    pub root_joint: Pointer<'a, JObj<'a>>,
+    pub joint_anims: Pointer<'a, PointerArray<'a, ()>>, // HSD_AnimJoint
     pub material_anims: Pointer<'a, PointerArray<'a, ()>>, // HSD_MatAnimJoint
-    pub shape_anims: Pointer<'a, PointerArray<'a, ()>>,    // HSD_ShapeAnimJoint
+    pub shape_anims: Pointer<'a, PointerArray<'a, ()>>, // HSD_ShapeAnimJoint
 }
 
 impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for JObjDesc<'a> {

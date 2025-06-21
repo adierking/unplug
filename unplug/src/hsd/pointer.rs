@@ -119,17 +119,22 @@ impl<'a, T: Node<'a>> Default for Pointer<'a, T> {
 
 /// Extension trait for ReadPointerBase which provides the generic read_pointer().
 pub trait ReadPointer<'a>: ReadPointerBase<'a> {
-    /// Read a pointer from the stream.
+    /// Read a pointer from the stream with default-constructed node data.
     fn read_pointer<T: Node<'a>>(&mut self) -> Result<Pointer<'a, T>> {
+        self.read_pointer_into(T::default_in(self.arena()))
+    }
+
+    /// Read a pointer from the stream. The node data will be read into the given node object.
+    fn read_pointer_into<T: Node<'a>>(&mut self, node: T) -> Result<Pointer<'a, T>> {
         match self.read_offset()? {
-            Some(offset) => self.read_node(offset.get()),
+            Some(offset) => self.read_node(offset.get(), node),
             None => Ok(Pointer(None)),
         }
     }
 
     /// Read a node from the stream at the given offset and return a pointer for it.
-    fn read_node<T: Node<'a>>(&mut self, offset: u32) -> Result<Pointer<'a, T>> {
-        let pointer = Pointer::alloc(self.arena(), T::default_in(self.arena()));
+    fn read_node<T: Node<'a>>(&mut self, offset: u32, node: T) -> Result<Pointer<'a, T>> {
+        let pointer = Pointer::alloc(self.arena(), node);
         self.add_node(offset, pointer.0.unwrap());
         Ok(pointer)
     }

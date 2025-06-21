@@ -130,7 +130,7 @@ impl<'a> Archive<'a> {
         let mut node_reader = NodeReader::new(region, arena, relocs);
         let mut roots = vec![];
         for offset in root_offsets {
-            roots.push(node_reader.read_node(offset)?);
+            roots.push(node_reader.read_node(offset, SObj::default())?);
         }
         node_reader.read_nodes()?;
         Ok(Self { roots })
@@ -140,14 +140,16 @@ impl<'a> Archive<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
+    use std::fs;
+    use std::io::Cursor;
 
     #[test]
     #[ignore = "needs to be enabled manually"]
     fn test_read_archive() {
-        let mut file = File::open(r"../sample.dat").unwrap();
+        let bytes = fs::read("../sample.dat").unwrap();
+        let mut cursor = Cursor::new(bytes);
         let arena = Bump::new();
-        let archive = Archive::read_from(&mut file, &arena).unwrap();
+        let archive = Archive::read_from(&mut cursor, &arena).unwrap();
         println!("{:?}", archive);
     }
 }

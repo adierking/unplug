@@ -1,14 +1,19 @@
 use thiserror::Error;
 
+pub mod dobj;
+pub mod jobj;
+pub mod pobj;
 pub mod sobj;
 
 mod archive;
+mod array;
+mod display_list;
 mod pointer;
-mod types;
 
 pub use archive::Archive;
+pub use array::PointerArray;
+pub use display_list::DisplayList;
 pub use pointer::{Node, Pointer, ReadPointer};
-pub use types::PointerArray;
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
