@@ -3,7 +3,6 @@ use crate::common::ReadFrom;
 use bumpalo::Bump;
 use std::cell::{Ref, RefCell, RefMut};
 use std::io::Read;
-use std::num::NonZeroU32;
 
 // This is some convoluted type system stuff to support the node graph (yay, Rust!). Basically, a
 // Pointer can either be null or hold a reference to a node. When we read a pointer, we need to put
@@ -28,7 +27,7 @@ pub trait ReadPointerBase<'a>: Read {
     fn arena(&self) -> &'a Bump;
 
     /// Read a 32-bit offset and validate that it has a relocation pointing to it.
-    fn read_offset(&mut self) -> Result<Option<NonZeroU32>>;
+    fn read_offset(&mut self) -> Result<Option<u32>>;
 
     /// Enqueue a node to be read at an offset.
     fn add_node(&mut self, offset: u32, node: &'a RefCell<dyn NodeBase<'a>>);
@@ -131,7 +130,7 @@ pub trait ReadPointer<'a>: ReadPointerBase<'a> {
     /// Read a pointer from the stream. The node data will be read into the given node object.
     fn read_pointer_into<T: Node<'a>>(&mut self, node: T) -> Result<Pointer<'a, T>> {
         match self.read_offset()? {
-            Some(offset) => self.read_node(offset.get(), node),
+            Some(offset) => self.read_node(offset, node),
             None => Ok(Pointer(None)),
         }
     }

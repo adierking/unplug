@@ -7,7 +7,6 @@ use byteorder::{ReadBytesExt, BE};
 use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
-use std::num::NonZeroU32;
 use tracing::trace;
 
 const VERSION_NONE: [u8; 4] = [0; 4];
@@ -126,12 +125,13 @@ impl<'a, R: Read + Seek> ReadPointerBase<'a> for NodeReader<'a, R> {
         self.arena
     }
 
-    fn read_offset(&mut self) -> Result<Option<NonZeroU32>> {
-        // Get the stream position so we can make sure there's a relocation pointing here.
+    fn read_offset(&mut self) -> Result<Option<u32>> {
+        // Get the stream position so we can check if there's a relocation pointing here. It's
+        // possible to have an offset of 0 which is still a valid pointer if it's relocated.
         let pos = self.stream_position()? as u32;
         let offset = self.read_u32::<BE>()?;
-        if offset > 0 && self.relocs.contains(&pos) {
-            Ok(NonZeroU32::new(offset))
+        if self.relocs.contains(&pos) {
+            Ok(Some(offset))
         } else if offset == 0 {
             Ok(None)
         } else {
