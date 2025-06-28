@@ -35,8 +35,8 @@ pub trait ReadPointerBase<'a>: Read {
 }
 
 pub trait NodeBase<'a>: 'a {
-    /// Read the node's data from a reader.
-    fn read<'r>(&mut self, reader: &'r mut dyn ReadPointerBase<'a>) -> Result<()>;
+    /// Read the node's data from a reader. `max_size` is an upper bound on the known size of the object.
+    fn read<'r>(&mut self, reader: &'r mut dyn ReadPointerBase<'a>, max_size: usize) -> Result<()>;
 }
 
 // Auto-implement NodeBase for anything which supports ReadFrom<ReadPointer>.
@@ -44,7 +44,11 @@ impl<'a, T: 'a> NodeBase<'a> for T
 where
     for<'x> T: ReadFrom<dyn ReadPointerBase<'a> + 'x, Error = Error> + 'a,
 {
-    fn read<'r>(&mut self, reader: &'r mut dyn ReadPointerBase<'a>) -> Result<()> {
+    fn read<'r>(
+        &mut self,
+        reader: &'r mut dyn ReadPointerBase<'a>,
+        _max_size: usize,
+    ) -> Result<()> {
         *self = T::read_from(reader)?;
         Ok(())
     }
@@ -64,7 +68,7 @@ impl<'a, T: Default> DefaultIn<'a> for T {
 /// Marker trait which ensures that a type conforms to all of the necessary traits for a node.
 /// Technically this is not necessary and we could use just NodeBase everywhere, but this makes it
 /// more explicit which types are actually nodes.
-pub trait Node<'a>: NodeBase<'a> + DefaultIn<'a> {}
+pub trait Node<'a>: NodeBase<'a> {}
 
 // () is a node with nothing in it. Useful for pointers to unimplemented structs.
 impl Node<'_> for () {}
@@ -120,7 +124,7 @@ impl<'a, T: Node<'a>> Default for Pointer<'a, T> {
 /// Extension trait for ReadPointerBase which provides the generic read_pointer().
 pub trait ReadPointer<'a>: ReadPointerBase<'a> {
     /// Read a pointer from the stream with default-constructed node data.
-    fn read_pointer<T: Node<'a>>(&mut self) -> Result<Pointer<'a, T>> {
+    fn read_pointer<T: Node<'a> + DefaultIn<'a>>(&mut self) -> Result<Pointer<'a, T>> {
         self.read_pointer_into(T::default_in(self.arena()))
     }
 
@@ -141,3 +145,18 @@ pub trait ReadPointer<'a>: ReadPointerBase<'a> {
 }
 
 impl<'a, R: ReadPointerBase<'a> + ?Sized> ReadPointer<'a> for R {}
+
+// Implement ReadFrom for pointers by delegating to read_pointer().
+impl<'a, R, T> ReadFrom<R> for Pointer<'a, T>
+where
+    R: ReadPointer<'a> + ?Sized,
+    T: Node<'a> + DefaultIn<'a>,
+{
+    type Error = Error;
+    fn read_from(reader: &mut R) -> Result<Self> {
+        reader.read_pointer()
+    }
+}
+
+// Necessary for pointer arrays.
+impl<'a, T: Node<'a> + DefaultIn<'a>> Node<'a> for Pointer<'a, T> {}

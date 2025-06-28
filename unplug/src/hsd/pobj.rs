@@ -1,3 +1,4 @@
+use super::attribute::AttributeArray;
 use super::{Buffer, Error, Node, Pointer, ReadPointer, Result};
 use crate::common::ReadFrom;
 use bitflags::bitflags;
@@ -24,7 +25,7 @@ bitflags! {
 pub struct PObj<'a> {
     pub name: Pointer<'a, ()>,
     pub next: Pointer<'a, PObj<'a>>,
-    pub attributes: Pointer<'a, ()>,
+    pub attributes: Pointer<'a, AttributeArray<'a>>,
     pub flags: Flags,
     pub display_list: Pointer<'a, Buffer<'a>>,
     pub jobj: Pointer<'a, ()>,
@@ -43,7 +44,7 @@ impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for PObj<'a> {
         let num_blocks = reader.read_u16::<BE>()?;
         let buffer_size = num_blocks as usize * DISPLAY_LIST_BLOCK_SIZE;
         Ok(Self {
-            display_list: Buffer::read_pointer(reader, buffer_size)?,
+            display_list: Buffer::read_pointer_known_size(reader, buffer_size)?,
             jobj: reader.read_pointer()?,
             ..result
         })

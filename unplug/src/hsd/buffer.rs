@@ -6,8 +6,8 @@ use std::ops::{Deref, DerefMut};
 
 /// A variable-size byte buffer.
 ///
-/// The size needs to be specified when the buffer is created, so to read a buffer given a size, you
-/// can use `Buffer::read_pointer()`.
+/// This is not compatible with `read_pointer()`. Use `Buffer::read_pointer_unknown_size()` or
+/// `Buffer::read_pointer_known_size()` to read a pointer to a buffer.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Buffer<'a> {
     bytes: Vec<'a, u8>,
@@ -22,18 +22,24 @@ impl<'a> std::fmt::Debug for Buffer<'a> {
 impl<'a> Buffer<'a> {
     /// Create an empty buffer in an arena.
     pub fn new_in(arena: &'a Bump) -> Self {
-        Self { bytes: Vec::new_in(arena) }
+        Self { bytes: bumpalo::vec![in arena] }
     }
 
-    /// Create a buffer in an arena, zero-initialized up to the given size.
+    /// Create a buffer in an arena with a known maximum size.
     pub fn with_size_in(arena: &'a Bump, size: usize) -> Self {
-        let mut bytes = Vec::new_in(arena);
-        bytes.resize(size, 0);
-        Self { bytes }
+        Self { bytes: bumpalo::vec![in arena; 0; size] }
     }
 
-    /// Read a pointer to a buffer with the given size.
-    pub fn read_pointer<R>(reader: &mut R, size: usize) -> Result<Pointer<'a, Self>>
+    /// Read a pointer to a buffer with an unknown size.
+    pub fn read_pointer_unknown_size<R>(reader: &mut R) -> Result<Pointer<'a, Self>>
+    where
+        R: ReadPointer<'a> + ?Sized,
+    {
+        reader.read_pointer_into(Self::new_in(reader.arena()))
+    }
+
+    /// Read a pointer to a buffer with a known size.
+    pub fn read_pointer_known_size<R>(reader: &mut R, size: usize) -> Result<Pointer<'a, Self>>
     where
         R: ReadPointer<'a> + ?Sized,
     {
@@ -62,7 +68,10 @@ impl DerefMut for Buffer<'_> {
 
 // Manual impl of NodeBase; we can't use ReadFrom because the buffer needs to have a size assigned.
 impl<'a> NodeBase<'a> for Buffer<'a> {
-    fn read<'r>(&mut self, reader: &'r mut dyn ReadPointerBase<'a>) -> Result<()> {
+    fn read<'r>(&mut self, reader: &'r mut dyn ReadPointerBase<'a>, max_size: usize) -> Result<()> {
+        if self.bytes.is_empty() {
+            self.bytes.resize(max_size, 0);
+        }
         reader.read_exact(&mut self.bytes)?;
         Ok(())
     }

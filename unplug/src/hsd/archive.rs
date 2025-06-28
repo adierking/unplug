@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::num::NonZeroU32;
+use tracing::trace;
 
 const VERSION_NONE: [u8; 4] = [0; 4];
 const VERSION_001B: [u8; 4] = *b"001B";
@@ -51,19 +52,58 @@ struct QueuedNode<'a> {
 struct NodeReader<'a, R: Read + Seek> {
     reader: R,
     arena: &'a Bump,
+    header: Header,
     relocs: HashSet<u32>,
     queue: VecDeque<QueuedNode<'a>>,
 }
 
 impl<'a, R: Read + Seek> NodeReader<'a, R> {
-    fn new(reader: R, arena: &'a Bump, relocs: impl IntoIterator<Item = u32>) -> Self {
-        Self { reader, arena, relocs: relocs.into_iter().collect(), queue: VecDeque::new() }
+    fn new(
+        reader: R,
+        arena: &'a Bump,
+        header: Header,
+        relocs: impl IntoIterator<Item = u32>,
+    ) -> Self {
+        Self { reader, arena, header, relocs: relocs.into_iter().collect(), queue: VecDeque::new() }
     }
 
     fn read_nodes(&mut self) -> Result<()> {
+        // Build a list of all the node offsets by reading the offset at each relocation.
+        let mut node_offsets = Vec::<u32>::with_capacity(self.relocs.len());
+        for &reloc_offset in &self.relocs {
+            self.reader.seek(SeekFrom::Start(reloc_offset as u64))?;
+            node_offsets.push(self.reader.read_u32::<BE>()?);
+        }
+        node_offsets.sort();
+
         while let Some(node) = self.queue.pop_front() {
-            self.seek(SeekFrom::Start(node.offset as u64))?;
-            node.node.borrow_mut().read(self)?;
+            // Compute the max size of the node by searching for its offset in the node list and
+            // then subtracting it from the offset of the following node. This is necessary for
+            // reading buffers with unknown sizes, and it also helps us check correctness. This does
+            // make the assumption that pointers will never point to the middle of a node or buffer.
+            self.reader.seek(SeekFrom::Start(node.offset as u64))?;
+            let next_index = node_offsets.binary_search(&node.offset).map_or_else(|i| i, |i| i + 1);
+            let max_size = if next_index < node_offsets.len() {
+                node_offsets[next_index] - node.offset
+            } else {
+                self.header.reloc_offset - node.offset
+            };
+
+            trace!("Reading node at 0x{:x} with max size 0x{:x}", node.offset, max_size);
+            node.node.borrow_mut().read(self, max_size as usize)?;
+
+            // Validate the node size in debug builds.
+            if cfg!(debug_assertions) {
+                if let Ok(end_offset) = self.reader.stream_position() {
+                    let actual_size = end_offset - node.offset as u64;
+                    assert!(
+                        actual_size <= max_size as u64,
+                        "Actual size (0x{:x}) larger than max size (0x{:x})!",
+                        actual_size,
+                        max_size
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -90,11 +130,12 @@ impl<'a, R: Read + Seek> ReadPointerBase<'a> for NodeReader<'a, R> {
         // Get the stream position so we can make sure there's a relocation pointing here.
         let pos = self.stream_position()? as u32;
         let offset = self.read_u32::<BE>()?;
-        if offset > 0 {
-            assert!(self.relocs.contains(&pos));
+        if offset > 0 && self.relocs.contains(&pos) {
             Ok(NonZeroU32::new(offset))
-        } else {
+        } else if offset == 0 {
             Ok(None)
+        } else {
+            Err(Error::MissingRelocation(pos))
         }
     }
 
@@ -127,7 +168,7 @@ impl<'a> Archive<'a> {
 
         // Enqueue each of the root nodes.
         // TODO: Actually check the type instead of assuming each is an SObj.
-        let mut node_reader = NodeReader::new(region, arena, relocs);
+        let mut node_reader = NodeReader::new(region, arena, header, relocs);
         let mut roots = vec![];
         for offset in root_offsets {
             roots.push(node_reader.read_node(offset, SObj::default())?);
