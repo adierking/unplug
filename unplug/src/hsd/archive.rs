@@ -201,21 +201,21 @@ mod tests {
 
     fn parse_display_lists<'a>(jobj: &JObj<'a>) {
         if let Data::DObj(dobj_ptr) = &jobj.data {
-            let mut nextd = dobj_ptr.borrow();
+            let mut nextd = dobj_ptr.get();
             while let Some(dobj) = nextd {
-                let mut nextp = dobj.polygons.borrow();
+                let mut nextp = dobj.polygons.get();
                 while let Some(pobj) = nextp {
                     let list = pobj.parse_display_list().unwrap();
                     println!("{:?}", list);
-                    nextp = pobj.next.borrow();
+                    nextp = pobj.next.get();
                 }
-                nextd = dobj.next.borrow();
+                nextd = dobj.next.get();
             }
         }
-        if let Some(child) = jobj.child.borrow() {
+        if let Some(child) = jobj.child.get() {
             parse_display_lists(&child);
         }
-        if let Some(next) = jobj.next.borrow() {
+        if let Some(next) = jobj.next.get() {
             parse_display_lists(&next);
         }
     }
@@ -228,10 +228,10 @@ mod tests {
         let arena = Bump::new();
         let archive = Archive::read_from(&mut cursor, &arena).unwrap();
         println!("{:?}", archive);
-        let sobj = archive.roots[0].borrow().unwrap();
-        for ptr in sobj.jobj_descs.borrow().unwrap().iter() {
-            if let Some(desc) = ptr.borrow() {
-                if let Some(joint) = desc.root_joint.borrow() {
+        let sobj = archive.roots[0].get().unwrap();
+        for ptr in sobj.jobj_descs.get().unwrap().iter() {
+            if let Some(desc) = ptr.get() {
+                if let Some(joint) = desc.root_joint.get() {
                     parse_display_lists(&joint);
                 }
             }

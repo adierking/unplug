@@ -38,14 +38,14 @@ impl<'a> PObj<'a> {
     }
 
     pub fn vertex_size(&self) -> usize {
-        match self.attributes.borrow() {
+        match self.attributes.get() {
             Some(attributes) => attributes.iter().map(|a| a.display_list_size()).sum(),
             None => 0,
         }
     }
 
     pub fn parse_display_list(&self) -> Result<DisplayList<'a>> {
-        match self.display_list.borrow() {
+        match self.display_list.get() {
             Some(buffer) => DisplayList::parse(buffer.as_slice(), self.vertex_size()),
             None => Ok(DisplayList::default()),
         }

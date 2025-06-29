@@ -101,11 +101,11 @@ impl<'a, T: Node<'a>> Pointer<'a, T> {
         Self(Some(arena.alloc(RefCell::new(node))))
     }
 
-    pub fn borrow(&self) -> Option<Ref<'a, T>> {
+    pub fn get(&self) -> Option<Ref<'a, T>> {
         self.0.map(|obj| obj.borrow())
     }
 
-    pub fn borrow_mut(&self) -> Option<RefMut<'a, T>> {
+    pub fn get_mut(&self) -> Option<RefMut<'a, T>> {
         self.0.map(|obj| obj.borrow_mut())
     }
 
