@@ -1,5 +1,5 @@
 use super::array::{Array, ArrayElement};
-use super::{Buffer, Node, Pointer};
+use super::{ByteArray, Node, Pointer};
 use crate::common::ReadFrom;
 use crate::hsd::{Error, ReadPointer, Result};
 use byteorder::{ReadBytesExt, BE};
@@ -179,7 +179,19 @@ pub struct Attribute<'a> {
     pub component_type: ComponentType,
     pub scale: u8,
     pub stride: u16,
-    pub buffer: Pointer<'a, Buffer<'a>>,
+    pub data: Pointer<'a, ByteArray<'a>>,
+}
+
+impl<'a> Attribute<'a> {
+    /// Get the size (in bytes) of the component's data in a display list.
+    pub fn display_list_size(&self) -> usize {
+        match self.kind {
+            AttributeType::None => 0,
+            AttributeType::Direct => unimplemented!("direct vertex data is not supported"),
+            AttributeType::Index8 => 1,
+            AttributeType::Index16 => 2,
+        }
+    }
 }
 
 impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for Attribute<'a> {
@@ -195,7 +207,7 @@ impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for Attribute<'a> {
             component_type: ComponentType::try_from_primitive(reader.read_u32::<BE>()?, name)?,
             scale: (reader.read_u16::<BE>()? >> 8) as u8,
             stride: reader.read_u16::<BE>()?,
-            buffer: Buffer::read_pointer_unknown_size(reader)?,
+            data: ByteArray::read_pointer(reader, ByteArray::UNKNOWN_LENGTH)?,
         })
     }
 }

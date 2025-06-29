@@ -1,7 +1,7 @@
 use super::pointer::DefaultIn;
+use super::pointer::{NodeBase, ReadPointerBase};
 use super::{Error, Node, Pointer, ReadPointer, Result};
 use crate::common::ReadFrom;
-use crate::hsd::pointer::ReadPointerBase;
 use bumpalo::collections::vec::IntoIter;
 use bumpalo::collections::Vec;
 use bumpalo::Bump;
@@ -92,3 +92,75 @@ impl<'a, T> Node<'a> for Array<'a, T> where
     for<'x> T: Node<'a> + ArrayElement + ReadFrom<dyn ReadPointerBase<'a> + 'x, Error = Error> + 'a
 {
 }
+
+/// An immutable array of bytes.
+///
+/// This is not compatible with `read_pointer()`. Use `ByteArray::read_pointer()` to both read and
+/// specify a size.
+#[derive(Copy, Clone)]
+pub struct ByteArray<'a> {
+    arena: &'a Bump,
+    bytes: &'a [u8],
+    max_len: usize,
+}
+
+impl<'a> ByteArray<'a> {
+    /// Pass this to `read_pointer()` to guess the size of the buffer based on adjacent nodes.
+    /// Only use this if there is no way to know the buffer size ahead of time.
+    pub const UNKNOWN_LENGTH: usize = usize::MAX;
+
+    /// Create an empty byte array.
+    pub fn new_in(arena: &'a Bump) -> Self {
+        Self { arena, bytes: &[], max_len: 0 }
+    }
+
+    /// Create an empty byte array with a max length set.
+    pub fn with_max_len_in(arena: &'a Bump, max_len: usize) -> Self {
+        Self { arena, bytes: &[], max_len }
+    }
+
+    /// Create a byte array from a span of bytes.
+    pub fn with_bytes_in(arena: &'a Bump, bytes: &[u8]) -> Self {
+        Self { arena, bytes: arena.alloc_slice_copy(bytes), max_len: bytes.len() }
+    }
+
+    /// Read a pointer to a buffer with the given maximum size.
+    /// If the size is unknown, use `UNKNOWN_LENGTH` to guess the size.
+    pub fn read_pointer<R>(reader: &mut R, max_len: usize) -> Result<Pointer<'a, Self>>
+    where
+        R: ReadPointer<'a> + ?Sized,
+    {
+        reader.read_pointer_into(Self::with_max_len_in(reader.arena(), max_len))
+    }
+
+    /// Return a slice over the bytes in the array.
+    pub fn as_slice(&self) -> &'a [u8] {
+        self.bytes
+    }
+}
+
+impl<'a> std::fmt::Debug for ByteArray<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ByteArray").field("len", &self.bytes.len()).finish()
+    }
+}
+
+impl Deref for ByteArray<'_> {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+// Manual impl of NodeBase; we can't use ReadFrom because the buffer needs to have a size assigned.
+impl<'a> NodeBase<'a> for ByteArray<'a> {
+    fn read<'r>(&mut self, reader: &'r mut dyn ReadPointerBase<'a>, max_size: usize) -> Result<()> {
+        let len = if self.max_len == Self::UNKNOWN_LENGTH { max_size } else { self.max_len };
+        let bytes = self.arena.alloc_slice_fill_default(len);
+        reader.read_exact(bytes)?;
+        self.bytes = bytes;
+        Ok(())
+    }
+}
+
+impl<'a> Node<'a> for ByteArray<'a> {}

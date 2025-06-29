@@ -1,5 +1,6 @@
 use super::attribute::AttributeArray;
-use super::{Buffer, Error, Node, Pointer, ReadPointer, Result};
+use super::display_list::DisplayList;
+use super::{ByteArray, Error, Node, Pointer, ReadPointer, Result};
 use crate::common::ReadFrom;
 use bitflags::bitflags;
 use byteorder::{ReadBytesExt, BE};
@@ -27,8 +28,28 @@ pub struct PObj<'a> {
     pub next: Pointer<'a, PObj<'a>>,
     pub attributes: Pointer<'a, AttributeArray<'a>>,
     pub flags: Flags,
-    pub display_list: Pointer<'a, Buffer<'a>>,
+    pub display_list: Pointer<'a, ByteArray<'a>>,
     pub jobj: Pointer<'a, ()>,
+}
+
+impl<'a> PObj<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn vertex_size(&self) -> usize {
+        match self.attributes.borrow() {
+            Some(attributes) => attributes.iter().map(|a| a.display_list_size()).sum(),
+            None => 0,
+        }
+    }
+
+    pub fn parse_display_list(&self) -> Result<DisplayList<'a>> {
+        match self.display_list.borrow() {
+            Some(buffer) => DisplayList::parse(buffer.as_slice(), self.vertex_size()),
+            None => Ok(DisplayList::default()),
+        }
+    }
 }
 
 impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for PObj<'a> {
@@ -44,7 +65,7 @@ impl<'a, R: ReadPointer<'a> + ?Sized> ReadFrom<R> for PObj<'a> {
         let num_blocks = reader.read_u16::<BE>()?;
         let buffer_size = num_blocks as usize * DISPLAY_LIST_BLOCK_SIZE;
         Ok(Self {
-            display_list: Buffer::read_pointer_known_size(reader, buffer_size)?,
+            display_list: ByteArray::read_pointer(reader, buffer_size)?,
             jobj: reader.read_pointer()?,
             ..result
         })

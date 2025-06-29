@@ -7,7 +7,7 @@ use byteorder::{ReadBytesExt, BE};
 use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
-use tracing::trace;
+use tracing::{debug, trace};
 
 const VERSION_NONE: [u8; 4] = [0; 4];
 const VERSION_001B: [u8; 4] = *b"001B";
@@ -69,9 +69,21 @@ impl<'a, R: Read + Seek> NodeReader<'a, R> {
     fn read_nodes(&mut self) -> Result<()> {
         // Build a list of all the node offsets by reading the offset at each relocation.
         let mut node_offsets = Vec::<u32>::with_capacity(self.relocs.len());
-        for &reloc_offset in &self.relocs {
+        let mut relocs_sorted = self.relocs.iter().copied().collect::<Vec<u32>>();
+        relocs_sorted.sort();
+        for reloc_offset in relocs_sorted {
             self.reader.seek(SeekFrom::Start(reloc_offset as u64))?;
-            node_offsets.push(self.reader.read_u32::<BE>()?);
+            let offset = self.reader.read_u32::<BE>()?;
+            if offset & 0x3 == 0 {
+                node_offsets.push(offset);
+            } else {
+                // HACK: No idea what's going on with these, some seem to point into the middle of a
+                // buffer for no apparent reason and some are even negative (e.g. cb_robo.dat has a
+                // pointer with offset 0xffffcc7f). HSD_ArchiveParse() is at 0x801d4360 and it
+                // doesn't do anything special when applying relocations. Need to figure out what
+                // struct is referencing these and why.
+                debug!("Ignoring unaligned pointer: 0x{:x} -> 0x{:x}", reloc_offset, offset);
+            }
         }
         node_offsets.sort();
 
@@ -88,6 +100,7 @@ impl<'a, R: Read + Seek> NodeReader<'a, R> {
                 self.header.reloc_offset - node.offset
             };
 
+            // TODO: Dedup nodes referenced by more than one pointer.
             trace!("Reading node at 0x{:x} with max size 0x{:x}", node.offset, max_size);
             node.node.borrow_mut().read(self, max_size as usize)?;
 
@@ -157,7 +170,8 @@ impl<'a> Archive<'a> {
         // HEADER_SIZE all over the place.
         let mut region = Region::new(reader, HEADER_SIZE, header.file_size as u64 - HEADER_SIZE);
 
-        // Read the relocation table. We only use it to verify the validity of a pointer.
+        // Read the relocation table. We use this to determine where pointers are and the
+        // approximate size of each node.
         let mut relocs = vec![0u32; header.reloc_count as usize];
         region.seek(SeekFrom::Start(header.reloc_offset as u64))?;
         region.read_u32_into::<BE>(&mut relocs)?;
@@ -181,8 +195,30 @@ impl<'a> Archive<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hsd::jobj::{Data, JObj};
     use std::fs;
     use std::io::Cursor;
+
+    fn parse_display_lists<'a>(jobj: &JObj<'a>) {
+        if let Data::DObj(dobj_ptr) = &jobj.data {
+            let mut nextd = dobj_ptr.borrow();
+            while let Some(dobj) = nextd {
+                let mut nextp = dobj.polygons.borrow();
+                while let Some(pobj) = nextp {
+                    let list = pobj.parse_display_list().unwrap();
+                    println!("{:?}", list);
+                    nextp = pobj.next.borrow();
+                }
+                nextd = dobj.next.borrow();
+            }
+        }
+        if let Some(child) = jobj.child.borrow() {
+            parse_display_lists(&child);
+        }
+        if let Some(next) = jobj.next.borrow() {
+            parse_display_lists(&next);
+        }
+    }
 
     #[test]
     #[ignore = "needs to be enabled manually"]
@@ -192,5 +228,13 @@ mod tests {
         let arena = Bump::new();
         let archive = Archive::read_from(&mut cursor, &arena).unwrap();
         println!("{:?}", archive);
+        let sobj = archive.roots[0].borrow().unwrap();
+        for ptr in sobj.jobj_descs.borrow().unwrap().iter() {
+            if let Some(desc) = ptr.borrow() {
+                if let Some(joint) = desc.root_joint.borrow() {
+                    parse_display_lists(&joint);
+                }
+            }
+        }
     }
 }
