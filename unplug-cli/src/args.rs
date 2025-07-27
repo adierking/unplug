@@ -104,7 +104,7 @@ pub enum Command {
     #[clap(subcommand)]
     Qp(archive::QpSubcommand),
 
-    /// Dump event scripts
+    /// Edit event scripts
     #[clap(subcommand)]
     Script(script::Subcommand),
 
@@ -333,50 +333,12 @@ pub mod script {
 
     #[derive(Subcommand)]
     pub enum Subcommand {
-        /// Dump the script data from a single stage
-        Dump(DumpArgs),
-        /// Dump all script data
-        DumpAll(DumpAllArgs),
         /// Disassemble a single stage's script
         Disassemble(DisassembleArgs),
         /// Disassemble all scripts
         DisassembleAll(DisassembleAllArgs),
         /// Assemble a single stage's script
         Assemble(AssembleArgs),
-    }
-
-    #[derive(Args)]
-    pub struct DumpFlags {
-        /// Dump unknown structs
-        #[clap(long)]
-        pub dump_unknown: bool,
-
-        /// Do not show file offsets
-        #[clap(long)]
-        pub no_offsets: bool,
-    }
-
-    #[derive(Args)]
-    pub struct DumpArgs {
-        /// Name of the stage to dump, or "globals" to dump globals
-        pub stage: String,
-
-        /// Redirect output to a file instead of stdout
-        #[clap(short, value_name("PATH"))]
-        pub output: Option<PathBuf>,
-
-        #[clap(flatten)]
-        pub flags: DumpFlags,
-    }
-
-    #[derive(Args)]
-    pub struct DumpAllArgs {
-        /// Path to the output directory
-        #[clap(short, value_name("PATH"))]
-        pub output: PathBuf,
-
-        #[clap(flatten)]
-        pub flags: DumpFlags,
     }
 
     #[derive(Args)]
@@ -795,6 +757,44 @@ pub mod debug {
     pub enum Subcommand {
         /// Read and rewrite script data
         RebuildScripts,
+        /// Dump the script data from a single stage
+        DumpScript(DumpArgs),
+        /// Dump all script data
+        DumpAllScripts(DumpAllArgs),
+    }
+
+    #[derive(Args)]
+    pub struct DumpFlags {
+        /// Dump unknown structs
+        #[clap(long)]
+        pub dump_unknown: bool,
+
+        /// Do not show file offsets
+        #[clap(long)]
+        pub no_offsets: bool,
+    }
+
+    #[derive(Args)]
+    pub struct DumpArgs {
+        /// Name of the stage to dump, or "globals" to dump globals
+        pub stage: String,
+
+        /// Redirect output to a file instead of stdout
+        #[clap(short, value_name("PATH"))]
+        pub output: Option<PathBuf>,
+
+        #[clap(flatten)]
+        pub flags: DumpFlags,
+    }
+
+    #[derive(Args)]
+    pub struct DumpAllArgs {
+        /// Path to the output directory
+        #[clap(short, value_name("PATH"))]
+        pub output: PathBuf,
+
+        #[clap(flatten)]
+        pub flags: DumpFlags,
     }
 }
 
@@ -1572,43 +1572,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_script_dump() {
-        use script::*;
-        let map = mapper!(Command::Script(Subcommand::Dump(args)) => args);
-        parse(["script", "dump", "foo"], map, |args| {
-            assert_eq!(args.stage, "foo");
-            assert_eq!(args.output, None);
-            assert!(!args.flags.dump_unknown);
-            assert!(!args.flags.no_offsets);
-        });
-        parse(["script", "dump", "foo", "-o", "out"], map, |args| {
-            assert_eq!(args.stage, "foo");
-            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
-        });
-        parse(["script", "dump", "foo", "--dump-unknown", "--no-offsets"], map, |args| {
-            assert_eq!(args.stage, "foo");
-            assert_eq!(args.output, None);
-            assert!(args.flags.dump_unknown);
-            assert!(args.flags.no_offsets);
-        });
-    }
-
-    #[test]
-    fn test_cli_script_dump_all() {
-        use script::*;
-        let map = mapper!(Command::Script(Subcommand::DumpAll(args)) => args);
-        parse(["script", "dump-all", "-o", "out"], map, |args| {
-            assert_eq!(args.output, Path::new("out"));
-        });
-        parse(["script", "dump-all", "-o", "out", "--dump-unknown", "--no-offsets"], map, |args| {
-            assert_eq!(args.output, Path::new("out"));
-            assert!(args.flags.dump_unknown);
-            assert!(args.flags.no_offsets);
-        });
-        assert_eq!(error(["script", "dump-all"]), ErrorKind::MissingRequiredArgument);
-    }
-
-    #[test]
     fn test_cli_script_disassemble() {
         use script::*;
         let map = mapper!(Command::Script(Subcommand::Disassemble(args)) => args);
@@ -1720,11 +1683,53 @@ mod tests {
 
     #[cfg(feature = "debug")]
     #[test]
-    fn test_debug() {
+    fn test_cli_debug_rebuild_scripts() {
         use debug::*;
         let map = mapper!(Command::Debug(c) => c);
         parse(["debug", "rebuild-scripts"], map, |c| {
             assert!(matches!(c, Subcommand::RebuildScripts));
         });
+    }
+
+    #[cfg(feature = "debug")]
+    #[test]
+    fn test_cli_debug_dump_script() {
+        use debug::*;
+        let map = mapper!(Command::Debug(Subcommand::DumpScript(args)) => args);
+        parse(["debug", "dump-script", "foo"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output, None);
+            assert!(!args.flags.dump_unknown);
+            assert!(!args.flags.no_offsets);
+        });
+        parse(["debug", "dump-script", "foo", "-o", "out"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output.as_deref(), Some(Path::new("out")));
+        });
+        parse(["debug", "dump-script", "foo", "--dump-unknown", "--no-offsets"], map, |args| {
+            assert_eq!(args.stage, "foo");
+            assert_eq!(args.output, None);
+            assert!(args.flags.dump_unknown);
+            assert!(args.flags.no_offsets);
+        });
+    }
+
+    #[test]
+    fn test_cli_debug_dump_all_scripts() {
+        use debug::*;
+        let map = mapper!(Command::Debug(Subcommand::DumpAllScripts(args)) => args);
+        parse(["debug", "dump-all-scripts", "-o", "out"], map, |args| {
+            assert_eq!(args.output, Path::new("out"));
+        });
+        parse(
+            ["debug", "dump-all-scripts", "-o", "out", "--dump-unknown", "--no-offsets"],
+            map,
+            |args| {
+                assert_eq!(args.output, Path::new("out"));
+                assert!(args.flags.dump_unknown);
+                assert!(args.flags.no_offsets);
+            },
+        );
+        assert_eq!(error(["debug", "dump-all-scripts"]), ErrorKind::MissingRequiredArgument);
     }
 }
