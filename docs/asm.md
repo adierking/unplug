@@ -286,7 +286,7 @@ accepts both everywhere.
 You may notice that most integers have type suffixes (`.b`, `.w`, `.d`). These indicate to the
 assembler how many bytes an integer takes up. They are used to preserve the original code and you do
 not need to use them in new code that you write (unless you want to), because the assembler can
-determine how large a number should be based on context. 
+determine how large a number should be based on context.
 
 ## Expressions
 
@@ -383,3 +383,305 @@ special modifiers which change the appearance or behavior of the text:
 | `stay` | Keep the message on-screen after it's done |
 | `voice(id)` | Voice selection |
 | `wait(x)` | Wait for a certain amount of time or a button press (254, 255) |
+
+## List of All Possible Command Signatures
+
+Some of these have unknown functions right now. You will have to search the game scripts to find
+how to actually use them.
+
+```
+abort
+return
+
+break   ADDRESS
+endif   ADDRESS
+goto    ADDRESS
+lib     INDEX
+run     ADDRESS
+
+case    EXPR, else ADDRESS
+elif    EXPR, else ADDRESS
+expr    EXPR, else ADDRESS
+if      EXPR, else ADDRESS
+while   EXPR, else ADDRESS
+
+popbp
+pushbp
+set     TARGET, VALUE
+set     UPDATE_EXPR
+setsp   EXPR
+
+anim    OBJECT_EXPR, EXPR...
+anim1   OBJECT_EXPR, EXPR...
+anim2   OBJECT_EXPR, EXPR...
+
+attach  OBJECT_EXPR, ADDRESS
+detach  OBJECT_EXPR
+
+born    EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, ADDRESS
+call    OBJECT_EXPR, EXPR...
+disp    OBJECT_EXPR, EXPR
+kill    EXPR
+timer   EXPR, EVENT_EXPR
+warp    EXPR, EXPR
+
+camera  @anim, EXPR, EXPR, EXPR
+camera  @distance, EXPR, EXPR, EXPR
+camera  @lead, EXPR
+camera  @obj, EXPR, EXPR, EXPR
+camera  @pos, EXPR, EXPR, EXPR, EXPR, EXPR
+camera  @reset, EXPR, EXPR
+camera  @unk211, EXPR, EXPR, EXPR, EXPR
+camera  @unk227, EXPR, EXPR, EXPR, EXPR, EXPR
+camera  @unk229, EXPR, EXPR, EXPR
+camera  @unk230
+camera  @unk232, -1
+camera  @unk232, -2
+camera  @unk232, 0
+camera  @unk232, 1
+camera  @unk232, 2, EXPR
+camera  @unk232, 3, EXPR
+camera  @unk232, 4, EXPR
+camera  @unk236, EXPR
+camera  @unk237, EXPR
+camera  @unk238, EXPR
+camera  @unk240, EXPR, EXPR, EXPR, EXPR
+camera  @unk243, EXPR, EXPR, EXPR, EXPR
+camera  @unk251, EXPR, EXPR, EXPR, EXPR
+camera  @unk252, EXPR, EXPR, EXPR, EXPR
+
+check   @anim, OBJECT_EXPR, EXPR
+check   @cam
+check   @color, OBJECT_EXPR
+check   @cue
+check   @dir, OBJECT_EXPR
+check   @fade
+check   @letterbox
+check   @mono
+check   @move, OBJECT_EXPR
+check   @read, OBJECT_EXPR
+check   @real, EXPR
+check   @scale, OBJECT_EXPR
+check   @sfx, SOUND_EXPR
+check   @shake
+check   @time, EXPR
+check   @unk203
+check   @unk246, EXPR
+check   @wipe
+check   @zblur
+
+wait    @anim, OBJECT_EXPR, EXPR
+wait    @cam
+wait    @color, OBJECT_EXPR
+wait    @cue
+wait    @dir, OBJECT_EXPR
+wait    @fade
+wait    @letterbox
+wait    @mono
+wait    @move, OBJECT_EXPR
+wait    @read, OBJECT_EXPR
+wait    @real, EXPR
+wait    @scale, OBJECT_EXPR
+wait    @sfx, SOUND_EXPR
+wait    @shake
+wait    @time, EXPR
+wait    @unk203
+wait    @unk246, EXPR
+wait    @wipe
+wait    @zblur
+
+color   OBJECT_EXPR, @blend, EXPR, EXPR, EXPR, EXPR
+color   OBJECT_EXPR, @modulate, EXPR, EXPR, EXPR, EXPR
+
+dir     OBJECT_EXPR, EXPR
+mdir    OBJECT_EXPR, @cam, EXPR, EXPR
+mdir    OBJECT_EXPR, @dir, EXPR, EXPR, EXPR
+mdir    OBJECT_EXPR, @obj, EXPR, EXPR, EXPR
+mdir    OBJECT_EXPR, @pos, EXPR, EXPR, EXPR, EXPR
+
+light   EXPR, @color, EXPR, EXPR, EXPR
+light   EXPR, @pos, EXPR, EXPR, EXPR
+light   EXPR, @unk227, EXPR, EXPR, EXPR
+
+menu    0
+menu    1
+menu    2
+menu    3
+menu    4
+menu    5
+menu    6
+menu    7
+menu    1000, EXPR
+menu    1001, EXPR, EXPR
+
+move    OBJECT_EXPR, EXPR, EXPR, EXPR, EXPR
+moveto  OBJECT_EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+pos     OBJECT_EXPR, EXPR, EXPR, EXPR
+
+movie   STRING_EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+msg     MESSAGE...
+printf  STRING
+select  MESSAGE...
+
+ptcl    EXPR, @lead, OBJECT_EXPR, Variadic
+ptcl    EXPR, @obj, OBJECT_EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+ptcl    EXPR, @pos, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+ptcl    EXPR, @unk210
+
+read    @anim, OBJECT_EXPR, STRING_EXPR
+read    @sfx, OBJECT_EXPR, STRING_EXPR
+
+mscale  OBJECT_EXPR, EXPR, EXPR, EXPR, EXPR
+scale   OBJECT_EXPR, EXPR, EXPR, EXPR
+
+scrn    @fade, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+scrn    @hud, 0, EXPR
+scrn    @hud, 1, EXPR
+scrn    @hud, 2, EXPR
+scrn    @hud, 3, EXPR, EXPR, EXPR, EXPR
+scrn    @hud, 4, -1
+scrn    @hud, 4, -2
+scrn    @hud, 4, -3, EXPR
+scrn    @hud, 4, -4
+scrn    @hud, 4, 0
+scrn    @hud, 4, 1
+scrn    @hud, 4, 2
+scrn    @hud, 4, 3
+scrn    @letterbox, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+scrn    @mono, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+scrn    @shake, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+scrn    @wipe, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR, EXPR
+scrn    @zblur, EXPR, EXPR, EXPR, EXPR, EXPR
+
+sfx     SOUND_EXPR, @cue
+sfx     SOUND_EXPR, 0
+sfx     SOUND_EXPR, 1
+sfx     SOUND_EXPR, 2, EXPR
+sfx     SOUND_EXPR, 3, EXPR
+sfx     SOUND_EXPR, 4, EXPR, EXPR
+sfx     SOUND_EXPR, 5
+sfx     SOUND_EXPR, 6
+
+win     @color, EXPR, EXPR, EXPR, EXPR
+win     @letterbox
+win     @obj, OBJECT_EXPR, EXPR, EXPR, EXPR
+win     @pos, EXPR, EXPR
+win     @reset
+```
+
+## List of All Possible Expression Signatures
+
+Some of these have unknown functions right now. You will have to search the game scripts to find
+how to actually use them. This list does not include things like integer literals.
+
+```
+cur_atc
+cur_suit
+exp
+hit
+hold
+level
+money
+rank
+result
+result2
+scrap
+use
+
+eq(EXPR, EXPR)
+ge(EXPR, EXPR)
+gt(EXPR, EXPR)
+le(EXPR, EXPR)
+lt(EXPR, EXPR)
+ne(EXPR, EXPR)
+not(EXPR)
+
+add(EXPR, EXPR)
+and(EXPR, EXPR)
+div(EXPR, EXPR)
+mod(EXPR, EXPR)
+mul(EXPR, EXPR)
+or(EXPR, EXPR)
+sub(EXPR, EXPR)
+xor(EXPR, EXPR)
+
+adda(EXPR, EXPR)
+anda(EXPR, EXPR)
+diva(EXPR, EXPR)
+moda(EXPR, EXPR)
+mula(EXPR, EXPR)
+ora(EXPR, EXPR)
+suba(EXPR, EXPR)
+xora(EXPR, EXPR)
+
+cos(EXPR)
+rand(EXPR)
+sin(EXPR)
+
+atc(EXPR)
+battery(EXPR)
+item(ITEM_EXPR)
+map(EXPR)
+pad(EXPR)
+time(EXPR)
+
+addr(ADDRESS)
+array(EXPR, EXPR, ADDRESS)
+bp(INTEGER)
+flag(EXPR)
+sp(INTEGER)
+var(EXPR)
+
+obj(@anim, OBJECT_EXPR)
+obj(@bone_x, ADDRESS)
+obj(@bone_y, ADDRESS)
+obj(@bone_z, ADDRESS)
+obj(@dir_to, ADDRESS)
+obj(@dir, OBJECT_EXPR)
+obj(@distance, ADDRESS)
+obj(@pos_x, OBJECT_EXPR)
+obj(@pos_y, OBJECT_EXPR)
+obj(@pos_z, OBJECT_EXPR)
+obj(@unk235, OBJECT_EXPR)
+obj(@unk247, OBJECT_EXPR)
+obj(@unk248, OBJECT_EXPR)
+obj(@unk249, ADDRESS)
+obj(@unk250, ADDRESS)
+
+actor_name(OBJECT_EXPR)
+item_name(ITEM_EXPR)
+sticker_name(EXPR)
+```
+
+## List of All Possible Message Function Signatures
+
+```
+anim(INTEGER, INTEGER, INTEGER)
+center(INTEGER)
+color(INTEGER)
+format(String)
+icon(INTEGER)
+layout(INTEGER)
+rgba(INTEGER)
+rotate(INTEGER)
+scale(INTEGER, INTEGER)
+shake(INTEGER, INTEGER, INTEGER)
+size(INTEGER)
+speed(INTEGER)
+stay()
+voice(INTEGER)
+wait(INTEGER)
+
+ask(INTEGER, INTEGER)
+def(INTEGER, INTEGER)
+input(INTEGER, INTEGER, INTEGER)
+
+sfx(SOUND, -1)
+sfx(SOUND, 0)
+sfx(SOUND, 1)
+sfx(SOUND, 2, INTEGER)
+sfx(SOUND, 3, INTEGER)
+sfx(SOUND, 4, INTEGER, INTEGER)
+sfx(SOUND, 5)
+sfx(SOUND, 6)
+```

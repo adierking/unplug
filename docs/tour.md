@@ -1,8 +1,7 @@
-# A Tour of Unplug 0.4
+# A Quick Tour of Unplug
 
-Unplug 0.4 is a pretty big change from 0.3. There is a new "project" paradigm for managing ISOs and
-all of the commands have been reworked. This guide gives you an overview of all of Unplug's major
-features so that you can get up to speed quickly.
+This guide gives you an overview of all of Unplug's major features so that you can quickly figure
+out what you want to do.
 
 ## Table of Contents
 
@@ -13,14 +12,14 @@ features so that you can get up to speed quickly.
 - [Editing Cutscene Messages](#editing-cutscene-messages)
 - [Editing the In-Game Shop](#editing-the-in-game-shop)
 - [Editing Global Metadata](#editing-global-metadata)
-- [Dumping Scripts](#dumping-scripts)
+- [Editing Scripts](#editing-scripts)
 - [Working with the ISO](#working-with-the-iso)
 - [Working with qp.bin](#working-with-qpbin)
 
 ## Projects
 
 In older versions of Unplug, you had to pass `--iso` to every command, which got tedious very
-quickly. Unplug 0.4 introduces a "project" system to improve upon this. Essentially, you can
+quickly. Unplug 0.4 introduced a "project" system to improve upon this. Essentially, you can
 register your ISO files as "projects" and then "open" a project to automatically use it for future
 commands.
 
@@ -58,10 +57,10 @@ You can close the project and go back to the default ISO by using `project close
 
 ## Running Dolphin
 
-Unplug 0.4 introduces a `dolphin` command which lets you quickly run the Dolphin Emulator with your
+Unplug 0.4 introduced a `dolphin` command which lets you quickly run the Dolphin Emulator with your
 current project.
 
-If this is your first time using Unplug 0.4, you'll need to configure where Dolphin is installed:
+If this is your first time using Unplug, you'll need to configure where Dolphin is installed:
 
 ```sh
 $ unplug config set dolphin-path 'D:\Downloads\Dolphin-x64\Dolphin.exe'
@@ -81,7 +80,7 @@ $ unplug dolphin
 
 ## Editing Stages
 
-Unplug 0.4 introduces a `stage` command which gives you the ability to export stage data to .json
+Unplug 0.4 introduced a `stage` command which gives you the ability to export stage data to .json
 files which you can edit and then re-import.
 
 To export the stage data, use the `stage export-all` command:
@@ -108,7 +107,7 @@ $ unplug --default-iso stage export-all -o stages
 
 ## Editing Audio
 
-Unplug 0.4 introduces an `audio` command which can export, import, and play the game's audio
+Unplug 0.4 introduced an `audio` command which can export, import, and play the game's audio
 resources.
 
 To play a sound file, use the `audio play` command:
@@ -196,18 +195,11 @@ project is open and then use the `globals import` command:
 $ unplug globals import globals.json
 ```
 
-## Dumping Scripts
+## Editing Scripts
 
-Most of the game's logic is powered by a custom scripting engine with bytecode stored in each
-stage file. Unplug doesn't have a language which lets you edit this yet, but you can at least dump
-its internal representation of the script data. Use the `script dump-all` command to do that:
-
-```sh
-$ unplug script dump-all -o scripts
-```
-
-Note that this internal representation is subject to change at any time, so try to avoid parsing it
-in another program.
+Most of the game's logic is powered by a custom scripting engine with bytecode stored in each stage
+file. Unplug 0.5 introduced an assembly language syntax that you can use to view and edit the script
+data on a low level. Refer to the [assembly documentation](/docs/asm.md) for more information.
 
 ## Working with the ISO
 
