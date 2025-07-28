@@ -44,10 +44,10 @@ emistro's [Unplugger](https://emistro.itch.io/unplugger)!
 - Built-in support for ISO reading and writing
 - Audio export, import, and playback
 - Edit objects in stage files
-- Export and import cutscene messages
-- Change items in the shop
+- Edit script bytecode
 - Edit the global metadata
-- Disassemble script bytecode
+- Edit the shop
+- Edit cutscene messages
 
 Stay tuned for more!
 
