@@ -21,7 +21,7 @@ default-members = [
 authors = ["Derpky <a@dierking.me>"]
 edition = "2021"
 rust-version = "1.74"
-version = "0.4.0"
+version = "0.5.0"
 
 [workspace.dependencies]
 anyhow = "1.0"
