@@ -74,7 +74,7 @@ toml_edit = { version = "0.15.0", features = ["easy"] }
 tracing = { version = "0.1.37", features = ["log"] }
 tracing-appender = "0.2"
 tracing-flame = "0.2"
-tracing-subscriber = "0.3.16"
+tracing-subscriber = "0.3.20"
 unicase = "2.6"
 
 [patch.crates-io]
