@@ -69,7 +69,7 @@ smol_str = "0.1.23"
 syn = "1.0"
 tempfile = "3"
 thiserror = "1.0"
-time = { version = "0.3.36", features = ["formatting", "macros"] }
+time = { version = "0.3.47", features = ["formatting", "macros"] }
 toml_edit = { version = "0.15.0", features = ["easy"] }
 tracing = { version = "0.1.37", features = ["log"] }
 tracing-appender = "0.2"
