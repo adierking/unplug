@@ -65,7 +65,8 @@ jobs:
           cargo +${{ env.nightly_toolchain }} build
             -v -p unplug-cli --target ${{ matrix.target }}
             --release --no-default-features --features distribution
-            -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort
+            -Zbuild-std=std,panic_abort -Zpanic-immediate-abort
+            --config=profile.release.panic=\"immediate-abort\"
 
         env:
           RUSTFLAGS: -C strip=symbols
