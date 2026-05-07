@@ -3,7 +3,6 @@ use super::{Requirement, Slot, SHOP_COUNT_FIRST, SHOP_ITEM_FIRST};
 use crate::data::{Atc, Item};
 use crate::event::command::{IfArgs, SetArgs};
 use crate::event::{Block, BlockId, CodeBlock, Command, Expr, Pointer, Script, SetExpr};
-use crate::expr;
 use std::convert::TryFrom;
 use tracing::level_filters::STATIC_MAX_LEVEL;
 use tracing::{trace, warn, Level};

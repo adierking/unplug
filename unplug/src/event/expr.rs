@@ -872,8 +872,10 @@ impl SerializeEvent for ObjBone {
 /// A wrapper which makes it easier to work with expressions that reference sounds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(variant_size_differences)]
+#[derive(Default)]
 pub enum SoundExpr {
     /// An immediate expression referring to no sound.
+    #[default]
     None,
     /// An immediate expression referring to a sound effect.
     Sfx(Sfx),
@@ -881,12 +883,6 @@ pub enum SoundExpr {
     Music(Music),
     /// An expression which evaulates to a sound ID.
     Expr(Box<Expr>),
-}
-
-impl Default for SoundExpr {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl From<Sound> for SoundExpr {

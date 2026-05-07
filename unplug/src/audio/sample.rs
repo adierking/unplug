@@ -252,20 +252,15 @@ impl From<Cow<'_, str>> for SourceTag {
 }
 
 /// Indicates the audio channel(s) that will be read by an audio source.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Default)]
 pub enum SourceChannel {
     /// All channels are read.
+    #[default]
     All,
     /// Only the left channel is read.
     Left,
     /// Only the right channel is read.
     Right,
-}
-
-impl Default for SourceChannel {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 /// Trait for an audio source.

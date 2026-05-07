@@ -109,6 +109,7 @@ impl Debug for Atc {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Atc {
     fn default() -> Self {
         Self::None

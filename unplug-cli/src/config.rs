@@ -133,15 +133,11 @@ pub struct Settings {
 /// A type of project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum ProjectKind {
     /// The project is a .iso file.
+    #[default]
     Iso,
-}
-
-impl Default for ProjectKind {
-    fn default() -> Self {
-        Self::Iso
-    }
 }
 
 impl Display for ProjectKind {

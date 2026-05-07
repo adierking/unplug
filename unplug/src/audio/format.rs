@@ -21,9 +21,10 @@ use std::result::Result as StdResult;
 use std::slice;
 
 /// Supported audio sample formats.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum Format {
     PcmS8,
+    #[default]
     PcmS16Le,
     PcmS16Be,
     PcmU16Le,
@@ -94,12 +95,6 @@ impl Format {
         } else {
             *self == other
         }
-    }
-}
-
-impl Default for Format {
-    fn default() -> Self {
-        Self::PcmS16Le
     }
 }
 

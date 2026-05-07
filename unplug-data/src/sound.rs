@@ -80,6 +80,7 @@ impl TryFrom<u32> for Sound {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Sound {
     fn default() -> Self {
         Self::None

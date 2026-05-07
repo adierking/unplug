@@ -351,11 +351,12 @@ pub struct Collection {
 
 impl Collection {
     fn read_from(reader: &mut (impl Read + Seek), header: CollectionHeader) -> Result<Self> {
-        let mut groups = vec![];
-        if let Some(offset) = header.group_links.offset() {
+        let groups = if let Some(offset) = header.group_links.offset() {
             reader.seek(SeekFrom::Start(offset))?;
-            groups = read_list(reader)?;
-        }
+            read_list(reader)?
+        } else {
+            vec![]
+        };
         Ok(Self { header, groups })
     }
 }
@@ -410,11 +411,12 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for InfoSection {
             Region::new(reader, start_offset, section_header.size as u64 - SECTION_HEADER_SIZE);
         let header = InfoHeader::read_from(&mut section)?;
 
-        let mut sounds = vec![];
-        if let Some(offset) = header.sounds.offset() {
+        let sounds = if let Some(offset) = header.sounds.offset() {
             section.seek(SeekFrom::Start(offset))?;
-            sounds = read_list(&mut section)?;
-        }
+            read_list(&mut section)?
+        } else {
+            vec![]
+        };
 
         let mut collections = vec![];
         if let Some(offset) = header.collections.offset() {
@@ -426,11 +428,12 @@ impl<R: Read + Seek + ?Sized> ReadFrom<R> for InfoSection {
             }
         }
 
-        let mut groups = vec![];
-        if let Some(offset) = header.groups.offset() {
+        let groups = if let Some(offset) = header.groups.offset() {
             section.seek(SeekFrom::Start(offset))?;
-            groups = read_list(&mut section)?;
-        }
+            read_list(&mut section)?
+        } else {
+            vec![]
+        };
 
         Ok(Self { sounds, collections, groups })
     }

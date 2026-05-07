@@ -9,7 +9,6 @@ use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::fmt;
 use thiserror::Error;
-use tracing::error;
 use unplug_proc::{DeserializeEvent, SerializeEvent};
 
 /// The maximum number of characters that can appear in a message.

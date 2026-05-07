@@ -41,7 +41,7 @@ impl Write for OutputRedirect {
 }
 
 /// Copies an entire reader into memory and then returns a `Cursor` over the bytes.
-pub fn copy_into_memory(mut reader: (impl Read + Seek)) -> io::Result<MemoryCursor> {
+pub fn copy_into_memory(mut reader: impl Read + Seek) -> io::Result<MemoryCursor> {
     let size = reader.seek(SeekFrom::End(0))?.try_into().expect("File size overflow");
     reader.rewind()?;
     let mut buf = Vec::with_capacity(size);

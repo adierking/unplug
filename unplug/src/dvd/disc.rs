@@ -421,7 +421,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
     }
 
     /// Replaces file `id` with the contents of `reader`.
-    pub fn replace_file(&mut self, id: EntryId, mut reader: (impl Read + Seek)) -> Result<()> {
+    pub fn replace_file(&mut self, id: EntryId, mut reader: impl Read + Seek) -> Result<()> {
         let start_pos = reader.stream_position()?;
         let end_pos = reader.seek(SeekFrom::End(0))?;
         reader.seek(SeekFrom::Start(start_pos))?;
@@ -436,7 +436,7 @@ impl<S: ReadWriteSeek> DiscStream<S> {
     }
 
     /// Replaces the file at `path` with the contents of `reader`.
-    pub fn replace_file_at(&mut self, path: &str, reader: (impl Read + Seek)) -> Result<()> {
+    pub fn replace_file_at(&mut self, path: &str, reader: impl Read + Seek) -> Result<()> {
         self.replace_file(self.files.at(path)?, reader)
     }
 

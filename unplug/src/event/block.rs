@@ -5,8 +5,9 @@ use super::serialize::{self, EventSerializer, SerializeEvent};
 use crate::common::VecText;
 
 /// A block of data in a script.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Block {
+    #[default]
     Placeholder,
     Code(CodeBlock),
     Data(DataBlock),
@@ -66,12 +67,6 @@ impl Block {
             Self::Data(d) => Some(d),
             _ => None,
         }
-    }
-}
-
-impl Default for Block {
-    fn default() -> Self {
-        Self::Placeholder
     }
 }
 

@@ -109,7 +109,7 @@ impl<'a> ArchiveBuilder<'a> {
     }
 
     /// Writes out an archive file.
-    pub fn write_to(&self, mut writer: (impl Write + Seek)) -> Result<()> {
+    pub fn write_to(&self, mut writer: impl Write + Seek) -> Result<()> {
         // Write an empty header we can fill in later
         writer.rewind()?;
         let mut buf = BufWriter::new(&mut writer);

@@ -8,19 +8,15 @@ use std::io::{Read, Write};
 /// GameCube DSP audio sample formats.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u16)]
+#[derive(Default)]
 pub enum DspFormat {
     /// GameCube ADPCM
+    #[default]
     Adpcm = 0,
     /// 16-bit big endian PCM
     Pcm16 = 10,
     /// 8-bit PCM
     Pcm8 = 25,
-}
-
-impl Default for DspFormat {
-    fn default() -> Self {
-        Self::Adpcm
-    }
 }
 
 impl<R: Read + ?Sized> ReadFrom<R> for DspFormat {

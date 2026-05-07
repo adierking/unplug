@@ -14,7 +14,7 @@ pub struct OggReader<'r> {
 impl<'r> OggReader<'r> {
     /// Creates a new `OggReader` which reads Ogg Vorbis data from `reader`. `tag` is a string or
     /// tag to identify the stream for debugging purposes.
-    pub fn new(reader: (impl ReadSeek + 'r), tag: impl Into<SourceTag>) -> Result<Self> {
+    pub fn new(reader: impl ReadSeek + 'r, tag: impl Into<SourceTag>) -> Result<Self> {
         Self::new_impl(Box::from(reader), tag.into())
     }
 

@@ -341,7 +341,6 @@ mod tests {
     use super::*;
     use crate::event::command::IfArgs;
     use crate::event::{Block, CodeBlock, Pointer};
-    use crate::expr;
 
     /// Convenience macro for initializing HashSets
     macro_rules! set {

@@ -311,10 +311,11 @@ impl ReadSamples<'static> for WavReader<'_> {
         if self.data_remaining == 0 {
             return Ok(None);
         }
-        let mut samples = vec![];
-        if let Some(chunk) = self.open_chunk(ID_DATA)? {
-            samples = PcmS16Le::read_bytes(chunk)?;
-        }
+        let samples = if let Some(chunk) = self.open_chunk(ID_DATA)? {
+            PcmS16Le::read_bytes(chunk)?
+        } else {
+            vec![]
+        };
         self.data_remaining = 0;
         if samples.is_empty() {
             Ok(None)

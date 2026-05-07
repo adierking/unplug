@@ -130,7 +130,7 @@ impl<'r, 's: 'r> WavWriter<'r, 's> {
 
     /// Prepares the final WAV file and writes it to `writer`.
     #[instrument(level = "trace", skip_all)]
-    pub fn write_to(&mut self, writer: (impl Write + Seek)) -> Result<()> {
+    pub fn write_to(&mut self, writer: impl Write + Seek) -> Result<()> {
         self.update_progress();
         self.peek_audio_info()?;
         let mut riff = RiffWriter::new(writer);

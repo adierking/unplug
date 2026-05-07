@@ -3,7 +3,6 @@ use super::Pointer;
 use crate::common::text::{self, VecText};
 use std::io;
 use thiserror::Error;
-use tracing::error;
 
 /// The result type for (de)serialization operations.
 pub type Result<T> = std::result::Result<T, Error>;

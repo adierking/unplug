@@ -284,7 +284,7 @@ impl FileEntry {
     }
 
     /// Returns a wrapper around a reader which reads the contents of this file.
-    pub fn open<'a>(&self, reader: (impl ReadSeek + 'a)) -> Result<Box<dyn ReadSeek + 'a>> {
+    pub fn open<'a>(&self, reader: impl ReadSeek + 'a) -> Result<Box<dyn ReadSeek + 'a>> {
         trace!("Opening entry \"{}\" at {:#x} (size = {:#x})", self.name, self.offset, self.size);
         Ok(Box::new(Region::new(reader, self.offset as u64, self.size as u64)))
     }
@@ -294,7 +294,7 @@ impl FileEntry {
     /// responsibility to change the file size after writing.
     pub fn edit<'a>(
         &self,
-        stream: (impl ReadWriteSeek + 'a),
+        stream: impl ReadWriteSeek + 'a,
         max_size: u32,
     ) -> Box<dyn ReadWriteSeek + 'a> {
         trace!(

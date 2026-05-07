@@ -68,11 +68,7 @@ fn run_app() -> Result<()> {
     load_config(args.config);
 
     #[cfg(feature = "trace")]
-    let mut _trace_guard = None;
-    #[cfg(feature = "trace")]
-    if let Some(path) = &args.trace {
-        _trace_guard = Some(init_tracing(path)?);
-    }
+    let _trace_guard = if let Some(path) = &args.trace { Some(init_tracing(path)?) } else { None };
 
     let ctx = get_context(args.context)?;
     commands::execute(ctx, args.command)

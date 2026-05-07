@@ -12,7 +12,7 @@ pub fn fill(mut writer: impl Write, byte: u8, len: u64) -> io::Result<()> {
 }
 
 /// Writes padding bytes so that a writer's offset is aligned to a power of two.
-pub fn pad(mut writer: (impl Write + Seek), align: u64, fill: u8) -> io::Result<()> {
+pub fn pad(mut writer: impl Write + Seek, align: u64, fill: u8) -> io::Result<()> {
     let offset = writer.stream_position()?;
     let aligned = super::align(offset, align);
     let padding = aligned - offset;
@@ -43,7 +43,7 @@ pub fn copy_buffered(
 /// Copies a region of bytes inside a stream to another position in the stream. The source and
 /// destination regions are permitted to overlap.
 pub fn copy_within(
-    mut stream: (impl Read + Write + Seek),
+    mut stream: impl Read + Write + Seek,
     from_offset: u64,
     len: u64,
     to_offset: u64,
