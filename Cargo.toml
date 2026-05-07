@@ -20,7 +20,7 @@ default-members = [
 [workspace.package]
 authors = ["Derpky <a@dierking.me>"]
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.88"
 version = "0.5.0"
 
 [workspace.dependencies]
@@ -131,7 +131,6 @@ return_self_not_must_use = "warn"
 semicolon_if_nothing_returned = "warn"
 semicolon_outside_block = "warn"
 str_to_string = "warn"
-string_to_string = "warn"
 suboptimal_flops = "warn"
 suspicious_operation_groupings = "warn"
 undocumented_unsafe_blocks = "warn"

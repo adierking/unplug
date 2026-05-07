@@ -19,7 +19,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  stable_toolchain: 1.74.1
+  stable_toolchain: 1.88.0
   nightly_toolchain: nightly-2026-05-06
   branch_name: ${{ github.base_ref || github.ref_name }}
 
