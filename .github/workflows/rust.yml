@@ -66,7 +66,7 @@ jobs:
             -v -p unplug-cli --target ${{ matrix.target }}
             --release --no-default-features --features distribution
             -Z build-std=std,panic_abort -Z panic-immediate-abort
-            --config=profile.release.panic=\"immediate-abort\"
+            --config .cargo/distribution.toml
 
         env:
           RUSTFLAGS: -C strip=symbols
