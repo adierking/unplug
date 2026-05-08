@@ -146,7 +146,7 @@ impl<'r> ScriptReader<'r> {
         self.resolve_edges(entry_block);
 
         // Use the analyzer to find all of the data that the code references.
-        self.analyzer.analyze_subroutine(&self.blocks, entry_block);
+        self.analyzer.analyze_subroutine(&self.blocks, entry_block)?;
         let mut references = self.analyzer.find_references(entry_block);
         // References must be sorted to make the block order deterministic
         references.sort_unstable_by_key(|(_, ptr)| *ptr);

@@ -4,7 +4,7 @@ mod writer;
 pub use reader::ScriptReader;
 pub use writer::{BlockOffsetMap, ScriptWriter};
 
-use super::analysis::SubroutineEffectsMap;
+use super::analysis::{self, SubroutineEffectsMap};
 use super::block::{Block, CodeBlock};
 use super::command::{self, Command};
 use super::pointer::{BlockId, Pointer};
@@ -42,12 +42,16 @@ pub enum Error {
     WriteCommand(#[source] Box<command::Error>),
 
     #[error(transparent)]
+    Analysis(Box<analysis::Error>),
+
+    #[error(transparent)]
     Io(Box<io::Error>),
 
     #[error(transparent)]
     Serialize(Box<serialize::Error>),
 }
 
+from_error_boxed!(Error::Analysis, analysis::Error);
 from_error_boxed!(Error::Io, io::Error);
 from_error_boxed!(Error::Serialize, serialize::Error);
 

@@ -4,6 +4,7 @@ use super::subroutine::{
     SubroutineEffects, SubroutineEffectsMap, SubroutineInfo, SubroutineInfoMap,
 };
 use super::value::{DefId, Definition, DefinitionMap, Label, Value, ValueKind};
+use super::Result;
 use crate::event::{Block, BlockId, Pointer};
 use arrayvec::ArrayVec;
 use std::collections::{hash_map, HashSet, VecDeque};
@@ -91,22 +92,23 @@ impl ScriptAnalyzer {
     }
 
     /// Analyzes the subroutine starting at `entry_point`.
-    pub fn analyze_subroutine(&mut self, blocks: &[Block], entry_point: BlockId) {
+    pub fn analyze_subroutine(&mut self, blocks: &[Block], entry_point: BlockId) -> Result<()> {
         match self.subs.entry(entry_point) {
-            hash_map::Entry::Occupied(_) => return,
+            hash_map::Entry::Occupied(_) => return Ok(()),
             hash_map::Entry::Vacant(vacant) => {
                 vacant.insert(SubroutineInfo::new(entry_point));
             }
         }
         let mut sub_info = SubroutineInfo::from_blocks(blocks, entry_point);
-        self.analyze_dependencies(blocks, &sub_info);
-        self.analyze_blocks(blocks, &sub_info);
+        self.analyze_dependencies(blocks, &sub_info)?;
+        self.analyze_blocks(blocks, &sub_info)?;
         self.calc_edges(blocks, &sub_info);
         self.bubble_undefined(&mut sub_info);
         self.propagate_definitions(&sub_info);
         self.analyze_references(&mut sub_info);
         self.collect_outputs(&mut sub_info);
         self.subs.insert(entry_point, sub_info);
+        Ok(())
     }
 
     /// Recursively finds all offsets referenced by an entry point.
@@ -137,14 +139,15 @@ impl ScriptAnalyzer {
     }
 
     /// Analyzes all of the subroutines called by `sub`.
-    fn analyze_dependencies(&mut self, blocks: &[Block], sub: &SubroutineInfo) {
+    fn analyze_dependencies(&mut self, blocks: &[Block], sub: &SubroutineInfo) -> Result<()> {
         for &call in &sub.calls {
-            self.analyze_subroutine(blocks, call);
+            self.analyze_subroutine(blocks, call)?;
         }
+        Ok(())
     }
 
     /// Populates the initial `BlockInfo` for each block in `sub`.
-    fn analyze_blocks(&mut self, blocks: &[Block], sub: &SubroutineInfo) {
+    fn analyze_blocks(&mut self, blocks: &[Block], sub: &SubroutineInfo) -> Result<()> {
         self.blocks.expand(blocks.len());
         for &id in &sub.postorder {
             if self.blocks.get(id).is_some() {
@@ -153,10 +156,11 @@ impl ScriptAnalyzer {
             let code = id.get(blocks).code().unwrap();
             let mut state = LiveState::new();
             for cmd in &code.commands {
-                state.analyze_command(cmd, &self.subs, &self.libs);
+                state.analyze_command(cmd, &self.subs, &self.libs)?;
             }
             self.blocks.insert(state.into_block(id, &mut self.defs));
         }
+        Ok(())
     }
 
     /// Scans `sub`'s block hierarchy and fills in each block's `successors` and `predecessors`.
@@ -445,7 +449,7 @@ mod tests {
         ];
 
         let mut analyzer = ScriptAnalyzer::new();
-        analyzer.analyze_subroutine(blocks, BlockId::new(0));
+        analyzer.analyze_subroutine(blocks, BlockId::new(0)).unwrap();
         let sub1 = analyzer.subroutine(BlockId::new(0)).unwrap();
         let sub2 = analyzer.subroutine(BlockId::new(1)).unwrap();
 
@@ -508,7 +512,7 @@ mod tests {
         ];
 
         let mut analyzer = ScriptAnalyzer::new();
-        analyzer.analyze_subroutine(blocks, BlockId::new(0));
+        analyzer.analyze_subroutine(blocks, BlockId::new(0)).unwrap();
         let sub = analyzer.subroutine(BlockId::new(0)).unwrap();
 
         assert!(sub.references.contains(&(ValueKind::Event, offset1)));
@@ -586,13 +590,13 @@ mod tests {
         })];
 
         let mut lib_analyzer = ScriptAnalyzer::new();
-        lib_analyzer.analyze_subroutine(lib_blocks, BlockId::new(0));
-        lib_analyzer.analyze_subroutine(lib_blocks, BlockId::new(1));
+        lib_analyzer.analyze_subroutine(lib_blocks, BlockId::new(0)).unwrap();
+        lib_analyzer.analyze_subroutine(lib_blocks, BlockId::new(1)).unwrap();
         let lib_effects = lib_analyzer.into_subroutine_effects();
 
         let mut analyzer =
             ScriptAnalyzer::with_libs(&lib_effects, &[BlockId::new(0), BlockId::new(1)]);
-        analyzer.analyze_subroutine(script_blocks, BlockId::new(0));
+        analyzer.analyze_subroutine(script_blocks, BlockId::new(0)).unwrap();
         let sub = analyzer.subroutine(BlockId::new(0)).unwrap();
 
         assert!(sub.references.contains(&(ValueKind::Event, offset1)));
@@ -638,7 +642,7 @@ mod tests {
         })];
 
         let mut analyzer = ScriptAnalyzer::new();
-        analyzer.analyze_subroutine(blocks, BlockId::new(0));
+        analyzer.analyze_subroutine(blocks, BlockId::new(0)).unwrap();
         let sub = analyzer.subroutine(BlockId::new(0)).unwrap();
 
         assert!(sub.references.contains(&(ValueKind::Array(ArrayKind::I32), offset)));
@@ -661,7 +665,7 @@ mod tests {
         })];
 
         let mut analyzer = ScriptAnalyzer::new();
-        analyzer.analyze_subroutine(blocks, BlockId::new(0));
+        analyzer.analyze_subroutine(blocks, BlockId::new(0)).unwrap();
         let sub = analyzer.subroutine(BlockId::new(0)).unwrap();
 
         assert!(sub.references.contains(&(ValueKind::Array(ArrayKind::I16), offset)));

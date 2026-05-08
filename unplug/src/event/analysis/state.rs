@@ -1,6 +1,7 @@
 use super::block::BlockInfo;
 use super::subroutine::{SubroutineEffects, SubroutineInfoMap};
 use super::value::{ArrayKind, Definition, DefinitionMap, Label, Value, ValueKind};
+use super::{Error, Result};
 use crate::event::command::*;
 use crate::event::expr::{ArrayElementExpr, BinaryOp, Expr, ObjExpr, SetExpr};
 use crate::event::msg::{MsgArgs, MsgCommand};
@@ -128,67 +129,68 @@ impl LiveState {
         cmd: &Command,
         subs: &SubroutineInfoMap,
         libs: &[SubroutineEffects],
-    ) {
+    ) -> Result<()> {
         // TODO: Maybe make a generic interface to iterate over a command's expressions
         match cmd {
-            Command::Abort => (),
-            Command::Return => (),
-            Command::Goto(_) => (),
+            Command::Abort => Ok(()),
+            Command::Return => Ok(()),
+            Command::Goto(_) => Ok(()),
             Command::Set(arg) => self.analyze_set(&arg.target, &arg.value),
             Command::If(arg)
             | Command::Elif(arg)
             | Command::Case(arg)
             | Command::Expr(arg)
             | Command::While(arg) => self.analyze_if(arg),
-            Command::EndIf(_) => (),
-            Command::Break(_) => (),
+            Command::EndIf(_) => Ok(()),
+            Command::Break(_) => Ok(()),
             Command::Run(ptr) => self.analyze_run(*ptr, subs),
             Command::Lib(index) => self.analyze_lib(*index, libs),
             Command::PushBp => self.analyze_push_bp(),
             Command::PopBp => self.analyze_pop_bp(),
             Command::SetSp(e) => self.analyze_set_sp(e),
-            Command::Anim(_) => (),
-            Command::Anim1(_) => (),
-            Command::Anim2(_) => (),
+            Command::Anim(_) => Ok(()),
+            Command::Anim1(_) => Ok(()),
+            Command::Anim2(_) => Ok(()),
             Command::Attach(arg) => self.analyze_attach(arg),
             Command::Born(arg) => self.analyze_born(arg),
             Command::Call(arg) => self.analyze_call(arg),
-            Command::Camera(_) => (),
-            Command::Check(_) => (),
-            Command::Color(_) => (),
+            Command::Camera(_) => Ok(()),
+            Command::Check(_) => Ok(()),
+            Command::Color(_) => Ok(()),
             Command::Detach(arg) => self.analyze_detach(arg),
-            Command::Dir(_) => (),
-            Command::MDir(_) => (),
-            Command::Disp(_) => (),
-            Command::Kill(_) => (),
-            Command::Light(_) => (),
-            Command::Menu(_) => (),
-            Command::Move(_) => (),
-            Command::MoveTo(_) => (),
+            Command::Dir(_) => Ok(()),
+            Command::MDir(_) => Ok(()),
+            Command::Disp(_) => Ok(()),
+            Command::Kill(_) => Ok(()),
+            Command::Light(_) => Ok(()),
+            Command::Menu(_) => Ok(()),
+            Command::Move(_) => Ok(()),
+            Command::MoveTo(_) => Ok(()),
             Command::Msg(arg) => self.analyze_msg(arg),
-            Command::Pos(_) => (),
-            Command::PrintF(_) => (),
-            Command::Ptcl(_) => (),
+            Command::Pos(_) => Ok(()),
+            Command::PrintF(_) => Ok(()),
+            Command::Ptcl(_) => Ok(()),
             Command::Read(arg) => self.analyze_read(arg),
-            Command::Scale(_) => (),
-            Command::MScale(_) => (),
-            Command::Scrn(_) => (),
-            Command::Select(_) => (),
-            Command::Sfx(_) => (),
+            Command::Scale(_) => Ok(()),
+            Command::MScale(_) => Ok(()),
+            Command::Scrn(_) => Ok(()),
+            Command::Select(_) => Ok(()),
+            Command::Sfx(_) => Ok(()),
             Command::Timer(arg) => self.analyze_timer(arg),
-            Command::Wait(_) => (),
-            Command::Warp(_) => (),
-            Command::Win(_) => (),
+            Command::Wait(_) => Ok(()),
+            Command::Warp(_) => Ok(()),
+            Command::Win(_) => Ok(()),
             Command::Movie(arg) => self.analyze_movie(arg),
         }
     }
 
-    fn analyze_attach(&mut self, arg: &AttachArgs) {
+    fn analyze_attach(&mut self, arg: &AttachArgs) -> Result<()> {
         self.analyze_expr(&arg.obj);
         self.analyze_reference(ValueKind::Event, &arg.event);
+        Ok(())
     }
 
-    fn analyze_born(&mut self, arg: &BornArgs) {
+    fn analyze_born(&mut self, arg: &BornArgs) -> Result<()> {
         self.analyze_expr(&arg.val1);
         self.analyze_expr(&arg.val2);
         self.analyze_expr(&arg.val3);
@@ -199,16 +201,17 @@ impl LiveState {
         self.analyze_expr(&arg.val8);
         self.analyze_expr(&arg.val9);
         self.analyze_reference(ValueKind::Event, &arg.event);
+        Ok(())
     }
 
-    fn analyze_call(&mut self, arg: &CallArgs) {
+    fn analyze_call(&mut self, arg: &CallArgs) -> Result<()> {
         if let Some(value) = arg.obj.value() {
             // Special cases for system calls
             if value == -200 {
                 if arg.args.len() >= 2 {
                     self.analyze_reference(ValueKind::String, &arg.args[0]);
                     self.analyze_reference(ValueKind::Event, &arg.args[1]);
-                    return;
+                    return Ok(());
                 } else {
                     warn!("Not enough arguments for call(-200)");
                 }
@@ -226,39 +229,46 @@ impl LiveState {
         }
         // Assume call() always mutates Result1
         self.set_value(Label::Result1, LiveValue::Other);
+        Ok(())
     }
 
-    fn analyze_detach(&mut self, arg: &Expr) {
+    fn analyze_detach(&mut self, arg: &Expr) -> Result<()> {
         self.analyze_expr(arg);
+        Ok(())
     }
 
-    fn analyze_if(&mut self, arg: &IfArgs) {
+    fn analyze_if(&mut self, arg: &IfArgs) -> Result<()> {
         self.analyze_expr(&arg.condition);
+        Ok(())
     }
 
-    fn analyze_lib(&mut self, index: i16, libs: &[SubroutineEffects]) {
-        assert!(!libs.is_empty(), "No library subroutines are configured");
-        // TODO: this should be an error, not an assert
-        assert!(index >= 0 && (index as usize) < libs.len(), "Invalid library index: {}", index);
-        self.analyze_sub_call(&libs[index as usize]);
+    fn analyze_lib(&mut self, index: i16, libs: &[SubroutineEffects]) -> Result<()> {
+        if index >= 0 && (index as usize) < libs.len() {
+            self.analyze_sub_call(&libs[index as usize]);
+            Ok(())
+        } else {
+            Err(Error::InvalidLibrary(index))
+        }
     }
 
-    fn analyze_movie(&mut self, arg: &MovieArgs) {
+    fn analyze_movie(&mut self, arg: &MovieArgs) -> Result<()> {
         self.analyze_reference(ValueKind::String, &arg.path);
         self.analyze_expr(&arg.val1);
         self.analyze_expr(&arg.val2);
         self.analyze_expr(&arg.val3);
         self.analyze_expr(&arg.val4);
         self.analyze_expr(&arg.val5);
+        Ok(())
     }
 
-    fn analyze_push_bp(&mut self) {
+    fn analyze_push_bp(&mut self) -> Result<()> {
         // Create a new stack frame
         self.sp_stack.push(self.sp);
         self.sp = 0;
+        Ok(())
     }
 
-    fn analyze_pop_bp(&mut self) {
+    fn analyze_pop_bp(&mut self) -> Result<()> {
         if let Some(sp) = self.sp_stack.pop() {
             self.sp = sp;
             let bp = self.sp_stack.len() as i16;
@@ -273,19 +283,21 @@ impl LiveState {
                 },
             );
         }
+        Ok(())
     }
 
-    fn analyze_msg(&mut self, arg: &MsgArgs) {
+    fn analyze_msg(&mut self, arg: &MsgArgs) -> Result<()> {
         // If the message prompts for user input, it sets Result1
         for command in &arg.commands {
             if let MsgCommand::NumInput(_) | MsgCommand::Question(_) = command {
                 self.set_value(Label::Result1, LiveValue::Other);
-                return;
+                break;
             }
         }
+        Ok(())
     }
 
-    fn analyze_read(&mut self, arg: &ReadType) {
+    fn analyze_read(&mut self, arg: &ReadType) -> Result<()> {
         match arg {
             ReadType::Anim(anim) => {
                 self.analyze_expr(&anim.obj);
@@ -296,24 +308,28 @@ impl LiveState {
                 self.analyze_reference(ValueKind::String, &sfx.path);
             }
         }
+        Ok(())
     }
 
-    fn analyze_run(&mut self, ptr: Pointer, subs: &SubroutineInfoMap) {
+    fn analyze_run(&mut self, ptr: Pointer, subs: &SubroutineInfoMap) -> Result<()> {
         let block_id = ptr.block().expect("Unresolved subroutine call");
         let sub = subs.get(&block_id).expect("Unanalyzed subroutine");
         self.analyze_sub_call(&sub.effects);
+        Ok(())
     }
 
-    fn analyze_set_sp(&mut self, expr: &Expr) {
+    fn analyze_set_sp(&mut self, expr: &Expr) -> Result<()> {
         let label = self.stack_label(0, self.sp);
         let value = self.analyze_expr(expr);
         self.set_value(label, value);
         self.sp += 1;
+        Ok(())
     }
 
-    fn analyze_timer(&mut self, arg: &TimerArgs) {
+    fn analyze_timer(&mut self, arg: &TimerArgs) -> Result<()> {
         self.analyze_expr(&arg.duration);
         self.analyze_reference(ValueKind::Event, &arg.event);
+        Ok(())
     }
 
     fn analyze_sub_call(&mut self, effects: &SubroutineEffects) {
@@ -502,7 +518,7 @@ impl LiveState {
         LiveValue::ArrayElement(address.into())
     }
 
-    fn analyze_set(&mut self, target: &SetExpr, expr: &Expr) {
+    fn analyze_set(&mut self, target: &SetExpr, expr: &Expr) -> Result<()> {
         let value = self.analyze_expr(expr);
         let label = match target {
             SetExpr::Stack(i) => self.stack_label(0, *i),
@@ -511,7 +527,7 @@ impl LiveState {
                     Label::Variable(val as i16)
                 } else {
                     self.analyze_expr(e);
-                    return;
+                    return Ok(());
                 }
             }
             SetExpr::Result1 => Label::Result1,
@@ -519,7 +535,7 @@ impl LiveState {
             SetExpr::Pad(_) => {
                 // Setting pad[7] is the only legal assignment, so assume the operand is an array
                 self.add_reference(ValueKind::Array(ArrayKind::I16), value);
-                return;
+                return Ok(());
             }
 
             SetExpr::Flag(e)
@@ -528,7 +544,7 @@ impl LiveState {
             | SetExpr::Atc(e)
             | SetExpr::Time(e) => {
                 self.analyze_expr(e);
-                return;
+                return Ok(());
             }
 
             SetExpr::Money
@@ -537,9 +553,10 @@ impl LiveState {
             | SetExpr::Level
             | SetExpr::CurrentSuit
             | SetExpr::Scrap
-            | SetExpr::CurrentAtc => return,
+            | SetExpr::CurrentAtc => return Ok(()),
         };
         self.set_value(label, value);
+        Ok(())
     }
 
     /// Sets the value of a label and kills the old one.
@@ -672,7 +689,7 @@ mod tests {
         let mut state = LiveState::new();
         let subs = SubroutineInfoMap::new();
         for cmd in commands {
-            state.analyze_command(cmd, &subs, &[]);
+            state.analyze_command(cmd, &subs, &[]).unwrap();
         }
 
         let mut defs = DefinitionMap::with_key();
@@ -701,7 +718,7 @@ mod tests {
         let mut state = LiveState::new();
         let subs = SubroutineInfoMap::new();
         for cmd in commands {
-            state.analyze_command(cmd, &subs, &[]);
+            state.analyze_command(cmd, &subs, &[]).unwrap();
         }
 
         let mut defs = DefinitionMap::with_key();
@@ -725,7 +742,7 @@ mod tests {
         let mut state = LiveState::new();
         let subs = SubroutineInfoMap::new();
         for cmd in commands {
-            state.analyze_command(cmd, &subs, &[]);
+            state.analyze_command(cmd, &subs, &[]).unwrap();
         }
 
         let mut defs = DefinitionMap::with_key();
