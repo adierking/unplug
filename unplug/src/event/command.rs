@@ -821,8 +821,8 @@ expr_enum! {
         Unpause => -1,
         Show => 0,
         Hide => 1,
-        FadeIn => 2,
-        FadeOut => 3,
+        FadeOut => 2,
+        FadeIn => 3,
     }
 }
 
