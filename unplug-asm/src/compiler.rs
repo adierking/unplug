@@ -225,6 +225,31 @@ impl<'a> OperandCursor<'a> {
         }
     }
 
+    /// Returns the next operand as an integer and advances the cursor.
+    fn next_integer<I: CastOperand + Default>(&mut self) -> Located<I> {
+        let Some(operand) = self.next() else {
+            let span = self.span().at_end(0);
+            self.report(Diagnostic::expected_integer(span));
+            return Located::with_span(I::default(), span);
+        };
+        let span = operand.span();
+        if matches!(**operand, Operand::Error) {
+            return Located::with_span(I::default(), span);
+        }
+        let value = match operand.cast() {
+            Ok(i) => i,
+            Err(Error::ExpectedInteger) => {
+                self.report(Diagnostic::expected_integer(span));
+                I::default()
+            }
+            Err(_) => {
+                self.report(Diagnostic::integer_conversion(span, I::BITS));
+                I::default()
+            }
+        };
+        Located::with_span(value, span)
+    }
+
     /// Returns the index of the current operand if there is one.
     fn index(&self) -> Option<usize> {
         if self.position < self.operands.len() {
@@ -263,26 +288,58 @@ impl<'a> OperandCursor<'a> {
         let operands = self.operands.ensure_borrowed().expect("operands are not borrowed");
         let operand = &operands[index];
         let (opcode, cursor) = match &**operand {
-            Operand::I8(_) | Operand::U8(_) | Operand::I16(_) | Operand::U16(_) => {
+            // Expression operands pass through.
+            Operand::Expr(expr) => {
+                (expr.opcode, Self::with_borrowed(expr, Rc::clone(&self.diagnostics)))
+            }
+
+            // U8 | I8 | I16 -> Imm16
+            Operand::U8(_) | Operand::I8(_) | Operand::I16(_) => {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm16), [operand.clone()]);
                 (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
-            Operand::I32(_) | Operand::U32(_) | Operand::Atom(_) => {
+
+            // U16 -> Imm16 or Imm32
+            &Operand::U16(i) => {
+                // If the value does not cleanly convert to i16, we have to actually emit Imm32 or
+                // else the value will be incorrectly sign-extended when the game reads it.
+                // TODO: This really needs a test...
+                let (opcode, casted) = match i16::try_from(i) {
+                    Ok(i) => (ExprOp::Imm16, Operand::I16(i)),
+                    Err(_) => (ExprOp::Imm32, Operand::I32(i.into())),
+                };
+                let op = Operation::with_operands(
+                    Located::new(opcode),
+                    [Located::with_span(casted, operand.span())],
+                );
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
+            }
+
+            // I32 | Atom -> Imm32
+            Operand::I32(_) | Operand::Atom(_) => {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm32), [operand.clone()]);
                 (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
+
+            // U32 -> Imm32 (bitcasted)
+            Operand::U32(i) => {
+                let casted = Located::with_span(Operand::I32(*i as i32), operand.span());
+                let op = Operation::with_operands(Located::new(ExprOp::Imm32), [casted]);
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
+            }
+
+            // Label | Offset -> AddressOf
             Operand::Label(_) | Operand::ElseLabel(_) | Operand::Offset(_) => {
                 let op =
                     Operation::with_operands(Located::new(ExprOp::AddressOf), [operand.clone()]);
                 (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
-            Operand::Expr(expr) => {
-                (expr.opcode, Self::with_borrowed(expr, Rc::clone(&self.diagnostics)))
-            }
+
             Operand::Text(_) | Operand::MsgCommand(_) => {
                 self.report(Diagnostic::expected_expr(operand.span()));
                 return Err(());
             }
+
             Operand::Error => {
                 return Err(());
             }
@@ -438,23 +495,11 @@ impl<'a> AsmDeserializer<'a> {
         self.cursor.as_mut().and_then(|c| c.next())
     }
 
-    fn next_integer<I: CastOperand + Default>(&mut self) -> I {
-        let Some(operand) = self.next_operand() else {
-            self.report(Diagnostic::expected_integer(self.cursor_span().at_end(0)));
-            return I::default();
-        };
-        if matches!(**operand, Operand::Error) {
-            return I::default();
-        }
-        let span = operand.span();
-        match operand.cast() {
-            Ok(i) => i,
-            Err(Error::ExpectedInteger) => {
-                self.report(Diagnostic::expected_integer(span));
-                I::default()
-            }
-            Err(_) => {
-                self.report(Diagnostic::integer_conversion(span, I::BITS));
+    fn next_integer<I: CastOperand + Default + Copy>(&mut self) -> I {
+        match self.cursor.as_mut() {
+            Some(cursor) => *cursor.next_integer::<I>(),
+            None => {
+                self.report(Diagnostic::expected_integer(self.cursor_span().at_end(0)));
                 I::default()
             }
         }
