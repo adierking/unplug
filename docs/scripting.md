@@ -251,7 +251,10 @@ the existing scripts to find examples of these.
 | Name     | Description |
 | -------- | ----------- |
 | `abort`  | Abnormally terminate script execution |
-| `printf` | Log a debug message |
+| `printf` | Log a message in debug builds of the game |
+
+**Note:** There are no known debug builds of the game, so `printf` will never actually do anything
+because its code is compiled out. There is no known way to make it work.
 
 ### Others
 
