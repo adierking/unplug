@@ -199,7 +199,7 @@ $ unplug globals import globals.json
 
 Most of the game's logic is powered by a custom scripting engine with bytecode stored in each stage
 file. Unplug 0.5 introduced an assembly language syntax that you can use to view and edit the script
-data on a low level. Refer to the [assembly documentation](/docs/asm.md) for more information.
+data on a low level. Refer to the [assembly documentation](/docs/scripting.md) for more information.
 
 ## Working with the ISO
 
