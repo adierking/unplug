@@ -355,9 +355,12 @@ impl<'a> ProgramAssembler<'a> {
                         return self.parse_integer(int.with_value(IntValue::U32(x)), hint);
                     }
                     _ => {
-                        return Ok(u8::try_from(x)
-                            .map(Operand::U8)
-                            .or_else(|_| u16::try_from(x).map(Operand::U16))
+                        // Never emit a U8 or U16 because in an expression these will be interpreted
+                        // as signed and then sign-extended.
+                        return Ok(i8::try_from(x)
+                            .map(Operand::I8)
+                            .or_else(|_| i16::try_from(x).map(Operand::I16))
+                            .or_else(|_| i32::try_from(x).map(Operand::I32))
                             .unwrap_or(Operand::U32(x)));
                     }
                 }

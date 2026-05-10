@@ -1,3 +1,4 @@
+use crate::ast::IntValue;
 use crate::diagnostics::{CompileOutput, Diagnostic};
 use crate::opcodes::{AsmMsgOp, NamedOpcode};
 use crate::program::{
@@ -293,31 +294,51 @@ impl<'a> OperandCursor<'a> {
                 (expr.opcode, Self::with_borrowed(expr, Rc::clone(&self.diagnostics)))
             }
 
-            // U8 | I8 | I16 -> Imm16
-            Operand::U8(_) | Operand::I8(_) | Operand::I16(_) => {
+            // I8 | I16 -> Imm16
+            Operand::I8(_) | Operand::I16(_) => {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm16), [operand.clone()]);
-                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
-            }
-
-            // U16 -> Imm16 or Imm32
-            &Operand::U16(i) => {
-                // If the value does not cleanly convert to i16, we have to actually emit Imm32 or
-                // else the value will be incorrectly sign-extended when the game reads it.
-                // TODO: This really needs a test...
-                let (opcode, casted) = match i16::try_from(i) {
-                    Ok(i) => (ExprOp::Imm16, Operand::I16(i)),
-                    Err(_) => (ExprOp::Imm32, Operand::I32(i.into())),
-                };
-                let op = Operation::with_operands(
-                    Located::new(opcode),
-                    [Located::with_span(casted, operand.span())],
-                );
                 (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
 
             // I32 | Atom -> Imm32
             Operand::I32(_) | Operand::Atom(_) => {
                 let op = Operation::with_operands(Located::new(ExprOp::Imm32), [operand.clone()]);
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
+            }
+
+            // U8 -> Imm16 (sign-extended)
+            &Operand::U8(i) => {
+                let span = operand.span();
+                let casted = match i8::try_from(i) {
+                    Ok(i) => Operand::I8(i),
+                    Err(_) => {
+                        let value = i as i8;
+                        self.report(Diagnostic::sign_extended(span, IntValue::I8(value.into())));
+                        Operand::I8(value)
+                    }
+                };
+                let op = Operation::with_operands(
+                    Located::new(ExprOp::Imm16),
+                    [Located::with_span(casted, span)],
+                );
+                (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
+            }
+
+            // U16 -> Imm16 (sign-extended)
+            &Operand::U16(i) => {
+                let span = operand.span();
+                let casted = match i16::try_from(i) {
+                    Ok(i) => Operand::I16(i),
+                    Err(_) => {
+                        let value = i as i16;
+                        self.report(Diagnostic::sign_extended(span, IntValue::I16(value.into())));
+                        Operand::I16(value)
+                    }
+                };
+                let op = Operation::with_operands(
+                    Located::new(ExprOp::Imm16),
+                    [Located::with_span(casted, span)],
+                );
                 (op.opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
 

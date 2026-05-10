@@ -1,4 +1,4 @@
-use crate::ast::{self, Else, LParen};
+use crate::ast::{self, Else, IntValue, LParen};
 use crate::lexer::Token;
 use crate::span::{Span, Spanned};
 use crate::{Error, Result};
@@ -133,6 +133,7 @@ pub enum DiagnosticCode {
 #[repr(u32)]
 pub enum WarningCode {
     Reserved,
+    SignExtended,
 }
 
 /// General diagnostic codes.
@@ -243,11 +244,21 @@ macro_rules! diagnostics {
     (@note $note:literal) => { Some(format!($note)) };
     (@note) => { None };
 
-    (@label $span:ident -> $tag:literal) => { Label::with_tag($span, $tag) };
+    (@label $span:ident -> $tag:literal) => { Label::with_tag($span, format!($tag)) };
     (@label $span:ident) => { Label::new($span) };
 }
 
 diagnostics! {
+    // === Warnings ===
+
+    sign_extended(span: Span, actual: IntValue) {
+        code: WarningCode::SignExtended,
+        message: "value will be sign-extended and interpreted as {actual}",
+        labels: [span -> "remove the type suffix or use {actual}"],
+    }
+
+    // === Errors ===
+
     internal_error(span: Span, message: &str) {
         code: ErrorCode::InternalError,
         message: "internal error: {message}",
