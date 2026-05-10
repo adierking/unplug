@@ -8,7 +8,7 @@ use codespan_reporting::diagnostic::{Diagnostic as ReportDiagnostic, Label as Re
 use codespan_reporting::files::{Files, SimpleFile};
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-use log::info;
+use log::{error, info, warn};
 use std::fs::{self, File};
 use std::io::BufWriter;
 use std::ops::Range;
@@ -17,6 +17,7 @@ use unplug::data::{Resource, Stage as StageId};
 use unplug::globals::GlobalsBuilder;
 use unplug_asm as asm;
 use unplug_asm::assembler::ProgramAssembler;
+use unplug_asm::diagnostics::DiagnosticCode;
 use unplug_asm::lexer::Lexer;
 use unplug_asm::parser::Parser;
 use unplug_asm::program::Target;
@@ -70,10 +71,21 @@ where
     let writer = StandardStream::stderr(ColorChoice::Auto);
     let config = term::Config::default();
     let mut lock = writer.lock();
+    let mut warnings: usize = 0;
+    let mut errors: usize = 0;
     for diagnostic in diagnostics {
-        let mut report = ReportDiagnostic::error()
-            .with_message(diagnostic.message())
-            .with_code(format!("{}", diagnostic.code()));
+        let mut report = match diagnostic.code() {
+            DiagnosticCode::Warning(_) => {
+                warnings += 1;
+                ReportDiagnostic::warning()
+            }
+            DiagnosticCode::Error(_) => {
+                errors += 1;
+                ReportDiagnostic::error()
+            }
+        };
+        report =
+            report.with_message(diagnostic.message()).with_code(format!("{}", diagnostic.code()));
         if let Some(note) = diagnostic.note() {
             report = report.with_notes(vec![note.to_owned()]);
         }
@@ -98,6 +110,22 @@ where
         }
         term::emit(&mut lock, &config, file, &report).unwrap();
     }
+    let warnings_str = match warnings {
+        2.. => format!("{warnings} warnings"),
+        1 => "1 warning".to_owned(),
+        0 => "".to_owned(),
+    };
+    let errors_str = match errors {
+        2.. => format!("{errors} errors"),
+        1 => "1 error".to_owned(),
+        0 => "".to_owned(),
+    };
+    match (warnings, errors) {
+        (0, 0) => (),
+        (0, _) => error!("{errors_str} found"),
+        (_, 0) => warn!("{warnings_str} found"),
+        (_, _) => error!("{warnings_str} and {errors_str} found"),
+    }
 }
 
 /// Checks the output of a compilation stage and pools diagnostics into a single list. If a result is available,
@@ -115,10 +143,7 @@ where
     }
     output.result.ok_or_else(|| {
         report_diagnostics(file, diagnostics);
-        match diagnostics.len() {
-            1 => anyhow!("1 error found"),
-            n => anyhow!("{n} errors found"),
-        }
+        anyhow!("script assembly failed")
     })
 }
 
@@ -138,6 +163,10 @@ fn command_assemble(ctx: Context, args: AssembleArgs) -> Result<()> {
     info!("Assembling script");
     let program = check_output(&file, &mut diagnostics, ProgramAssembler::new(&ast).assemble())?;
     let compiled = check_output(&file, &mut diagnostics, asm::compile(&program))?;
+    if !diagnostics.is_empty() {
+        // Print warnings.
+        report_diagnostics(&file, &mut diagnostics);
+    }
     let update = match &compiled.target {
         Some(Target::Globals) => {
             let libs = compiled.into_libs()?;

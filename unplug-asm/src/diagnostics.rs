@@ -51,6 +51,11 @@ impl Diagnostic {
         self.code
     }
 
+    /// Returns true if this diagnostic represents an error.
+    pub fn is_err(&self) -> bool {
+        matches!(self.code, DiagnosticCode::Error(_))
+    }
+
     /// Returns the message to display.
     pub fn message(&self) -> &str {
         &self.message
@@ -117,10 +122,23 @@ impl<T> CompileOutput<T> {
     }
 }
 
+/// A diagnostic code.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum DiagnosticCode {
+    Warning(WarningCode),
+    Error(ErrorCode),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, IntoPrimitive)]
+#[repr(u32)]
+pub enum WarningCode {
+    Reserved,
+}
+
 /// General diagnostic codes.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, IntoPrimitive)]
 #[repr(u32)]
-pub enum DiagnosticCode {
+pub enum ErrorCode {
     // TODO: Define fixed code numbers before stabilization
     InternalError,
     InvalidToken,
@@ -175,10 +193,24 @@ pub enum DiagnosticCode {
     UnsupportedMsgCommand,
 }
 
+impl From<WarningCode> for DiagnosticCode {
+    fn from(value: WarningCode) -> Self {
+        Self::Warning(value)
+    }
+}
+
+impl From<ErrorCode> for DiagnosticCode {
+    fn from(value: ErrorCode) -> Self {
+        Self::Error(value)
+    }
+}
+
 impl Display for DiagnosticCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value = u32::from(*self);
-        write!(f, "E{:03}", value)
+        match *self {
+            Self::Warning(code) => write!(f, "W{:03}", u32::from(code)),
+            Self::Error(code) => write!(f, "E{:03}", u32::from(code)),
+        }
     }
 }
 
@@ -187,7 +219,7 @@ macro_rules! diagnostics {
     {
         $(
             $fn_name:ident ( $( $key:ident : $type:ty),* ) {
-                code : $code:ident $(,)+
+                code : $code:expr $(,)+
                 message : $message:literal $(,)+
                 $( note : $note:literal $(,)+ )?
                 labels : [ $( $span:ident $(-> $tag:literal)? ),* $(,)* ] $(,)*
@@ -198,7 +230,7 @@ macro_rules! diagnostics {
             $(
                 pub fn $fn_name ( $($key : $type),* ) -> Self {
                     Self {
-                        code: DiagnosticCode::$code,
+                        code: $code.into(),
                         message: format!($message),
                         note: diagnostics!(@note $($note)?),
                         labels: vec![ $( diagnostics!(@label $span $(-> $tag)?) ),* ],
@@ -217,59 +249,59 @@ macro_rules! diagnostics {
 
 diagnostics! {
     internal_error(span: Span, message: &str) {
-        code: InternalError,
+        code: ErrorCode::InternalError,
         message: "internal error: {message}",
         labels: [span],
     }
 
     invalid_token(span: Span) {
-        code: InvalidToken,
+        code: ErrorCode::InvalidToken,
         message: "invalid token",
         labels: [span -> "delete this"],
     }
 
     integer_out_of_range(span: Span) {
-        code: IntegerOutOfRange,
+        code: ErrorCode::IntegerOutOfRange,
         message: "integer literal out of range",
         note: "integers cannot exceed 32 bits",
         labels: [span],
     }
 
     integer_conversion(span: Span, bits: usize) {
-        code: IntegerConversion,
+        code: ErrorCode::IntegerConversion,
         message: "integer cannot fit in {bits} bits",
         labels: [span],
     }
 
     unterminated_string(span: Span) {
-        code: UnterminatedString,
+        code: ErrorCode::UnterminatedString,
         message: "unterminated string literal",
         note: "add a `\"` at the end of the string",
         labels: [span],
     }
 
     unterminated_comment(start: Span) {
-        code: UnterminatedComment,
+        code: ErrorCode::UnterminatedComment,
         message: "unterminated block comment",
         note: "add a `*/` at the end of the comment",
         labels: [start],
     }
 
     missing_deref(else_token: Else) {
-        code: MissingDeref,
+        code: ErrorCode::MissingDeref,
         message: "missing `*` after `else`",
         labels: [else_token],
     }
 
     missing_deref_target(deref_token: Span) {
-        code: MissingDerefTarget,
+        code: ErrorCode::MissingDerefTarget,
         message: "missing label or offset after `*`",
         note: "add a label or number, e.g. `*my_label`, `*0x10`",
         labels: [deref_token],
     }
 
     unclosed_parenthesis(lparen_token: LParen, suggested: Span) {
-        code: UnclosedParenthesis,
+        code: ErrorCode::UnclosedParenthesis,
         message: "unclosed parenthesis",
         labels: [
             lparen_token,
@@ -278,139 +310,139 @@ diagnostics! {
     }
 
     missing_comma(span: Span) {
-        code: MissingComma,
+        code: ErrorCode::MissingComma,
         message: "missing `,` after operand",
         labels: [span -> "try adding a `,` here"],
     }
 
     not_enough_operands(command: Span) {
-        code: NotEnoughOperands,
+        code: ErrorCode::NotEnoughOperands,
         message: "not enough operands for command",
         labels: [command],
     }
 
     expected_newline(span: Span) {
-        code: ExpectedNewline,
+        code: ErrorCode::ExpectedNewline,
         message: "expected a newline after the operands",
         labels: [span],
     }
 
     expected_expr(span: Span) {
-        code: ExpectedExpr,
+        code: ErrorCode::ExpectedExpr,
         message: "expected an expression",
         labels: [span],
     }
 
     expected_command(span: Span) {
-        code: ExpectedCommand,
+        code: ErrorCode::ExpectedCommand,
         message: "expected a command",
         labels: [span],
     }
 
     expected_msg_command(span: Span) {
-        code: ExpectedMsgCommand,
+        code: ErrorCode::ExpectedMsgCommand,
         message: "expected a message command",
         labels: [span],
     }
 
     expected_item(span: Span) {
-        code: ExpectedItem,
+        code: ErrorCode::ExpectedItem,
         message: "expected a command, directive, or label declaration",
         labels: [span],
     }
 
     expected_integer(span: Span) {
-        code: ExpectedInteger,
+        code: ErrorCode::ExpectedInteger,
         message: "expected an integer literal",
         labels: [span],
     }
 
     expected_string(span: Span) {
-        code: ExpectedString,
+        code: ErrorCode::ExpectedString,
         message: "expected a string literal",
         labels: [span],
     }
 
     expected_label_ref(span: Span) {
-        code: ExpectedLabelRef,
+        code: ErrorCode::ExpectedLabelRef,
         message: "expected a label reference",
         labels: [span],
     }
 
     expected_ident(span: Span) {
-        code: ExpectedIdent,
+        code: ErrorCode::ExpectedIdent,
         message: "expected an identifier",
         labels: [span],
     }
 
     too_many_operands(command: Span) {
-        code: TooManyOperands,
+        code: ErrorCode::TooManyOperands,
         message: "too many operands for command",
         labels: [command],
     }
 
     unexpected_token(token: &Token, span: impl Spanned) {
-        code: UnexpectedToken,
+        code: ErrorCode::UnexpectedToken,
         message: "unexpected {token}",
         labels: [span -> "delete this"],
     }
 
     unexpected_expr(expr: Span) {
-        code: UnexpectedExpr,
+        code: ErrorCode::UnexpectedExpr,
         message: "unexpected expression",
         labels: [expr],
     }
 
     unexpected_msg_command(command: Span) {
-        code: UnexpectedMsgCommand,
+        code: ErrorCode::UnexpectedMsgCommand,
         message: "unexpected message command",
         labels: [command],
     }
 
     unexpected_value_name(value: Span) {
-        code: UnexpectedValueName,
+        code: ErrorCode::UnexpectedValueName,
         message: "unexpected value name",
         labels: [value],
     }
 
     unexpected_string_literal(literal: Span) {
-        code: UnexpectedString,
+        code: ErrorCode::UnexpectedString,
         message: "unexpected string literal",
         labels: [literal],
     }
 
     unexpected_label_ref(label: Span) {
-        code: UnexpectedLabelRef,
+        code: ErrorCode::UnexpectedLabelRef,
         message: "unexpected label reference",
         labels: [label],
     }
 
     unexpected_else_label(label: Span) {
-        code: UnexpectedElseLabel,
+        code: ErrorCode::UnexpectedElseLabel,
         message: "unexpected `else` label reference",
         labels: [label],
     }
 
     unexpected_offset_ref(offset: Span) {
-        code: UnexpectedOffset,
+        code: ErrorCode::UnexpectedOffset,
         message: "unexpected offset reference",
         labels: [offset],
     }
 
     unexpected_function_call(func: Span) {
-        code: UnexpectedFunction,
+        code: ErrorCode::UnexpectedFunction,
         message: "unexpected function call",
         labels: [func],
     }
 
     undefined_label(name: &ast::Ident) {
-        code: UndefinedLabel,
+        code: ErrorCode::UndefinedLabel,
         message: "undefined label: `{name}`",
         labels: [name],
     }
 
     duplicate_label(name: &ast::Ident, prev: Span) {
-        code: DuplicateLabel,
+        code: ErrorCode::DuplicateLabel,
         message: "label `{name}` is declared more than once",
         labels: [
             name -> "give this a unique name",
@@ -419,7 +451,7 @@ diagnostics! {
     }
 
     duplicate_target(this: Span, prev: Span) {
-        code: DuplicateTarget,
+        code: ErrorCode::DuplicateTarget,
         message: "duplicate target specifier",
         labels: [
             this -> "this conflicts",
@@ -428,21 +460,21 @@ diagnostics! {
     }
 
     missing_stage_name(specifier: Span) {
-        code: MissingStageName,
+        code: ErrorCode::MissingStageName,
         message: "target specifier is missing a stage name",
         note: "add a stage file name, e.g. `.stage \"stage07\"`",
         labels: [specifier],
     }
 
     missing_lib_index(span: Span) {
-        code: MissingLibIndex,
+        code: ErrorCode::MissingLibIndex,
         message: "library function declaration is missing an index",
         note: "add an index first, e.g. `.lib 123, *my_lib`",
         labels: [span],
     }
 
     duplicate_entry_point(this: Span, prev: Span) {
-        code: DuplicateEntryPoint,
+        code: ErrorCode::DuplicateEntryPoint,
         message: "duplicate entry point",
         labels: [
             this -> "this conflicts",
@@ -451,96 +483,96 @@ diagnostics! {
     }
 
     missing_entry_point_subroutine(span: Span) {
-        code: MissingEntryPointSubroutine,
+        code: ErrorCode::MissingEntryPointSubroutine,
         message: "missing entry point subroutine",
         note: "add a label reference, e.g. `*evt_startup`",
         labels: [span],
     }
 
     stage_event_in_globals(decl: &ast::Command) {
-        code: StageEventInGlobals,
+        code: ErrorCode::StageEventInGlobals,
         message: "globals scripts cannot define stage events",
         note: "only `.lib` entry points are permitted",
         labels: [decl],
     }
 
     lib_in_stage(decl: &ast::Command) {
-        code: LibInStage,
+        code: ErrorCode::LibInStage,
         message: "stage scripts cannot define library functions",
         note: "`.lib` entry points are not permitted",
         labels: [decl],
     }
 
     undefined_lib(index: i16) {
-        code: UndefinedLib,
+        code: ErrorCode::UndefinedLib,
         message: "library function is not defined: {index}",
         note: "declare it with `.lib {index}, *label`",
         labels: [],
     }
 
     missing_event_object(span: Span) {
-        code: MissingEventObject,
+        code: ErrorCode::MissingEventObject,
         message: "interaction event is missing an object index",
         note: "add an object index first, e.g. `.interact 123, *label`",
         labels: [span],
     }
 
     invalid_event_object(index: i32) {
-        code: InvalidEventObject,
+        code: ErrorCode::InvalidEventObject,
         message: "interaction event has an invalid object index: {index}",
         labels: [],
     }
 
     unrecognized_command(ident: &ast::Ident) {
-        code: UnrecognizedCommand,
+        code: ErrorCode::UnrecognizedCommand,
         message: "unrecognized command: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_directive(ident: &ast::Ident) {
-        code: UnrecognizedDirective,
+        code: ErrorCode::UnrecognizedDirective,
         message: "unrecognized directive: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_atom(ident: &ast::Ident) {
-        code: UnrecognizedAtom,
+        code: ErrorCode::UnrecognizedAtom,
         message: "unrecognized atom: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_function(ident: &ast::Ident) {
-        code: UnrecognizedFunction,
+        code: ErrorCode::UnrecognizedFunction,
         message: "unrecognized function: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_msg_command(ident: &ast::Ident) {
-        code: UnrecognizedMsgCommand,
+        code: ErrorCode::UnrecognizedMsgCommand,
         message: "unrecognized message command: `{ident}`",
         labels: [ident],
     }
 
     unsupported_command(ident: &ast::Ident) {
-        code: UnsupportedCommand,
+        code: ErrorCode::UnsupportedCommand,
         message: "command is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 
     unsupported_atom(ident: &ast::Ident) {
-        code: UnsupportedAtom,
+        code: ErrorCode::UnsupportedAtom,
         message: "atom is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 
     unsupported_function(ident: &ast::Ident) {
-        code: UnsupportedFunction,
+        code: ErrorCode::UnsupportedFunction,
         message: "function is not supported by the target game: `{ident}`",
         labels: [ident],
     }
 
     unsupported_msg_command(ident: &ast::Ident) {
-        code: UnsupportedMsgCommand,
+        code: ErrorCode::UnsupportedMsgCommand,
         message: "message command is not supported by the target game: `{ident}`",
         labels: [ident],
     }

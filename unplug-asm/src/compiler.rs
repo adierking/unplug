@@ -875,17 +875,19 @@ pub fn compile(program: &Program) -> CompileOutput<CompiledScript> {
     let layout = ScriptLayout::new(block_offsets, SubroutineEffectsMap::new());
     let script = Script::with_blocks_and_layout(script_blocks, layout);
     let diagnostics = Rc::try_unwrap(diagnostics).unwrap().into_inner();
-    if diagnostics.is_empty() {
+
+    // Since this is the final step, fail if any errors were omitted.
+    if diagnostics.iter().any(|d| d.is_err()) {
+        CompileOutput::err(diagnostics)
+    } else {
         CompileOutput::with_result(
             CompiledScript {
                 script,
                 target: program.target.as_deref().cloned(),
                 entry_points: program.entry_points.iter().map(|(&e, &b)| (e, *b)).collect(),
             },
-            vec![],
+            diagnostics,
         )
-    } else {
-        CompileOutput::err(diagnostics)
     }
 }
 
