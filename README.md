@@ -129,8 +129,7 @@ There are lots of ways you can contribute to the project:
 >
 > - You have been assigned an issue to fix.
 >
-> - You have pinged me (Derpky) in the [community discord](http://discord.gg/ymNDqTyjRQ) and
-> discussed the details of your change with me.
+> - You are a member of the [community discord](http://discord.gg/ymNDqTyjRQ).
 >
 > AI use is permitted, but you must disclose it. I reserve the right to reject a pull request if
 > it feels like a waste of my time to review.
