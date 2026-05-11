@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::result::Result as StdResult;
-use unplug::common::{Text, VecText};
+use unplug::common::VecText;
 use unplug::event::analysis::SubroutineEffectsMap;
 use unplug::event::block::Block as ScriptBlock;
 use unplug::event::opcodes::{Atom, CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap};
@@ -378,7 +378,7 @@ impl<'a> OperandCursor<'a> {
                 let opcode = AsmMsgOp::Text;
                 let op = Operation::with_operands(
                     Located::new(opcode),
-                    [Located::new(Operand::Text(Text::default()))],
+                    [Located::new(Operand::Text(Default::default()))],
                 );
                 (opcode, Self::with_owned(op, Rc::clone(&self.diagnostics)))
             }
@@ -386,14 +386,15 @@ impl<'a> OperandCursor<'a> {
     }
 
     fn enter_msg_command_impl(&mut self) -> StdResult<(AsmMsgOp, Self), ()> {
-        let Some(index) = self.index() else {
-            self.report(Diagnostic::not_enough_operands(self.kind.span()));
-            return Err(());
-        };
         assert!(
             matches!(*self.kind, CursorKind::Command(_)),
             "this operation does not support message commands"
         );
+        let Some(index) = self.index() else {
+            self.report(Diagnostic::not_enough_operands(self.kind.span()));
+            return Err(());
+        };
+        self.position += 1;
         let operands = self.operands.ensure_borrowed().expect("operands are not borrowed");
         let operand = &operands[index];
         let (opcode, cursor) = match &**operand {
@@ -422,7 +423,6 @@ impl<'a> OperandCursor<'a> {
                 return Err(());
             }
         };
-        self.position += 1;
         Ok((*opcode, cursor))
     }
 
