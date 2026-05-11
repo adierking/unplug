@@ -41,6 +41,9 @@ pub enum Token {
     #[regex(r"\*")]
     Deref,
 
+    #[regex(r"=")]
+    Equals,
+
     #[regex(r"else")]
     Else,
 
@@ -78,6 +81,7 @@ impl Display for Token {
             Token::RParen => f.write_str("')'"),
             Token::Colon => f.write_str("':'"),
             Token::Deref => f.write_str("'*'"),
+            Token::Equals => f.write_str("'='"),
             Token::Else => f.write_str("'else'"),
             Token::Identifier(s) => f.write_str(s.as_str()),
             Token::String(s) => f.write_str(s.as_str()),
@@ -196,13 +200,14 @@ mod tests {
     #[test]
     fn test_basic() {
         assert_eq!(
-            lex("(),:* else \r\n"),
+            lex("(),:*= else \r\n"),
             &[
                 Token::LParen,
                 Token::RParen,
                 Token::Comma,
                 Token::Colon,
                 Token::Deref,
+                Token::Equals,
                 Token::Else,
                 Token::Newline,
             ]
@@ -309,8 +314,12 @@ mod tests {
     #[test]
     fn test_complex() {
         assert_eq!(
-            lex("loc_0:\n\tif\teq(flag(123.d), 1.d), else *loc_1\n"),
+            lex("TEST=1.b\nloc_0:\n\tif\teq(flag(123.d), 1.d), else *loc_1\n"),
             &[
+                Token::Identifier("TEST".into()),
+                Token::Equals,
+                Token::Integer(IntValue::U8(1)),
+                Token::Newline,
                 Token::Identifier("loc_0".into()),
                 Token::Colon,
                 Token::Newline,

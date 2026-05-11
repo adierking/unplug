@@ -1,30 +1,43 @@
-use crate::ast::{self, Ast, Expr, IdentClass, IntValue, Item};
+use crate::ast::{
+    self, Ast, Command, ConstantDecl, Expr, IdentClass, IntLiteral, IntValue, Item, LabelDecl,
+    StrLiteral,
+};
 use crate::diagnostics::{CompileOutput, Diagnostic};
 use crate::label::LabelId;
-use crate::opcodes::{DirOp, NamedOpcode};
+use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::program::{
     Block, BlockContent, CastOperand, EntryPoint, Located, Operand, OperandType, Operation,
     Program, Target, TypeHint,
 };
-use crate::span::Spanned;
+use crate::span::{Span, Spanned};
 use crate::Error;
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use unplug::common::Text;
-use unplug::event::opcodes::CmdOp;
+use unplug::event::opcodes::{CmdOp, ExprOp};
 use unplug::event::BlockId;
 use unplug::stage::Event;
+
+/// A constant value.
+#[derive(Debug, Clone)]
+pub struct Constant {
+    name_span: Span,
+    value: Located<Operand>,
+}
 
 /// Assembles a `Program` from an AST.
 pub struct ProgramAssembler<'a> {
     ast: &'a Ast,
     program: Program,
+    constants: HashMap<String, Constant>,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl<'a> ProgramAssembler<'a> {
     /// Creates a new `ProgramAssembler` that parses `ast`.
     pub fn new(ast: &'a Ast) -> Self {
-        Self { ast, program: Program::new(), diagnostics: vec![] }
+        Self { ast, program: Program::new(), constants: HashMap::new(), diagnostics: vec![] }
     }
 
     /// Parses the AST and assembles a `Program`.
@@ -65,7 +78,7 @@ impl<'a> ProgramAssembler<'a> {
                     let prev = self.program.labels.get(prev_id);
                     self.report(Diagnostic::duplicate_label(name, prev.span));
                 }
-            } else {
+            } else if let Item::Command(_) = item {
                 // There's content in this block, so the next label starts a new one
                 new_block = true;
             }
@@ -76,50 +89,84 @@ impl<'a> ProgramAssembler<'a> {
     fn parse_instructions(&mut self) {
         let mut block_id = self.program.first_block.unwrap();
         for item in &self.ast.items {
-            match item {
-                Item::LabelDecl(label) => {
-                    let labels = &self.program.labels;
-                    if let Some(id) = labels.find_name(label.name.as_str()) {
-                        block_id = labels.get(id).block;
-                    }
+            block_id = match item {
+                Item::LabelDecl(label) => self.parse_label_decl(label, block_id),
+                Item::ConstantDecl(decl) => {
+                    self.parse_constant_decl(decl);
+                    block_id
                 }
-
-                Item::Command(cmd) => match cmd.name.class() {
-                    IdentClass::Default => {
-                        let opcode = self.parse_opcode(&cmd.name, Diagnostic::unrecognized_command);
-                        let command = self.parse_operation(opcode, &cmd.operands);
-                        block_id = self.process_command(block_id, command);
-                    }
-
-                    IdentClass::Directive => {
-                        let opcode =
-                            self.parse_opcode(&cmd.name, Diagnostic::unrecognized_directive);
-                        let dir = self.parse_operation(opcode, &cmd.operands);
-                        match self.process_directive(block_id, dir) {
-                            Ok(next) => block_id = next,
-                            Err(dir) => {
-                                // Replace the directive with an invalid command to indicate to
-                                // later stages that the directive failed
-                                let command = dir.with_opcode(CmdOp::Invalid);
-                                block_id = self.process_command(block_id, command);
-                            }
-                        }
-                    }
-
-                    IdentClass::Atom => {
-                        self.report(Diagnostic::expected_command(cmd.name.span()));
-                        // Treat this as a command with an invalid opcode
-                        let opcode = Located::with_span(CmdOp::Invalid, cmd.name.span());
-                        let command = self.parse_operation(opcode, &cmd.operands);
-                        block_id = self.process_command(block_id, command);
-                    }
-                },
-
+                Item::Command(cmd) => self.parse_command(cmd, block_id),
                 Item::Error => {
                     // Treat this as a command with an invalid opcode
                     let opcode = Located::with_span(CmdOp::Invalid, item.span());
-                    block_id = self.process_command(block_id, Operation::new(opcode));
+                    self.process_command(block_id, Operation::new(opcode))
                 }
+            }
+        }
+    }
+
+    /// Parses a label declaration.
+    fn parse_label_decl(&mut self, label: &LabelDecl, block_id: BlockId) -> BlockId {
+        // scan_labels() already did most of the work, so we just move to the label's block.
+        let labels = &self.program.labels;
+        if let Some(id) = labels.find_name(label.name.as_str()) {
+            labels.get(id).block
+        } else {
+            block_id
+        }
+    }
+
+    /// Parses a constant declaration.
+    fn parse_constant_decl(&mut self, decl: &ConstantDecl) {
+        if decl.name.class() != IdentClass::Default
+            || CmdOp::get(decl.name.as_str()).is_some()
+            || ExprOp::get(decl.name.as_str()).is_some()
+            || AsmMsgOp::get(decl.name.as_str()).is_some()
+        {
+            self.report(Diagnostic::invalid_constant_name(&decl.name));
+            return;
+        }
+        let value = self.parse_constant_expr(&decl.value, OperandType::Unknown);
+        match self.constants.entry(decl.name.to_string()) {
+            Entry::Vacant(vacant) => {
+                vacant.insert(Constant { name_span: decl.name.span(), value });
+            }
+            Entry::Occupied(occupied) => {
+                self.diagnostics
+                    .push(Diagnostic::duplicate_constant(&decl.name, occupied.get().name_span));
+            }
+        }
+    }
+
+    /// Parses a command.
+    fn parse_command(&mut self, cmd: &Command, block_id: BlockId) -> BlockId {
+        match cmd.name.class() {
+            IdentClass::Default => {
+                let opcode = self.parse_opcode(&cmd.name, Diagnostic::unrecognized_command);
+                let command = self.parse_operation(opcode, &cmd.operands);
+                self.process_command(block_id, command)
+            }
+
+            IdentClass::Directive => {
+                let opcode = self.parse_opcode(&cmd.name, Diagnostic::unrecognized_directive);
+                let dir = self.parse_operation(opcode, &cmd.operands);
+                match self.process_directive(block_id, dir) {
+                    Ok(next) => next,
+                    Err(dir) => {
+                        // Replace the directive with an invalid command to indicate to
+                        // later stages that the directive failed
+                        let command = dir.with_opcode(CmdOp::Invalid);
+                        self.process_command(block_id, command)
+                    }
+                }
+            }
+
+            IdentClass::Atom => {
+                self.report(Diagnostic::expected_command(cmd.name.span()));
+                // Treat this as a command with an invalid opcode
+                let opcode = Located::with_span(CmdOp::Invalid, cmd.name.span());
+                let command = self.parse_operation(opcode, &cmd.operands);
+                self.process_command(block_id, command)
             }
         }
     }
@@ -307,9 +354,40 @@ impl<'a> ProgramAssembler<'a> {
         Located::with_span(result.unwrap_or(Operand::Error), operand.expr.span())
     }
 
+    /// Parses a constant expression.
+    fn parse_constant_expr(&mut self, expr: &Expr, hint: OperandType) -> Located<Operand> {
+        let value = match expr {
+            Expr::IntLiteral(i) => self.parse_integer(*i, hint),
+            Expr::StrLiteral(s) => self.parse_text(s, hint),
+            Expr::Variable(id) => self.parse_var_expr(id, hint),
+            Expr::LabelRef(_) | Expr::ElseLabel(_) | Expr::OffsetRef(_) | Expr::FunctionCall(_) => {
+                self.report(Diagnostic::invalid_constant_value(expr));
+                Err(())
+            }
+            Expr::Error => Err(()),
+        }
+        .unwrap_or(Operand::Error);
+
+        // Make sure it actually resolved to a constant.
+        match value {
+            Operand::I8(_)
+            | Operand::U8(_)
+            | Operand::I16(_)
+            | Operand::U16(_)
+            | Operand::I32(_)
+            | Operand::U32(_)
+            | Operand::Text(_)
+            | Operand::Error => Located::with_span(value, expr.span()),
+            _ => {
+                self.report(Diagnostic::invalid_constant_value(expr));
+                Located::with_span(Operand::Error, expr.span())
+            }
+        }
+    }
+
     /// Parses a number of a potentially-unknown type into an operand with a known type.
     /// Returns `None` if parsing failed.
-    fn parse_integer(&mut self, int: ast::IntLiteral, hint: OperandType) -> Result<Operand, ()> {
+    fn parse_integer(&mut self, int: IntLiteral, hint: OperandType) -> Result<Operand, ()> {
         let (bits, operand) = match int.value() {
             IntValue::I8(x) => (8, i8::try_from(x).map(Operand::I8).ok()),
             IntValue::U8(x) => (8, u8::try_from(x).map(Operand::U8).ok()),
@@ -376,7 +454,7 @@ impl<'a> ProgramAssembler<'a> {
     }
 
     /// Parses a text operand.
-    fn parse_text(&mut self, s: &ast::StrLiteral, hint: OperandType) -> Result<Operand, ()> {
+    fn parse_text(&mut self, s: &StrLiteral, hint: OperandType) -> Result<Operand, ()> {
         if !matches!(hint, OperandType::Unknown | OperandType::Byte | OperandType::Message) {
             self.report(Diagnostic::unexpected_string_literal(s.span()));
             return Err(());
@@ -394,7 +472,9 @@ impl<'a> ProgramAssembler<'a> {
         }
         match id.class() {
             IdentClass::Default => {
-                if hint == OperandType::Message {
+                if let Some(constant) = self.constants.get(id.as_str()) {
+                    Ok((*constant.value).clone())
+                } else if hint == OperandType::Message {
                     let cmd =
                         Operation::new(self.parse_opcode(id, Diagnostic::unrecognized_msg_command));
                     Ok(Operand::MsgCommand(cmd.into()))

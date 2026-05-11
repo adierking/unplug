@@ -56,6 +56,8 @@ impl<'s> Parser<'s> {
             Some(Token::Identifier(_)) => {
                 if self.peek(|t| *t == Token::Colon) {
                     Item::LabelDecl(self.parse_label_decl())
+                } else if self.peek(|t| *t == Token::Equals) {
+                    Item::ConstantDecl(self.parse_constant_decl())
                 } else {
                     Item::Command(self.parse_command())
                 }
@@ -75,6 +77,18 @@ impl<'s> Parser<'s> {
         let name = self.parse_ident();
         let colon = self.parse_simple().unwrap();
         LabelDecl { name, colon_token: colon }
+    }
+
+    /// Parses a constant declaration.
+    fn parse_constant_decl(&mut self) -> ConstantDecl {
+        let name = self.parse_ident();
+        let equals = self.parse_simple().unwrap();
+        let value = self.parse_expr();
+        if self.have(|t| *t != Token::Newline) {
+            self.report(Diagnostic::expected_newline(self.span));
+            self.skip_thru(|t| matches!(t, Token::Newline));
+        }
+        ConstantDecl { name, equals_token: equals, value }
     }
 
     /// Parses a command.
@@ -185,7 +199,8 @@ impl<'s> Parser<'s> {
                 Some(t @ Token::Comma)
                 | Some(t @ Token::LParen)
                 | Some(t @ Token::RParen)
-                | Some(t @ Token::Colon) => {
+                | Some(t @ Token::Colon)
+                | Some(t @ Token::Equals) => {
                     self.report(Diagnostic::unexpected_token(t, self.span));
                     // Ignore the bad token
                     self.eat();

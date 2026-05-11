@@ -100,8 +100,6 @@ $ unplug dolphin
 
 ## Source Structure
 
-Assembly source files are composed of three main elements: *labels*, *commands*, and *directives*.
-
 ### Labels
 
 A *label* associates a bytecode location with a name that can be referenced elsewhere. To define a
@@ -162,6 +160,34 @@ setsp   mul(var(0), var(1))  ; a * b
 setsp   var(1)  ; b
 setsp   var(0)  ; a
 ```
+
+### Constants
+
+**Nightly builds only.**
+
+Nightly builds of Unplug allow you to define constants in scripts which get replaced with their
+actual values when the code is processed. They are just `NAME = VALUE` lines, and can be either
+integers or strings:
+
+```
+CB_ROBO = 20000
+MY_VAR  = 500
+LEFT    = 254
+HELLO   = "Hello!"
+
+dir     CB_ROBO, 0         ; Same as `dir 20000, 0`
+set     var(MY_VAR), 0     ; Same as `set var(500), 0`
+msg     HELLO, wait(LEFT)  ; Same as `msg "Hello!", wait(254)`
+```
+
+Constants cannot be anything more than simple values, though:
+
+```
+FOUR = add(1, 3)  ; ERROR!
+LABEL = *label    ; ERROR!
+```
+
+Future versions of Unplug may ship with constants built in that make code easier to read.
 
 ## Directives
 

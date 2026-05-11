@@ -192,6 +192,9 @@ pub enum ErrorCode {
     UnsupportedAtom,
     UnsupportedFunction,
     UnsupportedMsgCommand,
+    InvalidConstantName,
+    InvalidConstantValue,
+    ConstantRedefined,
 }
 
 impl From<WarningCode> for DiagnosticCode {
@@ -554,13 +557,13 @@ diagnostics! {
 
     unrecognized_function(ident: &ast::Ident) {
         code: ErrorCode::UnrecognizedFunction,
-        message: "unrecognized function: `{ident}`",
+        message: "unrecognized function or constant: `{ident}`",
         labels: [ident],
     }
 
     unrecognized_msg_command(ident: &ast::Ident) {
         code: ErrorCode::UnrecognizedMsgCommand,
-        message: "unrecognized message command: `{ident}`",
+        message: "unrecognized message command or constant: `{ident}`",
         labels: [ident],
     }
 
@@ -586,5 +589,26 @@ diagnostics! {
         code: ErrorCode::UnsupportedMsgCommand,
         message: "message command is not supported by the target game: `{ident}`",
         labels: [ident],
+    }
+
+    invalid_constant_name(ident: &ast::Ident) {
+        code: ErrorCode::InvalidConstantName,
+        message: "invalid constant name: `{ident}`",
+        labels: [ident],
+    }
+
+    invalid_constant_value(expr: &ast::Expr) {
+        code: ErrorCode::InvalidConstantValue,
+        message: "invalid constant value",
+        labels: [expr],
+    }
+
+    duplicate_constant(ident: &ast::Ident, prev: Span) {
+        code: ErrorCode::ConstantRedefined,
+        message: "redefinition of constant `{ident}`",
+        labels: [
+            ident -> "give this a unique name",
+            prev -> "previously declared here",
+        ]
     }
 }

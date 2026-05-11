@@ -54,6 +54,7 @@ declare_tokens! {
     RParen,
     Colon,
     Deref,
+    Equals,
     Else,
 }
 
@@ -436,11 +437,25 @@ impl Spanned for LabelDecl {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ConstantDecl {
+    pub name: Ident,
+    pub equals_token: Equals,
+    pub value: Expr,
+}
+
+impl Spanned for ConstantDecl {
+    fn span(&self) -> Span {
+        self.name.span().join(self.equals_token.span()).join(self.value.span())
+    }
+}
+
 /// A top-level item in a program.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Item {
     Command(Command),
     LabelDecl(LabelDecl),
+    ConstantDecl(ConstantDecl),
     Error,
 }
 
@@ -449,6 +464,7 @@ impl Spanned for Item {
         match self {
             Self::Command(i) => i.span(),
             Self::LabelDecl(i) => i.span(),
+            Self::ConstantDecl(i) => i.span(),
             Self::Error => Span::EMPTY,
         }
     }
