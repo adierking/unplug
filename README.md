@@ -8,6 +8,7 @@
 [![License](https://img.shields.io/github/license/adierking/unplug)](COPYING)
 
 :satellite: [Download](https://github.com/adierking/unplug/releases)  
+:books: [Documentation](#documentation)  
 :star: [Goals](#goals)  
 :robot: [Features](#features)  
 :thinking: [How to Use](#how-to-use)  
@@ -31,6 +32,12 @@ emistro's [Unplugger](https://emistro.itch.io/unplugger)!
 (Note that this packages its own Unplug build which may be different from the latest release.)
 
 ![Unplugger stage tools screenshot](docs/images/unplugger.png)
+
+## Documentation
+
+- **[Tour Guide (Start Here!)](docs/tour.md)**
+- **[Scripting Reference](docs/scripting.md)**
+- **[Scripting Tips 'n Tricks](docs/scripting-tips.md)**
 
 ## Goals
 
@@ -105,6 +112,8 @@ you will need 1.4 GB of free space.
 
 ## Contributing
 
+Unplug is currently licensed under the MIT license.
+
 There are lots of ways you can contribute to the project:
 
 - Submit issue reports
@@ -113,7 +122,15 @@ There are lots of ways you can contribute to the project:
 - Build higher-level tools (e.g. GUIs) on top of Unplug
 - Make and share cool mods!
 
-Before implementing a complex feature, you should reach out to Derpky through the
-[community Discord](http://discord.gg/ymNDqTyjRQ).
-
-Unplug is currently licensed under the MIT license.
+> [!IMPORTANT]
+> To prevent "drive-by" pull requests that take opportunities away from active community members,
+> you must meet one of these requirements or else your pull requests **will be rejected**
+> regardless of their content:
+>
+> - You have been assigned an issue to fix.
+>
+> - You have pinged me (Derpky) in the [community discord](http://discord.gg/ymNDqTyjRQ) and
+> discussed the details of your change with me.
+>
+> AI use is permitted, but you must disclose it. I reserve the right to reject a pull request if
+> it feels like a waste of my time to review.
