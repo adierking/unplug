@@ -149,7 +149,7 @@ where
 
 /// The `script assemble` CLI command.
 fn command_assemble(ctx: Context, args: AssembleArgs) -> Result<()> {
-    let mut ctx = ctx.open_read_write()?;
+    let mut ctx = if args.dry_run { None } else { Some(ctx.open_read_write()?) };
 
     let name = args.path.file_name().unwrap_or_default().to_string_lossy();
     info!("Parsing {}", name);
@@ -167,28 +167,32 @@ fn command_assemble(ctx: Context, args: AssembleArgs) -> Result<()> {
         // Print warnings.
         report_diagnostics(&file, &mut diagnostics);
     }
-    let update = match &compiled.target {
-        Some(Target::Globals) => {
-            let libs = compiled.into_libs()?;
-            let mut globals = ctx.read_globals()?;
-            ctx.begin_update()
-                .write_globals(GlobalsBuilder::new().base(&mut globals).libs(&libs))?
-        }
-        Some(Target::Stage(stage_name)) => {
-            let stage_id = StageId::find(stage_name)
-                .ok_or_else(|| anyhow!("Unknown stage \"{stage_name}\""))?;
-            let libs = ctx.read_globals()?.read_libs()?;
-            let mut stage = ctx.read_stage(&libs, stage_id)?;
-            stage = compiled.into_stage(stage)?;
-            ctx.begin_update().write_stage(stage_id, &stage)?
-        }
-        None => {
-            bail!("The script does not have a .globals or .stage directive");
-        }
-    };
+    if compiled.target.is_none() {
+        bail!("The script does not have a .globals or .stage directive");
+    }
 
-    info!("Updating game files");
-    update.commit()?;
+    if let Some(ctx) = ctx.as_mut() {
+        let update = match compiled.target.as_ref().unwrap() {
+            Target::Globals => {
+                let libs = compiled.into_libs()?;
+                let mut globals = ctx.read_globals()?;
+                ctx.begin_update()
+                    .write_globals(GlobalsBuilder::new().base(&mut globals).libs(&libs))?
+            }
+            Target::Stage(stage_name) => {
+                let stage_id = StageId::find(stage_name)
+                    .ok_or_else(|| anyhow!("Unknown stage \"{stage_name}\""))?;
+                let libs = ctx.read_globals()?.read_libs()?;
+                let mut stage = ctx.read_stage(&libs, stage_id)?;
+                stage = compiled.into_stage(stage)?;
+                ctx.begin_update().write_stage(stage_id, &stage)?
+            }
+        };
+        info!("Updating game files");
+        update.commit()?;
+    } else {
+        info!("Dry run: no game files updated");
+    }
     Ok(())
 }
 

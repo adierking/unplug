@@ -363,6 +363,10 @@ pub mod script {
         /// Path to the assembly source
         #[clap(value_name("PATH"))]
         pub path: PathBuf,
+
+        /// Do not require an ISO or write any changes
+        #[clap(long)]
+        pub dry_run: bool,
     }
 }
 
@@ -1596,6 +1600,11 @@ mod tests {
         let map = mapper!(Command::Script(Subcommand::Assemble(args)) => args);
         parse(["script", "assemble", "foo"], map, |args| {
             assert_eq!(args.path, Path::new("foo"));
+            assert!(!args.dry_run);
+        });
+        parse(["script", "assemble", "foo", "--dry-run"], map, |args| {
+            assert_eq!(args.path, Path::new("foo"));
+            assert!(args.dry_run);
         });
     }
 
