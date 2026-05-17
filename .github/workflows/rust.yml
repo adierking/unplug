@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
     paths-ignore:
       - '.gitignore'
       - '**.md'
@@ -244,3 +246,24 @@ jobs:
           path: unplug-vscode.vsix
           if-no-files-found: error
           archive: false
+
+  publish-release:
+    name: "Publish Release"
+    if: github.ref_type == 'tag'
+    needs: [build, universal, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+          skip-decompress: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.release_pat }}
+          name: Unplug ${{ github.ref_name }}
+          draft: true
+          files: |
+            *.zip
+            *.vsix
