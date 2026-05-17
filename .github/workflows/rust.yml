@@ -172,11 +172,11 @@ jobs:
           CHIBI_BRSAR: ${{ github.workspace }}/cb_robo.brsar
 
       - name: Upload Code Coverage
-        uses: coverallsapp/github-action@master
+        uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.github_token }}
           flag-name: run-${{ matrix.name }}
-          path-to-lcov: lcov.info
+          file: lcov.info
           parallel: true
 
   test-lite:
