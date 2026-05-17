@@ -49,7 +49,7 @@ jobs:
     runs-on: ${{ matrix.host }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Install Toolchain
         uses: ./.github/actions/toolchain
@@ -76,7 +76,7 @@ jobs:
           RUSTFLAGS: -C strip=symbols
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unplug-${{ env.branch_name }}-${{ matrix.name }}
           path: target/${{ matrix.target }}/release/${{ matrix.exe-name }}
@@ -100,7 +100,7 @@ jobs:
       - name: Run Lipo
         run: lipo arm64/unplug x64/unplug -create -output unplug
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unplug-${{ env.branch_name }}-macos-universal
           path: unplug
@@ -132,7 +132,7 @@ jobs:
     runs-on: ${{ matrix.host }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Install Toolchain
         uses: ./.github/actions/toolchain
@@ -198,7 +198,7 @@ jobs:
     runs-on: ${{ matrix.host }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Install Toolchain
         uses: ./.github/actions/toolchain
@@ -226,7 +226,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Install vsce
         run: npm install --global @vscode/vsce
@@ -238,7 +238,9 @@ jobs:
         working-directory: unplug-vscode
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unplug-vscode
           path: unplug-vscode.vsix
+          if-no-files-found: error
+          archive: false
