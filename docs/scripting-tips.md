@@ -86,7 +86,7 @@ work with by emitting `format` commands automatically when you use `%` in a mess
 
 ## Reading Arbitrary Memory
 
-**Requires a nightly build of Unplug.**
+**Requires Unplug 0.5.1 or newer.**
 
 You can actually read arbitrary memory addresses using the `array()` function because the pointer
 value is just an expression. However, it was only intended for script data, so it reads multi-byte

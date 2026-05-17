@@ -163,11 +163,10 @@ setsp   var(0)  ; a
 
 ### Constants
 
-**Nightly builds only.**
+**Requires Unplug 0.5.1 or newer.**
 
-Nightly builds of Unplug allow you to define constants in scripts which get replaced with their
-actual values when the code is processed. They are just `NAME = VALUE` lines, and can be either
-integers or strings:
+You can define named constants in scripts which get replaced with their actual values when the code
+is processed. They are just `NAME = VALUE` lines, and can be either integers or strings:
 
 ```
 CB_ROBO = 20000
