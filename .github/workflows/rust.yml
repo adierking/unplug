@@ -247,8 +247,8 @@ jobs:
           if-no-files-found: error
           archive: false
 
-  publish-release:
-    name: "Publish Release"
+  publish-stable-release:
+    name: "Publish Stable Release"
     if: github.ref_type == 'tag'
     needs: [build, universal, test]
     runs-on: ubuntu-latest
@@ -263,6 +263,8 @@ jobs:
         with:
           token: ${{ secrets.release_pat }}
           name: Unplug ${{ github.ref_name }}
+          body: The executables in this release are from [automated build \#${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          generate_release_notes: true
           draft: true
           files: |
             *.zip
