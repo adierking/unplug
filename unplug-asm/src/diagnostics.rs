@@ -1,5 +1,6 @@
 use crate::ast::{self, Else, IntValue, LParen};
 use crate::lexer::Token;
+use crate::program::Located;
 use crate::span::{Span, Spanned};
 use crate::{Error, Result};
 use num_enum::IntoPrimitive;
@@ -134,6 +135,7 @@ pub enum DiagnosticCode {
 pub enum WarningCode {
     Reserved,
     SignExtended,
+    LibCallInGlobals,
 }
 
 /// General diagnostic codes.
@@ -195,6 +197,8 @@ pub enum ErrorCode {
     InvalidConstantName,
     InvalidConstantValue,
     ConstantRedefined,
+    LibCallOutOfRange,
+    UnresolvedLibCall,
 }
 
 impl From<WarningCode> for DiagnosticCode {
@@ -258,6 +262,13 @@ diagnostics! {
         code: WarningCode::SignExtended,
         message: "value will be sign-extended and interpreted as {actual}",
         labels: [span -> "remove the type suffix or use {actual}"],
+    }
+
+    lib_call_in_globals(span: Span, label: &str) {
+        code: WarningCode::LibCallInGlobals,
+        message: "library calls should not be used in globals",
+        note: "rewriting to `run *{label}`",
+        labels: [span],
     }
 
     // === Errors ===
@@ -610,5 +621,18 @@ diagnostics! {
             ident -> "give this a unique name",
             prev -> "previously declared here",
         ]
+    }
+
+    lib_call_out_of_range(index: Located<i16>) {
+        code: ErrorCode::LibCallOutOfRange,
+        message: "library call is out of range: {index}",
+        note: "must be between 0 and 375",
+        labels: [index],
+    }
+
+    unresolved_lib_call(index: Located<i16>) {
+        code: ErrorCode::UnresolvedLibCall,
+        message: "unresolved library call: {index}",
+        labels: [index],
     }
 }

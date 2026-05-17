@@ -155,6 +155,7 @@ impl Deref for CursorData<'_> {
     }
 }
 
+#[derive(Clone)]
 /// A cursor which iterates over an operand list of any kind.
 struct OperandCursor<'a> {
     /// The cursor kind and opcode of the current operation.
@@ -426,14 +427,17 @@ impl<'a> OperandCursor<'a> {
         Ok((*opcode, cursor))
     }
 
-    /// Consumes the cursor, emitting diagnostics if the opcode does not match `T` or not all
-    /// operands were consumed.
-    fn leave<T: MatchCursorKind>(self) {
+    /// Consumes the cursor, emitting diagnostics and returning `false` if the opcode does not match
+    /// `T` or not all operands were consumed.
+    fn leave<T: MatchCursorKind>(self) -> bool {
         if !self.has_opcode::<T>() {
             self.report(T::error_diagnostic(self.kind.span()));
-        }
-        if self.has_next() {
+            false
+        } else if self.has_next() {
             self.report(Diagnostic::too_many_operands(self.kind.span()));
+            false
+        } else {
+            true
         }
     }
 
@@ -524,6 +528,66 @@ impl<'a> AsmDeserializer<'a> {
                 I::default()
             }
         }
+    }
+
+    /// Preprocess a command and prepare a cursor for it. The returned cursor may not necessarily
+    /// cover the original command if the command needs to be rewritten in order to compile.
+    /// Returns `None` if the command should be skipped.
+    fn prepare_command<'c>(&mut self, command: &'c Operation<CmdOp>) -> Option<OperandCursor<'c>> {
+        let cursor = OperandCursor::with_borrowed(command, Rc::clone(&self.diagnostics));
+        match *command.opcode {
+            CmdOp::Lib => self.prepare_lib_call(cursor),
+            _ => Some(cursor),
+        }
+    }
+
+    /// Preprocess a `lib` command and rewrite it if necessary.
+    fn prepare_lib_call<'c>(&mut self, cursor: OperandCursor<'c>) -> Option<OperandCursor<'c>> {
+        let mut my_cursor = cursor.clone();
+
+        // Validate the index ahead of time so the deserializer doesn't need to understand it.
+        let index = my_cursor.next_integer::<i16>();
+        if *index < 0 || *index as usize >= NUM_LIBS {
+            self.report(Diagnostic::lib_call_out_of_range(index));
+            // Skip: the command is invalid.
+            return None;
+        }
+        if !my_cursor.leave::<CmdOp>() {
+            // Skip: don't emit any more errors for this command.
+            return None;
+        }
+
+        // Library calls cannot be done from globals on the technicality that the disassembler does
+        // not support this. The game *seems* to handle these OK, but none of the official scripts
+        // do it. Reworking the script reader to support resolving library calls while reading
+        // globals is a major headache, so we can instead rewrite them to `run` commands which are
+        // functionally equivalent and then warn the user.
+        let default_target = Located::new(Target::Globals);
+        let target = self.program.target.as_ref().unwrap_or(&default_target);
+        if **target == Target::Globals {
+            if let Some(block) = self.program.entry_points.get(&EntryPoint::Lib(*index)) {
+                if let Some(label) = self.program.labels.find_block(**block).first() {
+                    let name = self.program.labels.get(*label).name.as_ref();
+                    self.report(Diagnostic::lib_call_in_globals(cursor.span(), name));
+                    let rewritten = Operation::with_operands(
+                        Located::new(CmdOp::Run),
+                        [Located::new(Operand::Label(*label))],
+                    );
+                    return Some(OperandCursor::with_owned(
+                        rewritten,
+                        Rc::clone(&self.diagnostics),
+                    ));
+                }
+            }
+
+            // This can technically happen if you don't define a lib and then try to call it.
+            // TODO: Can we just reuse the `undefined_lib` diagnostic here?
+            self.report(Diagnostic::unresolved_lib_call(index));
+            // Skip: the command is invalid.
+            return None;
+        }
+
+        Some(cursor)
     }
 
     fn cursor_span(&self) -> Span {
@@ -655,9 +719,16 @@ impl EventDeserializer for AsmDeserializer<'_> {
             Some(BlockContent::Data(_)) => panic!("not in a code block"),
             _ => return Err(SerError::EndOfData),
         };
-        let command = code.get(self.command_index).ok_or(SerError::EndOfData)?;
-        self.cursor = Some(OperandCursor::with_borrowed(command, Rc::clone(&self.diagnostics)));
-        Ok(*command.opcode)
+        let cursor = loop {
+            let command = code.get(self.command_index).ok_or(SerError::EndOfData)?;
+            match self.prepare_command(command) {
+                Some(cursor) => break cursor,
+                None => self.command_index += 1,
+            }
+        };
+        let op = cursor.opcode::<CmdOp>().expect("expected a command");
+        self.cursor = Some(cursor);
+        Ok(op)
     }
 
     fn end_command(&mut self) -> SerResult<()> {

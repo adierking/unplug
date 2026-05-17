@@ -77,6 +77,12 @@ impl<T> From<T> for Located<T> {
     }
 }
 
+impl<T: Display> Display for Located<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.value.fmt(f)
+    }
+}
+
 /// Data which can be operated on.
 #[derive(Debug, Clone)]
 pub enum Operand {
