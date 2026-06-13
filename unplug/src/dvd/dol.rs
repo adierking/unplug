@@ -1,5 +1,5 @@
 use crate::common::{ReadFrom, WriteTo};
-use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ByteOrder, ReadBytesExt, WriteBytesExt};
 use std::io::{self, Read, Write};
 use thiserror::Error;
 
@@ -99,10 +99,10 @@ impl DolHeader {
     where
         I: Iterator<Item = (usize, (&'a u32, &'a u32))>,
     {
-        text.find(|(_, (&offset, &size))| pointer >= offset && pointer < offset + size)
+        text.find(|&(_, (&offset, &size))| pointer >= offset && pointer < offset + size)
             .map(|(i, (offset, _))| DolPointer::Text { index: i, offset: pointer - offset })
             .or_else(|| {
-                data.find(|(_, (&offset, &size))| pointer >= offset && pointer < offset + size)
+                data.find(|&(_, (&offset, &size))| pointer >= offset && pointer < offset + size)
                     .map(|(i, (offset, _))| DolPointer::Data { index: i, offset: pointer - offset })
             })
     }

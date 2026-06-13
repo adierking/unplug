@@ -7,7 +7,7 @@ use crate::event::expr::{ArrayElementExpr, BinaryOp, Expr, ObjExpr, SetExpr};
 use crate::event::msg::{MsgArgs, MsgCommand};
 use crate::event::{BlockId, Pointer};
 use arrayvec::ArrayVec;
-use std::collections::{hash_map, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map};
 use tracing::warn;
 
 /// A value which is live in the middle of a block.
@@ -275,11 +275,7 @@ impl LiveState {
             // Discard any live values that belonged to the stack frame
             self.values.retain(
                 |&label, _| {
-                    if let Label::Stack(lbp, _) = label {
-                        lbp <= bp
-                    } else {
-                        true
-                    }
+                    if let Label::Stack(lbp, _) = label { lbp <= bp } else { true }
                 },
             );
         }

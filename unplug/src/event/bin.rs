@@ -2,7 +2,7 @@ use super::opcodes::{Atom, CmdOp, ExprOp, Ggte, MsgOp, OpcodeMap};
 use super::pointer::{Pointer, WritePointer};
 use super::serialize::{Error, EventDeserializer, EventSerializer, Result};
 use crate::common::{CText, ReadFrom, VecText, WriteTo};
-use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
+use byteorder::{BE, LE, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 /// The maximum size of a serialized message command list in bytes.
@@ -204,10 +204,10 @@ impl<W: Write + WritePointer + Seek> EventSerializer for BinSerializer<W> {
 
     fn serialize_msg_char(&mut self, ch: MsgOp) -> Result<()> {
         let b = Ggte::value(ch).map_err(Error::UnsupportedMsgChar)?;
-        if let MsgOp::Char(_) = ch {
-            if Ggte::get(b) != Ok(ch) {
-                return Err(Error::InvalidMsgChar(b as u16));
-            }
+        if let MsgOp::Char(_) = ch
+            && Ggte::get(b) != Ok(ch)
+        {
+            return Err(Error::InvalidMsgChar(b as u16));
         }
         self.serialize_u8(b)
     }
@@ -345,11 +345,11 @@ impl<R: Read + Seek> EventDeserializer for BinDeserializer<R> {
         let opcode = self.reader.read_u8()?;
         let expr = Ggte::get(opcode).map_err(Error::UnrecognizedExpr)?;
         self.expr_level += 1;
-        if self.expr_level == 1 {
-            if let Some(VariadicType::PtclLead { count }) = &mut self.variadic {
-                assert!(*count > 0, "Too many ptcl(@lead) arguments");
-                *count -= 1;
-            }
+        if self.expr_level == 1
+            && let Some(VariadicType::PtclLead { count }) = &mut self.variadic
+        {
+            assert!(*count > 0, "Too many ptcl(@lead) arguments");
+            *count -= 1;
         }
         Ok(expr)
     }

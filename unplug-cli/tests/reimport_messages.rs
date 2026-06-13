@@ -4,14 +4,14 @@ use std::fs::File;
 use tempfile::NamedTempFile;
 use unplug::data::{Resource, Stage as StageId};
 use unplug::dvd::{ArchiveReader, DiscStream, OpenFile};
-use unplug::event::msg::MsgArgs;
 use unplug::event::Script;
+use unplug::event::msg::MsgArgs;
 use unplug::globals::GlobalsReader;
 use unplug::stage::Stage;
 use unplug_cli::args::messages::{ExportArgs, ImportArgs};
 use unplug_cli::commands::messages;
 use unplug_cli::context::Context;
-use unplug_cli::msg::{iter_messages, MessageId, MessageSource};
+use unplug_cli::msg::{MessageId, MessageSource, iter_messages};
 use unplug_test as common;
 
 fn collect_messages(source: MessageSource, script: &Script) -> Vec<(MessageId, &MsgArgs)> {

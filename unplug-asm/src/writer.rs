@@ -1,3 +1,4 @@
+use crate::Result;
 use crate::label::{LabelId, LabelMap};
 use crate::opcodes::{AsmMsgOp, DirOp, NamedOpcode};
 use crate::program::{
@@ -5,7 +6,6 @@ use crate::program::{
     Program, Target,
 };
 use crate::span::Span;
-use crate::Result;
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -523,11 +523,11 @@ impl<'a> ProgramBuilder<'a> {
         block.content = Some(BlockContent::Code(serialized.into_code()));
 
         // If execution can flow directly out of this block into another one, it MUST be written next
-        if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
-            if let Some(Pointer::Block(next)) = code.next_block {
-                assert!(next.get(&self.program.blocks).is_empty());
-                self.add_code(next)?;
-            }
+        if (code.commands.is_empty() || !code.commands.last().unwrap().is_goto())
+            && let Some(Pointer::Block(next)) = code.next_block
+        {
+            assert!(next.get(&self.program.blocks).is_empty());
+            self.add_code(next)?;
         }
         Ok(())
     }
@@ -625,12 +625,12 @@ impl<'a, W: Write> ProgramWriter<'a, W> {
     fn write_block(&mut self, id: BlockId, block: &Block) -> io::Result<()> {
         let labels = self.program.labels.find_block(id);
         if !labels.is_empty() {
-            if block.flags.contains(BlockFlags::ENTRY_POINT) {
-                if let Some(mut entry_points) = self.block_entries.remove(&id) {
-                    entry_points.sort_unstable();
-                    for &kind in &entry_points {
-                        self.write_entry_directive(kind, labels[0])?;
-                    }
+            if block.flags.contains(BlockFlags::ENTRY_POINT)
+                && let Some(mut entry_points) = self.block_entries.remove(&id)
+            {
+                entry_points.sort_unstable();
+                for &kind in &entry_points {
+                    self.write_entry_directive(kind, labels[0])?;
                 }
             }
             for &label in labels {

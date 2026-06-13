@@ -6,7 +6,7 @@ pub mod pcm;
 pub use adpcm::GcAdpcm;
 pub use convert::Convert;
 pub use dsp::DspFormat;
-pub use pcm::{PcmF32Le, PcmS16Be, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8, PcmU16Le};
+pub use pcm::{PcmF32Le, PcmS8, PcmS16Be, PcmS16Le, PcmS24Le, PcmS32Le, PcmU16Le};
 
 use super::Result;
 use crate::common::endian::{ConvertEndian, IsNative, ReadValuesExt, WriteValuesExt};

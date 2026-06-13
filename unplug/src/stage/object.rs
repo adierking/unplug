@@ -2,7 +2,7 @@ use super::{Error, Result};
 use crate::common::{ReadOptionFrom, WriteOptionTo, WriteTo};
 use crate::data::{Object, ObjectFlags, RawObjectPlacement};
 use crate::event::BlockId;
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::num::NonZeroI32;

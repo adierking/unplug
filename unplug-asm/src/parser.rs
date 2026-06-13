@@ -138,10 +138,10 @@ impl<'s> Parser<'s> {
         }
 
         // Detect a trailing comma
-        if let Some(last) = operands.last() {
-            if let Some(last_comma) = last.comma {
-                self.report(Diagnostic::unexpected_token(&Token::Comma, last_comma));
-            }
+        if let Some(last) = operands.last()
+            && let Some(last_comma) = last.comma
+        {
+            self.report(Diagnostic::unexpected_token(&Token::Comma, last_comma));
         }
         operands
     }
@@ -304,11 +304,7 @@ impl<'s> Parser<'s> {
 
     /// Parses an optional `SimpleToken`.
     fn parse_simple<T: SimpleToken>(&mut self) -> Option<T> {
-        if self.have(T::matches) {
-            Some(self.take(|_, span| T::new(span)))
-        } else {
-            None
-        }
+        if self.have(T::matches) { Some(self.take(|_, span| T::new(span))) } else { None }
     }
 
     /// Passes the current token and its span to `func`, eats the token, and returns the new value.

@@ -10,7 +10,7 @@ use crossterm::terminal::{Clear, ClearType};
 use crossterm::tty::IsTty;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressFinish, ProgressStyle};
 use lazy_static::lazy_static;
-use log::{info, log_enabled, Level, Log};
+use log::{Level, Log, info, log_enabled};
 use simplelog::{Color, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 use std::convert::identity;
 use std::io::{self, StdoutLock, Write};
@@ -104,12 +104,12 @@ fn hide_progress() -> bool {
 /// Shows the progress bar again after it was hidden with `hide_progress()`.
 fn show_progress() {
     let lock = PROGRESS_BAR.lock().unwrap();
-    if let Some(bar) = &*lock {
-        if bar.is_hidden() {
-            // Steady tick was disabled in hide_progress()
-            bar.enable_steady_tick(1000 / PROGRESS_UPDATE_RATE);
-            bar.set_draw_target(default_progress_target());
-        }
+    if let Some(bar) = &*lock
+        && bar.is_hidden()
+    {
+        // Steady tick was disabled in hide_progress()
+        bar.enable_steady_tick(1000 / PROGRESS_UPDATE_RATE);
+        bar.set_draw_target(default_progress_target());
     }
 }
 
@@ -327,10 +327,10 @@ impl<T: PlaybackController> PlaybackUi<T> {
             if self.visibility == Visibility::Visible {
                 self.update_ui();
             }
-            if event::poll(Duration::from_secs(0)).unwrap_or_default() {
-                if let Ok(Event::Key(key)) = event::read() {
-                    self.handle_key(key);
-                }
+            if event::poll(Duration::from_secs(0)).unwrap_or_default()
+                && let Ok(Event::Key(key)) = event::read()
+            {
+                self.handle_key(key);
             }
         }
     }

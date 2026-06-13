@@ -1,10 +1,10 @@
-use super::constants::*;
 use super::MessageId;
+use super::constants::*;
 use crate::id::IdString;
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{Result, anyhow, bail, ensure};
+use quick_xml::Reader;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, BytesText, Event};
-use quick_xml::Reader;
 use std::convert::TryInto;
 use std::io::BufRead;
 use std::mem;
@@ -18,11 +18,7 @@ fn parse_int(string: &str) -> Result<i32> {
     if let Some(hex) = string.strip_prefix("0x") {
         Ok(u32::from_str_radix(hex, 16)? as i32)
     } else if let Some(hex) = string.strip_prefix("-0x") {
-        if hex == "80000000" {
-            Ok(-0x80000000)
-        } else {
-            Ok(-i32::from_str_radix(hex, 16)?)
-        }
+        if hex == "80000000" { Ok(-0x80000000) } else { Ok(-i32::from_str_radix(hex, 16)?) }
     } else {
         Ok(string.parse()?)
     }

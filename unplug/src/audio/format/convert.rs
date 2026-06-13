@@ -1,8 +1,8 @@
 use super::adpcm;
 use super::pcm::{ConvertPcm, Scalable};
 use super::{
-    AnyFormat, Cast, DynamicFormat, Format, GcAdpcm, PcmF32Le, PcmFormat, PcmS16Be, PcmS16Le,
-    PcmS24Le, PcmS32Le, PcmS8, PcmU16Le, StaticFormat,
+    AnyFormat, Cast, DynamicFormat, Format, GcAdpcm, PcmF32Le, PcmFormat, PcmS8, PcmS16Be,
+    PcmS16Le, PcmS24Le, PcmS32Le, PcmU16Le, StaticFormat,
 };
 use crate::audio::ReadSamples;
 
@@ -118,8 +118,8 @@ mod tests {
     use crate::audio::format::ReadWriteBytes;
     use crate::audio::{Result, Samples};
     use crate::test::{
-        open_test_wav, TEST_WAV_LEFT_DSP, TEST_WAV_RIGHT_DSP, TEST_WAV_S32,
-        TEST_WAV_S32_DATA_OFFSET,
+        TEST_WAV_LEFT_DSP, TEST_WAV_RIGHT_DSP, TEST_WAV_S32, TEST_WAV_S32_DATA_OFFSET,
+        open_test_wav,
     };
 
     fn wrap<'r, 's: 'r, R, From, To>(reader: R) -> DynReader<'r, 's, To>

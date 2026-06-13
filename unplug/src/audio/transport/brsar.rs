@@ -3,7 +3,7 @@
 
 use crate::audio::{Error, Result};
 use crate::common::{ReadFrom, Region};
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{BE, ReadBytesExt};
 use std::any;
 use std::ffi::CString;
 use std::io::{Read, Seek, SeekFrom};
@@ -452,11 +452,7 @@ pub struct Brsar {
 impl Brsar {
     /// Gets the symbol name at `index`. Returns an empty string if the index is negative.
     pub fn symbol(&self, index: i32) -> &str {
-        if index >= 0 {
-            &self.symbols[index as usize]
-        } else {
-            ""
-        }
+        if index >= 0 { &self.symbols[index as usize] } else { "" }
     }
 }
 

@@ -2,7 +2,7 @@ use crate::args::config::*;
 
 use crate::config::{Config, Settings};
 use crate::context::Context;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use log::info;
 use std::fmt::Display;
 use std::mem;

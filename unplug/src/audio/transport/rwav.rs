@@ -8,7 +8,7 @@ use crate::audio::{
 };
 use crate::common::{ReadFrom, ReadSeek, Region};
 use arrayvec::ArrayVec;
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{BE, ReadBytesExt};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::borrow::Cow;
 use std::convert::TryFrom;

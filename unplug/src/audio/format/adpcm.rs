@@ -8,7 +8,7 @@ pub use encode::*;
 use super::{ExtendSamples, Format, FormatTag, ReadWriteBytes, StaticFormat};
 use crate::audio::{Error, Result};
 use crate::common::{ReadFrom, WriteTo};
-use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ByteOrder, ReadBytesExt, WriteBytesExt};
 use std::borrow::Cow;
 use std::io::{Read, Write};
 

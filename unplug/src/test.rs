@@ -1,10 +1,10 @@
-use crate::audio::format::{FormatTag, PcmS16Le, ReadWriteBytes};
 use crate::audio::Samples;
+use crate::audio::format::{FormatTag, PcmS16Le, ReadWriteBytes};
 use crate::common::{ReadFrom, WriteTo};
 use crate::event::bin::{BinDeserializer, BinSerializer};
 use crate::event::pointer::{Pointer, WritePointer};
 use crate::event::serialize::{DeserializeEvent, SerializeEvent};
-use byteorder::{ByteOrder, WriteBytesExt, LE};
+use byteorder::{ByteOrder, LE, WriteBytesExt};
 use ctor::ctor;
 use std::fmt::{Debug, Display};
 use std::io::{self, Cursor, Seek, SeekFrom};

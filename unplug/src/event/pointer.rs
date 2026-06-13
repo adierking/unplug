@@ -1,5 +1,5 @@
 use crate::common::{ReadFrom, WriteTo};
-use byteorder::{ReadBytesExt, LE};
+use byteorder::{LE, ReadBytesExt};
 use std::convert::TryFrom;
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -76,11 +76,7 @@ impl Pointer {
 
     /// Returns `true` if this points inside the stage header.
     pub fn is_in_header(&self) -> bool {
-        if let Self::Offset(o) = *self {
-            o <= STAGE_OBJECTS_OFFSET
-        } else {
-            false
-        }
+        if let Self::Offset(o) = *self { o <= STAGE_OBJECTS_OFFSET } else { false }
     }
 
     /// Returns `true` if this points to offset 0. Note that these are not necessarily null

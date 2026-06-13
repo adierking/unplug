@@ -513,19 +513,19 @@ fn debug2(f: &mut fmt::Formatter<'_>, name: &str, arg: &BinaryOp) -> fmt::Result
 }
 
 fn debug_item(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result {
-    if let Some(id) = expr.value() {
-        if let Ok(item) = Item::try_from(id as i16) {
-            return f.debug_tuple(name).field(&item).finish();
-        }
+    if let Some(id) = expr.value()
+        && let Ok(item) = Item::try_from(id as i16)
+    {
+        return f.debug_tuple(name).field(&item).finish();
     }
     f.debug_tuple(name).field(expr).finish()
 }
 
 fn debug_atc(f: &mut fmt::Formatter<'_>, name: &str, expr: &Expr) -> fmt::Result {
-    if let Some(id) = expr.value() {
-        if let Ok(atc) = Atc::try_from(id as i16) {
-            return f.debug_tuple(name).field(&atc).finish();
-        }
+    if let Some(id) = expr.value()
+        && let Ok(atc) = Atc::try_from(id as i16)
+    {
+        return f.debug_tuple(name).field(&atc).finish();
     }
     f.debug_tuple(name).field(expr).finish()
 }

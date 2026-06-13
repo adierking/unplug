@@ -1,5 +1,5 @@
 use crate::context::{FileId, OpenContext};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Display};
 use std::path::Path;

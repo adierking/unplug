@@ -1,5 +1,5 @@
-use crate::io::{copy_into_memory, MemoryCursor};
-use anyhow::{anyhow, Error, Result};
+use crate::io::{MemoryCursor, copy_into_memory};
+use anyhow::{Error, Result, anyhow};
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use regex::Regex;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tempfile::NamedTempFile;
 use unplug::audio::metadata::SfxPlaylist;
 use unplug::audio::transport::{HpsReader, SfxBank};
-use unplug::common::io::{copy_buffered, BUFFER_SIZE};
+use unplug::common::io::{BUFFER_SIZE, copy_buffered};
 use unplug::common::{ReadFrom, ReadSeek, ReadWriteSeek, WriteTo};
 use unplug::data::{Music, Sfx, SfxGroup, Stage as StageId};
 use unplug::dvd::{ArchiveBuilder, ArchiveReader, DiscStream, EntryId, FileTree, OpenFile};

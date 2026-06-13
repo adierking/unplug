@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use unplug::event::msg::{Color, Icon, Voice};
 
 /// Trait for an enum which can be converted to/from ID strings.

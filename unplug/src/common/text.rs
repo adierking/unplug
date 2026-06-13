@@ -73,11 +73,7 @@ impl TextData for Vec<u8> {
         self.as_ref()
     }
     fn from_raw_bytes(bytes: Vec<u8>) -> Result<Self> {
-        if bytes.iter().all(|b| *b != 0) {
-            Ok(bytes)
-        } else {
-            Err(Error::UnexpectedNul)
-        }
+        if bytes.iter().all(|b| *b != 0) { Ok(bytes) } else { Err(Error::UnexpectedNul) }
     }
     fn from_bytes_without_nul(bytes: Vec<u8>) -> Result<Self> {
         Self::from_raw_bytes(bytes)

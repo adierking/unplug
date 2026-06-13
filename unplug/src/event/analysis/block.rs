@@ -51,11 +51,7 @@ impl BlockInfoMap {
 
     /// Gets a block from the map, or `None` if there is no info defined for it.
     pub(super) fn get(&self, id: BlockId) -> Option<&BlockInfo> {
-        if id.index() < self.blocks.len() {
-            id.get(&self.blocks).as_ref()
-        } else {
-            None
-        }
+        if id.index() < self.blocks.len() { id.get(&self.blocks).as_ref() } else { None }
     }
 
     /// Inserts a block into the map.

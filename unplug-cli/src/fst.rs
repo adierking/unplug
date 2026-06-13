@@ -1,5 +1,5 @@
 use crate::args::list::Options;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use log::info;
 use std::fs::{self, File};
 use std::path::Path;

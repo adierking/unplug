@@ -4,7 +4,7 @@ use crate::common::IString;
 use crate::config::{Config, Project, ProjectKind};
 use crate::context::Context;
 use crate::terminal::ask_yes_no;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use log::info;
 use std::fs;
 use std::mem;

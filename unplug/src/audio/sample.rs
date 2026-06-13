@@ -904,11 +904,7 @@ impl<'s, F: PcmFormat> ReadSamples<'s> for JoinChannels<'_, 's, F> {
 
     fn progress(&self) -> Option<ProgressHint> {
         let left = self.left.progress();
-        if left == self.right.progress() {
-            left
-        } else {
-            None
-        }
+        if left == self.right.progress() { left } else { None }
     }
 
     fn data_remaining(&self) -> Option<u64> {

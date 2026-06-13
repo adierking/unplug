@@ -1,13 +1,13 @@
+use super::Result;
 use super::block::{BlockInfo, BlockInfoMap};
 use super::state::LiveState;
 use super::subroutine::{
     SubroutineEffects, SubroutineEffectsMap, SubroutineInfo, SubroutineInfoMap,
 };
 use super::value::{DefId, Definition, DefinitionMap, Label, Value, ValueKind};
-use super::Result;
 use crate::event::{Block, BlockId, Pointer};
 use arrayvec::ArrayVec;
-use std::collections::{hash_map, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque, hash_map};
 use tracing::debug;
 
 /// Helper function to enqueue a block onto a workqueue only if it is not present.
@@ -393,9 +393,9 @@ impl Default for ScriptAnalyzer {
 mod tests {
     use super::super::value::ArrayKind;
     use super::*;
+    use crate::event::CodeBlock;
     use crate::event::command::{AttachArgs, Command, IfArgs, SetArgs};
     use crate::event::expr::{ArrayElementExpr, BinaryOp, Expr, SetExpr};
-    use crate::event::CodeBlock;
 
     #[test]
     fn test_input_kinds() {
@@ -658,7 +658,7 @@ mod tests {
 
         let blocks: &[Block] = &[Block::Code(CodeBlock {
             commands: vec![
-                SetArgs::new(SetExpr::Pad(Expr::Imm32(7)), Expr::AddressOf(offset)).into()
+                SetArgs::new(SetExpr::Pad(Expr::Imm32(7)), Expr::AddressOf(offset)).into(),
             ],
             next_block: None,
             else_block: None,

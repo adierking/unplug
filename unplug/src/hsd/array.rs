@@ -2,9 +2,9 @@ use super::pointer::DefaultIn;
 use super::pointer::{NodeBase, ReadPointerBase};
 use super::{Error, Node, Pointer, ReadPointer, Result};
 use crate::common::ReadFrom;
-use bumpalo::collections::vec::IntoIter;
-use bumpalo::collections::Vec;
 use bumpalo::Bump;
+use bumpalo::collections::Vec;
+use bumpalo::collections::vec::IntoIter;
 use std::ops::{Deref, DerefMut};
 
 /// Trait for values that can be used in arrays.

@@ -490,11 +490,11 @@ impl Iterator for Postorder<'_> {
             } else if let Some(&peek) = self.stack.last() {
                 // If we didn't just come from next_block, then it hasn't been visited yet.
                 let code = peek.get(self.blocks).code().expect("expected code block");
-                if let Some(Pointer::Block(next_block)) = code.next_block {
-                    if self.prev != next_block {
-                        self.current = Some(next_block);
-                        continue;
-                    }
+                if let Some(Pointer::Block(next_block)) = code.next_block
+                    && self.prev != next_block
+                {
+                    self.current = Some(next_block);
+                    continue;
                 }
 
                 // Visit this node and go up the stack

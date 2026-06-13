@@ -2,7 +2,7 @@ use super::dobj::DObj;
 use super::{Error, Node, Pointer, ReadPointer, Result};
 use crate::common::ReadFrom;
 use bitflags::bitflags;
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{BE, ReadBytesExt};
 
 bitflags! {
     // From HSDLib

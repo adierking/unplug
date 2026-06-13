@@ -2,7 +2,7 @@ use crate::args::dolphin::*;
 
 use crate::config::Config;
 use crate::context::Context;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use cfg_if::cfg_if;
 use log::{debug, info};
 use std::fs;

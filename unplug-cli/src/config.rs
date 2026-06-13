@@ -1,6 +1,6 @@
 use crate::common::IString;
 use crate::context::Context;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use dirs::config_dir;
 use lazy_static::lazy_static;
 use log::{debug, error, trace};

@@ -6,7 +6,7 @@ pub use reader::ArchiveReader;
 
 use super::fst;
 use crate::common::{ReadFrom, WriteTo};
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use std::io::{self, Read, Write};
 use thiserror::Error;
 

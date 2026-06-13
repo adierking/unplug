@@ -9,8 +9,8 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Cursor};
 use unplug::common::WriteTo;
 use unplug::data::{Resource, Stage};
-use unplug::event::msg::MsgArgs;
 use unplug::event::Script;
+use unplug::event::msg::MsgArgs;
 use unplug::globals::GlobalsBuilder;
 
 /// Replaces messages in `script` using `messages`. After a message is replaced, it is removed from

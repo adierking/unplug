@@ -4,11 +4,11 @@ use crate::audio::format::{PcmFormat, PcmS16Le, ReadWriteBytes};
 use crate::audio::sample::{PeekSamples, ReadSamples};
 use crate::audio::{Error, ProgressHint, Result};
 use crate::common::WriteTo;
-use byteorder::{WriteBytesExt, LE};
+use byteorder::{LE, WriteBytesExt};
 use std::borrow::Cow;
 use std::io::{self, Seek, SeekFrom, Write};
 use tracing::level_filters::STATIC_MAX_LEVEL;
-use tracing::{debug, instrument, Level};
+use tracing::{Level, debug, instrument};
 
 const DEFAULT_SOFTWARE_NAME: &str = concat!("unplug v", env!("CARGO_PKG_VERSION"));
 

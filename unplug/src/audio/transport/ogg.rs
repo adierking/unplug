@@ -88,7 +88,7 @@ impl ReadSamples<'static> for OggReader<'_> {
 mod tests {
     use super::*;
     use crate::audio::transport::WavReader;
-    use crate::test::{assert_samples_close, TEST_OGG, TEST_OGG_WAV};
+    use crate::test::{TEST_OGG, TEST_OGG_WAV, assert_samples_close};
     use std::io::Cursor;
 
     #[test]

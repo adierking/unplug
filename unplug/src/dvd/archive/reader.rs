@@ -1,7 +1,7 @@
 use super::{Header, Result};
 use crate::common::{ReadFrom, ReadSeek};
-use crate::dvd::fst::{self, EntryId, FileStringTable, FileTree};
 use crate::dvd::OpenFile;
+use crate::dvd::fst::{self, EntryId, FileStringTable, FileTree};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
 /// A stream for reading U8 archives.

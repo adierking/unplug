@@ -2,7 +2,7 @@ use super::{Error, Result};
 use crate::common::{CText, ReadFrom, WriteTo};
 use crate::data::Sound;
 use bitflags::bitflags;
-use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
+use byteorder::{BE, LE, ReadBytesExt, WriteBytesExt};
 use std::convert::TryInto;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 

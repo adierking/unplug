@@ -4,8 +4,8 @@ use crate::common::{format_duration, output_dir_and_name};
 use crate::context::{Context, FileId, OpenContext};
 use crate::playback::{self, PlaybackDevice, PlaybackSource};
 use crate::terminal::{progress_bar, progress_spinner, update_audio_progress};
-use anyhow::{anyhow, bail, Result};
-use log::{debug, info, log_enabled, warn, Level};
+use anyhow::{Result, anyhow, bail};
+use log::{Level, debug, info, log_enabled, warn};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 use unplug::audio::format::PcmS16Le;
-use unplug::audio::metadata::audacity;
 use unplug::audio::metadata::SfxPlaylist;
+use unplug::audio::metadata::audacity;
 use unplug::audio::transport::hps::{Looping, PcmHpsWriter};
 use unplug::audio::transport::ssm::BankSample;
 use unplug::audio::transport::{
@@ -100,10 +100,8 @@ fn have_sample_names(bank: &SfxBank) -> bool {
 /// Gets the name of a sound sample.
 fn sfx_name(bank: &SfxBank, index: usize, have_names: bool) -> Cow<'static, str> {
     let id = bank.base_index() + (index as u32);
-    if have_names {
-        if let Ok(sample) = SfxSample::try_from(id) {
-            return sample.name().into();
-        }
+    if have_names && let Ok(sample) = SfxSample::try_from(id) {
+        return sample.name().into();
     }
     format!("{:>04}", id).into()
 }

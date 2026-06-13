@@ -3,7 +3,7 @@ use crate::args::globals::*;
 use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::serde_list_wrapper;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use log::info;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
@@ -11,8 +11,8 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use unplug::common::CText;
 use unplug::data::{Object, Resource, Sound};
-use unplug::globals::metadata::*;
 use unplug::globals::GlobalsBuilder;
+use unplug::globals::metadata::*;
 
 /// Serialize/Deserialize implementation for CText
 mod text {

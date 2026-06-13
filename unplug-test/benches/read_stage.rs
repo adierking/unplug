@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::io::Cursor;
 use unplug::data::Stage as StageId;
 use unplug::dvd::{ArchiveReader, OpenFile};

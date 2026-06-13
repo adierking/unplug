@@ -1,4 +1,4 @@
-use super::{FrameContext, GcAdpcm, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
+use super::{BYTES_PER_FRAME, FrameContext, GcAdpcm, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Cue, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::clamp_i16;
@@ -112,8 +112,8 @@ impl<'s> ReadSamples<'s> for Decoder<'_, 's> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::format::adpcm::{Coefficients, FrameContext, Info};
     use crate::audio::format::ReadWriteBytes;
+    use crate::audio::format::adpcm::{Coefficients, FrameContext, Info};
 
     /// 128-sample sine wave encoded to GameCube ADPCM
     const SINE_ENCODED: &[u8] = &[

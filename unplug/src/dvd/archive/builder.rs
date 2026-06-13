@@ -1,8 +1,8 @@
 use super::{ArchiveReader, Header, Result};
 use crate::common::io::pad;
 use crate::common::{ReadSeek, WriteTo};
-use crate::dvd::fst::{self, EntryId, FileTree, FstEntryKind};
 use crate::dvd::OpenFile;
+use crate::dvd::fst::{self, EntryId, FileTree, FstEntryKind};
 use slotmap::SecondaryMap;
 use std::cell::RefCell;
 use std::convert::TryFrom;

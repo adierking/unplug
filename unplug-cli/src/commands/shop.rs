@@ -3,7 +3,7 @@ use crate::args::shop::*;
 use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::json::MaxIndentJsonFormatter;
-use anyhow::{bail, Error, Result};
+use anyhow::{Error, Result, bail};
 use lazy_static::lazy_static;
 use log::{error, info, warn};
 use regex::Regex;
@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use unplug::data::{Atc, Item, Resource, Stage};
 use unplug::globals::{GlobalsBuilder, Metadata};
-use unplug::shop::{Requirement, Shop, Slot, NUM_SLOTS};
+use unplug::shop::{NUM_SLOTS, Requirement, Shop, Slot};
 
 const FLAG_PREFIX: &str = "flag";
 lazy_static! {
@@ -151,11 +151,11 @@ pub fn command_import(ctx: Context, args: ImportArgs) -> Result<()> {
     let mut has_duplicate = false;
     for model in &models {
         let slot = Slot::try_from(model)?;
-        if let Some(item) = slot.item {
-            if !items.insert(item) {
-                error!("{:?} appears in the shop more than once", item);
-                has_duplicate = true;
-            }
+        if let Some(item) = slot.item
+            && !items.insert(item)
+        {
+            error!("{:?} appears in the shop more than once", item);
+            has_duplicate = true;
         }
         slots.push(slot);
     }

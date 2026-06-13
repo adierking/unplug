@@ -1,8 +1,8 @@
 // See <https://manual.audacityteam.org/man/importing_and_exporting_labels.html> for details on the
 // label track format.
 
-use crate::audio::cue::{self, Cue, CueKind};
 use crate::audio::Result;
+use crate::audio::cue::{self, Cue, CueKind};
 use std::borrow::Cow;
 use std::io::{BufRead, Write};
 

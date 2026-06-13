@@ -6,15 +6,11 @@ use syn::parse::{self, Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, parse_quote, Data, DeriveInput, Error, Fields, Ident, Token, TypePath,
+    Data, DeriveInput, Error, Fields, Ident, Token, TypePath, parse_macro_input, parse_quote,
 };
 
 fn main_crate() -> TokenStream2 {
-    if env::var("CARGO_PKG_NAME").unwrap() == "unplug" {
-        quote!(crate)
-    } else {
-        quote!(::unplug)
-    }
+    if env::var("CARGO_PKG_NAME").unwrap() == "unplug" { quote!(crate) } else { quote!(::unplug) }
 }
 
 enum KeyValueArg {

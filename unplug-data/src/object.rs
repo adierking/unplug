@@ -1,5 +1,5 @@
-use crate::private::Sealed;
 use crate::Resource;
+use crate::private::Sealed;
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use phf::phf_map;

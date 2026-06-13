@@ -3,12 +3,12 @@ use crate::args::iso::*;
 use crate::common::output_dir_and_name;
 use crate::context::Context;
 use crate::fst::{extract_file, list_files};
-use anyhow::{bail, Result};
-use humansize::{FormatSize, BINARY};
+use anyhow::{Result, bail};
+use humansize::{BINARY, FormatSize};
 use log::info;
 use std::fs::{self, File};
-use unplug::common::io::BUFFER_SIZE;
 use unplug::common::Text;
+use unplug::common::io::BUFFER_SIZE;
 use unplug::dvd::{Banner, DiscStream, Glob, GlobMode};
 
 const BANNER_PATH: &str = "opening.bnr";

@@ -47,10 +47,10 @@ fn get_context(args: GlobalContextArgs) -> Result<Context> {
 
     // Try loading a project
     let config = Config::get();
-    if !args.default_iso {
-        if let Some(context) = config::load_project(&config, args.project.as_deref())? {
-            return Ok(context);
-        }
+    if !args.default_iso
+        && let Some(context) = config::load_project(&config, args.project.as_deref())?
+    {
+        return Ok(context);
     }
 
     // Try loading the default ISO if nothing else is available

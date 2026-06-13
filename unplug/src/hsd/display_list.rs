@@ -1,6 +1,6 @@
 use super::{Error, Result};
 use crate::common::I24;
-use byteorder::{ByteOrder, BE};
+use byteorder::{BE, ByteOrder};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use tracing::{debug, trace};
 

@@ -5,7 +5,7 @@ pub use reader::*;
 pub use writer::*;
 
 use crate::common::{ReadFrom, WriteTo};
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use byteorder::{LE, ReadBytesExt, WriteBytesExt};
 use std::ffi::CString;
 use std::io::{self, Read, Write};
 

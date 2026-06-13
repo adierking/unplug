@@ -269,10 +269,10 @@ impl<'r> ScriptReader<'r> {
         // two separate blocks.
         if let Some(before_id) = before {
             let before_layout = before_id.get(&self.layouts);
-            if let BlockLayout::Code(code) = before_layout {
-                if offset < code.end_offset {
-                    return Ok(self.split(before_id, offset));
-                }
+            if let BlockLayout::Code(code) = before_layout
+                && offset < code.end_offset
+            {
+                return Ok(self.split(before_id, offset));
             }
         }
 
@@ -391,10 +391,10 @@ impl<'r> ScriptReader<'r> {
                 }
 
                 for command in &mut code.commands {
-                    if let Command::Run(target) = command {
-                        if let Pointer::Offset(offset) = target {
-                            *target = self.offset_map[offset].into();
-                        }
+                    if let Command::Run(target) = command
+                        && let Pointer::Offset(offset) = target
+                    {
+                        *target = self.offset_map[offset].into();
                     }
                 }
 
@@ -425,14 +425,14 @@ impl<'r> ScriptReader<'r> {
             queue.clear();
             trace!("Searching for pointer arrays starting at {}", start);
             for (index, layout) in self.layouts[start..].iter().enumerate() {
-                if let BlockLayout::Data(data) = layout {
-                    if let DataType::Array(ArrayKind::Pointer(kind)) = &data.ty {
-                        queue.push(PendingArray {
-                            block_id: index.try_into().unwrap(),
-                            offset: data.start_offset,
-                            element_kind: (**kind).clone(),
-                        });
-                    }
+                if let BlockLayout::Data(data) = layout
+                    && let DataType::Array(ArrayKind::Pointer(kind)) = &data.ty
+                {
+                    queue.push(PendingArray {
+                        block_id: index.try_into().unwrap(),
+                        offset: data.start_offset,
+                        element_kind: (**kind).clone(),
+                    });
                 }
             }
             start = self.layouts.len();
@@ -449,8 +449,7 @@ impl<'r> ScriptReader<'r> {
                 let max_len = ((next_offset - pending.offset) / 4) as usize;
                 trace!(
                     "Reading pointer array at {:#x} with max length {}",
-                    pending.offset,
-                    max_len
+                    pending.offset, max_len
                 );
 
                 self.reader.seek(SeekFrom::Start(pending.offset as u64))?;
@@ -462,8 +461,7 @@ impl<'r> ScriptReader<'r> {
                 for &offset in offsets.iter().filter(|p| !p.is_in_header()) {
                     trace!(
                         "Processing pointer array reference: {:?} at {:?}",
-                        pending.element_kind,
-                        offset
+                        pending.element_kind, offset
                     );
                     self.process_reference(pending.element_kind.clone(), offset)?;
                 }
@@ -491,9 +489,7 @@ impl<'r> ScriptReader<'r> {
                 let max_size = (next_offset - layout.start_offset) as usize;
                 trace!(
                     "Reading {:?} at {:#x} with estimated size {:#x}",
-                    layout.ty,
-                    layout.start_offset,
-                    max_size
+                    layout.ty, layout.start_offset, max_size
                 );
                 self.reader.seek(SeekFrom::Start(layout.start_offset as u64))?;
                 let mut de = BinDeserializer::new(&mut self.reader);
@@ -558,12 +554,11 @@ impl<'r> ScriptReader<'r> {
         // Regardless, it isn't our job to fix the game, but it would also be silly to reject the
         // entire file for this. Returning true here produces an Abort command so we can keep
         // reading the other blocks in the file.
-        if offset == 0x13cf3 {
-            if let command::Error::Expr(err) = err {
-                if let expr::Error::Serialize(err) = &**err {
-                    return matches!(**err, serialize::Error::UnrecognizedExpr(45));
-                }
-            }
+        if offset == 0x13cf3
+            && let command::Error::Expr(err) = err
+            && let expr::Error::Serialize(err) = &**err
+        {
+            return matches!(**err, serialize::Error::UnrecognizedExpr(45));
         }
         false
     }

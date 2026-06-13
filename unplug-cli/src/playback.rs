@@ -1,10 +1,10 @@
 use super::terminal::{self, PlaybackController, PlaybackUi};
 use crate::terminal::Visibility;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use arrayvec::ArrayVec;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, OutputCallbackInfo, SampleRate, SupportedStreamConfig};
-use log::{debug, error, info, log_enabled, trace, Level};
+use log::{Level, debug, error, info, log_enabled, trace};
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -12,7 +12,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use unplug::audio::format::pcm::Scalable;
 use unplug::audio::format::{
-    AnyFormat, Cast, Convert, PcmF32Le, PcmFormat, PcmS16Le, PcmS32Le, PcmS8, PcmU16Le,
+    AnyFormat, Cast, Convert, PcmF32Le, PcmFormat, PcmS8, PcmS16Le, PcmS32Le, PcmU16Le,
 };
 use unplug::audio::volume::{ScaleAmplitude, Volume};
 use unplug::audio::{Error, ReadSamples, SampleFilter, Samples};
@@ -535,7 +535,7 @@ impl PlaybackStream {
     }
 
     /// Returns a closure for filling an audio device's sample buffer.
-    fn sample_callback<F>(&self) -> impl FnMut(&mut [F::Data], &OutputCallbackInfo)
+    fn sample_callback<F>(&self) -> impl FnMut(&mut [F::Data], &OutputCallbackInfo) + use<F>
     where
         F: PcmFormat,
         F::Data: cpal::Sample + Default + Scalable,

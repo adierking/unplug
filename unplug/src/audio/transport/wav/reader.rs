@@ -2,7 +2,7 @@ use super::*;
 use crate::audio::cue::{self, Cue, CueKind};
 use crate::audio::format::{PcmS16Le, ReadWriteBytes, StaticFormat};
 use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
-use crate::common::{align, ReadFrom, ReadSeek, Region};
+use crate::common::{ReadFrom, ReadSeek, Region, align};
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::num::NonZeroU64;
@@ -83,10 +83,10 @@ impl Read for RiffReader<'_> {
 impl Seek for RiffReader<'_> {
     fn seek(&mut self, mut pos: SeekFrom) -> io::Result<u64> {
         // Make the seek relative to `next_offset` if necessary
-        if let Some(next_offset) = self.next_offset {
-            if let SeekFrom::Current(offset) = &mut pos {
-                *offset += next_offset as i64;
-            }
+        if let Some(next_offset) = self.next_offset
+            && let SeekFrom::Current(offset) = &mut pos
+        {
+            *offset += next_offset as i64;
         }
         let new_offset = self.reader.seek(pos)?;
         self.next_offset = None;
@@ -334,11 +334,7 @@ impl ReadSamples<'static> for WavReader<'_> {
 
     fn progress(&self) -> Option<ProgressHint> {
         // We just read everything at once, so...
-        if self.data_remaining > 0 {
-            ProgressHint::new(0, 1)
-        } else {
-            ProgressHint::new(1, 1)
-        }
+        if self.data_remaining > 0 { ProgressHint::new(0, 1) } else { ProgressHint::new(1, 1) }
     }
 
     fn data_remaining(&self) -> Option<u64> {
@@ -353,7 +349,7 @@ impl ReadSamples<'static> for WavReader<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{open_test_wav, TEST_WAV, TEST_WAV_CUES};
+    use crate::test::{TEST_WAV, TEST_WAV_CUES, open_test_wav};
     use std::io::Cursor;
 
     #[test]

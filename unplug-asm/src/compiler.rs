@@ -565,19 +565,16 @@ impl<'a> AsmDeserializer<'a> {
         let default_target = Located::new(Target::Globals);
         let target = self.program.target.as_ref().unwrap_or(&default_target);
         if **target == Target::Globals {
-            if let Some(block) = self.program.entry_points.get(&EntryPoint::Lib(*index)) {
-                if let Some(label) = self.program.labels.find_block(**block).first() {
-                    let name = self.program.labels.get(*label).name.as_ref();
-                    self.report(Diagnostic::lib_call_in_globals(cursor.span(), name));
-                    let rewritten = Operation::with_operands(
-                        Located::new(CmdOp::Run),
-                        [Located::new(Operand::Label(*label))],
-                    );
-                    return Some(OperandCursor::with_owned(
-                        rewritten,
-                        Rc::clone(&self.diagnostics),
-                    ));
-                }
+            if let Some(block) = self.program.entry_points.get(&EntryPoint::Lib(*index))
+                && let Some(label) = self.program.labels.find_block(**block).first()
+            {
+                let name = self.program.labels.get(*label).name.as_ref();
+                self.report(Diagnostic::lib_call_in_globals(cursor.span(), name));
+                let rewritten = Operation::with_operands(
+                    Located::new(CmdOp::Run),
+                    [Located::new(Operand::Label(*label))],
+                );
+                return Some(OperandCursor::with_owned(rewritten, Rc::clone(&self.diagnostics)));
             }
 
             // This can technically happen if you don't define a lib and then try to call it.
@@ -924,10 +921,10 @@ fn compile_data(program: &Program, data: &[Located<Operand>]) -> Result<ScriptBl
         if matches!(**value, Operand::Error) {
             continue;
         }
-        if let Some(last) = blocks.last_mut() {
-            if try_append_data(program, last, value) {
-                continue;
-            }
+        if let Some(last) = blocks.last_mut()
+            && try_append_data(program, last, value)
+        {
+            continue;
         }
         blocks.push(into_data(program, value)?);
     }

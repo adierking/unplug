@@ -5,10 +5,10 @@ use super::fst::{
 };
 use crate::common::io::{copy_within, fill};
 use crate::common::{
-    self, text, FixedText, ReadFrom, ReadSeek, ReadStructExt, ReadWriteSeek, Region,
-    WriteStructExt, WriteTo,
+    self, FixedText, ReadFrom, ReadSeek, ReadStructExt, ReadWriteSeek, Region, WriteStructExt,
+    WriteTo, text,
 };
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use encoding_rs::mem::decode_latin1;
 use std::cmp;
 use std::convert::TryFrom;

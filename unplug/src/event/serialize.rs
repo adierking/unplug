@@ -1,5 +1,5 @@
-use super::opcodes::{Atom, CmdOp, ExprOp, MsgOp};
 use super::Pointer;
+use super::opcodes::{Atom, CmdOp, ExprOp, MsgOp};
 use crate::common::text::{self, VecText};
 use std::io;
 use thiserror::Error;

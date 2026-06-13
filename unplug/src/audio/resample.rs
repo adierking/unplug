@@ -1,5 +1,5 @@
-use super::format::pcm::{AnyPcm, ConvertPcm, PcmF32Le};
 use super::format::Convert;
+use super::format::pcm::{AnyPcm, ConvertPcm, PcmF32Le};
 use super::{Cue, Error, ProgressHint, ReadSamples, Result, Samples};
 use libsamplerate_sys::*;
 use std::convert::TryInto;
@@ -241,7 +241,7 @@ mod tests {
     use super::*;
     use crate::audio::format::PcmS16Le;
     use crate::audio::transport::FlacReader;
-    use crate::test::{assert_samples_close, open_test_wav, TEST_FLAC};
+    use crate::test::{TEST_FLAC, assert_samples_close, open_test_wav};
     use std::io::Cursor;
 
     #[test]

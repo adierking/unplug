@@ -3,7 +3,7 @@ use super::display_list::DisplayList;
 use super::{ByteArray, Error, Node, Pointer, ReadPointer, Result};
 use crate::common::ReadFrom;
 use bitflags::bitflags;
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{BE, ReadBytesExt};
 
 const DISPLAY_LIST_BLOCK_SIZE: usize = 0x20;
 

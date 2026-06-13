@@ -1,6 +1,6 @@
 use crate::common::text::{self, FixedText};
 use crate::common::{ReadFrom, ReadStructExt, WriteStructExt, WriteTo};
-use byteorder::{ByteOrder, ReadBytesExt, BE};
+use byteorder::{BE, ByteOrder, ReadBytesExt};
 use std::fmt::{self, Debug, Formatter};
 use std::io::{self, Read, Write};
 use thiserror::Error;

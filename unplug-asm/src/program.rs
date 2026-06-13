@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use unplug::common::VecText;
-use unplug::event::opcodes::{Atom, CmdOp, ExprOp, Opcode};
 use unplug::event::BlockId;
+use unplug::event::opcodes::{Atom, CmdOp, ExprOp, Opcode};
 use unplug::stage::Event;
 
 mod private {

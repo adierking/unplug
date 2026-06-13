@@ -2,7 +2,7 @@ use super::array::{Array, ArrayElement};
 use super::{ByteArray, Node, Pointer};
 use crate::common::ReadFrom;
 use crate::hsd::{Error, ReadPointer, Result};
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{BE, ReadBytesExt};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 /// An array of vertex attributes.

@@ -3,7 +3,7 @@ use minimp3_fixed as minimp3;
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::{ReadSeek, Region};
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{BE, ReadBytesExt};
 use minimp3::{Decoder, Error as Mp3Error, Frame};
 use std::io::{Read, Seek, SeekFrom};
 use std::iter;
@@ -351,7 +351,7 @@ fn analyze_mp3(reader: &mut (impl Read + Seek), info: &mut Info) -> Result<()> {
 mod tests {
     use super::*;
     use crate::audio::transport::WavReader;
-    use crate::test::{assert_samples_close, TEST_MP3, TEST_MP3_WAV};
+    use crate::test::{TEST_MP3, TEST_MP3_WAV, assert_samples_close};
     use std::io::Cursor;
 
     #[test]

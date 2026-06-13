@@ -1,5 +1,5 @@
 use crate::event::{BlockId, Expr};
-use slotmap::{new_key_type, SlotMap};
+use slotmap::{SlotMap, new_key_type};
 use tracing::warn;
 
 new_key_type! {

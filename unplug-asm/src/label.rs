@@ -1,6 +1,6 @@
 use crate::span::Span;
 use crate::{Error, Result};
-use slotmap::{new_key_type, SlotMap};
+use slotmap::{SlotMap, new_key_type};
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::sync::Arc;

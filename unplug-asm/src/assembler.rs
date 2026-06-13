@@ -1,3 +1,4 @@
+use crate::Error;
 use crate::ast::{
     self, Ast, Command, ConstantDecl, Expr, IdentClass, IntLiteral, IntValue, Item, LabelDecl,
     StrLiteral,
@@ -10,13 +11,12 @@ use crate::program::{
     Program, Target, TypeHint,
 };
 use crate::span::{Span, Spanned};
-use crate::Error;
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use unplug::common::Text;
-use unplug::event::opcodes::{CmdOp, ExprOp};
 use unplug::event::BlockId;
+use unplug::event::opcodes::{CmdOp, ExprOp};
 use unplug::stage::Event;
 
 /// A constant value.

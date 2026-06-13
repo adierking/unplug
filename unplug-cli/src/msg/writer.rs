@@ -1,17 +1,17 @@
 use super::constants::*;
-use super::{iter_messages, MessageId, MessageSource};
+use super::{MessageId, MessageSource, iter_messages};
 use crate::id::IdString;
 use anyhow::Result;
 use log::trace;
-use quick_xml::events::{BytesDecl, BytesStart, BytesText, Event};
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesStart, BytesText, Event};
 use std::borrow::Cow;
 use std::io::Write;
 use unplug::common::text::{Text, TextData};
+use unplug::event::Script;
 use unplug::event::msg::{
     DefaultFlags, Layout, MsgArgs, MsgCommand, MsgSfxType, MsgWaitType, QuestionFlags, ShakeFlags,
 };
-use unplug::event::Script;
 
 /// Converts `text` to an escaped XML string.
 /// quick-xml's built-in string escaping converts quote characters, which isn't user-friendly.

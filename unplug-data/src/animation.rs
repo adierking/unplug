@@ -1,5 +1,5 @@
-use crate::private::Sealed;
 use crate::Object;
+use crate::private::Sealed;
 use phf::phf_map;
 use std::fmt::{self, Debug, Formatter};
 use unicase::UniCase;

@@ -5,7 +5,7 @@ use crate::context::Context;
 use crate::io::OutputRedirect;
 use crate::json::MaxIndentJsonFormatter;
 use crate::serde_list_wrapper;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::ser::Serializer;
@@ -294,11 +294,11 @@ fn patch_item_script(
     let code = script.block_mut(entry_point).code_mut().unwrap();
     let mut success = false;
     for i in 1..code.commands.len() {
-        if code.commands[i] == Command::Lib(LIB_COLLECT_ITEM) {
-            if let Command::SetSp(_) = code.commands[i - 1] {
-                code.commands[i - 1] = Command::SetSp(Expr::Imm16(item.into()).into());
-                success = true;
-            }
+        if code.commands[i] == Command::Lib(LIB_COLLECT_ITEM)
+            && let Command::SetSp(_) = code.commands[i - 1]
+        {
+            code.commands[i - 1] = Command::SetSp(Expr::Imm16(item.into()).into());
+            success = true;
         }
     }
 

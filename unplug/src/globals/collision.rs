@@ -1,7 +1,7 @@
 use super::{Error, Result};
 use crate::common::{NonNoneList, ReadFrom, ReadOptionFrom, WriteOptionTo, WriteTo};
 use crate::data::Object;
-use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
+use byteorder::{BE, LE, ReadBytesExt, WriteBytesExt};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryInto;
 use std::io::{Read, Seek, SeekFrom, Write};

@@ -1,12 +1,12 @@
 use crate::audio::cue::{Cue, LOOP_PREFIX};
 use crate::audio::format::adpcm::{Decoder, EncoderBuilder, FrameContext, GcAdpcm, Info};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
-use crate::audio::format::{AnyFormat, Format, PcmS16Be, PcmS16Le, PcmS8, ReadWriteBytes};
+use crate::audio::format::{AnyFormat, Format, PcmS8, PcmS16Be, PcmS16Le, ReadWriteBytes};
 use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceChannel, SourceTag};
 use crate::common::io::pad;
-use crate::common::{align, ReadFrom, ReadSeek, WriteTo};
+use crate::common::{ReadFrom, ReadSeek, WriteTo, align};
 use arrayvec::ArrayVec;
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::Arc;

@@ -1,6 +1,6 @@
-use anyhow::{anyhow, bail, Error, Result};
+use anyhow::{Error, Result, anyhow, bail};
 use bitflags::bitflags;
-use byteorder::{ReadBytesExt, BE, LE};
+use byteorder::{BE, LE, ReadBytesExt};
 use lazy_static::lazy_static;
 use log::{debug, error, info, trace, warn};
 use num_enum::TryFromPrimitive;
@@ -932,11 +932,7 @@ fn read_stages(
             let display_name = metadata.name.decode()?;
             let display_desc = metadata.description.decode()?;
             title = format!("{} {}", display_name.trim(), display_desc.trim()).trim().to_owned();
-            if !title.is_empty() {
-                Label::pascal_case(&title)
-            } else {
-                Label::pascal_case(&name)
-            }
+            if !title.is_empty() { Label::pascal_case(&title) } else { Label::pascal_case(&name) }
         } else {
             Label::pascal_case(&name)
         };

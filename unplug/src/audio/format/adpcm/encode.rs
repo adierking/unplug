@@ -1,6 +1,6 @@
 use super::vgaudio::coefficients::{self, PcmHistory, Vec3};
 use super::vgaudio::encode;
-use super::{Coefficients, GcAdpcm, Info, BYTES_PER_FRAME, SAMPLES_PER_FRAME};
+use super::{BYTES_PER_FRAME, Coefficients, GcAdpcm, Info, SAMPLES_PER_FRAME};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::sample::ReadSampleList;
 use crate::audio::{Cue, Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
@@ -379,11 +379,7 @@ impl<'r, 's> Encoder<'r, 's> {
             let frame = mem::take(&mut self.frame);
             self.encode(&frame);
         }
-        if self.block.len > 0 {
-            Some(mem::take(&mut self.block))
-        } else {
-            None
-        }
+        if self.block.len > 0 { Some(mem::take(&mut self.block)) } else { None }
     }
 }
 
@@ -447,8 +443,8 @@ impl<'s> ReadSamples<'s> for Encoder<'_, 's> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::format::adpcm::FrameContext;
     use crate::audio::Result;
+    use crate::audio::format::adpcm::FrameContext;
     use crate::test;
 
     const EXPECTED_LEN: usize = 0x30af9;

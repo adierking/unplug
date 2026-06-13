@@ -3,7 +3,7 @@ use super::sobj::SObj;
 use super::{Error, Pointer, Result};
 use crate::common::{ReadFrom, ReadStructExt, Region};
 use bumpalo::Bump;
-use byteorder::{ReadBytesExt, BE};
+use byteorder::{BE, ReadBytesExt};
 use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
@@ -105,16 +105,16 @@ impl<'a, R: Read + Seek> NodeReader<'a, R> {
             node.node.borrow_mut().read(self, max_size as usize)?;
 
             // Validate the node size in debug builds.
-            if cfg!(debug_assertions) {
-                if let Ok(end_offset) = self.reader.stream_position() {
-                    let actual_size = end_offset - node.offset as u64;
-                    assert!(
-                        actual_size <= max_size as u64,
-                        "Actual size (0x{:x}) larger than max size (0x{:x})!",
-                        actual_size,
-                        max_size
-                    );
-                }
+            if cfg!(debug_assertions)
+                && let Ok(end_offset) = self.reader.stream_position()
+            {
+                let actual_size = end_offset - node.offset as u64;
+                assert!(
+                    actual_size <= max_size as u64,
+                    "Actual size (0x{:x}) larger than max size (0x{:x})!",
+                    actual_size,
+                    max_size
+                );
             }
         }
         Ok(())
@@ -230,10 +230,10 @@ mod tests {
         println!("{:?}", archive);
         let sobj = archive.roots[0].get().unwrap();
         for ptr in sobj.jobj_descs.get().unwrap().iter() {
-            if let Some(desc) = ptr.get() {
-                if let Some(joint) = desc.root_joint.get() {
-                    parse_display_lists(&joint);
-                }
+            if let Some(desc) = ptr.get()
+                && let Some(joint) = desc.root_joint.get()
+            {
+                parse_display_lists(&joint);
             }
         }
     }

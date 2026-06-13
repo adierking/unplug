@@ -1,6 +1,6 @@
 use super::{Error, Result};
 use crate::common::{ReadFrom, WriteTo};
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use byteorder::{LE, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Write};
 
 pub(super) const HEADER_SIZE: u32 = 0x18;

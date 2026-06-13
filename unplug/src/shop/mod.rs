@@ -65,12 +65,12 @@ fn is_shop_setup(script: &Script, block: BlockId, visited: &mut HashSet<BlockId>
     }
     let code = script.block(block).code().unwrap();
     for command in &code.commands {
-        if let Command::Set(arg) = command {
-            if let SetExpr::Variable(e) = &arg.target {
-                let index = e.value().unwrap_or(0) as usize;
-                if (SHOP_ITEM_FIRST..SHOP_ITEM_LAST).contains(&index) {
-                    return true;
-                }
+        if let Command::Set(arg) = command
+            && let SetExpr::Variable(e) = &arg.target
+        {
+            let index = e.value().unwrap_or(0) as usize;
+            if (SHOP_ITEM_FIRST..SHOP_ITEM_LAST).contains(&index) {
+                return true;
             }
         }
     }

@@ -1,7 +1,7 @@
 #![allow(unused_qualifications)]
 use super::I24;
 use byte_slice_cast::{self as bsc, AsByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice};
-use byteorder::{ByteOrder, NativeEndian, BE, LE};
+use byteorder::{BE, ByteOrder, LE, NativeEndian};
 use std::convert::AsMut;
 use std::io::{self, Read, Write};
 use std::mem;

@@ -4,7 +4,7 @@ use crate::event::bin::BinSerializer;
 use crate::event::block::{Block, DataBlock};
 use crate::event::pointer::{BlockId, Pointer, WritePointer};
 use crate::event::serialize::SerializeEvent;
-use byteorder::{WriteBytesExt, LE};
+use byteorder::{LE, WriteBytesExt};
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 use std::num::NonZeroU32;
 use tracing::{debug, trace};
@@ -225,11 +225,11 @@ impl<'a> ScriptWriter<'a> {
         }
 
         // If execution can flow directly out of this block into another one, it MUST be written next
-        if code.commands.is_empty() || !code.commands.last().unwrap().is_goto() {
-            if let Some(Pointer::Block(next)) = code.next_block {
-                assert!(!self.visited(next));
-                self.write_code(blob, next)?;
-            }
+        if (code.commands.is_empty() || !code.commands.last().unwrap().is_goto())
+            && let Some(Pointer::Block(next)) = code.next_block
+        {
+            assert!(!self.visited(next));
+            self.write_code(blob, next)?;
         }
         Ok(())
     }

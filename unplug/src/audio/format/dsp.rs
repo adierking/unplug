@@ -1,6 +1,6 @@
 use crate::audio::{Error, Format, Result};
 use crate::common::{ReadFrom, WriteTo};
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::io::{Read, Write};

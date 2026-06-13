@@ -2,7 +2,7 @@ use crate::args::script::*;
 
 use crate::common::find_stage_file;
 use crate::context::Context;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use asm::diagnostics::{CompileOutput, Diagnostic};
 use codespan_reporting::diagnostic::{Diagnostic as ReportDiagnostic, Label as ReportLabel};
 use codespan_reporting::files::{Files, SimpleFile};

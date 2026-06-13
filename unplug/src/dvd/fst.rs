@@ -1,10 +1,10 @@
 use crate::common::{
-    string_table, ReadFrom, ReadSeek, ReadWriteSeek, Region, StringTable, WriteTo,
+    ReadFrom, ReadSeek, ReadWriteSeek, Region, StringTable, WriteTo, string_table,
 };
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use encoding_rs::SHIFT_JIS;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use slotmap::{new_key_type, SlotMap};
+use slotmap::{SlotMap, new_key_type};
 use std::convert::TryFrom;
 use std::ffi::CString;
 use std::io::{self, Read, Write};
@@ -299,10 +299,7 @@ impl FileEntry {
     ) -> Box<dyn ReadWriteSeek + 'a> {
         trace!(
             "Opening entry \"{}\" at {:#x} (size = {:#x}, max size = {:#x})",
-            self.name,
-            self.offset,
-            self.size,
-            max_size,
+            self.name, self.offset, self.size, max_size,
         );
         Box::new(Region::with_max_len(
             stream,

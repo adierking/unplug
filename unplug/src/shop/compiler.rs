@@ -1,11 +1,11 @@
-use super::{Requirement, Slot, SHOP_COUNT_FIRST, SHOP_ITEM_FIRST};
+use super::{Requirement, SHOP_COUNT_FIRST, SHOP_ITEM_FIRST, Slot};
 
 use crate::data::{Atc, Item};
 use crate::event::command::{IfArgs, SetArgs};
 use crate::event::{Block, BlockId, CodeBlock, Command, Expr, Pointer, Script, SetExpr};
 use std::convert::TryFrom;
 use tracing::level_filters::STATIC_MAX_LEVEL;
-use tracing::{trace, warn, Level};
+use tracing::{Level, trace, warn};
 
 const TIMER_5_RATE: i16 = 200;
 const TIMER_10_RATE: i16 = 100;
@@ -451,8 +451,8 @@ impl<'s> ShopCompiler<'s> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shop::parser::ShopParser;
     use crate::shop::Shop;
+    use crate::shop::parser::ShopParser;
 
     /// Convenience macro for initializing HashSets
     macro_rules! set {

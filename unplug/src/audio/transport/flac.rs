@@ -1,4 +1,4 @@
-use crate::audio::format::{AnyFormat, Cast, PcmFormat, PcmS16Le, PcmS24Le, PcmS32Le, PcmS8};
+use crate::audio::format::{AnyFormat, Cast, PcmFormat, PcmS8, PcmS16Le, PcmS24Le, PcmS32Le};
 use crate::audio::{Error, Format, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use claxon::{self};
 use std::convert::TryFrom;
@@ -134,7 +134,7 @@ impl ReadSamples<'static> for FlacReader<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{open_test_wav, TEST_FLAC};
+    use crate::test::{TEST_FLAC, open_test_wav};
 
     #[test]
     fn test_read_flac() -> Result<()> {

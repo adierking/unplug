@@ -95,7 +95,7 @@ mod tests {
     use crate::audio::format::{PcmF32Le, PcmS16Le};
     use crate::audio::transport::WavReader;
     use crate::audio::{ReadSamples, Samples};
-    use crate::test::{assert_samples_close, open_test_wav, TEST_WAV_VOL};
+    use crate::test::{TEST_WAV_VOL, assert_samples_close, open_test_wav};
     use float_cmp::assert_approx_eq;
     use std::io::Cursor;
 

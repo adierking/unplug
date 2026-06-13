@@ -5,7 +5,7 @@ use crate::common::{
 use crate::event::pointer::BlockId;
 use crate::event::script::{Script, ScriptReader, ScriptWriter};
 use crate::globals::Libs;
-use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt, BE, LE};
+use byteorder::{BE, ByteOrder, LE, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, SeekFrom, Write};
 use std::iter::FusedIterator;
 use std::num::NonZeroU32;

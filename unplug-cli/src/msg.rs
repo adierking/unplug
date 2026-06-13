@@ -5,7 +5,7 @@ mod writer;
 pub use reader::MessageReader;
 pub use writer::MessageWriter;
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{Result, anyhow, ensure};
 use std::fmt;
 use unplug::data::{Resource, Stage};
 use unplug::event::msg::MsgArgs;
@@ -84,10 +84,10 @@ fn filter_message(
     loc: CommandLocation,
     command: &Command,
 ) -> Option<(MessageId, &MsgArgs)> {
-    if let Command::Msg(arg) | Command::Select(arg) = command {
-        if !arg.commands.is_empty() {
-            return Some((MessageId::new(source, loc.block.id.index(), loc.index), arg));
-        }
+    if let Command::Msg(arg) | Command::Select(arg) = command
+        && !arg.commands.is_empty()
+    {
+        return Some((MessageId::new(source, loc.block.id.index(), loc.index), arg));
     }
     None
 }
@@ -98,10 +98,10 @@ fn filter_message_mut(
     loc: CommandLocation,
     command: &mut Command,
 ) -> Option<(MessageId, &mut MsgArgs)> {
-    if let Command::Msg(arg) | Command::Select(arg) = command {
-        if !arg.commands.is_empty() {
-            return Some((MessageId::new(source, loc.block.id.index(), loc.index), arg));
-        }
+    if let Command::Msg(arg) | Command::Select(arg) = command
+        && !arg.commands.is_empty()
+    {
+        return Some((MessageId::new(source, loc.block.id.index(), loc.index), arg));
     }
     None
 }

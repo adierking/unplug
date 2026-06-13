@@ -4,7 +4,7 @@ use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::format::{PcmS16Le, StaticFormat};
 use crate::audio::{Cue, Error, ProgressHint, ReadSamples, Result, Samples};
 use crate::common::io::pad;
-use crate::common::{align, WriteSeek, WriteTo};
+use crate::common::{WriteSeek, WriteTo, align};
 use arrayvec::ArrayVec;
 use std::io::SeekFrom;
 use std::num::NonZeroU32;
@@ -448,9 +448,9 @@ impl<'r, 's> HpsWriter<'r, 's> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::Cue;
     use crate::audio::sample::{ReadSampleList, ReadSamples, Samples};
     use crate::audio::transport::hps::HpsReader;
-    use crate::audio::Cue;
     use crate::test;
     use std::io::{Cursor, Seek};
 

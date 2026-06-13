@@ -7,8 +7,8 @@ pub use writer::*;
 use crate::audio::format::adpcm::{self, GcAdpcm};
 use crate::audio::format::dsp::{AudioAddress, DspFormat};
 use crate::audio::{Error, Result};
-use crate::common::{align, ReadFrom, WriteTo};
-use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use crate::common::{ReadFrom, WriteTo, align};
+use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use std::fmt::Debug;
 use std::io::{Read, Write};
 

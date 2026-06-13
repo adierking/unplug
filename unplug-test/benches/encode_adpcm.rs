@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::io::Cursor;
-use unplug::audio::format::adpcm::EncoderBuilder;
 use unplug::audio::format::GcAdpcm;
 use unplug::audio::format::PcmS16Le;
+use unplug::audio::format::adpcm::EncoderBuilder;
 use unplug::audio::transport::WavReader;
 use unplug::audio::{ReadSamples, Samples};
 

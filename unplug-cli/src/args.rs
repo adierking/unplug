@@ -1,6 +1,6 @@
 #![allow(trivial_numeric_casts, variant_size_differences)]
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use std::path::PathBuf;
 

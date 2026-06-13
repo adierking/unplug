@@ -1,6 +1,6 @@
 use super::{
-    Requirement, Slot, NUM_SLOTS, SHOP_COUNT_FIRST, SHOP_COUNT_LAST, SHOP_ITEM_FIRST,
-    SHOP_ITEM_LAST,
+    NUM_SLOTS, Requirement, SHOP_COUNT_FIRST, SHOP_COUNT_LAST, SHOP_ITEM_FIRST, SHOP_ITEM_LAST,
+    Slot,
 };
 
 use crate::data::{Atc, Item};
@@ -266,11 +266,11 @@ impl<'s> ShopParser<'s> {
         // effectively substitute 0 for the current item count).
         if index == 0 {
             if let Expr::Subtract(op) = &set.value {
-                if let BinaryOp { rhs: Expr::Item(item), lhs } = &**op {
-                    if let (Some(_), Some(limit)) = (item.value(), lhs.value()) {
-                        self.current_limit = limit as i16;
-                        return;
-                    }
+                if let BinaryOp { rhs: Expr::Item(item), lhs } = &**op
+                    && let (Some(_), Some(limit)) = (item.value(), lhs.value())
+                {
+                    self.current_limit = limit as i16;
+                    return;
                 }
             } else if set.value.value() == Some(0) {
                 return; // Ignore the assignment to clamp to 0

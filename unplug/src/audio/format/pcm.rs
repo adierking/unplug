@@ -1,7 +1,7 @@
 use super::{AnyFormat, Cast, DataCow, DynamicFormat, Format, FormatTag, PcmFormat, StaticFormat};
 use crate::audio::{Error, ProgressHint, ReadSamples, Result, Samples, SourceTag};
 use crate::common::I24;
-use byteorder::{NativeEndian as NE, BE, LE};
+use byteorder::{BE, LE, NativeEndian as NE};
 use float_cmp::approx_eq;
 use std::marker::PhantomData;
 use std::mem;
@@ -358,8 +358,8 @@ mod tests {
     use super::*;
     use crate::audio::format::ReadWriteBytes;
     use crate::test::{
-        open_test_wav, TEST_WAV_F32, TEST_WAV_F32_DATA_OFFSET, TEST_WAV_S32,
-        TEST_WAV_S32_DATA_OFFSET,
+        TEST_WAV_F32, TEST_WAV_F32_DATA_OFFSET, TEST_WAV_S32, TEST_WAV_S32_DATA_OFFSET,
+        open_test_wav,
     };
     use float_cmp::assert_approx_eq;
     use std::borrow::Cow;
