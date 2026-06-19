@@ -20,10 +20,16 @@ on:
     - cron: '0 8 * * *'
 
 env:
-  CARGO_TERM_COLOR: always
+  branch_name: ${{ github.base_ref || github.ref_name }}
+
+  windows_host: windows-2022
+  macos_host: macos-latest
+  linux_host: ubuntu-latest
+
   stable_toolchain: 1.88.0
   nightly_toolchain: nightly-2026-05-06
-  branch_name: ${{ github.base_ref || github.ref_name }}
+
+  CARGO_TERM_COLOR: always
 
 jobs:
   build:
@@ -33,19 +39,19 @@ jobs:
       matrix:
         include:
           - name: windows-x64
-            host: windows-latest
+            host: ${{ env.windows_host }}
             target: x86_64-pc-windows-msvc
             exe-name: unplug.exe
           - name: macos-arm64
-            host: macos-latest
+            host: ${{ env.macos_host }}
             target: aarch64-apple-darwin
             exe-name: unplug
           - name: macos-x64
-            host: macos-latest
+            host: ${{ env.macos_host }}
             target: x86_64-apple-darwin
             exe-name: unplug
           - name: linux-x64
-            host: ubuntu-latest
+            host: ${{ env.linux_host }}
             target: x86_64-unknown-linux-gnu
             exe-name: unplug
     runs-on: ${{ matrix.host }}
@@ -87,7 +93,7 @@ jobs:
   universal:
     name: "macOS Universal Binary"
     needs: build
-    runs-on: macos-latest
+    runs-on: ${{ env.macos_host }}
     steps:
       - name: Download ARM Build
         uses: actions/download-artifact@v4
@@ -123,13 +129,13 @@ jobs:
       matrix:
         include:
           - name: windows-x64
-            host: windows-latest
+            host: ${{ env.windows_host }}
             target: x86_64-pc-windows-msvc
           - name: macos-arm64
-            host: macos-latest
+            host: ${{ env.macos_host }}
             target: aarch64-apple-darwin
           - name: linux-x64
-            host: ubuntu-latest
+            host: ${{ env.linux_host }}
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.host }}
     steps:
@@ -189,13 +195,13 @@ jobs:
       matrix:
         include:
           - name: windows-x64
-            host: windows-latest
+            host: ${{ env.windows_host }}
             target: x86_64-pc-windows-msvc
           - name: macos-arm64
-            host: macos-latest
+            host: ${{ env.macos_host }}
             target: aarch64-apple-darwin
           - name: linux-x64
-            host: ubuntu-latest
+            host: ${{ env.linux_host }}
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.host }}
     steps:
@@ -215,7 +221,7 @@ jobs:
     name: "Finalize Code Coverage"
     if: github.event.pusher
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.linux_host }}
     steps:
       - name: Finalize Coverage
         uses: coverallsapp/github-action@master
@@ -225,7 +231,7 @@ jobs:
 
   vscode-package:
     name: "VSCode Package"
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.linux_host }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -251,7 +257,7 @@ jobs:
     name: "Publish Stable Release"
     if: github.ref_type == 'tag'
     needs: [build, universal, test]
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.linux_host }}
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v8
