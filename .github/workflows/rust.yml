@@ -173,6 +173,11 @@ jobs:
           CHIBI_ISO: ${{ github.workspace }}/chibi.iso
           CHIBI_BRSAR: ${{ github.workspace }}/cb_robo.brsar
 
+      - name: Trust Coveralls Tap (macOS)
+        if: runner.os == 'macOS'
+        run: brew trust coverallsapp/coveralls
+        continue-on-error: true
+
       - name: Upload Code Coverage
         uses: coverallsapp/github-action@v2
         with:
@@ -180,6 +185,7 @@ jobs:
           flag-name: run-${{ matrix.name }}
           file: lcov.info
           parallel: true
+        continue-on-error: true
 
   test-lite:
     name: "Test (without ISO)"
