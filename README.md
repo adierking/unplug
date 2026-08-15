@@ -122,14 +122,6 @@ There are lots of ways you can contribute to the project:
 - Build higher-level tools (e.g. GUIs) on top of Unplug
 - Make and share cool mods!
 
-> [!IMPORTANT]
-> To prevent "drive-by" pull requests that take opportunities away from active community members,
-> you must meet one of these requirements or else your pull requests **will be rejected**
-> regardless of their content:
->
-> - You have been assigned an issue to fix.
->
-> - You are a member of the [community discord](http://discord.gg/ymNDqTyjRQ).
->
-> AI use is permitted, but you must disclose it. I reserve the right to reject a pull request if
-> it feels like a waste of my time to review.
+No AI-generated code, documentation, issues, or comments will be accepted. Using AI for
+reverse-engineering is allowed provided that you disclose it and can demonstrate that you understand
+the results in your own words.
