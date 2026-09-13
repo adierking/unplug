@@ -136,13 +136,13 @@ mod tests {
     lazy_static! {
         static ref TEST_TREE: FileTree = {
             let mut files = FileTree::new();
-            files.insert(files.root(), file("qp.bin"));
-            let qp = files.insert(files.root(), dir("qp"));
-            files.insert(qp, file("sfx_army.ssm"));
-            files.insert(qp, file("sfx_bb.ssm"));
-            let streaming = files.insert(qp, dir("streaming"));
-            files.insert(streaming, file("bgm.hps"));
-            files.insert(streaming, file("menu.hps"));
+            files.insert(files.root(), file("qp.bin")).unwrap();
+            let qp = files.insert(files.root(), dir("qp")).unwrap();
+            files.insert(qp, file("sfx_army.ssm")).unwrap();
+            files.insert(qp, file("sfx_bb.ssm")).unwrap();
+            let streaming = files.insert(qp, dir("streaming")).unwrap();
+            files.insert(streaming, file("bgm.hps")).unwrap();
+            files.insert(streaming, file("menu.hps")).unwrap();
             files
         };
     }

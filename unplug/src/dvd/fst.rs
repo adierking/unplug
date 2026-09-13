@@ -57,6 +57,9 @@ pub enum Error {
     #[error("entry {0:?} was not found")]
     NotFound(String),
 
+    #[error("entry already exists: {0:?}")]
+    AlreadyExists(String),
+
     #[error(transparent)]
     Io(Box<io::Error>),
 
@@ -70,6 +73,11 @@ from_error_boxed!(Error::StringTable, string_table::Error);
 /// Returns true if a name is safe from directory traversal attacks.
 fn is_name_safe(name: &str) -> bool {
     !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':'])
+}
+
+/// Returns an iterator over the components in a path.
+fn path_components(path: &str) -> impl Iterator<Item = &str> {
+    path.split(['/', '\\'])
 }
 
 /// A file string table (FST) in a GameCube filesystem.
@@ -503,96 +511,127 @@ impl FileTree {
         TreeRecurse::new(self, entry)
     }
 
-    /// Returns a reference to the `FileEntry` corresponding to `id`.
-    pub fn file(&self, id: EntryId) -> Result<&FileEntry> {
-        match &self[id] {
-            Entry::File(f) => Ok(f),
-            Entry::Directory(_) => Err(Error::ExpectedFile(id)),
-        }
-    }
-
-    /// Returns a mutable reference to the `FileEntry` corresponding to `id`.
-    pub fn file_mut(&mut self, id: EntryId) -> Result<&mut FileEntry> {
-        match &mut self[id] {
-            Entry::File(f) => Ok(f),
-            Entry::Directory(_) => Err(Error::ExpectedFile(id)),
-        }
-    }
-
-    /// Returns a reference to the `FileEntry` at `path`.
-    pub fn file_at(&self, path: &str) -> Result<&FileEntry> {
-        match &self[self.at(path)?] {
-            Entry::File(file) => Ok(file),
-            Entry::Directory(_) => Err(Error::ExpectedFileAt(path.to_owned())),
-        }
-    }
-
     /// Returns the ID of the entry at `path`.
     pub fn at(&self, path: &str) -> Result<EntryId> {
         self.at_descendant(self.root, path)
     }
 
-    /// Returns the ID of the entry at `path`, interpreted relative to the `entry` directory.
-    pub fn at_descendant(&self, entry: EntryId, path: &str) -> Result<EntryId> {
-        let mut cur_entry = entry;
-        let mut cur_dir = match &self[cur_entry] {
-            Entry::File(_) => return Err(Error::ExpectedDirectory(cur_entry)),
-            Entry::Directory(d) => d,
-        };
-        let mut components = path.split(['/', '\\']);
-        let mut stack: Vec<EntryId> = Vec::new();
-        loop {
-            // Find the first non-empty and non-"." component. If this is the last component, return
-            // the current directory.
-            let component = match components.find(|&c| !c.is_empty() && c != ".") {
-                Some(c) => c,
-                None => return Ok(cur_entry),
-            };
-
-            // If this is "..", try to pop the directory stack
-            if component == ".." {
-                if let Some(entry) = stack.pop() {
-                    cur_entry = entry;
-                    cur_dir = self[entry].dir().unwrap();
-                    continue;
-                }
-                break;
-            }
-
-            // We have a child name - search for it in the current directory
-            let entry = cur_dir.children.iter().find(|&&e| self[e].name() == component);
-            let entry = match entry {
-                Some(&e) => e,
-                None => break,
-            };
-            match &self[entry] {
-                Entry::File(_) => {
-                    // Only return the file if this is the last component
-                    if components.next().is_none() {
-                        return Ok(entry);
-                    }
-                    break;
-                }
-                Entry::Directory(d) => {
-                    // Enter the directory
-                    stack.push(cur_entry);
-                    cur_entry = entry;
-                    cur_dir = d;
-                }
-            }
-        }
-        Err(Error::NotFound(path.to_owned()))
+    /// Returns a reference to the `FileEntry` corresponding to `id`.
+    pub fn file(&self, id: EntryId) -> Result<&FileEntry> {
+        self[id].file().ok_or(Error::ExpectedFile(id))
     }
 
-    /// Inserts `entry` as a child of the `parent_id` directory and returns its ID.
-    pub fn insert(&mut self, parent_id: EntryId, entry: Entry) -> EntryId {
-        let id = self.entries.insert(entry);
-        let parent = match self.entries[parent_id].dir_mut() {
-            Some(d) => d,
-            _ => panic!("Entry {:?} is not a directory", parent_id),
-        };
-        parent.children.push(id);
-        id
+    /// Returns a mutable reference to the `FileEntry` corresponding to `id`.
+    pub fn file_mut(&mut self, id: EntryId) -> Result<&mut FileEntry> {
+        self[id].file_mut().ok_or(Error::ExpectedFile(id))
+    }
+
+    /// Returns a reference to the `FileEntry` at `path`.
+    pub fn file_at(&self, path: &str) -> Result<&FileEntry> {
+        self.file(self.at(path)?)
+    }
+
+    /// Returns a mutable reference to the `FileEntry` at `path`.
+    pub fn file_at_mut(&mut self, path: &str) -> Result<&mut FileEntry> {
+        self.file_mut(self.at(path)?)
+    }
+
+    /// Returns a reference to the `DirectoryEntry` corresponding to `id`.
+    pub fn dir(&self, id: EntryId) -> Result<&DirectoryEntry> {
+        self[id].dir().ok_or(Error::ExpectedDirectory(id))
+    }
+
+    /// Returns a mutable reference to the `DirectoryEntry` corresponding to `id`.
+    pub fn dir_mut(&mut self, id: EntryId) -> Result<&mut DirectoryEntry> {
+        self[id].dir_mut().ok_or(Error::ExpectedDirectory(id))
+    }
+
+    /// Returns a reference to the `DirectoryEntry` at `path`.
+    pub fn dir_at(&self, path: &str) -> Result<&DirectoryEntry> {
+        self.dir(self.at(path)?)
+    }
+
+    /// Returns a mutable reference to the `DirectoryEntry` at `path`.
+    pub fn dir_at_mut(&mut self, path: &str) -> Result<&mut DirectoryEntry> {
+        self.dir_mut(self.at(path)?)
+    }
+
+    /// Returns the ID of the entry at `path`, interpreted relative to `root`.
+    pub fn at_descendant(&self, root: EntryId, path: &str) -> Result<EntryId> {
+        let mut entry = root;
+        let mut stack = vec![];
+        for component in path_components(path) {
+            let dir = self.dir(entry)?;
+            entry = match component {
+                "" | "." => entry,
+                ".." => stack.pop().ok_or_else(|| Error::NotFound(path.to_owned()))?,
+                _ => {
+                    stack.push(entry);
+                    dir.children
+                        .iter()
+                        .find(|&&e| self[e].name() == component)
+                        .copied()
+                        .ok_or_else(|| Error::NotFound(path.to_owned()))?
+                }
+            };
+        }
+
+        // If the path ends with a slash, it must result in a directory.
+        if path.ends_with("/") && !self[entry].is_dir() {
+            Err(Error::ExpectedDirectory(entry))
+        } else {
+            Ok(entry)
+        }
+    }
+
+    /// Creates a directory for each component in `path` that does not exist.
+    /// Returns the ID of the last entry in the path, which is always a directory.
+    pub fn make_directories(&mut self, path: &str) -> Result<EntryId> {
+        self.make_directories_from(self.root, path)
+    }
+
+    /// Creates a directory for each component in `path` that does not exist, starting from `root`.
+    /// Returns the ID of the last entry in the path, which is always a directory.
+    pub fn make_directories_from(&mut self, root: EntryId, path: &str) -> Result<EntryId> {
+        let mut entry = root;
+        let mut stack = vec![];
+        for component in path_components(path) {
+            let dir = self.dir(entry)?;
+            entry = match component {
+                "" | "." => entry,
+                ".." => stack.pop().ok_or_else(|| Error::NotFound(path.to_owned()))?,
+                _ => {
+                    stack.push(entry);
+                    dir.children
+                        .iter()
+                        .find(|&&e| self[e].name() == component)
+                        .copied()
+                        .map_or_else(
+                            || self.insert(entry, DirectoryEntry::new(component).into()),
+                            Ok,
+                        )?
+                }
+            };
+        }
+        if self[entry].is_dir() { Ok(entry) } else { Err(Error::ExpectedDirectory(entry)) }
+    }
+
+    /// Inserts `entry` as a child of the `parent_id` directory and returns its ID if successful.
+    /// Fails if the parent is not a directory, an entry with the name already exists, or the entry
+    /// name is unsafe.
+    pub fn insert(&mut self, parent_id: EntryId, entry: Entry) -> Result<EntryId> {
+        let name = entry.name();
+        if !is_name_safe(name) {
+            return Err(Error::UnsafeName(name.to_owned()));
+        }
+        let parent = self.dir(parent_id)?;
+        if parent.children.iter().any(|&e| self[e].name() == name) {
+            Err(Error::AlreadyExists(name.to_owned()))
+        } else {
+            let id = self.entries.insert(entry);
+            self.dir_mut(parent_id).unwrap().children.push(id);
+            Ok(id)
+        }
     }
 
     /// Builds a `FileStringTable` from this tree. Returns an `(fst, ids)` tuple, where `ids` is a
@@ -775,14 +814,14 @@ mod tests {
         };
         static ref TEST_TREE: FileTree = {
             let mut files = FileTree::new();
-            files.insert(files.root(), file("abc"));
-            files.insert(files.root(), file("def"));
-            let ghi = files.insert(files.root(), dir("ghi"));
-            let jkl = files.insert(ghi, dir("jkl"));
-            let mno = files.insert(jkl, dir("mno"));
-            files.insert(mno, dir("pqr"));
-            files.insert(ghi, file("stu"));
-            files.insert(files.root(), file("vwx"));
+            files.insert(files.root(), file("abc")).unwrap();
+            files.insert(files.root(), file("def")).unwrap();
+            let ghi = files.insert(files.root(), dir("ghi")).unwrap();
+            let jkl = files.insert(ghi, dir("jkl")).unwrap();
+            let mno = files.insert(jkl, dir("mno")).unwrap();
+            files.insert(mno, dir("pqr")).unwrap();
+            files.insert(ghi, file("stu")).unwrap();
+            files.insert(files.root(), file("vwx")).unwrap();
             files
         };
     }
@@ -921,14 +960,14 @@ mod tests {
     #[test]
     fn test_at() -> Result<()> {
         let mut files = FileTree::new();
-        let abc = files.insert(files.root(), file("abc"));
-        let def = files.insert(files.root(), file("def"));
-        let ghi = files.insert(files.root(), dir("ghi"));
-        let jkl = files.insert(ghi, dir("jkl"));
-        let mno = files.insert(jkl, dir("mno"));
-        let pqr = files.insert(mno, dir("pqr"));
-        let stu = files.insert(ghi, file("stu"));
-        let vwx = files.insert(files.root(), file("vwx"));
+        let abc = files.insert(files.root(), file("abc")).unwrap();
+        let def = files.insert(files.root(), file("def")).unwrap();
+        let ghi = files.insert(files.root(), dir("ghi")).unwrap();
+        let jkl = files.insert(ghi, dir("jkl")).unwrap();
+        let mno = files.insert(jkl, dir("mno")).unwrap();
+        let pqr = files.insert(mno, dir("pqr")).unwrap();
+        let stu = files.insert(ghi, file("stu")).unwrap();
+        let vwx = files.insert(files.root(), file("vwx")).unwrap();
 
         assert_eq!(files.at("abc")?, abc);
         assert_eq!(files.at("def")?, def);
@@ -954,7 +993,11 @@ mod tests {
         assert!(files.at("..").is_err());
 
         assert!(files.at("abc/").is_err());
+        assert!(files.at("abc//").is_err());
+        assert!(files.at("abc/.").is_err());
+        assert!(files.at("abc/..").is_err());
         assert!(files.at("abc/../abc").is_err());
+
         assert_eq!(files.at("ghi/jkl/mno/pqr/.")?, pqr);
         assert_eq!(files.at("ghi/jkl/mno/pqr/..")?, mno);
         assert_eq!(files.at("ghi/./jkl/./mno/./pqr")?, pqr);
@@ -974,5 +1017,42 @@ mod tests {
         assert!(!is_name_safe("foo/"));
         assert!(!is_name_safe("/"));
         assert!(!is_name_safe("C:"));
+    }
+
+    #[test]
+    fn test_make_directories() {
+        let mut files = FileTree::new();
+        files.insert(files.root(), file("abc")).unwrap();
+
+        let jkl = files.make_directories("def/ghi/jkl").unwrap();
+        assert!(files[jkl].is_dir());
+        assert_eq!(files.at("def/ghi/jkl").unwrap(), jkl);
+        assert_eq!(files.make_directories("def/ghi/jkl").unwrap(), jkl);
+
+        let mno = files.make_directories("def/ghi/jkl/mno").unwrap();
+        assert!(files[mno].is_dir());
+        assert_eq!(files.at("def/ghi/jkl/mno").unwrap(), mno);
+        assert_eq!(files.at("def/ghi/jkl/mno").unwrap(), mno);
+
+        let ghi_jkl = files.make_directories("def/../ghi/.//jkl/").unwrap();
+        assert!(files[ghi_jkl].is_dir());
+        assert_eq!(files.at("ghi/jkl").unwrap(), ghi_jkl);
+
+        let pqr = files.make_directories("mno/../pqr").unwrap();
+        assert!(files[pqr].is_dir());
+        assert!(files[files.at("mno").unwrap()].is_dir());
+        assert_eq!(files.at("pqr").unwrap(), pqr);
+
+        assert_eq!(files.make_directories("").unwrap(), files.root());
+        assert_eq!(files.make_directories(".").unwrap(), files.root());
+        assert_eq!(files.make_directories("/").unwrap(), files.root());
+        assert!(matches!(files.make_directories(":"), Err(Error::UnsafeName(_))));
+
+        assert!(matches!(files.make_directories("abc"), Err(Error::ExpectedDirectory(_))));
+        assert!(matches!(files.make_directories("abc/"), Err(Error::ExpectedDirectory(_))));
+        assert!(matches!(files.make_directories("abc/."), Err(Error::ExpectedDirectory(_))));
+        assert!(matches!(files.make_directories("abc/.."), Err(Error::ExpectedDirectory(_))));
+        assert!(matches!(files.make_directories("abc/def"), Err(Error::ExpectedDirectory(_))));
+        assert!(matches!(files.make_directories(".."), Err(Error::NotFound(_))));
     }
 }
