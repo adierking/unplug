@@ -17,9 +17,19 @@ runs:
     - if: ${{ contains(inputs.target, 'linux') }}
       name: Install Dependencies (Linux)
       run: |
-        sudo apt update
-        sudo apt install libasound2-dev
+        sudo apt-get update
+        sudo apt-get install libasound2-dev just
       shell: bash
+
+    - if: ${{ contains(inputs.target, 'apple') }}
+      name: Install Dependencies (macOS)
+      run: brew install just
+      shell: bash
+
+    - if: ${{ contains(inputs.target, 'windows') }}
+      name: Install Dependencies (Windows)
+      run: winget install --id Casey.Just --exact
+      shell: powershell
 
     - name: Install Toolchain (Stable)
       run: |
@@ -31,8 +41,4 @@ runs:
     - if: ${{ inputs.nightly }}
       name: Install Toolchain (Nightly)
       run: rustup toolchain install ${{ inputs.nightly }} -t ${{ inputs.target }} -c llvm-tools-preview,rust-src
-      shell: bash
-
-    - name: Install Just
-      run: cargo +${{ inputs.nightly }} install just
       shell: bash

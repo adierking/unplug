@@ -230,8 +230,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt update
-          sudo apt install just
+          sudo apt-get update
+          sudo apt-get install just
           npm install --global @vscode/vsce
 
       - name: Build VSIX
