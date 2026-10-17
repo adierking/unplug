@@ -17,8 +17,8 @@ runs:
     - if: ${{ contains(inputs.target, 'linux') }}
       name: Install Dependencies (Linux)
       run: |
-        sudo apt-get update
-        sudo apt-get install libasound2-dev
+        sudo apt update
+        sudo apt install libasound2-dev
       shell: bash
 
     - name: Install Toolchain (Stable)
@@ -32,3 +32,6 @@ runs:
       name: Install Toolchain (Nightly)
       run: rustup toolchain install ${{ inputs.nightly }} -t ${{ inputs.target }} -c llvm-tools-preview,rust-src
       shell: bash
+
+    - name: Install Just
+      run: cargo install just

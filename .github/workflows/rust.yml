@@ -67,15 +67,7 @@ jobs:
         run: cargo check --workspace --all-targets --target ${{ matrix.target }}
 
       - name: Build CLI
-        run:
-          cargo +${{ env.nightly_toolchain }} build
-            -v -p unplug-cli --target ${{ matrix.target }}
-            --release --no-default-features --features distribution
-            -Z build-std=std,panic_abort -Z panic-immediate-abort
-            --config .cargo/distribution.toml
-
-        env:
-          RUSTFLAGS: -C strip=symbols
+        run: just dist -t ${{ env.nightly_toolchain }} -- -v --target ${{ matrix.target }}
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
@@ -236,20 +228,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install vsce
-        run: npm install --global @vscode/vsce
-
-      - name: Create VSIX
+      - name: Install Dependencies
         run: |
-          cp ../COPYING LICENSE.txt
-          vsce package --allow-missing-repository -o ../unplug-vscode.vsix
-        working-directory: unplug-vscode
+          sudo apt update
+          sudo apt install just
+          npm install --global @vscode/vsce
+
+      - name: Build VSIX
+        run: just build-vsix
 
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
           name: unplug-vscode
-          path: unplug-vscode.vsix
+          path: out/unplug-vscode.vsix
           if-no-files-found: error
           archive: false
 

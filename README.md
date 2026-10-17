@@ -78,19 +78,19 @@ Prerequisites:
 - Rust 1.88+
 - C compiler (for dependencies)
 - CMake (for dependencies)
+- [Just](https://just.systems/) (optional, for development shortcuts)
 
-You can compile with Cargo as usual:
+To make a debug build, you can compile with Cargo as usual:
 
 ```sh
 cargo build
 cargo run -- arg...
 ```
 
-To create a distribution build (i.e. an optimized build to release to others), build with only the
-`distribution` feature activated. This will strip debugging features from the program:
+To make a distribution build (nightly toolchain required):
 
 ```sh
-cargo build --release --no-default-features --features distribution
+just dist
 ```
 
 To build and run the unit tests:
@@ -106,6 +106,8 @@ GGTE01 ISO. In PowerShell, you can do that like this:
 $Env:CHIBI_ISO="C:\path\to\the.iso"
 cargo test
 ```
+
+Alternatively, create a `.env` file with `CHIBI_ISO` set to the ISO path and run `just test-iso`.
 
 The tests will not modify the ISO, but some will copy it to your temporary directory - this means
 you will need 1.4 GB of free space.
