@@ -35,3 +35,4 @@ runs:
 
     - name: Install Just
       run: cargo install just
+      shell: bash
