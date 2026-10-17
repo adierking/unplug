@@ -34,5 +34,5 @@ runs:
       shell: bash
 
     - name: Install Just
-      run: cargo install just
+      run: cargo +${{ inputs.nightly }} install just
       shell: bash
