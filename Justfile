@@ -1,3 +1,6 @@
+# [env] requires 1.47.0
+set minimum-version := "1.47.0"
+
 # Some commands require a .env file with CHIBI_ISO set to the ISO path
 set dotenv-load
 
@@ -14,8 +17,8 @@ build *args="":
     cargo build {{args}}
 
 # Distribution build (requires nightly toolchain)
-[env("RUSTFLAGS", "-C strip=symbols")]
 [arg("toolchain", short="t", long)]
+[env("RUSTFLAGS", "-C strip=symbols")]
 build-dist toolchain="nightly" *args="":
     cargo +{{toolchain}} build -p unplug-cli \
         --config .cargo/distribution.toml \
