@@ -18,18 +18,8 @@ runs:
       name: Install Dependencies (Linux)
       run: |
         sudo apt-get update
-        sudo apt-get install libasound2-dev just
+        sudo apt-get install libasound2-dev
       shell: bash
-
-    - if: ${{ contains(inputs.target, 'apple') }}
-      name: Install Dependencies (macOS)
-      run: brew install just
-      shell: bash
-
-    - if: ${{ contains(inputs.target, 'windows') }}
-      name: Install Dependencies (Windows)
-      run: winget install --id Casey.Just --exact
-      shell: powershell
 
     - name: Install Toolchain (Stable)
       run: |

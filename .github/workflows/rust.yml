@@ -53,6 +53,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
       - name: Install Toolchain
         uses: ./.github/actions/toolchain
         with:
@@ -228,11 +231,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install just
-          npm install --global @vscode/vsce
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
+      - name: Install VSCE
+        run: npm install --global @vscode/vsce
 
       - name: Build VSIX
         run: just build-vsix
