@@ -9,14 +9,16 @@ vsix_path := out_dir / "unplug-vscode.vsix"
 
 # Build and run Unplug
 [no-exit-message]
+[positional-arguments]
 run *args="":
-    @cargo run -p unplug-cli -q -- {{args}}
+    @cargo run -p unplug-cli -q -- "$@"
 
 alias unplug := run
 
 # Default build
+[positional-arguments]
 build *args="":
-    cargo build {{args}}
+    cargo build "$@"
 
 # Distribution build (requires nightly toolchain)
 [arg("toolchain", short="t", long)]
