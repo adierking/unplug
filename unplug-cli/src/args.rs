@@ -17,8 +17,12 @@ pub struct CliArgs {
     /// Show debug logs
     ///
     /// Use -vv in non-distribution builds to show trace logs as well
-    #[clap(short, long, action = ArgAction::Count, global(true))]
+    #[clap(short, long, action = ArgAction::Count, global(true), group("logging"))]
     pub verbose: u8,
+
+    /// Hide most unnecessary output except for warnings and errors
+    #[clap(short, long, global(true), group("logging"))]
+    pub quiet: bool,
 
     /// Capture inferno trace data to a file (for developers)
     #[cfg(feature = "trace")]
@@ -928,6 +932,9 @@ mod tests {
         parse(["-vv", "test"], map, |args| {
             assert_eq!(args.verbose, 2);
         });
+        multiparse([["-q", "test"], ["--quiet", "test"]], map, |args| {
+            assert!(args.quiet);
+        });
         parse(["--config", "foo", "test"], map, |args| {
             assert_eq!(args.config.config.as_deref(), Some(Path::new("foo")));
         });
@@ -944,6 +951,7 @@ mod tests {
         multiparse([["-p", "foo", "test"], ["--project", "foo", "test"]], map, |args| {
             assert_eq!(args.context.project.as_deref(), Some("foo"));
         });
+        assert_eq!(error(["-q", "-v", "test"]), ErrorKind::ArgumentConflict);
         assert_eq!(error(["--iso", "foo", "--default-iso", "test"]), ErrorKind::ArgumentConflict);
         assert_eq!(error(["--iso", "foo", "-p", "bar", "test"]), ErrorKind::ArgumentConflict);
         assert_eq!(error(["--default-iso", "-p", "bar", "test"]), ErrorKind::ArgumentConflict);

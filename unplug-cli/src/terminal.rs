@@ -1,5 +1,6 @@
 #![allow(clippy::mutex_atomic)]
 
+use crate::args::CliArgs;
 use crate::common::format_duration;
 use console::Term;
 use crossterm::cursor::{Hide, MoveToColumn, MoveToPreviousLine, Show};
@@ -68,13 +69,20 @@ lazy_static! {
     static ref IN_RAW_MODE: Mutex<bool> = Mutex::new(false);
 }
 
-/// Makes a `ProgressDrawTarget` using default settings. This returns a hidden target if trace
-/// logging is enabled.
+/// Returns true if terminal UIs should be drawn. This will be false if trace logging or quiet mode
+/// is enabled.
+#[must_use]
+pub fn ui_enabled() -> bool {
+    !log_enabled!(Level::Trace) && log_enabled!(Level::Info)
+}
+
+/// Makes a `ProgressDrawTarget` using default settings. This returns a hidden target if UI is not
+/// enabled.
 fn default_progress_target() -> ProgressDrawTarget {
-    if log_enabled!(Level::Trace) {
-        ProgressDrawTarget::hidden()
-    } else {
+    if ui_enabled() {
         ProgressDrawTarget::term(PROGRESS_TERM.clone(), Some(1000 / PROGRESS_UPDATE_RATE))
+    } else {
+        ProgressDrawTarget::hidden()
     }
 }
 
@@ -162,12 +170,14 @@ pub fn disable_raw_mode() {
 }
 
 /// Initializes logging to the terminal.
-pub fn init_logging(verbosity: u8) {
-    let filter = if verbosity >= 2 {
+pub fn init_logging(args: &CliArgs) {
+    let filter = if args.verbose >= 2 {
         // Note: trace logs are compiled out in release builds
         LevelFilter::Trace
-    } else if verbosity == 1 {
+    } else if args.verbose == 1 {
         LevelFilter::Debug
+    } else if args.quiet {
+        LevelFilter::Warn
     } else {
         LevelFilter::Info
     };

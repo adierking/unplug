@@ -64,7 +64,7 @@ fn get_context(args: GlobalContextArgs) -> Result<Context> {
 
 fn run_app() -> Result<()> {
     let args = CliArgs::parse();
-    terminal::init_logging(args.verbose);
+    terminal::init_logging(&args);
     load_config(args.config);
 
     #[cfg(feature = "trace")]

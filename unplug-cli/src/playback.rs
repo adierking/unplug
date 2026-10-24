@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use arrayvec::ArrayVec;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, OutputCallbackInfo, SampleRate, SupportedStreamConfig};
-use log::{Level, debug, error, info, log_enabled, trace};
+use log::{debug, error, info, trace};
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -718,10 +718,8 @@ pub fn play(device: &mut PlaybackDevice, source: PlaybackSource, name: String) {
     let duration = source.duration();
     let mut stream = device.play(source);
     if terminal::is_tty() {
-        // In trace mode, we want to see trace logs, but key input should still work. Run the UI, but
-        // set it to not actually display anything.
-        let tracing = log_enabled!(Level::Trace);
-        let visibility = if tracing { Visibility::Hidden } else { Visibility::Visible };
+        let visibility =
+            if terminal::ui_enabled() { Visibility::Visible } else { Visibility::Hidden };
         PlaybackUi::new(UiController { stream, duration, name }, visibility).run();
     } else {
         stream.run_until_finished();
