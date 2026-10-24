@@ -122,7 +122,7 @@ fn try_coefficients(pcm: &[i16], c0: i32, c1: i32) -> Frame {
             frame.pcm[s + 2] = clamp_i16((predicted + clamped * scale + 0x400) >> 11);
 
             let actual_distance = (pcm[s + 2] as i32 - frame.pcm[s + 2] as i32) as f64;
-            frame.distance += actual_distance * actual_distance;
+            frame.distance = actual_distance.mul_add(actual_distance, frame.distance);
         }
 
         let mut x = max_overflow + 8;

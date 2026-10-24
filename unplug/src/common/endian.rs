@@ -179,8 +179,9 @@ mod tests {
     }
 
     fn write_i24_into<E: ByteOrder + IsNative>(values: &[I24], bytes: &mut [u8]) {
-        assert_eq!(bytes.len(), values.len() * 3);
-        for (v, c) in values.iter().copied().zip(bytes.chunks_exact_mut(3)) {
+        let (chunks, remainder) = bytes.as_chunks_mut::<3>();
+        assert!(remainder.is_empty());
+        for (v, c) in values.iter().copied().zip(chunks) {
             let b = &v.to_ne_bytes();
             if E::is_native() {
                 c.copy_from_slice(b);

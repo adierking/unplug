@@ -582,10 +582,10 @@ fn deduplicate_animations(anims: &mut [AnimationDefinition]) {
             anim.label.append_discriminator(anim.index as usize);
             anim.name = format!("{}_{}", prefixed, anim.index);
             assert!(!counts.contains_key(&anim.label.0));
-        } else if let Some((prefix, _)) = anim.name.split_once('_') {
-            if current_prefix != prefix {
-                current_prefix = prefix.to_owned();
-            }
+        } else if let Some((prefix, _)) = anim.name.split_once('_')
+            && current_prefix != prefix
+        {
+            current_prefix = prefix.to_owned();
         }
     }
 }
@@ -1385,8 +1385,8 @@ fn write_actors(
             writer,
             "    {} => {} {{ \"{}\", \"{}\", {} }},",
             actor_id,
-            &enum_label.0,
-            &string_label.0,
+            enum_label.0,
+            string_label.0,
             actor_name,
             object.map(|o| o.label.0.as_str()).unwrap_or("None"),
         )?;

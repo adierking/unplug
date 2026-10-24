@@ -111,7 +111,7 @@ fn analyze_ranges(mtx: &mut Matrix3, vec_idxs_out: &mut [usize; 3], recips: &mut
         for x in 1..i {
             let mut tmp = mtx[x][i];
             for y in 1..x {
-                tmp -= mtx[x][y] * mtx[y][i];
+                tmp = mtx[x][y].mul_add(-mtx[y][i], tmp);
             }
             mtx[x][i] = tmp;
         }
@@ -120,7 +120,7 @@ fn analyze_ranges(mtx: &mut Matrix3, vec_idxs_out: &mut [usize; 3], recips: &mut
         for x in i..=2 {
             let mut tmp = mtx[x][i];
             for y in 1..i {
-                tmp -= mtx[x][y] * mtx[y][i];
+                tmp = mtx[x][y].mul_add(-mtx[y][i], tmp);
             }
 
             mtx[x][i] = tmp;
@@ -165,7 +165,7 @@ fn bidirectional_filter(mtx: &Matrix3, vec_idxs: &[usize; 3], vec_out: &mut Vec3
         vec_out[index] = vec_out[i];
         if x != 0 {
             for y in x..i {
-                tmp -= vec_out[y] * mtx[i][y];
+                tmp = vec_out[y].mul_add(-mtx[i][y], tmp);
             }
         } else if tmp != 0.0 {
             x = i;
@@ -176,7 +176,7 @@ fn bidirectional_filter(mtx: &Matrix3, vec_idxs: &[usize; 3], vec_out: &mut Vec3
     for i in (1..=2).rev() {
         let mut tmp = vec_out[i];
         for y in (i + 1)..=2 {
-            tmp -= vec_out[y] * mtx[i][y];
+            tmp = vec_out[y].mul_add(-mtx[i][y], tmp);
         }
         vec_out[i] = tmp / mtx[i][i];
     }
@@ -226,7 +226,7 @@ fn matrix_filter(src: &Vec3, dst: &mut Vec3, mtx: &mut Matrix3) {
     for i in 1..=2 {
         dst[i] = 0.0;
         for y in 1..=i {
-            dst[i] += mtx[i][y] * dst[i - y];
+            dst[i] = mtx[i][y].mul_add(dst[i - y], dst[i]);
         }
     }
 }
@@ -239,14 +239,14 @@ fn merge_finish_record(src: &Vec3, dst: &mut Vec3) {
     for i in 1..=2 {
         let mut v2 = 0.0;
         for y in 1..i {
-            v2 += dst[y] * src[i - y];
+            v2 = dst[y].mul_add(src[i - y], v2);
         }
 
         dst[i] = if val > 0.0 { -(v2 + src[i]) / val } else { 0.0 };
         tmp[i] = dst[i];
 
         for y in 1..i {
-            dst[y] += dst[i] * dst[i - y];
+            dst[y] = dst[i].mul_add(dst[i - y], dst[y]);
         }
 
         val *= dst[i].mul_add(-dst[i], 1.0);

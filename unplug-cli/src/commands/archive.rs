@@ -21,7 +21,7 @@ fn command_info(ctx: Context, path: &str) -> Result<()> {
     let file = ctx.file_at(path)?;
     let info = ctx.query_file(&file)?;
     let archive = ArchiveReader::open(ctx.open_file(&file)?)?;
-    println!("{}: U8 archive", &info.name);
+    println!("{}: U8 archive", info.name);
     println!("Size: {}", info.size.format_size(BINARY));
     println!("File Entries: {}", archive.files.len());
     Ok(())
