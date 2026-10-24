@@ -9,10 +9,12 @@ use codespan_reporting::files::{Files, SimpleFile};
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use log::{error, info, warn};
+use regex::Regex;
 use std::fs::{self, File};
 use std::io::BufWriter;
 use std::ops::Range;
 use std::path::Path;
+use std::sync::LazyLock;
 use unplug::data::{Resource, Stage as StageId};
 use unplug::globals::GlobalsBuilder;
 use unplug_asm as asm;
@@ -23,6 +25,10 @@ use unplug_asm::parser::Parser;
 use unplug_asm::program::Target;
 use unplug_asm::span::Spanned;
 
+const GLOBALS_NAME: &str = "globals";
+const SCRIPT_EXTENSION: &str = "us";
+
+/// The `script disassemble` CLI command.
 fn command_disassemble(ctx: Context, args: DisassembleArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     let out = BufWriter::new(File::create(args.output)?);
@@ -40,21 +46,37 @@ fn command_disassemble(ctx: Context, args: DisassembleArgs) -> Result<()> {
     Ok(())
 }
 
+/// Gets the file name to use for a stage, including the extension.
+fn stage_filename(id: StageId) -> String {
+    // Remove unimportant characters (e.g. "(debug)" -> "debug")
+    static REMOVE_CHARS: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"[^A-Za-z0-9\s\-]+").unwrap());
+    let removed = REMOVE_CHARS.replace_all(id.title(), "");
+
+    // Convert separators to underscores (e.g. "chibi-house" -> "chibi_house")
+    static UNDERSCORE_CHARS: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"[^A-Za-z0-9_]+").unwrap());
+    let replaced = UNDERSCORE_CHARS.replace_all(&removed, "_");
+    format!("{}.{}", replaced, SCRIPT_EXTENSION).to_lowercase()
+}
+
+/// The `script disassemble-all` CLI command.
 pub fn command_disassemble_all(ctx: Context, args: DisassembleAllArgs) -> Result<()> {
     let mut ctx = ctx.open_read()?;
     fs::create_dir_all(&args.output)?;
 
     info!("Disassembling script globals");
     let libs = ctx.read_globals()?.read_libs()?;
-    let libs_out = Path::join(&args.output, "globals.us");
+    let libs_out = Path::join(&args.output, format!("{}.{}", GLOBALS_NAME, SCRIPT_EXTENSION));
     let libs_writer = BufWriter::new(File::create(libs_out)?);
     let libs_program = asm::disassemble_globals(&libs)?;
     asm::write_program(&libs_program, libs_writer)?;
 
     for id in StageId::iter() {
-        info!("Disassembling {}", id.file_name());
+        let out_name = stage_filename(id);
+        info!("Disassembling: {} -> {}", id.file_name(), out_name);
         let stage = ctx.read_stage(&libs, id)?;
-        let out_path = Path::join(&args.output, format!("{}.us", id.name()));
+        let out_path = Path::join(&args.output, out_name);
         let writer = BufWriter::new(File::create(out_path)?);
         let program = asm::disassemble_stage(&stage, id.name())?;
         asm::write_program(&program, writer)?;
