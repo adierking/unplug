@@ -12,6 +12,8 @@ vsix_path := out_dir / "unplug-vscode.vsix"
 run *args="":
     @cargo run -p unplug-cli -q -- {{args}}
 
+alias unplug := run
+
 # Default build
 build *args="":
     cargo build {{args}}
@@ -54,6 +56,12 @@ test *tests:
 test-iso *tests:
     @echo "Using ISO: {{env("CHIBI_ISO")}}"
     cargo test -- {{tests}}
+
+# Check all code with clippy
+clippy:
+    cargo clippy --workspace --all-targets
+
+alias lint := clippy
 
 # Run unplug-datagen (requires CHIBI_ISO in .env)
 datagen:
