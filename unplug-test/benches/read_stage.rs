@@ -6,7 +6,7 @@ use unplug::globals::{GlobalsReader, Libs};
 use unplug::stage::Stage;
 use unplug_test as common;
 
-const TEST_STAGE: StageId = StageId::LivingRoom;
+const TEST_STAGE: StageId = StageId::Foyer;
 
 struct StageContext {
     libs: Libs,

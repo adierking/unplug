@@ -15,6 +15,7 @@ simplelog.workspace = true
 tempfile.workspace = true
 time.workspace = true
 unplug = { path = "../unplug" }
+unplug-asm = { path = "../unplug-asm" }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -22,6 +23,9 @@ lazy_static.workspace = true
 seahash.workspace = true
 serial_test.workspace = true
 
+[[bench]]
+name = "assemble_script"
+harness = false
 [[bench]]
 name = "decode_adpcm"
 harness = false

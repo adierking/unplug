@@ -2055,6 +2055,7 @@ dependencies = [
  "tempfile",
  "time",
  "unplug",
+ "unplug-asm",
 ]
 
 [[package]]
