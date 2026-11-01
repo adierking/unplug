@@ -454,7 +454,7 @@ impl<'a> ProgramBuilder<'a> {
             // Blocks are already in program order
             self.program.first_block = Some(BlockId::new(0));
             for (i, block) in self.program.blocks.iter_mut().enumerate().rev().skip(1) {
-                block.next = Some(BlockId::new(i as u32 + 1));
+                block.next = Some(BlockId::new(i + 1));
             }
         }
         self.program.mark_subroutines();
@@ -544,13 +544,12 @@ impl<'a> ProgramBuilder<'a> {
         }
 
         for (i, block) in self.program.blocks.iter_mut().enumerate() {
-            if let Some(offset) = src_offsets.try_get(BlockId::new(i as u32)) {
+            if let Some(offset) = src_offsets.try_get(BlockId::new(i)) {
                 block.offset = offset;
             }
         }
 
-        let mut order =
-            (0..(self.program.blocks.len() as u32)).map(BlockId::new).collect::<Vec<_>>();
+        let mut order = (0..self.program.blocks.len()).map(BlockId::new).collect::<Vec<_>>();
         order.sort_by_key(|&id| id.get(&self.program.blocks).offset);
         self.program.first_block = Some(order[0]);
         for pair in order.windows(2) {

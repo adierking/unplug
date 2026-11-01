@@ -357,7 +357,7 @@ mod tests {
         SetArgs::new(SetExpr::Variable(Expr::Imm32(var as i32)), value).into()
     }
 
-    fn if_(condition: Expr, else_block: u32) -> Command {
+    fn if_(condition: Expr, else_block: usize) -> Command {
         Command::If(
             IfArgs { condition, else_target: Pointer::Block(BlockId::new(else_block)) }.into(),
         )

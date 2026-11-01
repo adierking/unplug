@@ -2,7 +2,7 @@ use super::{Actor, Error, ObjectPlacement, Result};
 use crate::common::{
     NonNoneList, ReadFrom, ReadOptionFrom, ReadSeek, WriteOptionTo, WriteSeek, WriteTo,
 };
-use crate::event::pointer::BlockId;
+use crate::event::block_id::BlockId;
 use crate::event::script::{Script, ScriptReader, ScriptWriter};
 use crate::globals::Libs;
 use byteorder::{BE, ByteOrder, LE, ReadBytesExt, WriteBytesExt};

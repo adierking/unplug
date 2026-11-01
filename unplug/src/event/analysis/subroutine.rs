@@ -107,13 +107,13 @@ mod tests {
     fn empty_block(next_index: Option<usize>, else_index: Option<usize>) -> Block {
         Block::Code(CodeBlock {
             commands: vec![],
-            next_block: next_index.map(|i| BlockId::new(i as u32).into()),
-            else_block: else_index.map(|i| BlockId::new(i as u32).into()),
+            next_block: next_index.map(|i| BlockId::new(i).into()),
+            else_block: else_index.map(|i| BlockId::new(i).into()),
         })
     }
 
     fn block_ids(indexes: &[usize]) -> Vec<BlockId> {
-        indexes.iter().map(|i| BlockId::new(*i as u32)).collect()
+        indexes.iter().copied().map(BlockId::new).collect()
     }
 
     #[test]

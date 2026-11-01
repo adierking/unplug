@@ -3,9 +3,10 @@ use crate::common::ReadSeek;
 use crate::event::analysis::{ArrayKind, ScriptAnalyzer, ValueKind};
 use crate::event::bin::BinDeserializer;
 use crate::event::block::{Block, CodeBlock, DataBlock};
+use crate::event::block_id::BlockId;
 use crate::event::command::{self, Command};
 use crate::event::expr::{self, ObjBone, ObjPair};
-use crate::event::pointer::{BlockId, Pointer};
+use crate::event::pointer::Pointer;
 use crate::event::serialize::{self, DeserializeEvent, EventDeserializer};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -181,7 +182,7 @@ impl<'r> ScriptReader<'r> {
     /// Gets the ID of the next block that will be created.
     fn next_id(&self) -> BlockId {
         assert!(self.blocks.len() == self.layouts.len());
-        self.blocks.len().try_into().unwrap()
+        self.blocks.len().into()
     }
 
     /// Returns a `(before, middle, after)` tuple of the blocks before, at, and after `offset`.
@@ -429,7 +430,7 @@ impl<'r> ScriptReader<'r> {
                     && let DataType::Array(ArrayKind::Pointer(kind)) = &data.ty
                 {
                     queue.push(PendingArray {
-                        block_id: index.try_into().unwrap(),
+                        block_id: index.into(),
                         offset: data.start_offset,
                         element_kind: (**kind).clone(),
                     });

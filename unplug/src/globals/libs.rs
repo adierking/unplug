@@ -1,6 +1,6 @@
 use super::{Error, Result};
 use crate::common::{ReadFrom, ReadSeek, WriteSeek, WriteTo};
-use crate::event::pointer::BlockId;
+use crate::event::block_id::BlockId;
 use crate::event::script::{Script, ScriptReader, ScriptWriter};
 use byteorder::{ByteOrder, LE, ReadBytesExt};
 use std::io::{Read, SeekFrom, Write};

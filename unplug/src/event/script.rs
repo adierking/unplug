@@ -6,11 +6,11 @@ pub use writer::{BlockOffsetMap, ScriptWriter};
 
 use super::analysis::{self, SubroutineEffectsMap};
 use super::block::{Block, CodeBlock};
+use super::block_id::BlockId;
 use super::command::{self, Command};
-use super::pointer::{BlockId, Pointer};
+use super::pointer::Pointer;
 use super::serialize;
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::io;
 use std::iter::{DoubleEndedIterator, Enumerate, ExactSizeIterator, Extend, FusedIterator};
 use std::slice;
@@ -100,7 +100,7 @@ impl ScriptLayout {
         let mut block_offsets: Vec<_> = block_offsets
             .into_iter()
             .enumerate()
-            .map(|(i, o)| BlockLocation::new(i.try_into().unwrap(), o))
+            .map(|(i, o)| BlockLocation::new(i.into(), o))
             .collect();
         block_offsets.sort_unstable_by_key(|loc| loc.offset);
         Self { block_offsets, subroutines }
@@ -187,7 +187,7 @@ impl Script {
 
     /// Pushes `block` onto the end of the script and returns its ID.
     pub fn push(&mut self, block: Block) -> BlockId {
-        let id = self.blocks.len().try_into().unwrap();
+        let id = self.blocks.len().into();
         self.blocks.push(block);
         id
     }
@@ -526,7 +526,7 @@ mod tests {
         })
     }
 
-    fn tree_block(next_block: Option<u32>, else_block: Option<u32>) -> Block {
+    fn tree_block(next_block: Option<usize>, else_block: Option<usize>) -> Block {
         Block::Code(CodeBlock {
             commands: vec![],
             next_block: next_block.map(|i| Pointer::Block(BlockId::new(i))),

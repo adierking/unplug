@@ -1,54 +1,12 @@
+use super::block_id::BlockId;
 use crate::common::{ReadFrom, WriteTo};
 use byteorder::{LE, ReadBytesExt};
-use std::convert::TryFrom;
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::num::{NonZeroU32, TryFromIntError};
+use std::num::NonZeroU32;
 
 /// The offset of the object table in stage files.
 const STAGE_OBJECTS_OFFSET: u32 = 0x48;
-
-/// Refers to a specific code block in an event.
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BlockId {
-    // Stored as index + 1 so it doesn't take up space in an Optional
-    id: NonZeroU32,
-}
-
-impl BlockId {
-    /// Constructs an ID from an index into a block list.
-    pub fn new(index: u32) -> Self {
-        Self { id: NonZeroU32::new(index + 1).expect("Invalid block index") }
-    }
-
-    /// Gets the block list index corresponding to this ID.
-    pub fn index(&self) -> usize {
-        self.id.get() as usize - 1
-    }
-
-    /// Uses this ID to get a reference to an object in a slice.
-    pub fn get<'a, T>(&self, slice: &'a [T]) -> &'a T {
-        &slice[self.index()]
-    }
-
-    /// Uses this ID to get a mutable reference to an object in a slice.
-    pub fn get_mut<'a, T>(&self, slice: &'a mut [T]) -> &'a mut T {
-        &mut slice[self.index()]
-    }
-}
-
-impl fmt::Debug for BlockId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.index())
-    }
-}
-
-impl TryFrom<usize> for BlockId {
-    type Error = TryFromIntError;
-    fn try_from(index: usize) -> Result<Self, Self::Error> {
-        Ok(Self::new(u32::try_from(index)?))
-    }
-}
 
 /// A pointer which can be read as a file offset and then resolved to a block ID.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

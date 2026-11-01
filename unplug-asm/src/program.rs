@@ -507,7 +507,7 @@ impl Program {
     /// Inserts `block` after `after_id` in program order and returns the new block's ID.
     /// If `after_id` is `None`, the block will be inserted at the beginning of the program.
     pub fn insert_after(&mut self, after_id: Option<BlockId>, mut block: Block) -> BlockId {
-        let new_id = BlockId::new(self.blocks.len() as u32);
+        let new_id = BlockId::new(self.blocks.len());
         let next = match after_id {
             Some(id) => id.get(&self.blocks).next,
             None => self.first_block,
